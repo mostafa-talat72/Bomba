@@ -1,126 +1,123 @@
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 
 // Ensure logs directory exists
-const logsDir = './logs';
+const logsDir = "./logs";
 if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+    fs.mkdirSync(logsDir, { recursive: true });
 }
 
 // Log levels
 const LOG_LEVELS = {
-  ERROR: 'ERROR',
-  WARN: 'WARN',
-  INFO: 'INFO',
-  DEBUG: 'DEBUG'
+    ERROR: "ERROR",
+    WARN: "WARN",
+    INFO: "INFO",
+    DEBUG: "DEBUG",
 };
 
 // Create log entry
 const createLogEntry = (level, message, meta = {}) => {
-  return {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    ...meta
-  };
+    return {
+        timestamp: new Date().toISOString(),
+        level,
+        message,
+        ...meta,
+    };
 };
 
 // Write log to file
 const writeLog = (filename, logEntry) => {
-  const logPath = path.join(logsDir, filename);
-  const logLine = JSON.stringify(logEntry) + '\n';
-  
-  fs.appendFile(logPath, logLine, (err) => {
-    if (err) {
-      console.error('Error writing to log file:', err);
-    }
-  });
+    const logPath = path.join(logsDir, filename);
+    const logLine = JSON.stringify(logEntry) + "\n";
+
+    fs.appendFile(logPath, logLine, (err) => {
+        if (err) {
+            console.error("Error writing to log file:", err);
+        }
+    });
 };
 
 // Logger class
 class Logger {
-  static error(message, meta = {}) {
-    const logEntry = createLogEntry(LOG_LEVELS.ERROR, message, meta);
-    writeLog('error.log', logEntry);
-    console.error(`[${logEntry.timestamp}] ERROR: ${message}`, meta);
-  }
-  
-  static warn(message, meta = {}) {
-    const logEntry = createLogEntry(LOG_LEVELS.WARN, message, meta);
-    writeLog('app.log', logEntry);
-    console.warn(`[${logEntry.timestamp}] WARN: ${message}`, meta);
-  }
-  
-  static info(message, meta = {}) {
-    const logEntry = createLogEntry(LOG_LEVELS.INFO, message, meta);
-    writeLog('app.log', logEntry);
-    console.log(`[${logEntry.timestamp}] INFO: ${message}`, meta);
-  }
-  
-  static debug(message, meta = {}) {
-    if (process.env.NODE_ENV === 'development') {
-      const logEntry = createLogEntry(LOG_LEVELS.DEBUG, message, meta);
-      writeLog('debug.log', logEntry);
-      console.log(`[${logEntry.timestamp}] DEBUG: ${message}`, meta);
+    static error(message, meta = {}) {
+        const logEntry = createLogEntry(LOG_LEVELS.ERROR, message, meta);
+        writeLog("error.log", logEntry);
+        console.error("يوجد خطأ! راجع ملف logs/error.log");
     }
-  }
-  
-  static audit(action, user, details = {}) {
-    const logEntry = createLogEntry(LOG_LEVELS.INFO, `Audit: ${action}`, {
-      userId: user?._id,
-      userName: user?.name,
-      userEmail: user?.email,
-      action,
-      ...details
-    });
-    writeLog('audit.log', logEntry);
-  }
+
+    static warn(message, meta = {}) {
+        const logEntry = createLogEntry(LOG_LEVELS.WARN, message, meta);
+        writeLog("app.log", logEntry);
+    }
+
+    static info(message, meta = {}) {
+        const logEntry = createLogEntry(LOG_LEVELS.INFO, message, meta);
+        writeLog("app.log", logEntry);
+    }
+
+    static debug(message, meta = {}) {
+        if (process.env.NODE_ENV === "development") {
+            const logEntry = createLogEntry(LOG_LEVELS.DEBUG, message, meta);
+            writeLog("debug.log", logEntry);
+        }
+    }
+
+    static audit(action, user, details = {}) {
+        const logEntry = createLogEntry(LOG_LEVELS.INFO, `Audit: ${action}`, {
+            userId: user?._id,
+            userName: user?.name,
+            userEmail: user?.email,
+            action,
+            ...details,
+        });
+        writeLog("audit.log", logEntry);
+    }
 }
 
 // Express middleware for request logging
 export const requestLogger = (req, res, next) => {
-  const start = Date.now();
-  
-  // Log request
-  Logger.info('Request received', {
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
-    userId: req.user?._id
-  });
-  
-  // Override res.end to log response
-  const originalEnd = res.end;
-  res.end = function(chunk, encoding) {
-    const duration = Date.now() - start;
-    
-    Logger.info('Request completed', {
-      method: req.method,
-      url: req.url,
-      statusCode: res.statusCode,
-      duration: `${duration}ms`,
-      userId: req.user?._id
+    const start = Date.now();
+
+    // Log request
+    Logger.info("Request received", {
+        method: req.method,
+        url: req.url,
+        ip: req.ip,
+        userAgent: req.get("User-Agent"),
+        userId: req.user?._id,
     });
-    
-    originalEnd.call(this, chunk, encoding);
-  };
-  
-  next();
+
+    // Override res.end to log response
+    const originalEnd = res.end;
+    res.end = function (chunk, encoding) {
+        const duration = Date.now() - start;
+
+        Logger.info("Request completed", {
+            method: req.method,
+            url: req.url,
+            statusCode: res.statusCode,
+            duration: `${duration}ms`,
+            userId: req.user?._id,
+        });
+
+        originalEnd.call(this, chunk, encoding);
+    };
+
+    next();
 };
 
 // Error logging middleware
 export const errorLogger = (err, req, res, next) => {
-  Logger.error('Request error', {
-    error: err.message,
-    stack: err.stack,
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-    userId: req.user?._id
-  });
-  
-  next(err);
+    Logger.error("Request error", {
+        error: err.message,
+        stack: err.stack,
+        method: req.method,
+        url: req.url,
+        ip: req.ip,
+        userId: req.user?._id,
+    });
+
+    next(err);
 };
 
 export default Logger;

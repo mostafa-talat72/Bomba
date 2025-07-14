@@ -1,4 +1,4 @@
-# Bastira - نظام إدارة الكافيه والبلايستيشن
+# Bomba - نظام إدارة الكافيه والبلايستيشن
 
 نظام شامل لإدارة الكافيهات وصالات الألعاب مع دعم كامل للعربية وميزات متقدمة للإدارة والتقارير.
 
@@ -52,8 +52,8 @@
 
 1. **استنساخ المشروع**
 ```bash
-git clone https://github.com/your-repo/bastira.git
-cd bastira
+git clone https://github.com/your-repo/bomba.git
+cd bomba
 ```
 
 2. **تثبيت التبعيات**
@@ -79,7 +79,7 @@ cp .env.example .env
 
 في ملف `server/.env`، استبدل `MONGODB_URI` بـ connection string الخاص بك:
 ```env
-MONGODB_URI=mongodb+srv://username:password@cluster-name.mongodb.net/bastira?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://username:password@cluster-name.mongodb.net/bomba?retryWrites=true&w=majority
 ```
 
 5. **اختبار الاتصال بقاعدة البيانات**
@@ -115,7 +115,7 @@ npm run server:dev
 - **Health Check**: http://localhost:5000/health
 
 ### بيانات الدخول الافتراضية
-- **البريد الإلكتروني**: admin@bastira.com
+- **البريد الإلكتروني**: admin@bomba.com
 - **كلمة المرور**: admin123
 
 ## 🔧 استكشاف الأخطاء
@@ -155,7 +155,7 @@ npm run server:dev
 ## 📁 هيكل المشروع
 
 ```
-bastira/
+bomba/
 ├── src/                    # Frontend React
 │   ├── components/         # مكونات React
 │   ├── pages/             # صفحات التطبيق
@@ -343,4 +343,4 @@ npm run dev
 
 ---
 
-**Bastira** - نظام إدارة شامل للكافيهات وصالات الألعاب 🎮☕
+**Bomba** - نظام إدارة شامل للكافيهات وصالات الألعاب 🎮☕

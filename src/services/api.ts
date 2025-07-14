@@ -48,6 +48,15 @@ export interface Session {
   createdBy: User;
   updatedBy?: User;
   createdAt: Date;
+  bill?: {
+    _id: string;
+    id: string;
+    billNumber: string;
+    customerName?: string;
+    total: number;
+    status: string;
+    billType: string;
+  };
 }
 
 export interface Order {
@@ -117,7 +126,7 @@ export interface Bill {
   _id: string;
   id: string;
   billNumber: string;
-  tableNumber: number;
+  tableNumber?: number;
   customerName?: string;
   customerPhone?: string;
   orders: Order[];
@@ -225,6 +234,12 @@ export interface BillItem {
   originalQuantity?: number;
   paidQuantity?: number;
   totalPrice: number;
+  addons?: { name: string; price: number }[];
+  addonsPerPiece?: { name: string; price: number }[][];
+  isMainItem?: boolean;
+  isAddon?: boolean;
+  mainItemName?: string;
+  addonName?: string;
 }
 
 // API Client class
@@ -258,19 +273,6 @@ class ApiClient {
         };
       }
 
-      console.log('🌐 API Request:', {
-        url,
-        method: config.method || 'GET',
-        headers: config.headers,
-        body: config.body ? (() => {
-          try {
-            return JSON.parse(config.body as string);
-          } catch {
-            return 'Invalid JSON';
-          }
-        })() : undefined
-      });
-
       const response = await fetch(url, config);
 
       if (!response.ok && response.status === 0) {
@@ -285,27 +287,13 @@ class ApiClient {
         const text = await response.text();
         data = text ? JSON.parse(text) : {};
       } catch (jsonError) {
-        console.error('❌ JSON parsing error:', jsonError);
         return {
           success: false,
           message: 'خطأ في تحليل البيانات المستلمة من الخادم'
         };
       }
 
-      console.log('📥 API Response:', {
-        url,
-        status: response.status,
-        success: data.success,
-        message: data.message
-      });
-
       if (!response.ok) {
-        console.error('❌ API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          data
-        });
-
         if (response.status === 401) {
           this.clearToken();
           return {
@@ -322,8 +310,6 @@ class ApiClient {
 
       return data;
     } catch (error) {
-      console.error('❌ API Request failed:', error);
-
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
           success: false,
@@ -353,19 +339,6 @@ class ApiClient {
         ...options,
       };
 
-      console.log('🌐 Public API Request:', {
-        url,
-        method: config.method || 'GET',
-        headers: config.headers,
-        body: config.body ? (() => {
-          try {
-            return JSON.parse(config.body as string);
-          } catch {
-            return 'Invalid JSON';
-          }
-        })() : undefined
-      });
-
       const response = await fetch(url, config);
 
       if (!response.ok && response.status === 0) {
@@ -380,27 +353,13 @@ class ApiClient {
         const text = await response.text();
         data = text ? JSON.parse(text) : {};
       } catch (jsonError) {
-        console.error('❌ JSON parsing error:', jsonError);
         return {
           success: false,
           message: 'خطأ في تحليل البيانات المستلمة من الخادم'
         };
       }
 
-      console.log('📥 Public API Response:', {
-        url,
-        status: response.status,
-        success: data.success,
-        message: data.message
-      });
-
       if (!response.ok) {
-        console.error('❌ Public API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          data
-        });
-
         return {
           success: false,
           message: data.message || `خطأ ${response.status}: ${response.statusText}`
@@ -409,8 +368,6 @@ class ApiClient {
 
       return data;
     } catch (error) {
-      console.error('❌ Public API Request failed:', error);
-
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
           success: false,
@@ -555,13 +512,37 @@ class ApiClient {
     deviceName: string;
     customerName?: string;
     controllers?: number;
-  }): Promise<ApiResponse<Session>> {
-    const response = await this.request<Session>('/sessions', {
+  }): Promise<ApiResponse<{ session: Session; bill?: Bill }>> {
+    const response = await this.request<{ session: Session; bill?: Bill }>('/sessions', {
       method: 'POST',
       body: JSON.stringify(sessionData),
     });
     if (response.success && response.data) {
-      response.data = this.normalizeData(response.data);
+      response.data.session = this.normalizeData(response.data.session);
+      if (response.data.bill) {
+        response.data.bill = this.normalizeData(response.data.bill);
+      }
+    }
+    return response;
+  }
+
+  async createSessionWithExistingBill(sessionData: {
+    deviceType: string;
+    deviceNumber: number;
+    deviceName: string;
+    customerName?: string;
+    controllers?: number;
+    billId: string;
+  }): Promise<ApiResponse<{ session: Session; bill?: Bill }>> {
+    const response = await this.request<{ session: Session; bill?: Bill }>('/sessions/with-existing-bill', {
+      method: 'POST',
+      body: JSON.stringify(sessionData),
+    });
+    if (response.success && response.data) {
+      response.data.session = this.normalizeData(response.data.session);
+      if (response.data.bill) {
+        response.data.bill = this.normalizeData(response.data.bill);
+      }
     }
     return response;
   }
@@ -602,6 +583,18 @@ class ApiClient {
     return this.request<Session>(`/sessions/${sessionId}/controllers`, {
       method: 'PUT',
       body: JSON.stringify({ controllers }),
+    });
+  }
+
+  async updateSessionCost(sessionId: string): Promise<ApiResponse<{
+    sessionId: string;
+    currentCost: number;
+    totalCost: number;
+    billUpdated: boolean;
+    duration: number;
+  }>> {
+    return this.request(`/sessions/${sessionId}/update-cost`, {
+      method: 'PUT'
     });
   }
 
@@ -655,8 +648,6 @@ class ApiClient {
       }
     }
 
-    console.log('📤 API: Sending order data:', orderData);
-
     const response = await this.request<Order>('/orders', {
       method: 'POST',
       body: JSON.stringify(orderData),
@@ -666,7 +657,6 @@ class ApiClient {
       response.data = this.normalizeData(response.data);
     }
 
-    console.log('📥 API: Order response:', response);
     return response;
   }
 
@@ -683,15 +673,23 @@ class ApiClient {
   }
 
   async updateOrderItemPrepared(orderId: string, itemIndex: number, data: { preparedCount: number }): Promise<ApiResponse<Order>> {
-    try {
-      const response = await this.request<Order>(`/orders/${orderId}/item/${itemIndex}/prepared`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-      });
-      return response;
-    } catch (error: any) {
-      throw new Error(error.message || 'فشل في تحديث حالة التجهيز');
-    }
+    return this.request<Order>(`/orders/${orderId}/items/${itemIndex}/prepared`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateOrderStatus(orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'): Promise<ApiResponse<Order>> {
+    return this.request<Order>(`/orders/${orderId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async deliverItem(orderId: string, itemIndex: number): Promise<ApiResponse<Order>> {
+    return this.request<Order>(`/orders/${orderId}/deliver-item/${itemIndex}`, {
+      method: 'PUT',
+    });
   }
 
   async deleteOrder(id: string): Promise<ApiResponse> {
@@ -813,7 +811,7 @@ class ApiClient {
   }
 
   async createBill(billData: {
-    tableNumber: number;
+    tableNumber?: number;
     customerName?: string;
     customerPhone?: string;
     orders?: string[];
@@ -901,22 +899,14 @@ class ApiClient {
   }
 
   async cancelBill(id: string): Promise<ApiResponse<Bill>> {
-    console.log('🔄 API: cancelBill called with ID:', id);
-    console.log('🔄 API: Making request to:', `/billing/${id}/cancel`);
-    console.log('🔄 API: Request method: PUT');
-
     const response = await this.request<Bill>(`/billing/${id}/cancel`, {
       method: 'PUT',
     });
 
-    console.log('📥 API: cancelBill response received:', response);
-
     if (response.success && response.data) {
-      console.log('✅ API: Normalizing response data');
       response.data = this.normalizeData(response.data);
     }
 
-    console.log('🔄 API: cancelBill returning:', response);
     return response;
   }
 
@@ -934,6 +924,7 @@ class ApiClient {
       itemName: string;
       price: number;
       quantity: number;
+      addonsPerPiece?: { name: string; price: number }[][];
     }>;
     paymentMethod: 'cash' | 'card' | 'transfer';
   }): Promise<ApiResponse<Bill>> {
@@ -1232,10 +1223,11 @@ class ApiClient {
     return response;
   }
 
-  async updateDeviceStatus(id: string, status: string): Promise<ApiResponse<Device>> {
+  // تحديث حالة الجهاز فقط (status)
+  async updateDeviceStatus(id: string, statusData: { status: string }): Promise<ApiResponse<Device>> {
     const response = await this.request<Device>(`/devices/${id}/status`, {
       method: 'PUT',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(statusData),
     });
     if (response.success && response.data) {
       response.data = this.normalizeData(response.data);
@@ -1365,6 +1357,77 @@ class ApiClient {
 
   async getTodayOrdersStats(): Promise<ApiResponse<any>> {
     return this.request('/orders/today-stats');
+  }
+
+  // Notification methods
+  async getNotifications(options?: { category?: string; unreadOnly?: boolean; limit?: number }): Promise<ApiResponse<any[]>> {
+    const params = new URLSearchParams();
+    if (options?.category) params.append('category', options.category);
+    if (options?.unreadOnly) params.append('unreadOnly', 'true');
+    if (options?.limit) params.append('limit', options.limit.toString());
+
+    return this.request(`/notifications?${params.toString()}`);
+  }
+
+  async getNotificationStats(): Promise<ApiResponse<any>> {
+    return this.request('/notifications/stats');
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<ApiResponse<any>> {
+    return this.request(`/notifications/${notificationId}/read`, {
+      method: 'PUT'
+    });
+  }
+
+  async markAllNotificationsAsRead(): Promise<ApiResponse<any>> {
+    return this.request('/notifications/read-all', {
+      method: 'PUT'
+    });
+  }
+
+  async deleteNotification(notificationId: string): Promise<ApiResponse<any>> {
+    return this.request(`/notifications/${notificationId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Admin notification methods
+  async createNotification(notificationData: any): Promise<ApiResponse<any>> {
+    return this.request('/notifications', {
+      method: 'POST',
+      body: JSON.stringify(notificationData)
+    });
+  }
+
+  async sendNotificationToRole(role: string, notificationData: any): Promise<ApiResponse<any>> {
+    return this.request(`/notifications/role/${role}`, {
+      method: 'POST',
+      body: JSON.stringify(notificationData)
+    });
+  }
+
+  async sendNotificationToPermission(permission: string, notificationData: any): Promise<ApiResponse<any>> {
+    return this.request(`/notifications/permission/${permission}`, {
+      method: 'POST',
+      body: JSON.stringify(notificationData)
+    });
+  }
+
+  async broadcastNotification(notificationData: any): Promise<ApiResponse<any>> {
+    return this.request('/notifications/broadcast', {
+      method: 'POST',
+      body: JSON.stringify(notificationData)
+    });
+  }
+
+  async cleanExpiredNotifications(): Promise<ApiResponse<any>> {
+    return this.request('/notifications/clean-expired', {
+      method: 'DELETE'
+    });
+  }
+
+  async getAvailableBillsForSession(type: 'playstation' | 'computer'): Promise<ApiResponse<Bill[]>> {
+    return this.request<Bill[]>(`/bills/available-for-session?type=${type}`);
   }
 }
 

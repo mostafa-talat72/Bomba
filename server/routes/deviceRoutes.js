@@ -1,34 +1,54 @@
-import express from 'express';
-import { protect, authorize } from '../middleware/auth.js';
-import deviceController from '../controllers/deviceController.js';
+import express from "express";
+import { protect, authorize } from "../middleware/auth.js";
+import deviceController from "../controllers/deviceController.js";
 
 const router = express.Router();
 
 // Apply authentication to all routes
 router.use(protect);
 
-// Get all devices with filtering and pagination (available for all authenticated users)
-router.get('/', deviceController.getDevices);
+// Get all devices (playstation and computer permissions)
+router.get(
+    "/",
+    authorize("playstation", "computer", "all"),
+    deviceController.getDevices
+);
 
-// Get device statistics (admin and staff)
-router.get('/stats', authorize('admin', 'staff'), deviceController.getDeviceStats);
+// Get device stats (playstation and computer permissions)
+router.get(
+    "/stats",
+    authorize("playstation", "computer", "all"),
+    deviceController.getDeviceStats
+);
 
-// Get single device by ID (available for all authenticated users)
-router.get('/:id', deviceController.getDevice);
+// Get single device (playstation and computer permissions)
+router.get(
+    "/:id",
+    authorize("playstation", "computer", "all"),
+    deviceController.getDevice
+);
 
 // Create new device (admin only)
-router.post('/', authorize('admin'), deviceController.createDevice);
+router.post("/", authorize("all"), deviceController.createDevice);
 
 // Update device (admin only)
-router.put('/:id', authorize('admin'), deviceController.updateDevice);
+router.put("/:id", authorize("all"), deviceController.updateDevice);
 
-// Update device status only (admin and staff)
-router.put('/:id/status', authorize('admin', 'staff'), deviceController.updateDeviceStatus);
+// Update device status (playstation and computer permissions)
+router.put(
+    "/:id/status",
+    authorize("playstation", "computer", "all"),
+    deviceController.updateDeviceStatus
+);
 
 // Bulk update devices (admin only)
-router.put('/bulk/update', authorize('admin'), deviceController.bulkUpdateDevices);
+router.put(
+    "/bulk/update",
+    authorize("all"),
+    deviceController.bulkUpdateDevices
+);
 
 // Delete device (admin only)
-router.delete('/:id', authorize('admin'), deviceController.deleteDevice);
+router.delete("/:id", authorize("all"), deviceController.deleteDevice);
 
 export default router;

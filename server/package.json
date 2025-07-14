@@ -1,7 +1,7 @@
 {
-  "name": "bastira-backend",
+  "name": "bomba-backend",
   "version": "1.0.0",
-  "description": "Backend for Bastira Cafe Management System",
+  "description": "Backend for Bomba Cafe Management System",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -38,7 +38,7 @@
     "supertest": "^6.3.3"
   },
   "keywords": ["cafe", "management", "nodejs", "express", "mongodb", "gaming"],
-  "author": "Bastira Team",
+      "author": "Bomba Team",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0",

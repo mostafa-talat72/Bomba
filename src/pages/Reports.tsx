@@ -40,7 +40,6 @@ const Reports = () => {
         financial: financialReport
       });
     } catch (error) {
-      console.error('Error loading reports:', error);
       showNotification('خطأ في تحميل التقارير', 'error');
     } finally {
       setLoading(false);
@@ -244,7 +243,7 @@ const Reports = () => {
                   </div>
                   <div className="mr-3">
                     <p className="font-medium text-gray-900">{product.name}</p>
-                    <p className="text-sm text-gray-500">{formatNumber(product.quantity)} طلب</p>
+                    <p className="text-sm text-gray-500">{formatNumber(product.quantity)} قطعة</p>
                   </div>
                 </div>
                 <div className="text-left">

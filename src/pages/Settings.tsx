@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, Save, Bell, Globe, Palette, Shield, Database } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Bell, Palette, Shield, Database } from 'lucide-react';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('general');
@@ -23,6 +23,7 @@ const Settings = () => {
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Sidebar */}
         <div className="lg:col-span-1">
@@ -62,7 +63,7 @@ const Settings = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">اسم الكافيه</label>
                       <input
                         type="text"
-                        defaultValue="Bastira Café"
+                        defaultValue="Bomba Café"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
@@ -116,7 +117,7 @@ const Settings = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">البريد الإلكتروني</label>
                       <input
                         type="email"
-                        defaultValue="info@bastira.com"
+                        defaultValue="info@bomba.com"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
@@ -181,13 +182,153 @@ const Settings = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">نغمة الإشعار</label>
-                    <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                      <option value="default">النغمة الافتراضية</option>
-                      <option value="bell">جرس</option>
-                      <option value="chime">رنين</option>
-                      <option value="beep">صوت تنبيه</option>
-                    </select>
+                    <h4 className="font-medium text-gray-900 mb-4">إشعارات الفواتير</h4>
+                    <div className="space-y-3">
+                      <label className="flex items-center">
+                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <span className="mr-3 text-sm text-gray-700">إشعار عند إنشاء فاتورة جديدة</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <span className="mr-3 text-sm text-gray-700">إشعار عند دفع الفاتورة</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <span className="mr-3 text-sm text-gray-700">إشعار عند الدفع الجزئي</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-4">إعدادات الصوت</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="flex items-center">
+                          <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                          <span className="mr-3 text-sm text-gray-700">تفعيل صوت الإشعارات</span>
+                        </label>
+                        <p className="text-xs text-gray-500 mt-1 mr-6">تشغيل صوت عند وصول إشعار جديد</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">مستوى الصوت</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          defaultValue="60"
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                        />
+                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                          <span>صامت</span>
+                          <span>60%</span>
+                          <span>عالي</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">نوع الصوت الافتراضي</label>
+                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                          <option value="default">النغمة الافتراضية</option>
+                          <option value="success">نغمة النجاح</option>
+                          <option value="warning">نغمة التحذير</option>
+                          <option value="error">نغمة الخطأ</option>
+                          <option value="urgent">نغمة عاجلة</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">أصوات خاصة حسب الأولوية</label>
+                        <div className="space-y-2">
+                          <label className="flex items-center">
+                            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات العاجلة</span>
+                          </label>
+                          <label className="flex items-center">
+                            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات عالية الأولوية</span>
+                          </label>
+                          <label className="flex items-center">
+                            <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات العادية</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-4">خيارات الإشعارات</h4>
+                    <div className="space-y-3">
+                      <label className="flex items-center">
+                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <span className="mr-3 text-sm text-gray-700">تفعيل الصوت</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <span className="mr-3 text-sm text-gray-700">إشعارات البريد الإلكتروني</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <span className="mr-3 text-sm text-gray-700">إظهار عدد الإشعارات</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <span className="mr-3 text-sm text-gray-700">تحديد كمقروء تلقائياً</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-4">إعدادات متقدمة</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">مدة ظهور الإشعار (بالثواني)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          defaultValue="5"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">نغمة الإشعار</label>
+                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                          <option value="default">النغمة الافتراضية</option>
+                          <option value="bell">جرس</option>
+                          <option value="chime">رنين</option>
+                          <option value="beep">صوت تنبيه</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">أولوية الإشعارات</label>
+                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                          <option value="all">جميع الإشعارات</option>
+                          <option value="high">عالية فقط</option>
+                          <option value="urgent">عاجلة فقط</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-4">إدارة الإشعارات</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-3 space-x-reverse">
+                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
+                          تحديد جميع الإشعارات كمقروءة
+                        </button>
+                        <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
+                          حذف جميع الإشعارات
+                        </button>
+                      </div>
+                      <div className="flex items-center space-x-3 space-x-reverse">
+                        <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
+                          تنظيف الإشعارات المنتهية الصلاحية
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -391,9 +532,9 @@ const Settings = () => {
                     </div>
                   </div>
 
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div>
                     <p className="text-sm text-yellow-800">
-                      <strong>تحذير:</strong> عملية الاستعادة ستحل محل جميع البيانات الحالية. 
+                      <strong>تحذير:</strong> عملية الاستعادة ستحل محل جميع البيانات الحالية.
                       تأكد من إنشاء نسخة احتياطية قبل المتابعة.
                     </p>
                   </div>

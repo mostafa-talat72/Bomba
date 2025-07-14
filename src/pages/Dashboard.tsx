@@ -40,7 +40,6 @@ const Dashboard = () => {
   // دالة لتنظيف البيانات يدوياً
   const cleanData = async () => {
     try {
-      console.log('🧹 Cleaning data manually...');
 
       // تحديث البيانات الأساسية
       await refreshData();
@@ -50,8 +49,6 @@ const Dashboard = () => {
 
       // تحديث لوحة التحكم
       await refreshDashboardData();
-
-      console.log('✅ Data cleaned successfully');
     } catch (error) {
       console.error('❌ Failed to clean data:', error);
     }
@@ -60,7 +57,6 @@ const Dashboard = () => {
   // دالة منفصلة لتحديث البيانات فقط
   const refreshDashboardData = async () => {
     try {
-      console.log('🔄 Refreshing dashboard data only...');
 
       // تحديث البيانات الأساسية أولاً
       await refreshData();
@@ -73,15 +69,14 @@ const Dashboard = () => {
         getRecentActivity(5)
       ]);
 
-      console.log('📊 Refreshed dashboard stats:', statsResponse);
+
 
       if (statsResponse.success) {
         setDashboardStats(statsResponse.data);
-        console.log('✅ Dashboard stats refreshed successfully');
       }
 
       setRecentActivity(activityData);
-      console.log('✅ Recent activity refreshed successfully');
+
     } catch (error) {
       console.error('❌ Failed to refresh dashboard data:', error);
     }
@@ -90,7 +85,6 @@ const Dashboard = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Loading dashboard data...');
 
       // تحميل البيانات الأساسية أولاً
       await refreshData();
@@ -103,20 +97,16 @@ const Dashboard = () => {
         getRecentActivity(5) // تغيير من 10 إلى 5
       ]);
 
-      console.log('📊 Dashboard stats response:', statsResponse);
-      console.log('📈 Recent activity data:', activityData);
+
 
       if (statsResponse.success) {
         setDashboardStats(statsResponse.data);
-        console.log('✅ Dashboard stats set successfully');
       } else {
         console.error('❌ Dashboard stats failed:', statsResponse);
       }
 
       setRecentActivity(activityData);
-      console.log('✅ Recent activity set successfully');
 
-      console.log('✅ Dashboard data loaded successfully');
     } catch (error) {
       console.error('❌ Failed to load dashboard data:', error);
     } finally {
@@ -152,21 +142,7 @@ const Dashboard = () => {
     o.status === 'ready'
   );
 
-  console.log('🔍 Orders analysis:', {
-    totalOrders: orders.length,
-    ordersByStatus: ordersAnalysis,
-    pendingOrders: pendingOrders.length,
-    pendingOrdersCount,
-    actualPendingOrders: actualPendingOrders.length,
-    actualPendingOrdersDetails: actualPendingOrders.map(o => ({
-      id: o.id,
-      orderNumber: o.orderNumber,
-      status: o.status,
-      customerName: o.customerName
-    })),
-    realTimePendingOrders: dashboardStats?.realTime?.pendingOrders,
-    ordersData: orders.map(o => ({ id: o.id, status: o.status, customerName: o.customerName }))
-  });
+
 
   // Use real data from API or fallback to calculated values
   const todayRevenue = dashboardStats?.today?.revenue ||
@@ -179,23 +155,6 @@ const Dashboard = () => {
   // Use real-time data from API with fallback - تحسين الحساب
   const realTimeActiveSessions = dashboardStats?.realTime?.activeSessions ?? activeSessions.length;
   const realTimePendingOrders = dashboardStats?.realTime?.pendingOrders ?? actualPendingOrders.length;
-
-  console.log('📊 Dashboard data:', {
-    sessions: sessions.length,
-    activeSessions: activeSessions.length,
-    realTimeActiveSessions,
-    orders: orders.length,
-    pendingOrders: pendingOrders.length,
-    realTimePendingOrders,
-    bills: bills.length,
-    todayBills: todayBills.length,
-    todayRevenue,
-    todayOrders,
-    dashboardStats: dashboardStats ? {
-      realTime: dashboardStats.realTime,
-      today: dashboardStats.today
-    } : null
-  });
 
   const stats = [
     {
@@ -295,7 +254,7 @@ const Dashboard = () => {
       <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-8 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-3">مرحباً بك في نظام Bastira</h1>
+            <h1 className="text-3xl font-bold mb-3">مرحباً بك في نظام Bomba</h1>
             <p className="text-primary-100 text-lg">لوحة تحكم شاملة لإدارة الكافيه والبلايستيشن</p>
             <div className="flex items-center mt-4 space-x-4 space-x-reverse">
               <div className="flex items-center">

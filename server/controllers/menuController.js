@@ -1,490 +1,468 @@
-import MenuItem from '../models/MenuItem.js';
-import { validateRequest } from '../middleware/validation.js';
+import MenuItem from "../models/MenuItem.js";
+import { validateRequest } from "../middleware/validation.js";
 
 // Get all menu items with optional filtering
 export const getAllMenuItems = async (req, res) => {
-  try {
-    const {
-      category,
-      search,
-      isAvailable,
-      sortBy = 'name',
-      sortOrder = 'asc',
-      page = 1,
-      limit = 50
-    } = req.query;
+    try {
+        const {
+            category,
+            search,
+            isAvailable,
+            sortBy = "name",
+            sortOrder = "asc",
+            page = 1,
+            limit = 50,
+        } = req.query;
 
-    // Build filter object
-    const filter = {};
-    if (category && category !== 'all') {
-      filter.category = category;
+        // Build filter object
+        const filter = {};
+        if (category && category !== "all") {
+            filter.category = category;
+        }
+        if (isAvailable !== undefined) {
+            filter.isAvailable = isAvailable === "true";
+        }
+        if (search) {
+            filter.$text = { $search: search };
+        }
+
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+        // Calculate pagination
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Execute query
+        const menuItems = await MenuItem.find(filter)
+            .sort(sort)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .populate("createdBy", "name")
+            .populate("updatedBy", "name");
+
+        // Get total count for pagination
+        const total = await MenuItem.countDocuments(filter);
+
+        res.json({
+            success: true,
+            data: menuItems,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total,
+                pages: Math.ceil(total / parseInt(limit)),
+            },
+        });
+    } catch (err) {
+        console.error("getMenuItems error:", err);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب عناصر المنيو",
+            error: err.message,
+        });
     }
-    if (isAvailable !== undefined) {
-      filter.isAvailable = isAvailable === 'true';
-    }
-    if (search) {
-      filter.$text = { $search: search };
-    }
-
-    // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Execute query
-    const menuItems = await MenuItem.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .populate('createdBy', 'name')
-      .populate('updatedBy', 'name');
-
-    // Get total count for pagination
-    const total = await MenuItem.countDocuments(filter);
-
-    res.json({
-      success: true,
-      data: menuItems,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
-    });
-  } catch (err) {
-    console.error('getMenuItems error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في جلب عناصر المنيو',
-      error: err.message
-    });
-  }
 };
 
 // Get menu item by ID
 export const getMenuItemById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const menuItem = await MenuItem.findById(id)
-      .populate('createdBy', 'name')
-      .populate('updatedBy', 'name');
+    try {
+        const { id } = req.params;
+        const menuItem = await MenuItem.findById(id)
+            .populate("createdBy", "name")
+            .populate("updatedBy", "name");
 
-    if (!menuItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'العنصر غير موجود',
-        error: 'MenuItem not found'
-      });
+        if (!menuItem) {
+            return res.status(404).json({
+                success: false,
+                message: "العنصر غير موجود",
+                error: "MenuItem not found",
+            });
+        }
+
+        res.json({
+            success: true,
+            data: menuItem,
+        });
+    } catch (err) {
+        console.error("getMenuItem error:", err);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب العنصر",
+            error: err.message,
+        });
     }
-
-    res.json({
-      success: true,
-      data: menuItem
-    });
-  } catch (err) {
-    console.error('getMenuItem error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في جلب العنصر',
-      error: err.message
-    });
-  }
 };
 
 // Create new menu item
 export const createMenuItem = async (req, res) => {
-  try {
-    const validation = validateRequest(req);
-    if (!validation.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'بيانات الطلب غير صحيحة',
-        errors: validation.errors
-      });
+    try {
+        const validation = validateRequest(req);
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: "بيانات الطلب غير صحيحة",
+                errors: validation.errors,
+            });
+        }
+
+        const menuItemData = {
+            ...req.body,
+            createdBy: req.user.id,
+        };
+
+        const menuItem = new MenuItem(menuItemData);
+        await menuItem.save();
+
+        res.status(201).json({
+            success: true,
+            message: "تم إنشاء عنصر القائمة بنجاح",
+            data: menuItem,
+        });
+    } catch (error) {
+        console.error("❌ Error creating menu item:", error);
+
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                message: "عنصر القائمة موجود بالفعل",
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إنشاء عنصر القائمة",
+            error: error.message,
+        });
     }
-
-    const menuItemData = {
-      ...req.body,
-      createdBy: req.user.id
-    };
-
-    const menuItem = new MenuItem(menuItemData);
-    await menuItem.save();
-
-    console.log('✅ Menu item created:', {
-      id: menuItem._id,
-      name: menuItem.name,
-      category: menuItem.category,
-      price: menuItem.price
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'تم إنشاء عنصر القائمة بنجاح',
-      data: menuItem
-    });
-  } catch (error) {
-    console.error('❌ Error creating menu item:', error);
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'عنصر القائمة موجود بالفعل'
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في إنشاء عنصر القائمة',
-      error: error.message
-    });
-  }
 };
 
 // Update menu item
 export const updateMenuItem = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const validation = validateRequest(req);
+    try {
+        const { id } = req.params;
+        const validation = validateRequest(req);
 
-    if (!validation.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'بيانات الطلب غير صحيحة',
-        errors: validation.errors
-      });
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: "بيانات الطلب غير صحيحة",
+                errors: validation.errors,
+            });
+        }
+
+        const updateData = {
+            ...req.body,
+            updatedBy: req.user.id,
+        };
+
+        const menuItem = await MenuItem.findByIdAndUpdate(id, updateData, {
+            new: true,
+            runValidators: true,
+        })
+            .populate("createdBy", "name")
+            .populate("updatedBy", "name");
+
+        if (!menuItem) {
+            return res.status(404).json({
+                success: false,
+                message: "عنصر القائمة غير موجود",
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "تم تحديث عنصر القائمة بنجاح",
+            data: menuItem,
+        });
+    } catch (error) {
+        console.error("❌ Error updating menu item:", error);
+
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                message: "عنصر القائمة موجود بالفعل",
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تحديث عنصر القائمة",
+            error: error.message,
+        });
     }
-
-    const updateData = {
-      ...req.body,
-      updatedBy: req.user.id
-    };
-
-    const menuItem = await MenuItem.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('createdBy', 'name')
-     .populate('updatedBy', 'name');
-
-    if (!menuItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'عنصر القائمة غير موجود'
-      });
-    }
-
-    console.log('✅ Menu item updated:', {
-      id: menuItem._id,
-      name: menuItem.name,
-      updatedBy: req.user.name
-    });
-
-    res.json({
-      success: true,
-      message: 'تم تحديث عنصر القائمة بنجاح',
-      data: menuItem
-    });
-  } catch (error) {
-    console.error('❌ Error updating menu item:', error);
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'عنصر القائمة موجود بالفعل'
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في تحديث عنصر القائمة',
-      error: error.message
-    });
-  }
 };
 
 // Delete menu item
 export const deleteMenuItem = async (req, res) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    const menuItem = await MenuItem.findByIdAndDelete(id);
+        const menuItem = await MenuItem.findByIdAndDelete(id);
 
-    if (!menuItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'عنصر القائمة غير موجود'
-      });
+        if (!menuItem) {
+            return res.status(404).json({
+                success: false,
+                message: "عنصر القائمة غير موجود",
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "تم حذف عنصر القائمة بنجاح",
+        });
+    } catch (error) {
+        console.error("❌ Error deleting menu item:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في حذف عنصر القائمة",
+            error: error.message,
+        });
     }
-
-    console.log('✅ Menu item deleted:', {
-      id: menuItem._id,
-      name: menuItem.name,
-      deletedBy: req.user.name
-    });
-
-    res.json({
-      success: true,
-      message: 'تم حذف عنصر القائمة بنجاح'
-    });
-  } catch (error) {
-    console.error('❌ Error deleting menu item:', error);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في حذف عنصر القائمة',
-      error: error.message
-    });
-  }
 };
 
 // Get menu items by category
 export const getItemsByCategory = async (req, res) => {
-  try {
-    const { category } = req.params;
-    const menuItems = await MenuItem.getByCategory(category);
+    try {
+        const { category } = req.params;
+        const menuItems = await MenuItem.getByCategory(category);
 
-    res.json({
-      success: true,
-      data: menuItems
-    });
-  } catch (err) {
-    console.error('getItemsByCategory error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في جلب العناصر حسب الفئة',
-      error: err.message
-    });
-  }
+        res.json({
+            success: true,
+            data: menuItems,
+        });
+    } catch (err) {
+        console.error("getItemsByCategory error:", err);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب العناصر حسب الفئة",
+            error: err.message,
+        });
+    }
 };
 
 // Get popular items
 export const getPopularItems = async (req, res) => {
-  try {
-    const { limit = 10 } = req.query;
-    const menuItems = await MenuItem.getPopularItems(parseInt(limit));
+    try {
+        const { limit = 10 } = req.query;
+        const menuItems = await MenuItem.getPopularItems(parseInt(limit));
 
-    res.json({
-      success: true,
-      data: menuItems
-    });
-  } catch (err) {
-    console.error('getPopularItems error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في جلب العناصر الشائعة',
-      error: err.message
-    });
-  }
+        res.json({
+            success: true,
+            data: menuItems,
+        });
+    } catch (err) {
+        console.error("getPopularItems error:", err);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب العناصر الشائعة",
+            error: err.message,
+        });
+    }
 };
 
 // Get menu statistics
 export const getMenuStats = async (req, res) => {
-  try {
-    const stats = await MenuItem.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalItems: { $sum: 1 },
-          availableItems: {
-            $sum: { $cond: [{ $eq: ['$isAvailable', true] }, 1, 0] }
-          },
-          unavailableItems: {
-            $sum: { $cond: [{ $eq: ['$isAvailable', false] }, 1, 0] }
-          },
-          totalOrders: { $sum: '$orderCount' },
-          averagePrice: { $avg: '$price' }
-        }
-      }
-    ]);
+    try {
+        const stats = await MenuItem.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalItems: { $sum: 1 },
+                    availableItems: {
+                        $sum: {
+                            $cond: [{ $eq: ["$isAvailable", true] }, 1, 0],
+                        },
+                    },
+                    unavailableItems: {
+                        $sum: {
+                            $cond: [{ $eq: ["$isAvailable", false] }, 1, 0],
+                        },
+                    },
+                    totalOrders: { $sum: "$orderCount" },
+                    averagePrice: { $avg: "$price" },
+                },
+            },
+        ]);
 
-    const categoryStats = await MenuItem.aggregate([
-      {
-        $group: {
-          _id: '$category',
-          count: { $sum: 1 },
-          totalOrders: { $sum: '$orderCount' },
-          averagePrice: { $avg: '$price' }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
+        const categoryStats = await MenuItem.aggregate([
+            {
+                $group: {
+                    _id: "$category",
+                    count: { $sum: 1 },
+                    totalOrders: { $sum: "$orderCount" },
+                    averagePrice: { $avg: "$price" },
+                },
+            },
+            { $sort: { count: -1 } },
+        ]);
 
-    const result = {
-      total: stats[0]?.totalItems || 0,
-      available: stats[0]?.availableItems || 0,
-      unavailable: stats[0]?.unavailableItems || 0,
-      totalOrders: stats[0]?.totalOrders || 0,
-      averagePrice: stats[0]?.averagePrice || 0,
-      byCategory: categoryStats
-    };
+        const result = {
+            total: stats[0]?.totalItems || 0,
+            available: stats[0]?.availableItems || 0,
+            unavailable: stats[0]?.unavailableItems || 0,
+            totalOrders: stats[0]?.totalOrders || 0,
+            averagePrice: stats[0]?.averagePrice || 0,
+            byCategory: categoryStats,
+        };
 
-    res.json({
-      success: true,
-      data: result
-    });
-  } catch (err) {
-    console.error('getMenuStats error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في جلب إحصائيات المنيو',
-      error: err.message
-    });
-  }
+        res.json({
+            success: true,
+            data: result,
+        });
+    } catch (err) {
+        console.error("getMenuStats error:", err);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب إحصائيات المنيو",
+            error: err.message,
+        });
+    }
 };
 
 // Increment order count for an item
 export const incrementOrderCount = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const menuItem = await MenuItem.findById(id);
+    try {
+        const { id } = req.params;
+        const menuItem = await MenuItem.findById(id);
 
-    if (!menuItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'العنصر غير موجود',
-        error: 'MenuItem not found'
-      });
+        if (!menuItem) {
+            return res.status(404).json({
+                success: false,
+                message: "العنصر غير موجود",
+                error: "MenuItem not found",
+            });
+        }
+
+        await menuItem.incrementOrderCount();
+
+        res.json({
+            success: true,
+            message: "تم تحديث عدد الطلبات",
+            data: { orderCount: menuItem.orderCount + 1 },
+        });
+    } catch (err) {
+        console.error("incrementOrderCount error:", err);
+        res.status(400).json({
+            success: false,
+            message: "خطأ في تحديث عدد الطلبات",
+            error: err.message,
+        });
     }
-
-    await menuItem.incrementOrderCount();
-
-    res.json({
-      success: true,
-      message: 'تم تحديث عدد الطلبات',
-      data: { orderCount: menuItem.orderCount + 1 }
-    });
-  } catch (err) {
-    console.error('incrementOrderCount error:', err);
-    res.status(400).json({
-      success: false,
-      message: 'خطأ في تحديث عدد الطلبات',
-      error: err.message
-    });
-  }
 };
 
 // Toggle menu item availability
 export const toggleMenuItemAvailability = async (req, res) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    const menuItem = await MenuItem.findById(id);
+        const menuItem = await MenuItem.findById(id);
 
-    if (!menuItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'عنصر القائمة غير موجود'
-      });
+        if (!menuItem) {
+            return res.status(404).json({
+                success: false,
+                message: "عنصر القائمة غير موجود",
+            });
+        }
+
+        menuItem.isAvailable = !menuItem.isAvailable;
+        menuItem.updatedBy = req.user.id;
+        await menuItem.save();
+
+        res.json({
+            success: true,
+            message: `تم ${
+                menuItem.isAvailable ? "تفعيل" : "إلغاء تفعيل"
+            } عنصر القائمة بنجاح`,
+            data: menuItem,
+        });
+    } catch (error) {
+        console.error("❌ Error toggling menu item availability:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تغيير حالة عنصر القائمة",
+            error: error.message,
+        });
     }
-
-    menuItem.isAvailable = !menuItem.isAvailable;
-    menuItem.updatedBy = req.user.id;
-    await menuItem.save();
-
-    console.log('✅ Menu item availability toggled:', {
-      id: menuItem._id,
-      name: menuItem.name,
-      isAvailable: menuItem.isAvailable,
-      updatedBy: req.user.name
-    });
-
-    res.json({
-      success: true,
-      message: `تم ${menuItem.isAvailable ? 'تفعيل' : 'إلغاء تفعيل'} عنصر القائمة بنجاح`,
-      data: menuItem
-    });
-  } catch (error) {
-    console.error('❌ Error toggling menu item availability:', error);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في تغيير حالة عنصر القائمة',
-      error: error.message
-    });
-  }
 };
 
 // Get menu categories
 export const getMenuCategories = async (req, res) => {
-  try {
-    const categories = await MenuItem.distinct('category');
+    try {
+        const categories = await MenuItem.distinct("category");
 
-    res.json({
-      success: true,
-      data: categories
-    });
-  } catch (error) {
-    console.error('❌ Error getting menu categories:', error);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في جلب فئات القائمة',
-      error: error.message
-    });
-  }
+        res.json({
+            success: true,
+            data: categories,
+        });
+    } catch (error) {
+        console.error("❌ Error getting menu categories:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب فئات القائمة",
+            error: error.message,
+        });
+    }
 };
 
 // Get popular menu items
 export const getPopularMenuItems = async (req, res) => {
-  try {
-    const { limit = 10 } = req.query;
+    try {
+        const { limit = 10 } = req.query;
 
-    const popularItems = await MenuItem.find({
-      isPopular: true,
-      isAvailable: true
-    })
-    .sort({ sortOrder: 1, name: 1 })
-    .limit(parseInt(limit));
+        const popularItems = await MenuItem.find({
+            isPopular: true,
+            isAvailable: true,
+        })
+            .sort({ sortOrder: 1, name: 1 })
+            .limit(parseInt(limit));
 
-    res.json({
-      success: true,
-      data: popularItems,
-      count: popularItems.length
-    });
-  } catch (error) {
-    console.error('❌ Error getting popular menu items:', error);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في جلب العناصر الشائعة',
-      error: error.message
-    });
-  }
+        res.json({
+            success: true,
+            data: popularItems,
+            count: popularItems.length,
+        });
+    } catch (error) {
+        console.error("❌ Error getting popular menu items:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب العناصر الشائعة",
+            error: error.message,
+        });
+    }
 };
 
 // Bulk update menu items order
 export const updateMenuItemsOrder = async (req, res) => {
-  try {
-    const { items } = req.body;
+    try {
+        const { items } = req.body;
 
-    if (!Array.isArray(items)) {
-      return res.status(400).json({
-        success: false,
-        message: 'قائمة العناصر مطلوبة'
-      });
+        if (!Array.isArray(items)) {
+            return res.status(400).json({
+                success: false,
+                message: "قائمة العناصر مطلوبة",
+            });
+        }
+
+        const updatePromises = items.map((item) =>
+            MenuItem.findByIdAndUpdate(item.id, {
+                sortOrder: item.sortOrder,
+                updatedBy: req.user.id,
+            })
+        );
+
+        await Promise.all(updatePromises);
+
+        res.json({
+            success: true,
+            message: "تم تحديث ترتيب العناصر بنجاح",
+        });
+    } catch (error) {
+        console.error("❌ Error updating menu items order:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تحديث ترتيب العناصر",
+            error: error.message,
+        });
     }
-
-    const updatePromises = items.map(item =>
-      MenuItem.findByIdAndUpdate(item.id, {
-        sortOrder: item.sortOrder,
-        updatedBy: req.user.id
-      })
-    );
-
-    await Promise.all(updatePromises);
-
-    console.log('✅ Menu items order updated by:', req.user.name);
-
-    res.json({
-      success: true,
-      message: 'تم تحديث ترتيب العناصر بنجاح'
-    });
-  } catch (error) {
-    console.error('❌ Error updating menu items order:', error);
-    res.status(500).json({
-      success: false,
-      message: 'خطأ في تحديث ترتيب العناصر',
-      error: error.message
-    });
-  }
 };

@@ -29,7 +29,6 @@ const Cafe: React.FC = () => {
     fetchMenuItems,
     bills,
     fetchBills,
-    fetchOrders,
     showNotification
   } = useApp();
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -62,6 +61,107 @@ const Cafe: React.FC = () => {
     ordersByStatus: {}
   });
 
+  // إضافة state لإدارة قيم الإدخال المباشر للتجهيز
+  const [preparedInputs, setPreparedInputs] = useState<{ [key: string]: string }>({});
+
+  // إضافة state لإدارة حالة التجهيز لكل طلب
+  const [preparingOrders, setPreparingOrders] = useState<{ [key: string]: boolean }>({});
+
+  // دالة لإدارة حالة التجهيز
+  const togglePreparing = (orderId: string) => {
+    setPreparingOrders(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+  };
+
+  // دالة لتجهيز الطلب بالكامل
+  const prepareOrderComplete = async (orderId: string) => {
+    try {
+      const order = pendingOrders.find(o => o._id === orderId) || readyOrders.find(o => o._id === orderId);
+      if (!order || !order.items) {
+        showNotification('خطأ: الطلب غير موجود', 'error');
+        return;
+      }
+
+      // تجهيز جميع الأصناف بالكامل
+      const updatePromises = order.items.map((item, index) => {
+        const quantity = item.quantity || 0;
+        return updateItemPrepared(orderId, index, quantity);
+      });
+
+      await Promise.all(updatePromises);
+
+      // إزالة حالة التجهيز
+      setPreparingOrders(prev => {
+        const newState = { ...prev };
+        delete newState[orderId];
+        return newState;
+      });
+
+      showNotification('تم تجهيز الطلب بالكامل', 'success');
+
+      // إعادة تحميل البيانات
+      fetchPendingOrders();
+      fetchReadyOrders();
+    } catch (error) {
+      console.error('Error preparing order complete:', error);
+      showNotification('خطأ في تجهيز الطلب', 'error');
+    }
+  };
+
+  // دالة لإدارة الإدخال المباشر للتجهيز
+  const handlePreparedInputChange = (orderId: string, itemIndex: number, value: string) => {
+    const key = `${orderId}-${itemIndex}`;
+    setPreparedInputs(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // دالة لتطبيق الإدخال المباشر للتجهيز
+  const applyPreparedInput = async (orderId: string, itemIndex: number) => {
+    const key = `${orderId}-${itemIndex}`;
+    const inputValue = preparedInputs[key];
+
+    if (!inputValue || inputValue.trim() === '') {
+      showNotification('يرجى إدخال عدد صحيح', 'error');
+      return;
+    }
+
+    const preparedCount = parseInt(inputValue);
+    if (isNaN(preparedCount) || preparedCount < 0) {
+      showNotification('يرجى إدخال عدد صحيح موجب', 'error');
+      return;
+    }
+
+    // البحث عن الطلب للحصول على الكمية المطلوبة
+    const order = pendingOrders.find(o => o._id === orderId) || readyOrders.find(o => o._id === orderId);
+    if (!order || !order.items || !order.items[itemIndex]) {
+      showNotification('خطأ: الطلب أو الصنف غير موجود', 'error');
+      return;
+    }
+
+    const maxQuantity = order.items[itemIndex].quantity || 0;
+    if (preparedCount > maxQuantity) {
+      showNotification(`لا يمكن تجاوز الكمية المطلوبة (${maxQuantity})`, 'error');
+      return;
+    }
+
+    try {
+      await updateItemPrepared(orderId, itemIndex, preparedCount);
+      // مسح قيمة الإدخال بعد التطبيق
+      setPreparedInputs(prev => {
+        const newState = { ...prev };
+        delete newState[key];
+        return newState;
+      });
+    } catch (error) {
+      console.error('Error applying prepared input:', error);
+      showNotification('خطأ في تحديث عدد التجهيز', 'error');
+    }
+  };
+
   // Group menu items by category
   const menuItemsByCategory = menuItems.reduce((acc, item) => {
     if (!acc[item.category]) {
@@ -73,7 +173,6 @@ const Cafe: React.FC = () => {
 
   // Fetch categories
   useEffect(() => {
-    console.log('🔄 Component mounted, fetching initial data...');
     fetchCategories();
     fetchOpenBills();
     fetchPendingOrders();
@@ -82,7 +181,6 @@ const Cafe: React.FC = () => {
 
     // إعادة تحميل البيانات كل 30 ثانية للتأكد من التحديث
     const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing orders data...');
       fetchPendingOrders();
       fetchReadyOrders();
       fetchTodayStats();
@@ -93,7 +191,6 @@ const Cafe: React.FC = () => {
 
   // Fetch menu items when component mounts
   useEffect(() => {
-    console.log('🔄 Fetching menu items...');
     fetchMenuItems();
   }, []);
 
@@ -108,9 +205,8 @@ const Cafe: React.FC = () => {
   // Fetch pending orders for kitchen
   useEffect(() => {
     if (activeTab === 'kitchen') {
-      fetchPendingOrders();
-      fetchReadyOrders();
-      fetchTodayStats();
+      // لا نحتاج لاستدعاء الدوال هنا لأنها تُستدعى في useEffect الأول
+      // فقط نضيف interval إضافي للطبخ
       const interval = setInterval(() => {
         fetchPendingOrders();
         fetchReadyOrders();
@@ -134,18 +230,14 @@ const Cafe: React.FC = () => {
 
   const fetchOpenBills = async () => {
     try {
-      console.log('🔄 Fetching open bills...');
       const response = await api.getBills();
       if (response.success && response.data) {
-        console.log('📄 Fetched open bills:', response.data.length);
         response.data.forEach((bill: any) => {
-          console.log('📄 Bill:', bill.billNumber, 'Orders:', bill.orders?.length || 0);
           if (bill.orders && bill.orders.length > 0) {
             bill.orders.forEach((order: any) => {
-              console.log('📋 Order in bill:', order.orderNumber, 'Items:', order.items?.length || 0);
               if (order.items && order.items.length > 0) {
                 order.items.forEach((item: any, index: number) => {
-                  console.log('📦 Item', index, ':', item.name, 'Quantity:', item.quantity, 'Prepared:', item.preparedCount || 0);
+                  // تحضير البيانات للعرض
                 });
               }
             });
@@ -162,48 +254,21 @@ const Cafe: React.FC = () => {
     try {
       const response = await api.getPendingOrders();
       if (response.success && response.data) {
-        console.log('📋 Fetched pending orders:', response.data.length);
-
-        // Transform the data to match our local Order interface
         const transformedOrders = response.data.map((order: any) => {
-          console.log('📋 Order:', order.orderNumber, 'Items:', order.items?.length || 0);
           if (order.items && order.items.length > 0) {
             order.items.forEach((item: any, index: number) => {
-              console.log('📦 Item', index, ':', item.name, 'Quantity:', item.quantity, 'Prepared:', item.preparedCount || 0);
+              // تحضير البيانات للعرض
             });
           }
-
-          return {
-            _id: order._id,
-            id: order._id, // Use _id as id
-            orderNumber: order.orderNumber,
-            tableNumber: order.tableNumber || 1,
-            customerName: order.customerName,
-            customerPhone: order.customerPhone,
-            items: order.items || [],
-            subtotal: order.subtotal || order.totalAmount || 0,
-            finalAmount: order.finalAmount || order.totalAmount || 0,
-            totalAmount: order.totalAmount || 0,
-            status: order.status,
-            notes: order.notes,
-            createdAt: order.createdAt,
-            bill: order.bill
-          };
+          return order;
         });
 
-        console.log('📋 Transformed orders count:', transformedOrders.length);
-
-        // تأكد من عدم وجود طلبات مسلمة في القائمة
-        const filteredOrders = transformedOrders.filter(order =>
+        // تصفية الطلبات المسلمة أو الملغية
+        const filteredOrders = transformedOrders.filter((order: any) =>
           order.status !== 'delivered' && order.status !== 'cancelled'
         );
 
-        if (filteredOrders.length !== transformedOrders.length) {
-          console.log('⚠️ Filtered out', transformedOrders.length - filteredOrders.length, 'delivered/cancelled orders');
-        }
-
         setPendingOrders(filteredOrders);
-        // setOrders(transformedOrders); // Also update the main orders state
       }
     } catch (error) {
       console.error('Error fetching pending orders:', error);
@@ -214,38 +279,19 @@ const Cafe: React.FC = () => {
     try {
       const response = await api.getOrders({ status: 'ready' });
       if (response.success && response.data) {
-        console.log('✅ Fetched ready orders:', response.data.length);
-
-        // Transform the data to match our local Order interface
         const transformedOrders = response.data.map((order: any) => {
-          return {
-            _id: order._id,
-            id: order._id,
-            orderNumber: order.orderNumber,
-            tableNumber: order.tableNumber || 1,
-            customerName: order.customerName,
-            customerPhone: order.customerPhone,
-            items: order.items || [],
-            subtotal: order.subtotal || order.totalAmount || 0,
-            finalAmount: order.finalAmount || order.totalAmount || 0,
-            totalAmount: order.totalAmount || 0,
-            status: order.status,
-            notes: order.notes,
-            createdAt: order.createdAt,
-            bill: order.bill
-          };
+          if (order.items && order.items.length > 0) {
+            order.items.forEach((item: any, index: number) => {
+              // تحضير البيانات للعرض
+            });
+          }
+          return order;
         });
 
-        console.log('✅ Transformed ready orders count:', transformedOrders.length);
-
-        // تأكد من عدم وجود طلبات مسلمة في القائمة الجاهزة
-        const filteredOrders = transformedOrders.filter(order =>
+        // تصفية الطلبات المسلمة أو الملغية
+        const filteredOrders = transformedOrders.filter((order: any) =>
           order.status !== 'delivered' && order.status !== 'cancelled'
         );
-
-        if (filteredOrders.length !== transformedOrders.length) {
-          console.log('⚠️ Filtered out', transformedOrders.length - filteredOrders.length, 'delivered/cancelled orders from ready list');
-        }
 
         setReadyOrders(filteredOrders);
       }
@@ -256,14 +302,12 @@ const Cafe: React.FC = () => {
 
   const fetchTodayStats = async () => {
     try {
-      console.log('📊 Fetching today\'s orders statistics...');
       const response = await api.getTodayOrdersStats();
       if (response.success && response.data) {
-        console.log('📊 Today\'s stats:', response.data);
         setTodayStats(response.data);
       }
     } catch (error) {
-      console.error('Error fetching today\'s stats:', error);
+      console.error('Error fetching today stats:', error);
     }
   };
 
@@ -272,6 +316,10 @@ const Cafe: React.FC = () => {
   );
 
   const addToOrder = (item: MenuItem) => {
+    if (!item || !item._id || !item.name) {
+      showNotification('عنصر القائمة غير موجود أو غير معرف', 'error');
+      return;
+    }
     const existingItem = currentOrder.find(orderItem => orderItem.menuItem === item._id);
 
     if (existingItem) {
@@ -311,95 +359,106 @@ const Cafe: React.FC = () => {
   const calculateTotal = () => {
     return currentOrder.reduce((total, item) => {
       const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
-      return total + (item.price + addonsTotal) * item.quantity;
+      return total + (item.price * item.quantity) + addonsTotal;
     }, 0);
   };
 
   const handleCreateOrder = async () => {
     if (currentOrder.length === 0) {
-      alert('يرجى إضافة عناصر للطلب');
+      showNotification('يرجى إضافة عناصر للطلب', 'error');
       return;
+    }
+
+    // تحقق صارم من كل عنصر
+    if (currentOrder.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
+      showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
+    return;
     }
 
     if (!customerName.trim()) {
-      alert('يرجى إدخال اسم العميل');
+      showNotification('يرجى إدخال اسم العميل', 'error');
       return;
     }
 
+
     setLoading(true);
+
     try {
-      let billId = null;
-
-      // إنشاء فاتورة جديدة أو ربط بفاتورة موجودة
-      let finalCustomerName = customerName.trim();
-
-      if (billOption === 'new') {
-        // إنشاء فاتورة جديدة
-        const billData = {
-          tableNumber: 1, // رقم الطاولة الافتراضي للكافيه
-          customerName: finalCustomerName,
-          billType: 'cafe' as const
-        };
-        const billResponse = await api.createBill(billData);
-        if (billResponse.success && billResponse.data) {
-          billId = billResponse.data._id;
-        }
-      } else if (billOption === 'existing' && selectedBillId) {
-        billId = selectedBillId;
-        // استخدام اسم العميل من الفاتورة المختارة
-        finalCustomerName = selectedBill?.customerName || finalCustomerName;
-      }
-
       const orderData = {
-        tableNumber: 1, // رقم الطاولة الافتراضي للكافيه
-        customerName: finalCustomerName,
+        customerName: customerName.trim(),
         items: currentOrder.map(item => ({
-          menuItem: item.menuItem,
           name: item.name,
-          arabicName: item.name,
           price: item.price,
           quantity: item.quantity,
-          notes: item.notes || undefined,
+          notes: item.notes,
           addons: item.addons || []
         })),
-        bill: billId
+        notes: orderNotes
       };
 
-      console.log('📝 Sending order data:', orderData);
-      console.log('📝 Current order items:', currentOrder);
 
-      const response = await api.createOrder(orderData);
+      let response;
+      if (billOption === 'new') {
+        // 1. أنشئ الفاتورة أولاً
+        const billResponse = await api.createBill({
+          customerName: customerName.trim(),
+          orders: [],
+          sessions: [],
+          discount: 0,
+          tax: 0,
+          notes: orderNotes,
+          billType: 'cafe'
+        });
+        if (!billResponse.success || !billResponse.data) {
+          showNotification('فشل في إنشاء الفاتورة', 'error');
+          setLoading(false);
+          return;
+        }
+        const newBillId = billResponse.data._id || billResponse.data.id;
 
-      console.log('📥 Order response:', response);
+        // 2. أنشئ الطلب
+        response = await api.createOrder(orderData);
 
-      if (response.success) {
-        // Clear current order
-        setCurrentOrder([]);
+        // 3. اربط الطلب بالفاتورة الجديدة
+        if (response.success && response.data) {
+          await api.addOrderToBill(newBillId, response.data._id);
+        }
+      } else if (billOption === 'existing' && selectedBillId) {
+        response = await api.createOrder(orderData);
+        if (response.success && response.data) {
+          // إضافة الطلب إلى الفاتورة المختارة
+          await api.addOrderToBill(selectedBillId, response.data._id);
+        }
+      } else {
+        showNotification('يرجى اختيار فاتورة موجودة', 'error');
+        setLoading(false);
+        return;
+      }
+
+      if (response && response.success) {
+        showNotification('تم إنشاء الطلب بنجاح', 'success');
+        setShowNewOrder(false);
         setCustomerName('');
+        setOrderNotes('');
+        setCurrentOrder([]);
         setBillOption('new');
         setSelectedBillId('');
         setSelectedBill(null);
         setSearchBill('');
 
-        alert('تم إنشاء الطلب بنجاح');
-
-        // Refresh data
-        console.log('🔄 Refreshing data after order creation...');
-        fetchOpenBills();
+        // إعادة تحميل البيانات
+        setTimeout(() => {
         fetchPendingOrders();
-        fetchTodayStats();
-        if (activeTab === 'kitchen') {
-          fetchPendingOrders();
-        }
-        console.log('✅ Data refresh completed');
+          fetchReadyOrders();
+          fetchOpenBills();
+        }, 1000);
       } else {
-        console.error('❌ Order creation failed:', response);
-        alert(`خطأ في إنشاء الطلب: ${response.message || 'خطأ غير معروف'}`);
+        const errorMessage = response?.message || 'خطأ في إنشاء الطلب';
+        showNotification(errorMessage, 'error');
       }
     } catch (error) {
-      console.error('❌ Error creating order:', error);
-      const errorMessage = error instanceof Error ? error.message : 'خطأ غير معروف';
-      alert(`خطأ في إنشاء الطلب: ${errorMessage}`);
+      console.error('Error creating order:', error);
+      showNotification('خطأ في إنشاء الطلب', 'error');
     } finally {
       setLoading(false);
     }
@@ -407,13 +466,22 @@ const Cafe: React.FC = () => {
 
   const updateOrderStatus = async (orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled') => {
     try {
-      const response = await api.updateOrder(orderId, { status });
-      if (response.success) {
+      const response = await api.updateOrderStatus(orderId, status);
+
+      if (response && response.success) {
+        // إعادة تحميل البيانات
         fetchPendingOrders();
+        fetchReadyOrders();
+        return response;
+      } else {
+        const errorMessage = response?.message || 'خطأ في تحديث حالة الطلب';
+        showNotification(errorMessage, 'error');
+        return null;
       }
     } catch (error) {
       console.error('Error updating order status:', error);
-      alert('خطأ في تحديث حالة الطلب');
+      showNotification('خطأ في تحديث حالة الطلب', 'error');
+      return null;
     }
   };
 
@@ -426,48 +494,86 @@ const Cafe: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'preparing': return 'bg-blue-100 text-blue-800';
-      case 'ready': return 'bg-green-100 text-green-800';
-      case 'delivered': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'preparing':
+        return 'bg-blue-100 text-blue-800';
+      case 'ready':
+        return 'bg-green-100 text-green-800';
+      case 'delivered':
+        return 'bg-gray-100 text-gray-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'pending': return 'في الانتظار';
-      case 'preparing': return 'قيد التحضير';
-      case 'ready': return 'جاهز';
-      case 'delivered': return 'تم التسليم';
-      default: return 'غير معروف';
+      case 'pending':
+        return 'في الانتظار';
+      case 'preparing':
+        return 'قيد التجهيز';
+      case 'ready':
+        return 'جاهز للتسليم';
+      case 'delivered':
+        return 'تم التسليم';
+      case 'cancelled':
+        return 'ملغي';
+      default:
+        return status;
     }
   };
 
-  // Helper: Check if order has any unprepared items
+  // دالة للتحقق من وجود أصناف غير مجهزة
   const hasUnpreparedItems = (order: Order) => {
     if (!order.items) return false;
-    for (const item of order.items) {
+    return order.items.some(item => {
       const prepared = item.preparedCount || 0;
       const quantity = item.quantity || 0;
-      if (prepared < quantity) {
-        console.log('🔍 Found unprepared item:', { name: item.name, prepared, quantity });
-        return true;
-      }
-    }
-    return false;
+      return prepared < quantity; // يوجد أصناف غير مجهزة بالكامل
+    });
   };
 
+  // دالة للتحقق من وجود أصناف مجهزة
   const hasAnyPreparedItems = (order: Order) => {
     if (!order.items) return false;
-    for (const item of order.items) {
+    return order.items.some(item => {
       const prepared = item.preparedCount || 0;
-      if (prepared > 0) {
-        console.log('🔍 Found prepared item:', { name: item.name, prepared });
+      return prepared > 0; // يوجد أصناف مجهزة (ولو جزئياً)
+    });
+  };
+
+  // دالة للتحقق من أن جميع الأصناف مجهزة بالكامل
+  const hasAllItemsFullyPrepared = (order: Order) => {
+    if (!order.items) return false;
+    return order.items.every(item => {
+      const prepared = item.preparedCount || 0;
+      const quantity = item.quantity || 0;
+      return prepared >= quantity; // جميع الأصناف مجهزة بالكامل
+    });
+  };
+
+  // دالة للتحقق من أن الطلب جاهز للتسليم
+  const isOrderReadyForDelivery = (order: Order) => {
+    // التحقق من الحالة أولاً
+    if (order.status === 'ready') {
         return true;
       }
-    }
+
+    // التحقق من أن جميع الأصناف مجهزة بالكامل
+    if (!order.items || order.items.length === 0) {
     return false;
+    }
+
+    const allItemsFullyPrepared = order.items.every(item => {
+      const prepared = item.preparedCount || 0;
+      const quantity = item.quantity || 0;
+      return prepared >= quantity;
+    });
+
+    return allItemsFullyPrepared;
   };
 
   // Filter orders with unprepared items using useMemo
@@ -475,20 +581,18 @@ const Cafe: React.FC = () => {
     const filtered = pendingOrders.filter(order => {
       // تجاهل الطلبات المسلمة أو الملغية
       if (order.status === 'delivered' || order.status === 'cancelled') {
-        console.log('📋 Order', order.orderNumber, 'is', order.status, ', skipping');
         return false;
       }
 
+      // إظهار الطلبات التي لديها أصناف غير مجهزة بالكامل (pending + preparing)
       const hasUnprepared = hasUnpreparedItems(order);
-      console.log('📋 Order', order.orderNumber, 'has unprepared items:', hasUnprepared);
       return hasUnprepared;
     });
-    console.log('📋 Incomplete orders count:', filtered.length);
     return filtered;
   }, [pendingOrders]);
 
-  // تحويل الطلبات الجاهزة إلى أصناف جاهزة منفصلة
-  const readyItems = useMemo(() => {
+  // تحويل الطلبات إلى أصناف مجهزة منفصلة
+  const preparedItems = useMemo(() => {
     const items: Array<{
       _id: string;
       orderId: string;
@@ -501,15 +605,19 @@ const Cafe: React.FC = () => {
       totalPrice: number;
       createdAt: Date;
       orderCreatedAt: Date;
+      billNumber?: string;
     }> = [];
 
-    readyOrders.forEach(order => {
+    // البحث في جميع الطلبات (pending + ready)
+    const allOrders = [...pendingOrders, ...readyOrders];
+
+    allOrders.forEach(order => {
       if (order.items) {
         order.items.forEach(item => {
           const preparedCount = item.preparedCount || 0;
           const quantity = item.quantity || 0;
 
-          // إضافة الأصناف الجاهزة فقط (preparedCount > 0)
+          // إضافة الأصناف المجهزة فقط (preparedCount > 0)
           if (preparedCount > 0) {
             items.push({
               _id: `${order._id}-${item.name}`,
@@ -522,34 +630,44 @@ const Cafe: React.FC = () => {
               price: item.price,
               totalPrice: item.price * preparedCount,
               createdAt: new Date(),
-              orderCreatedAt: order.createdAt
+              orderCreatedAt: order.createdAt,
+              billNumber: order.bill?.billNumber
             });
           }
         });
       }
     });
 
-    console.log('📋 Ready items count:', items.length);
     return items;
-  }, [readyOrders]);
+  }, [pendingOrders, readyOrders]);
 
-  // Update incomplete orders when pendingOrders change
-  useEffect(() => {
-    console.log('🔄 Pending orders changed, updating incomplete orders...');
-    console.log('📋 Total pending orders:', pendingOrders.length);
-    console.log('📋 Incomplete orders:', incompleteOrders.length);
-  }, [pendingOrders, incompleteOrders]);
+  // طلبات جاهزة للتسليم
+  const readyForDeliveryOrders = useMemo(() => {
+    const filtered = [...pendingOrders, ...readyOrders].filter(order => {
+      // تجاهل الطلبات المسلمة أو الملغية
+      if (order.status === 'delivered' || order.status === 'cancelled') {
+        return false;
+      }
+
+      // إظهار الطلبات التي جميع أصنافها مجهزة بالكامل
+      const isReady = isOrderReadyForDelivery(order);
+      return isReady;
+    });
+    return filtered;
+  }, [pendingOrders, readyOrders]);
 
   // Auto-refresh data every 30 seconds to ensure consistency
   useEffect(() => {
     const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing cafe data...');
       fetchPendingOrders();
       fetchReadyOrders();
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
   }, []);
+
+  // Clean up delivered orders from all lists - يتم تنظيفها في fetchPendingOrders و fetchReadyOrders
+  // لذلك لا نحتاج لـ useEffect منفصل هنا
 
   // Helper: Get unprepared items count for an order
   const getUnpreparedItemsCount = (order: Order) => {
@@ -559,7 +677,19 @@ const Cafe: React.FC = () => {
       const unprepared = (item.quantity || 0) - (item.preparedCount || 0);
       if (unprepared > 0) {
         count += unprepared;
-        console.log('🔢 Unprepared count for', item.name, ':', unprepared, 'total:', count);
+      }
+    }
+    return count;
+  };
+
+  // دالة لحساب عدد الأصناف المجهزة
+  const getPreparedItemsCount = (order: Order) => {
+    if (!order.items) return 0;
+    let count = 0;
+    for (const item of order.items) {
+      const prepared = item.preparedCount || 0;
+      if (prepared > 0) {
+        count += prepared;
       }
     }
     return count;
@@ -568,27 +698,20 @@ const Cafe: React.FC = () => {
   // Function to update item prepared count
   const updateItemPrepared = async (orderId: string, itemIndex: number, preparedCount: number) => {
     try {
-      console.log('🔄 Updating prepared count:', { orderId, itemIndex, preparedCount });
-
       // تحديث فوري في الواجهة الأمامية أولاً
       setPendingOrders(prevOrders => {
         const updatedOrders = prevOrders.map(order => {
           if (order._id === orderId && order.items && order.items[itemIndex]) {
-            console.log('📋 Updating order:', order.orderNumber, 'item:', itemIndex);
             const updatedOrder = { ...order };
             updatedOrder.items = [...order.items];
             updatedOrder.items[itemIndex] = {
               ...order.items[itemIndex],
               preparedCount: preparedCount
             };
-            console.log('📋 Updated item:', updatedOrder.items[itemIndex]);
             return updatedOrder;
           }
           return order;
         });
-
-        console.log('📋 Updated orders count:', updatedOrders.length);
-        console.log('📋 Incomplete orders count:', updatedOrders.filter(order => hasUnpreparedItems(order)).length);
 
         return updatedOrders;
       });
@@ -612,39 +735,26 @@ const Cafe: React.FC = () => {
       // إرسال التحديث إلى الخادم
       const response = await api.updateOrderItemPrepared(orderId, itemIndex, { preparedCount });
       if (response.success) {
-        console.log('✅ API response successful');
-
         // التحقق من حالة الطلب بعد التحديث
         const updatedOrder = response.data;
         if (!updatedOrder) {
-          console.error('❌ No updated order data received');
           showNotification('خطأ في تحديث حالة التجهيز', 'error');
           return;
         }
 
-        const allItemsReady = updatedOrder.items?.every(item =>
+        const allItemsFullyPrepared = updatedOrder.items?.every(item =>
           (item.preparedCount || 0) >= (item.quantity || 0)
         );
         const anyItemsPrepared = updatedOrder.items?.some(item =>
           (item.preparedCount || 0) > 0
         );
 
-        console.log('📋 Order status after update:', {
-          orderId,
-          allItemsReady,
-          anyItemsPrepared,
-          items: updatedOrder.items?.map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            preparedCount: item.preparedCount
-          }))
-        });
+        // إذا تم تجهيز جميع الأصناف بالكامل، إزالة الطلب من غير المكتملة
+        if (allItemsFullyPrepared) {
+          // إزالة الطلب من المعلقة
+          setPendingOrders(prev => prev.filter(o => o._id !== orderId));
 
-        // إذا كان هناك أي صنف جاهز، انقل الطلب إلى الجاهزة
-        if (anyItemsPrepared) {
-          console.log('✅ Some items ready, moving to ready orders');
-
-          // إضافة الطلب إلى الجاهزة (حتى لو كان موجوداً في المعلقة)
+          // إضافة الطلب إلى الجاهزة
           setReadyOrders(prev => {
             const readyOrder: Order = {
               ...updatedOrder,
@@ -659,11 +769,9 @@ const Cafe: React.FC = () => {
               // تحديث الطلب الموجود
               const newReadyOrders = [...prev];
               newReadyOrders[existingIndex] = readyOrder;
-              console.log('📋 Updated existing order in ready list');
               return newReadyOrders;
             } else {
               // إضافة طلب جديد
-              console.log('📋 Added new order to ready list');
               return [...prev, readyOrder];
             }
           });
@@ -678,41 +786,24 @@ const Cafe: React.FC = () => {
             } as Order);
           }
 
-          if (allItemsReady) {
             showNotification('تم تجهيز الطلب بالكامل وتم نقله إلى الجاهزة', 'success');
-          } else {
-            showNotification('تم تجهيز بعض الأصناف وتم نقل الطلب إلى الجاهزة', 'success');
-          }
         }
-        // إذا لم تكن هناك أي أصناف جاهزة، انقل الطلب إلى المعلقة
-        else {
-          console.log('❌ No items prepared, moving back to pending');
-
-          // إزالة الطلب من الجاهزة إذا كان موجوداً هناك
-          setReadyOrders(prev => prev.filter(o => o._id !== orderId));
-
-          // إضافة الطلب إلى المعلقة
+        // إذا كان هناك أصناف مجهزة ولكن لم تكتمل جميعها
+        else if (anyItemsPrepared) {
+          // تحديث الطلب في المعلقة
           setPendingOrders(prev => {
-            const pendingOrder: Order = {
-              ...updatedOrder,
-              status: 'pending' as const,
-              _id: updatedOrder._id || orderId,
-              id: updatedOrder.id || orderId
-            };
-
-            // التحقق من وجود الطلب في القائمة المعلقة
-            const existingIndex = prev.findIndex(o => o._id === orderId);
-            if (existingIndex >= 0) {
-              // تحديث الطلب الموجود
-              const newPendingOrders = [...prev];
-              newPendingOrders[existingIndex] = pendingOrder;
-              console.log('📋 Updated existing order in pending list');
-              return newPendingOrders;
-            } else {
-              // إضافة طلب جديد
-              console.log('📋 Added new order to pending list');
-              return [...prev, pendingOrder];
-            }
+            const updatedOrders = prev.map(o => {
+              if (o._id === orderId) {
+                return {
+                  ...updatedOrder,
+                  status: 'pending' as const,
+                  _id: updatedOrder._id || orderId,
+                  id: updatedOrder.id || orderId
+                } as Order;
+              }
+              return o;
+            });
+            return updatedOrders;
           });
 
           // تحديث selectedOrder إذا كان مفتوحاً
@@ -725,7 +816,40 @@ const Cafe: React.FC = () => {
             } as Order);
           }
 
-          showNotification('تم إزالة جميع الأصناف الجاهزة وتم إرجاع الطلب للمعلقة', 'info');
+          showNotification('تم تحديث عدد التجهيز', 'success');
+        }
+        // إذا لم تكن هناك أي أصناف مجهزة
+        else {
+          // تحديث الطلب في المعلقة
+          setPendingOrders(prev => {
+            const updatedOrders = prev.map(o => {
+              if (o._id === orderId) {
+                return {
+              ...updatedOrder,
+              status: 'pending' as const,
+              _id: updatedOrder._id || orderId,
+              id: updatedOrder.id || orderId
+                } as Order;
+              }
+              return o;
+            });
+            return updatedOrders;
+          });
+
+          // إزالة الطلب من الجاهزة إذا كان موجوداً هناك
+          setReadyOrders(prev => prev.filter(o => o._id !== orderId));
+
+          // تحديث selectedOrder إذا كان مفتوحاً
+          if (selectedOrder && selectedOrder._id === orderId) {
+            setSelectedOrder({
+              ...updatedOrder,
+              status: 'pending' as const,
+              _id: updatedOrder._id || orderId,
+              id: updatedOrder.id || orderId
+            } as Order);
+          }
+
+          showNotification('تم إزالة جميع الأصناف المجهزة', 'info');
         }
 
         // تحديث الفواتير لتعكس التغييرات
@@ -733,12 +857,10 @@ const Cafe: React.FC = () => {
 
         // إعادة تحميل البيانات للتأكد من التحديث
         setTimeout(() => {
-          console.log('🔄 Refreshing data after update...');
           fetchPendingOrders();
           fetchReadyOrders();
         }, 500);
       } else {
-        console.error('❌ API response failed:', response);
         showNotification('خطأ في تحديث حالة التجهيز', 'error');
 
         // إعادة تحميل البيانات من الخادم في حالة الفشل
@@ -746,7 +868,6 @@ const Cafe: React.FC = () => {
         fetchReadyOrders();
       }
     } catch (error) {
-      console.error('❌ Error updating prepared count:', error);
       showNotification('خطأ في تحديث حالة التجهيز', 'error');
 
       // إعادة تحميل البيانات من الخادم في حالة الفشل
@@ -757,105 +878,156 @@ const Cafe: React.FC = () => {
   // Function to move order to ready manually
   const moveOrderToReady = async (orderId: string) => {
     try {
-      console.log('✅ Moving order to ready:', orderId);
-
+      // البحث عن الطلب
       const order = pendingOrders.find(o => o._id === orderId);
       if (!order) {
-        console.error('❌ Order not found:', orderId);
+        showNotification('خطأ: الطلب غير موجود', 'error');
         return;
       }
 
-      // تحقق من أن جميع الأصناف جاهزة
-      const allItemsReady = order.items?.every(item =>
-        (item.preparedCount || 0) >= (item.quantity || 0)
-      );
-
-      if (!allItemsReady) {
-        showNotification('لا يمكن تحريك الطلب إلى الجاهزة - بعض الأصناف غير جاهزة', 'error');
+      // التحقق من أن جميع الأصناف مجهزة بالكامل
+      if (!hasAllItemsFullyPrepared(order)) {
+        showNotification('لا يمكن تحريك الطلب - بعض الأصناف غير مجهزة بالكامل', 'error');
         return;
       }
 
       // تحديث حالة الطلب إلى ready
       await updateOrderStatus(orderId, 'ready');
 
-      // نقل الطلب من pending إلى ready
+      // إزالة من قائمة الطلبات قيد التجهيز
       setPendingOrders(prev => prev.filter(o => o._id !== orderId));
-      setReadyOrders(prev => {
-        const readyOrder = { ...order, status: 'ready' as const };
-        return [...prev, readyOrder];
-      });
 
       showNotification('تم تحريك الطلب إلى الجاهزة بنجاح', 'success');
+
+      // إعادة تحميل البيانات
+      fetchPendingOrders();
+      fetchReadyOrders();
     } catch (error) {
       console.error('❌ Error moving order to ready:', error);
-      showNotification('خطأ في تحريك الطلب إلى الجاهزة', 'error');
+      showNotification('خطأ في تحريك الطلب', 'error');
+    }
+  };
+
+  // دالة لاختبار الاتصال بالخادم
+  const testServerConnection = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/orders/pending');
+
+      if (response.ok) {
+        showNotification('الخادم يعمل بشكل طبيعي', 'success');
+      } else {
+        showNotification(`خطأ في الخادم: ${response.status}`, 'error');
+      }
+    } catch (error) {
+      showNotification('لا يمكن الاتصال بالخادم، تأكد من تشغيله', 'error');
     }
   };
 
   // Function to deliver order
   const deliverOrder = async (orderId: string) => {
     try {
-      console.log('🚚 Delivering order:', orderId);
-      const response = await updateOrder(orderId, 'delivered');
-      if (response) {
-        // Remove from ready orders
-        setReadyOrders(prev => prev.filter(order => order._id !== orderId));
+      // البحث عن الطلب في جميع القوائم
+      const allOrders = [...pendingOrders, ...readyOrders];
+      const order = allOrders.find(o => o._id === orderId);
+
+      if (!order) {
+        showNotification('خطأ: الطلب غير موجود', 'error');
+        return;
+      }
+
+      // التحقق من أن الطلب جاهز للتسليم
+      const isReady = isOrderReadyForDelivery(order);
+
+      if (!isReady) {
+        const unpreparedItems = order.items?.filter(item =>
+          (item.preparedCount || 0) < (item.quantity || 0)
+        ) || [];
+        showNotification('لا يمكن تسليم الطلب - بعض الأصناف غير جاهزة', 'error');
+        return;
+      }
+
+      // تحديث حالة الطلب إلى delivered
+      const response = await updateOrderStatus(orderId, 'delivered');
+
+      if (response && response.success) {
+        // إزالة من جميع القوائم فوراً
+        setReadyOrders(prev => {
+          const filtered = prev.filter(o => o._id !== orderId);
+          return filtered;
+        });
+
+        setPendingOrders(prev => {
+          const filtered = prev.filter(o => o._id !== orderId);
+          return filtered;
+        });
+
         showNotification('تم تسليم الطلب بنجاح', 'success');
 
-        // إعادة تحميل البيانات
+        // إعادة تحميل البيانات بعد تأخير قصير للتأكد من التحديث
+        setTimeout(() => {
         fetchPendingOrders();
         fetchReadyOrders();
+          fetchOpenBills(); // تحديث الفواتير
+        }, 1000);
+      } else {
+        const errorMessage = response?.message || 'خطأ غير معروف في تحديث حالة الطلب';
+        showNotification(errorMessage, 'error');
       }
     } catch (error) {
-      console.error('❌ Error delivering order:', error);
-      showNotification('خطأ في تسليم الطلب', 'error');
+      const errorMessage = error instanceof Error ? error.message : 'خطأ في تسليم الطلب';
+      showNotification(errorMessage, 'error');
     }
   };
 
   // Function to deliver specific item
   const deliverItem = async (orderId: string, itemName: string, itemIndex: number) => {
     try {
-      console.log('🚚 Delivering item:', { orderId, itemName, itemIndex });
-
-      // البحث عن الطلب في readyOrders
-      const order = readyOrders.find(o => o._id === orderId);
+      // البحث عن الطلب في جميع الطلبات (pending + ready)
+      const order = pendingOrders.find(o => o._id === orderId) || readyOrders.find(o => o._id === orderId);
       if (!order || !order.items || !order.items[itemIndex]) {
         showNotification('خطأ: الطلب أو الصنف غير موجود', 'error');
         return;
       }
 
-      // تحديث preparedCount للصنف إلى 0 (تم تسليمه)
-      const response = await api.updateOrderItemPrepared(orderId, itemIndex, { preparedCount: 0 });
-      if (response.success) {
-        console.log('✅ Item delivered successfully');
+      const currentItem = order.items[itemIndex];
+      const currentPreparedCount = currentItem.preparedCount || 0;
+      const requiredQuantity = currentItem.quantity || 0;
 
+      // حساب العدد المطلوب إضافته للوصول للكمية الكاملة
+      const remainingToDeliver = requiredQuantity - currentPreparedCount;
+
+      if (remainingToDeliver <= 0) {
+        showNotification(`${itemName} تم تسليمه بالكامل بالفعل`, 'info');
+        return;
+      }
+
+      // استخدام API الجديد لتسليم الصنف
+      const response = await api.deliverItem(orderId, itemIndex);
+
+      if (response.success) {
         // التحقق من حالة الطلب بعد التحديث
         const updatedOrder = response.data;
         if (updatedOrder) {
-          // التحقق من حالة الطلب من response
-          const orderStatus = (response as any).orderStatus;
+          // التحقق من أن جميع الأصناف تم تسليمها بالكامل
+          const allItemsFullyDelivered = updatedOrder.items?.every(item =>
+            (item.preparedCount || 0) >= (item.quantity || 0)
+          );
 
-          if (orderStatus?.shouldMoveToDelivered) {
+          if (allItemsFullyDelivered) {
             // إذا تم تسليم جميع الأصناف، الطلب أصبح delivered
-            console.log('✅ All items delivered, order is now delivered');
-
-            // إزالة الطلب من readyOrders
             setReadyOrders(prev => {
               const filtered = prev.filter(o => o._id !== orderId);
-              console.log('📋 Removed from readyOrders, remaining:', filtered.length);
               return filtered;
             });
 
-            // إزالة الطلب من pendingOrders إذا كان موجوداً هناك
             setPendingOrders(prev => {
               const filtered = prev.filter(o => o._id !== orderId);
-              console.log('📋 Removed from pendingOrders, remaining:', filtered.length);
               return filtered;
             });
 
-            showNotification(`تم تسليم ${itemName} واكتمل الطلب`, 'success');
-          } else if (orderStatus?.anyItemsPrepared) {
-            // إذا تبقى أصناف جاهزة، تحديث الواجهة فقط
+            showNotification(`تم تسليم ${itemName} واكتمل الطلب بالكامل`, 'success');
+          } else {
+            // إذا تبقى أصناف، تحديث الواجهة فقط
             setReadyOrders(prev => {
               const updatedOrders = prev.map(o => {
                 if (o._id === orderId) {
@@ -863,7 +1035,7 @@ const Cafe: React.FC = () => {
                   updatedOrder.items = [...o.items];
                   updatedOrder.items[itemIndex] = {
                     ...o.items[itemIndex],
-                    preparedCount: 0
+                    preparedCount: requiredQuantity
                   };
                   return updatedOrder;
                 }
@@ -872,27 +1044,35 @@ const Cafe: React.FC = () => {
               return updatedOrders;
             });
 
-            showNotification(`تم تسليم ${itemName} بنجاح`, 'success');
-          } else {
-            // إذا لم تتبق أي أصناف جاهزة، إزالة الطلب من readyOrders
-            setReadyOrders(prev => prev.filter(o => o._id !== orderId));
-            showNotification(`تم تسليم ${itemName} بنجاح`, 'success');
+            setPendingOrders(prev => {
+              const updatedOrders = prev.map(o => {
+                if (o._id === orderId) {
+                  const updatedOrder = { ...o };
+                  updatedOrder.items = [...o.items];
+                  updatedOrder.items[itemIndex] = {
+                    ...o.items[itemIndex],
+                    preparedCount: requiredQuantity
+                  };
+                  return updatedOrder;
+                }
+                return o;
+              });
+              return updatedOrders;
+            });
+
+            showNotification(`تم تسليم ${itemName} بنجاح (${remainingToDeliver} من ${requiredQuantity})`, 'success');
           }
         }
 
         // إعادة تحميل البيانات للتأكد من التحديث
         setTimeout(() => {
-          console.log('🔄 Refreshing data after item delivery...');
           fetchPendingOrders();
           fetchReadyOrders();
-          console.log('✅ Data refresh completed');
         }, 500);
       } else {
-        console.error('❌ Failed to deliver item:', response);
         showNotification('خطأ في تسليم الصنف', 'error');
       }
     } catch (error) {
-      console.error('❌ Error delivering item:', error);
       showNotification('خطأ في تسليم الصنف', 'error');
     }
   };
@@ -935,7 +1115,6 @@ const Cafe: React.FC = () => {
         <div className="flex items-center space-x-3 space-x-reverse">
           <button
             onClick={() => {
-              console.log('🔄 Manual refresh triggered');
               fetchPendingOrders();
               fetchReadyOrders();
               fetchTodayStats();
@@ -960,14 +1139,14 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
               <Clock className="h-6 w-6 text-yellow-600" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">طلبات غير مكتملة</p>
+              <p className="text-sm font-medium text-gray-600">طلبات قيد التجهيز</p>
               <p className="text-2xl font-bold text-yellow-600">
                 {incompleteOrders.length}
               </p>
@@ -981,8 +1160,8 @@ const Cafe: React.FC = () => {
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">أصناف جاهزة</p>
-              <p className="text-2xl font-bold text-green-600">{readyItems.length}</p>
+              <p className="text-sm font-medium text-gray-600">جاهز للتسليم</p>
+              <p className="text-2xl font-bold text-green-600">{readyForDeliveryOrders.length}</p>
             </div>
           </div>
         </div>
@@ -993,10 +1172,8 @@ const Cafe: React.FC = () => {
               <Coffee className="h-6 w-6 text-blue-600" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">أصناف غير جاهزة</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {incompleteOrders.reduce((sum, order) => sum + getUnpreparedItemsCount(order), 0)}
-              </p>
+              <p className="text-sm font-medium text-gray-600">أصناف مجهزة</p>
+              <p className="text-2xl font-bold text-blue-600">{preparedItems.length}</p>
             </div>
           </div>
         </div>
@@ -1014,37 +1191,22 @@ const Cafe: React.FC = () => {
             </div>
           </div>
         </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <User className="h-6 w-6 text-orange-600" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">إجمالي الطلبات اليوم</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {todayStats.totalOrders}
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Orders List */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">الطلبات غير المكتملة</h3>
+          <h3 className="text-lg font-semibold text-gray-900">طلبات قيد التجهيز</h3>
         </div>
         <div className="p-6">
           {incompleteOrders.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">لا توجد طلبات غير مكتملة</p>
+            <p className="text-gray-500 text-center py-8">لا توجد طلبات قيد التجهيز</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {incompleteOrders.map((order) => (
                 <div
                   key={order._id}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 cursor-pointer"
-                  onClick={() => handleOrderClick(order)}
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200"
                 >
                   {/* Header */}
                   <div className="p-4 border-b border-gray-100">
@@ -1069,35 +1231,141 @@ const Cafe: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Content - عرض الأصناف بدون أسعار */}
+                  <div className="p-4">
+                    <div className="space-y-3">
+                      {/* عرض جميع الأصناف المطلوبة بدون أسعار */}
+                      {order.items && order.items.length > 0 && (
+                        <div className="text-sm text-gray-700">
+                          <div className="font-medium mb-2 text-gray-900">الأصناف المطلوبة:</div>
+                          {order.items.map((item, index) => (
+                            <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
+                              <div className="flex justify-between items-center">
+                                <span className="truncate">{item.name}</span>
+                                <span className="font-medium text-gray-900">{item.quantity} قطعة</span>
+                              </div>
+                              {item.notes && (
+                                <div className="text-xs text-blue-600 mt-1">ملاحظة لهذا المشروب: {item.notes}</div>
+                              )}
+                              {item.addons && item.addons.length > 0 && (
+                                <div className="text-xs text-green-700 mt-1">
+                                  إضافات لهذا المشروب: {item.addons.map(a => `${a.name} (${a.price} ج.م)`).join('، ')}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {order.bill && (
+                        <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                          <span>فاتورة: {order.bill.billNumber}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer - أزرار التجهيز */}
+                  <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-lg">
+                    {preparingOrders[order._id] ? (
+                      // حالة التجهيز - إظهار زر "تم التجهيز"
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          prepareOrderComplete(order._id);
+                        }}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center"
+                      >
+                        <CheckCircle className="h-4 w-4 ml-2" />
+                        تم التجهيز
+                      </button>
+                    ) : (
+                      // الحالة العادية - إظهار زر "بدء التجهيز"
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePreparing(order._id);
+                        }}
+                        className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center"
+                      >
+                        <Coffee className="h-4 w-4 ml-2" />
+                        بدء التجهيز
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Ready for Delivery Orders */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">طلبات جاهزة للتسليم</h3>
+        </div>
+        <div className="p-6">
+          {readyForDeliveryOrders.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">لا توجد طلبات جاهزة للتسليم</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {readyForDeliveryOrders.map((order) => (
+                <div
+                  key={order._id}
+                  className="bg-white rounded-lg shadow-sm border border-green-200 hover:shadow-md transition-shadow duration-200"
+                >
+                  {/* Header */}
+                  <div className="p-4 border-b border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <span className="text-2xl mr-2">✅</span>
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                          جاهز للتسليم
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">#{order.orderNumber}</span>
+                    </div>
+
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <User className="h-4 w-4 mr-1" />
+                      <span className="truncate">{order.customerName || 'بدون اسم'}</span>
+                    </div>
+
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Clock className="h-4 w-4 mr-1" />
+                      <span>{new Date(order.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+
                   {/* Content */}
                   <div className="p-4">
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">الأصناف غير الجاهزة:</span>
-                        <span className="font-semibold text-red-600">{getUnpreparedItemsCount(order)}</span>
+                        <span className="text-sm text-gray-600">الأصناف الجاهزة:</span>
+                        <span className="font-semibold text-green-600">{order.items?.length || 0}</span>
                       </div>
 
-                      {/* عرض الأصناف غير الجاهزة فقط */}
+                      {/* عرض الأصناف الجاهزة */}
                       {order.items && order.items.length > 0 && (
                         <div className="text-xs text-gray-600">
-                          <div className="font-medium mb-1">الأصناف غير الجاهزة:</div>
-                          {order.items.map((item, index) => {
-                            const prepared = item.preparedCount || 0;
-                            const quantity = item.quantity || 0;
-                            const remaining = quantity - prepared;
-
-                            if (remaining > 0) {
-                              return (
-                                <div key={index} className="flex justify-between items-center py-1">
-                                  <span className="truncate">{item.name}</span>
-                                  <span className="text-red-600 font-medium">
-                                    {prepared}/{quantity} (متبقي: {remaining})
-                                  </span>
+                          <div className="font-medium mb-1">الأصناف الجاهزة:</div>
+                          {order.items.map((item, index) => (
+                            <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
+                              <div className="flex justify-between items-center">
+                                <span className="truncate">{item.name}</span>
+                                <span className="text-green-600 font-medium">{item.quantity} × {(item.price + (item.addonsTotal || 0))} ج.م</span>
+                              </div>
+                              {item.notes && (
+                                <div className="text-xs text-blue-600 mt-1">ملاحظة لهذا المشروب: {item.notes}</div>
+                              )}
+                              {item.addons && item.addons.length > 0 && (
+                                <div className="text-xs text-green-700 mt-1">
+                                  إضافات لهذا المشروب: {item.addons.map(a => `${a.name} (${a.price} ج.م)`).join('، ')}
                                 </div>
-                              );
-                            }
-                            return null;
-                          }).filter(Boolean)}
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
 
@@ -1115,111 +1383,20 @@ const Cafe: React.FC = () => {
                   </div>
 
                   {/* Footer */}
-                  <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-lg">
-                    <div className="flex items-center justify-center text-sm font-medium text-primary-600">
-                      <Coffee className="h-4 w-4 mr-1" />
-                      انقر لعرض التفاصيل
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ready Items List */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">الأصناف الجاهزة للتسليم</h3>
-        </div>
-        <div className="p-6">
-          {readyItems.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">لا توجد أصناف جاهزة للتسليم</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {readyItems.map((item) => (
-                <div
-                  key={item._id}
-                  className="bg-white rounded-lg shadow-sm border border-green-200 hover:shadow-md transition-shadow duration-200"
-                >
-                  {/* Header */}
-                  <div className="p-4 border-b border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center">
-                        <span className="text-2xl mr-2">✅</span>
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                          جاهز للتسليم
-                        </span>
-                      </div>
-                      <span className="text-xs text-gray-500">#{item.orderNumber}</span>
-                    </div>
-
-                    <div className="flex items-center text-sm text-gray-600 mb-1">
-                      <User className="h-4 w-4 mr-1" />
-                      <span className="truncate">{item.customerName}</span>
-                    </div>
-
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Clock className="h-4 w-4 mr-1" />
-                      <span>{new Date(item.orderCreatedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">الصنف:</span>
-                        <span className="font-semibold text-gray-900">{item.itemName}</span>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">الكمية الجاهزة:</span>
-                        <span className="font-semibold text-green-600">{item.quantity}</span>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">السعر:</span>
-                        <span className="font-semibold text-gray-900">{item.totalPrice} ج.م</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer */}
                   <div className="p-4 border-t border-gray-100 bg-green-50 rounded-b-lg">
                     <div className="flex items-center justify-between">
                       <button
-                        onClick={() => {
-                          // البحث عن الطلب الأصلي وعرض تفاصيله
-                          const originalOrder = readyOrders.find(o => o._id === item.orderId);
-                          if (originalOrder) {
-                            handleOrderClick(originalOrder);
-                          }
-                        }}
+                        onClick={() => handleOrderClick(order)}
                         className="text-sm font-medium text-primary-600 hover:text-primary-700"
                       >
                         <Coffee className="h-4 w-4 mr-1 inline" />
-                        عرض الطلب
+                        عرض التفاصيل
                       </button>
                       <button
-                        onClick={() => {
-                          // البحث عن index الصنف في الطلب الأصلي
-                          const originalOrder = readyOrders.find(o => o._id === item.orderId);
-                          if (originalOrder && originalOrder.items) {
-                            const itemIndex = originalOrder.items.findIndex(orderItem => orderItem.name === item.itemName);
-                            if (itemIndex !== -1) {
-                              deliverItem(item.orderId, item.itemName, itemIndex);
-                            } else {
-                              showNotification('خطأ: لم يتم العثور على الصنف', 'error');
-                            }
-                          } else {
-                            showNotification('خطأ: لم يتم العثور على الطلب', 'error');
-                          }
-                        }}
+                        onClick={() => deliverOrder(order._id)}
                         className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
                       >
-                        تسليم الصنف
+                        تسليم الطلب
                       </button>
                     </div>
                   </div>
@@ -1385,6 +1562,10 @@ const Cafe: React.FC = () => {
                               +
                             </button>
                             <span className="text-gray-600">{item.price} ج.م</span>
+                          </div>
+                          {/* إجمالي الصنف مع الإضافات */}
+                          <div className="text-xs text-gray-700 mb-2">
+                            الإجمالي لهذا الصنف: {(item.price * item.quantity) + (item.addons?.reduce((sum, a) => sum + (a.price || 0), 0) || 0)} ج.م
                           </div>
                           <div className="mb-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات هذا المشروب:</label>
@@ -1552,24 +1733,22 @@ const Cafe: React.FC = () => {
                 <div className="mt-4 p-3 bg-white rounded-lg border">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">حالة الطلب الكلية:</span>
-                    {hasAnyPreparedItems(selectedOrder) ? (
-                      hasUnpreparedItems(selectedOrder) ? (
+                    {hasAllItemsFullyPrepared(selectedOrder) ? (
+                      <div className="flex items-center">
+                        <span className="text-green-600 text-sm font-medium mr-2">✓ جاهز للتحريك</span>
+                        <span className="text-xs text-gray-500">جميع الأصناف مجهزة بالكامل</span>
+                      </div>
+                    ) : hasAnyPreparedItems(selectedOrder) ? (
                         <div className="flex items-center">
                           <span className="text-yellow-600 text-sm font-medium mr-2">⚠ جزئي</span>
                           <span className="text-xs text-gray-500">
-                            {getUnpreparedItemsCount(selectedOrder)} صنف غير جاهز
+                          {getUnpreparedItemsCount(selectedOrder)} صنف غير مجهز بالكامل
                           </span>
                         </div>
                       ) : (
                         <div className="flex items-center">
-                          <span className="text-green-600 text-sm font-medium mr-2">✓ جاهز بالكامل</span>
-                          <span className="text-xs text-gray-500">جميع الأصناف جاهزة</span>
-                        </div>
-                      )
-                    ) : (
-                      <div className="flex items-center">
-                        <span className="text-red-600 text-sm font-medium mr-2">✗ غير جاهز</span>
-                        <span className="text-xs text-gray-500">لا توجد أصناف جاهزة</span>
+                        <span className="text-red-600 text-sm font-medium mr-2">✗ غير مجهز</span>
+                        <span className="text-xs text-gray-500">لا توجد أصناف مجهزة</span>
                       </div>
                     )}
                   </div>
@@ -1578,7 +1757,7 @@ const Cafe: React.FC = () => {
                   <div className="mt-2 text-xs text-gray-500">
                     <div className="flex justify-between">
                       <span>إجمالي الأصناف: {selectedOrder.items?.length || 0}</span>
-                      <span>الأصناف الجاهزة: {(selectedOrder.items?.filter(item => (item.preparedCount || 0) >= (item.quantity || 0)).length || 0)}</span>
+                      <span>الأصناف المجهزة بالكامل: {(selectedOrder.items?.filter(item => (item.preparedCount || 0) >= (item.quantity || 0)).length || 0)}</span>
                       <span>الأصناف الجزئية: {(selectedOrder.items?.filter(item => (item.preparedCount || 0) > 0 && (item.preparedCount || 0) < (item.quantity || 0)).length || 0)}</span>
                     </div>
                   </div>
@@ -1587,80 +1766,92 @@ const Cafe: React.FC = () => {
 
               {/* Order Items */}
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900">الأصناف المطلوبة</h4>
-                {selectedOrder.items && selectedOrder.items.length > 0 ? (
-                  selectedOrder.items.map((item, index) => {
+                <h4 className="text-lg font-semibold text-gray-900">أصناف الطلب</h4>
+                {selectedOrder?.items?.map((item, index) => {
                     const preparedCount = item.preparedCount || 0;
-                    const remaining = (item.quantity || 0) - preparedCount;
-                    const isFullyPrepared = preparedCount >= (item.quantity || 0);
-                    const isPartiallyPrepared = preparedCount > 0 && preparedCount < (item.quantity || 0);
+                  const quantity = item.quantity || 0;
+                  const isFullyPrepared = preparedCount >= quantity;
+                  const isPartiallyPrepared = preparedCount > 0 && preparedCount < quantity;
+                  const isNotPrepared = preparedCount === 0;
 
                     return (
-                      <div key={index} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center">
-                            <span className="font-medium text-gray-900">{item.name}</span>
-                            {isFullyPrepared && (
-                              <span className="mr-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
-                                جاهز
+                    <div
+                      key={index}
+                      className={`p-4 rounded-lg border ${
+                        isFullyPrepared
+                          ? 'border-green-200 bg-green-50'
+                          : isPartiallyPrepared
+                          ? 'border-yellow-200 bg-yellow-50'
+                          : 'border-gray-200 bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h5 className="font-medium text-gray-900">{item.name}</h5>
+                          <p className="text-sm text-gray-600">
+                            {item.price} ج.م × {quantity} = {item.price * quantity} ج.م
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              isFullyPrepared
+                                ? 'bg-green-100 text-green-800'
+                                : isPartiallyPrepared
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {isFullyPrepared
+                              ? 'جاهز'
+                              : isPartiallyPrepared
+                              ? 'جزئي'
+                              : 'في الانتظار'}
                               </span>
-                            )}
-                            {isPartiallyPrepared && (
-                              <span className="mr-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">
-                                جزئي
-                              </span>
-                            )}
-                            {!isPartiallyPrepared && !isFullyPrepared && (
-                              <span className="mr-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
-                                غير جاهز
-                              </span>
-                            )}
                           </div>
-                          <span className="text-gray-600">{item.price * (item.quantity || 0)} ج.م</span>
                         </div>
 
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4 space-x-reverse">
+                        <div className="flex items-center space-x-4">
                             <span className="text-sm text-gray-600">
-                              الكمية: {item.quantity} | الجاهز: {preparedCount} | المتبقي: {remaining}
+                            مجهز: {preparedCount} / {quantity}
                             </span>
                             {isFullyPrepared && (
-                              <span className="text-green-600 text-sm font-medium">✓ جاهز بالكامل</span>
-                            )}
-                            {isPartiallyPrepared && (
-                              <span className="text-yellow-600 text-sm font-medium">⚠ جزئي</span>
-                            )}
-                            {!isPartiallyPrepared && !isFullyPrepared && (
-                              <span className="text-red-600 text-sm font-medium">✗ غير جاهز</span>
+                            <span className="text-sm text-green-600 font-medium">
+                              ✓ جاهز للتسليم
+                            </span>
                             )}
                           </div>
-                          <div className="flex items-center space-x-2 space-x-reverse">
-                            {remaining > 0 && (
+
+                        {/* Preparation Controls */}
+                        {selectedOrder.status !== 'delivered' && (
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max={quantity}
+                              value={preparedCount}
+                              onChange={(e) => {
+                                const newValue = Math.min(
+                                  Math.max(0, parseInt(e.target.value) || 0),
+                                  quantity
+                                );
+                                updateItemPrepared(selectedOrder._id, index, newValue);
+                              }}
+                              className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
                               <button
-                                onClick={() => updateItemPrepared(selectedOrder._id, index, preparedCount + 1)}
-                                className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition-colors duration-200"
-                                title={`إضافة واحد إلى ${item.name}`}
+                              onClick={() => updateItemPrepared(selectedOrder._id, index, quantity)}
+                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                               >
-                                +1
+                              تجهيز كامل
                               </button>
-                            )}
-                            {preparedCount > 0 && (
-                              <button
-                                onClick={() => updateItemPrepared(selectedOrder._id, index, preparedCount - 1)}
-                                className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-sm rounded transition-colors duration-200"
-                                title={`إزالة واحد من ${item.name}`}
-                              >
-                                -1
-                              </button>
-                            )}
                           </div>
+                        )}
                         </div>
                       </div>
                     );
-                  })
-                ) : (
-                  <p className="text-gray-500 text-center py-4">لا توجد عناصر في هذا الطلب</p>
-                )}
+                })}
               </div>
 
               {/* Action Buttons */}
@@ -1673,7 +1864,7 @@ const Cafe: React.FC = () => {
                 </button>
 
                 {/* زر تحريك الطلب إلى الجاهزة */}
-                {selectedOrder && hasAnyPreparedItems(selectedOrder) && (
+                {selectedOrder && hasAllItemsFullyPrepared(selectedOrder) && (
                   <button
                     onClick={() => {
                       moveOrderToReady(selectedOrder._id);

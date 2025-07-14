@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Users as UsersIcon, Plus, Edit, Trash2, Shield, User, Crown, Search, Filter, Eye, Lock, Unlock, Calendar, Phone, MapPin, RefreshCw } from 'lucide-react';
+import { Users as UsersIcon, Plus, Shield, User, Crown, Search, Filter, Lock, Unlock, Calendar, Phone, MapPin, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User as UserType } from '../services/api';
+import UserCard from '../components/UserCard';
 
 const Users = () => {
   const { users, fetchUsers, createUser, updateUser, deleteUser, showNotification, user } = useApp();
@@ -31,25 +32,73 @@ const Users = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const roles = [
-    { id: 'admin', name: 'مدير', icon: Crown, color: 'text-purple-600', bgColor: 'bg-purple-100', description: 'صلاحيات كاملة على النظام' },
-    { id: 'staff', name: 'موظف', icon: User, color: 'text-blue-600', bgColor: 'bg-blue-100', description: 'صلاحيات محدودة' },
-    { id: 'cashier', name: 'كاشير', icon: Shield, color: 'text-green-600', bgColor: 'bg-green-100', description: 'إدارة المبيعات والفواتير' },
-    { id: 'kitchen', name: 'مطبخ', icon: Shield, color: 'text-orange-600', bgColor: 'bg-orange-100', description: 'إدارة الطلبات والمطبخ' },
+    { id: 'admin', name: 'مدير', icon: Crown, color: 'text-purple-600', bgColor: 'bg-purple-100', description: 'صلاحيات كاملة على النظام - جميع الصلاحيات' },
+    { id: 'staff', name: 'موظف', icon: User, color: 'text-blue-600', bgColor: 'bg-blue-100', description: 'صلاحيات محدودة - لوحة التحكم، التقارير، الإعدادات' },
+    { id: 'cashier', name: 'كاشير', icon: Shield, color: 'text-green-600', bgColor: 'bg-green-100', description: 'إدارة المبيعات والفواتير - الكافيه، المنيو، الفواتير، التقارير' },
+    { id: 'kitchen', name: 'مطبخ', icon: Shield, color: 'text-orange-600', bgColor: 'bg-orange-100', description: 'إدارة الطلبات والمطبخ - الكافيه، المنيو، المخزون، التكاليف' },
   ];
 
   const permissions = [
-    { id: 'all', name: 'جميع الصلاحيات', description: 'وصول كامل لجميع الميزات' },
-    { id: 'dashboard', name: 'لوحة التحكم', description: 'عرض الإحصائيات والتقارير' },
-    { id: 'playstation', name: 'البلايستيشن', description: 'إدارة جلسات البلايستيشن' },
-    { id: 'computer', name: 'الكمبيوتر', description: 'إدارة جلسات الكمبيوتر' },
-    { id: 'cafe', name: 'الكافيه', description: 'إدارة الطلبات والمشروبات' },
-    { id: 'billing', name: 'الفواتير', description: 'إنشاء وإدارة الفواتير' },
-    { id: 'reports', name: 'التقارير', description: 'عرض وتصدير التقارير' },
-    { id: 'inventory', name: 'المخزون', description: 'إدارة المخزون والأصناف' },
-    { id: 'costs', name: 'التكاليف', description: 'إدارة التكاليف والمصروفات' },
-    { id: 'users', name: 'المستخدمين', description: 'إدارة المستخدمين والصلاحيات' },
-    { id: 'settings', name: 'الإعدادات', description: 'تعديل إعدادات النظام' },
+    { id: 'all', name: 'جميع الصلاحيات', description: 'وصول كامل لجميع الميزات والتحكم الكامل في النظام' },
+    { id: 'dashboard', name: 'لوحة التحكم', description: 'التحكم الكامل في لوحة التحكم وعرض الإحصائيات والتقارير' },
+    { id: 'playstation', name: 'البلايستيشن', description: 'التحكم الكامل في أجهزة البلايستيشن وجلسات اللعب' },
+    { id: 'computer', name: 'الكمبيوتر', description: 'التحكم الكامل في أجهزة الكمبيوتر وجلسات الاستخدام' },
+    { id: 'cafe', name: 'الكافيه', description: 'التحكم الكامل في طلبات الكافيه والمشروبات والخدمة' },
+    { id: 'menu', name: 'المنيو', description: 'التحكم الكامل في قائمة الطعام والمشروبات والأسعار' },
+    { id: 'billing', name: 'الفواتير', description: 'التحكم الكامل في إنشاء وإدارة الفواتير والمدفوعات' },
+    { id: 'reports', name: 'التقارير', description: 'التحكم الكامل في عرض وتصدير جميع التقارير' },
+    { id: 'inventory', name: 'المخزون', description: 'التحكم الكامل في المخزون والأصناف والمشتريات' },
+    { id: 'costs', name: 'التكاليف', description: 'التحكم الكامل في التكاليف والمصروفات والميزانية' },
+    { id: 'users', name: 'المستخدمين', description: 'التحكم الكامل في المستخدمين والصلاحيات والأدوار' },
+    { id: 'settings', name: 'الإعدادات', description: 'التحكم الكامل في إعدادات النظام والتكوين' },
   ];
+
+  // Get accessible pages for a user based on their permissions
+  const getAccessiblePages = (userPermissions: string[]) => {
+    const pagePermissions = {
+      dashboard: ['dashboard'],
+      playstation: ['playstation'],
+      computer: ['computer'],
+      cafe: ['cafe'],
+      menu: ['menu'],
+      billing: ['billing'],
+      reports: ['reports'],
+      inventory: ['inventory'],
+      costs: ['costs'],
+      users: ['users'],
+      settings: ['settings'],
+      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']
+    };
+
+    const accessiblePages = [];
+
+    for (const [page, requiredPermissions] of Object.entries(pagePermissions)) {
+      if (userPermissions.includes('all') || requiredPermissions.some(permission => userPermissions.includes(permission))) {
+        accessiblePages.push(page);
+      }
+    }
+
+    return accessiblePages;
+  };
+
+  // Get page display name
+  const getPageDisplayName = (page: string) => {
+    const pageNames = {
+      dashboard: 'لوحة التحكم',
+      playstation: 'البلايستيشن',
+      computer: 'الكمبيوتر',
+      cafe: 'الكافيه',
+      menu: 'المنيو',
+      billing: 'الفواتير',
+      reports: 'التقارير',
+      inventory: 'المخزون',
+      costs: 'التكاليف',
+      users: 'المستخدمين',
+      settings: 'الإعدادات',
+      notifications: 'الإشعارات'
+    };
+    return pageNames[page as keyof typeof pageNames] || page;
+  };
 
   // تحميل البيانات عند بدء الصفحة
   useEffect(() => {
@@ -71,8 +120,7 @@ const Users = () => {
     try {
       setLoading(true);
       await fetchUsers();
-    } catch (error) {
-      console.error('Error loading users:', error);
+    } catch {
       showNotification('خطأ في تحميل المستخدمين', 'error');
     } finally {
       setLoading(false);
@@ -131,12 +179,32 @@ const Users = () => {
   };
 
   const handlePermissionChange = (permissionId: string, checked: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      permissions: checked
-        ? [...prev.permissions, permissionId]
-        : prev.permissions.filter(p => p !== permissionId)
-    }));
+    setFormData(prev => {
+      let newPermissions: string[];
+
+      if (permissionId === 'all') {
+        // إذا تم تحديد "جميع الصلاحيات"
+        if (checked) {
+          newPermissions = ['all'];
+        } else {
+          newPermissions = prev.permissions.filter(p => p !== 'all');
+        }
+      } else {
+        // إذا تم تحديد صلاحية أخرى
+        if (checked) {
+          // إزالة "جميع الصلاحيات" إذا كانت محددة
+          const filteredPermissions = prev.permissions.filter(p => p !== 'all');
+          newPermissions = [...filteredPermissions, permissionId];
+        } else {
+          newPermissions = prev.permissions.filter(p => p !== permissionId);
+        }
+      }
+
+      return {
+        ...prev,
+        permissions: newPermissions
+      };
+    });
   };
 
   const resetForm = () => {
@@ -149,7 +217,7 @@ const Users = () => {
       status: 'active',
       phone: '',
       address: '',
-      permissions: []
+      permissions: ['dashboard'] // صلاحية افتراضية للوحة التحكم
     });
   };
 
@@ -167,10 +235,25 @@ const Users = () => {
       return;
     }
 
+    // التحقق من الصلاحيات
+    if (formData.permissions.length === 0) {
+      showNotification('يجب تحديد صلاحية واحدة على الأقل', 'error');
+      return;
+    }
+
     try {
       setLoading(true);
 
-      const userData: any = {
+      const userData: {
+        name: string;
+        email: string;
+        role: string;
+        status: string;
+        phone: string;
+        address: string;
+        permissions: string[];
+        password?: string;
+      } = {
         name: formData.name,
         email: formData.email,
         role: formData.role,
@@ -197,8 +280,7 @@ const Users = () => {
       setSelectedUser(null);
       await loadUsers();
 
-    } catch (error) {
-      console.error('Error saving user:', error);
+    } catch {
       showNotification('خطأ في حفظ المستخدم', 'error');
     } finally {
       setLoading(false);
@@ -206,7 +288,6 @@ const Users = () => {
   };
 
   const handleEdit = (user: UserType) => {
-    setSelectedUser(user);
     setFormData({
       name: user.name,
       email: user.email,
@@ -218,7 +299,10 @@ const Users = () => {
       address: user.address || '',
       permissions: user.permissions || []
     });
+    setSelectedUser(user);
     setShowEditUser(true);
+    // إغلاق نافذة التفاصيل عند فتح نافذة التعديل
+    setShowViewUser(false);
   };
 
   const handleView = (user: UserType) => {
@@ -259,8 +343,8 @@ const Users = () => {
         setShowDeleteModal(false);
         setDeleteTarget(null);
         setDeletePassword('');
-      } catch (err) {
-        setDeleteError('حدث خطأ أثناء التحقق');
+      } catch {
+        showNotification('خطأ في تحقق المستخدم', 'error');
       } finally {
         setDeleteLoading(false);
       }
@@ -271,25 +355,11 @@ const Users = () => {
         await deleteUser(deleteTarget.id);
         setShowDeleteModal(false);
         setDeleteTarget(null);
-      } catch (err) {
-        setDeleteError('حدث خطأ أثناء الحذف');
+      } catch {
+        showNotification('خطأ في حذف المستخدم', 'error');
       } finally {
         setDeleteLoading(false);
       }
-    }
-  };
-
-  const handleStatusChange = async (userId: string, newStatus: string) => {
-    try {
-      setLoading(true);
-      await updateUser(userId, { status: newStatus });
-      showNotification('تم تحديث حالة المستخدم بنجاح', 'success');
-      await loadUsers();
-    } catch (error) {
-      console.error('Error updating user status:', error);
-      showNotification('خطأ في تحديث حالة المستخدم', 'error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -317,23 +387,7 @@ const Users = () => {
     }
   };
 
-  const formatDate = (date: string | Date) => {
-    return new Date(date).toLocaleDateString('ar-EG', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
-  const formatDateTime = (date: string | Date) => {
-    return new Date(date).toLocaleDateString('ar-EG', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   return (
     <div className="space-y-6">
@@ -526,92 +580,19 @@ const Users = () => {
             )}
           </div>
         ) : (
-          filteredUsers.map((user) => {
-            const roleInfo = getRoleInfo(user.role);
-            const RoleIcon = roleInfo.icon;
-            const statusColor = getStatusColor(user.status);
-            return (
-              <div
+          filteredUsers.map((user) => (
+            <UserCard
                 key={user.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col relative hover:shadow-lg transition-shadow duration-200 cursor-pointer group"
-                onClick={() => handleView(user)}
-                tabIndex={0}
-                role="button"
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleView(user); }}
-                aria-label={`تفاصيل المستخدم ${user.name}`}
-              >
-                {/* حالة المستخدم */}
-                <span className={`absolute top-4 left-4 px-3 py-1 text-xs font-bold rounded-full ${statusColor}`}
-                  title={getStatusText(user.status)}>
-                  {getStatusText(user.status)}
-                </span>
-                {/* صورة أو أيقونة */}
-                <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                    <User className="h-6 w-6 text-gray-600" />
-                  </div>
-                  <div className="mr-4">
-                    <div className="text-lg font-bold text-gray-900">{user.name}</div>
-                    <div className="text-xs text-gray-500">{user.email}</div>
-                  </div>
-                </div>
-                {/* الدور */}
-                <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mb-2 ${roleInfo.bgColor} ${roleInfo.color}`}
-                  title={roleInfo.description}>
-                  <RoleIcon className="h-3 w-3 ml-1" />
-                  {roleInfo.name}
-                </div>
-                {/* آخر دخول */}
-                <div className="text-xs text-gray-400 mb-2">
-                  آخر دخول: {user.lastLogin ? formatDateTime(user.lastLogin) : 'لم يسجل دخول'}
-                </div>
-                {/* الصلاحيات */}
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {user.permissions?.includes('all') ? (
-                    <span className="text-purple-600 font-medium text-xs">جميع الصلاحيات</span>
-                  ) : (
-                    user.permissions?.slice(0, 2).map(perm => (
-                      <span key={perm} className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                        {permissions.find(p => p.id === perm)?.name || perm}
-                      </span>
-                    ))
-                  )}
-                  {user.permissions && user.permissions.length > 2 && (
-                    <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                      +{user.permissions.length - 2}
-                    </span>
-                  )}
-                </div>
-                {/* أزرار الإجراءات */}
-                <div
-                  className="flex items-center gap-2 mt-auto z-10"
-                  onClick={e => e.stopPropagation()}
-                >
-                  <button
-                    onClick={() => handleView(user)}
-                    className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                    title="عرض"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleEdit(user)}
-                    className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
-                    title="تعديل"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(user.id)}
-                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                    title="حذف"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+              user={user}
+              onView={handleView}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              getRoleInfo={getRoleInfo}
+              getStatusColor={getStatusColor}
+              getStatusText={getStatusText}
+              permissions={permissions}
+            />
+          ))
         )}
       </div>
 
@@ -649,7 +630,7 @@ const Users = () => {
                     onChange={handleInputChange}
                     required
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="user@bastira.com"
+                    placeholder="user@bomba.com"
                   />
                 </div>
 
@@ -742,25 +723,42 @@ const Users = () => {
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الصلاحيات</label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                    {permissions.map(permission => (
-                      <label key={permission.id} className="flex items-start p-2 border border-gray-200 rounded hover:bg-gray-50 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={formData.permissions.includes(permission.id)}
-                          onChange={(e) => handlePermissionChange(permission.id, e.target.checked)}
-                          className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <div className="mr-2">
-                          <div className="text-sm font-medium text-gray-700">{permission.name}</div>
-                          <div className="text-xs text-gray-500">{permission.description}</div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    الصلاحيات <span className="text-red-500">*</span>
+                  </label>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+                      {permissions.map(permission => (
+                        <label key={permission.id} className="flex items-start p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.permissions.includes(permission.id)}
+                            onChange={(e) => handlePermissionChange(permission.id, e.target.checked)}
+                            className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <div className="mr-3 flex-1">
+                            <div className="text-sm font-medium text-gray-700">{permission.name}</div>
+                            <div className="text-xs text-gray-500 mt-1">{permission.description}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
+                        <span className="text-xs text-blue-700">
+                          الصلاحيات المحددة: {formData.permissions.length} من {permissions.length}
+                        </span>
+                      </div>
+                      {formData.permissions.includes('all') && (
+                        <div className="mt-2 text-xs text-green-600 font-medium">
+                          ✓ تم تحديد "جميع الصلاحيات" - سيتم تجاهل الصلاحيات الأخرى
                         </div>
-                      </label>
-                    ))}
+                      )}
+                    </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
-                    * اختر "جميع الصلاحيات" لمنح صلاحيات كاملة
+                    * اختر الصلاحيات المطلوبة للمستخدم. اختيار "جميع الصلاحيات" يمنح صلاحيات كاملة
                   </div>
                 </div>
               </div>
@@ -793,94 +791,152 @@ const Users = () => {
       {/* View User Modal */}
       {showViewUser && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">تفاصيل المستخدم</h3>
+          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-primary-100">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-900">تفاصيل المستخدم</h3>
+                <button
+                  onClick={() => {
+                    setShowViewUser(false);
+                    setSelectedUser(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-6">
+              {/* User Header */}
               <div className="flex items-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-                  <User className="h-8 w-8 text-gray-600" />
+                <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
+                  <User className="h-10 w-10 text-primary-600" />
                 </div>
-                <div className="mr-4">
-                  <h4 className="text-lg font-semibold text-gray-900">{selectedUser.name}</h4>
+                <div className="mr-4 flex-1">
+                  <h4 className="text-xl font-bold text-gray-900">{selectedUser.name}</h4>
                   <p className="text-gray-500">{selectedUser.email}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(selectedUser.status)}`}>
+                      {getStatusText(selectedUser.status)}
+                    </span>
+                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${getRoleInfo(selectedUser.role).bgColor} ${getRoleInfo(selectedUser.role).color}`}>
+                      {getRoleInfo(selectedUser.role).name}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
+              {/* User Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">الدور</label>
-                  <p className="text-sm text-gray-900">{getRoleInfo(selectedUser.role).name}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">الحالة</label>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedUser.status)}`}>
-                    {getStatusText(selectedUser.status)}
-                  </span>
-                </div>
-
-                {selectedUser.phone && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">رقم الهاتف</label>
-                    <p className="text-sm text-gray-900 flex items-center">
-                      <Phone className="h-4 w-4 ml-1" />
-                      {selectedUser.phone}
-                    </p>
+                  <h5 className="text-lg font-semibold text-gray-900 mb-3">معلومات المستخدم</h5>
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <Phone className="h-4 w-4 text-gray-400 ml-2" />
+                      <span className="text-sm text-gray-600">
+                        {selectedUser.phone || 'غير محدد'}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <MapPin className="h-4 w-4 text-gray-400 ml-2" />
+                      <span className="text-sm text-gray-600">
+                        {selectedUser.address || 'غير محدد'}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <Calendar className="h-4 w-4 text-gray-400 ml-2" />
+                      <span className="text-sm text-gray-600">
+                        انضم في: {new Date(selectedUser.createdAt).toLocaleDateString('ar-EG')}
+                      </span>
+                    </div>
+                    {selectedUser.lastLogin && (
+                      <div className="flex items-center">
+                        <RefreshCw className="h-4 w-4 text-gray-400 ml-2" />
+                        <span className="text-sm text-gray-600">
+                          آخر دخول: {new Date(selectedUser.lastLogin).toLocaleDateString('ar-EG')}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
-
-                {selectedUser.address && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">العنوان</label>
-                    <p className="text-sm text-gray-900 flex items-center">
-                      <MapPin className="h-4 w-4 ml-1" />
-                      {selectedUser.address}
-                    </p>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">آخر دخول</label>
-                  <p className="text-sm text-gray-900 flex items-center">
-                    <Calendar className="h-4 w-4 ml-1" />
-                    {selectedUser.lastLogin ? formatDateTime(selectedUser.lastLogin) : 'لم يسجل دخول'}
-                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">تاريخ الإنشاء</label>
-                  <p className="text-sm text-gray-900">{formatDate(selectedUser.createdAt)}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">الصلاحيات</label>
-                  <div className="mt-2">
-                    {selectedUser.permissions?.includes('all') ? (
-                      <span className="text-purple-600 font-medium">جميع الصلاحيات</span>
+                  <h5 className="text-lg font-semibold text-gray-900 mb-3">الصلاحيات</h5>
+                  <div className="space-y-2">
+                    {selectedUser.permissions.includes('all') ? (
+                      <div className="flex items-center p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                        <Crown className="h-5 w-5 text-purple-600 ml-2" />
+                        <div>
+                          <div className="text-sm font-medium text-purple-800">جميع الصلاحيات</div>
+                          <div className="text-xs text-purple-600">وصول كامل لجميع الميزات</div>
+                        </div>
+                      </div>
+                    ) : selectedUser.permissions.length === 0 ? (
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <p className="text-sm text-gray-500">لا توجد صلاحيات محددة</p>
+                      </div>
                     ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {selectedUser.permissions?.map(perm => (
-                          <span key={perm} className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                            {permissions.find(p => p.id === perm)?.name || perm}
-                          </span>
-                        ))}
+                      <div className="grid grid-cols-1 gap-2">
+                        {selectedUser.permissions.map(permission => {
+                          const permInfo = permissions.find(p => p.id === permission);
+                          return (
+                            <div key={permission} className="flex items-center p-2 bg-green-50 border border-green-200 rounded-lg">
+                              <div className="w-2 h-2 bg-green-500 rounded-full ml-2"></div>
+                              <div>
+                                <div className="text-sm font-medium text-green-800">
+                                  {permInfo ? permInfo.name : permission}
+                                </div>
+                                {permInfo && (
+                                  <div className="text-xs text-green-600">{permInfo.description}</div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
+
+              {/* Accessible Pages */}
+              <div>
+                <h5 className="text-lg font-semibold text-gray-900 mb-3">الصفحات المتاحة</h5>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {getAccessiblePages(selectedUser.permissions).length > 0 ? (
+                    getAccessiblePages(selectedUser.permissions).map(page => (
+                      <div key={page} className="flex items-center p-2 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="w-2 h-2 bg-green-500 rounded-full ml-2"></div>
+                        <span className="text-sm text-green-700 font-medium">
+                          {getPageDisplayName(page)}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="col-span-full p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-sm text-gray-500 text-center">لا توجد صفحات متاحة</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end">
+            <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => handleEdit(selectedUser)}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
+              >
+                تعديل المستخدم
+              </button>
               <button
                 onClick={() => {
                   setShowViewUser(false);
                   setSelectedUser(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200"
               >
                 إغلاق
               </button>

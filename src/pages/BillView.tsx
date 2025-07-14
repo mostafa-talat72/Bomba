@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Receipt, Clock, User, DollarSign, CheckCircle, AlertCircle, Package, Gamepad2, Coffee, X, RefreshCw } from 'lucide-react';
+import { Receipt, Clock, CheckCircle, AlertCircle, Package, Gamepad2, Coffee, X } from 'lucide-react';
 import { api } from '../services/api';
 
 interface OrderItem {
@@ -17,6 +17,12 @@ interface OrderItem {
 		preparationTime: number;
 		price: number;
 	};
+	addons?: {
+		_id: string;
+		name: string;
+		price: number;
+	}[];
+	addonsTotal?: number;
 }
 
 interface Order {
@@ -111,24 +117,24 @@ interface BillDetails {
 	}[];
 }
 
-const normalizeBillDates = (bill: any): BillDetails => ({
+const normalizeBillDates = (bill: Record<string, unknown>): BillDetails => ({
 	...bill,
 	createdAt: bill.createdAt?.toString(),
 	updatedAt: bill.updatedAt?.toString(),
-	orders: bill.orders?.map((order: any) => ({
+	orders: bill.orders?.map((order: Record<string, unknown>) => ({
 		...order,
 		createdAt: order.createdAt?.toString(),
 	})) || [],
-	sessions: bill.sessions?.map((session: any) => ({
+	sessions: bill.sessions?.map((session: Record<string, unknown>) => ({
 		...session,
 		startTime: session.startTime?.toString(),
 		endTime: session.endTime?.toString(),
 	})) || [],
-	payments: bill.payments?.map((payment: any) => ({
+	payments: bill.payments?.map((payment: Record<string, unknown>) => ({
 		...payment,
 		timestamp: payment.timestamp?.toString(),
 	})) || [],
-	partialPayments: bill.partialPayments?.map((payment: any) => ({
+	partialPayments: bill.partialPayments?.map((payment: Record<string, unknown>) => ({
 		...payment,
 		paidAt: payment.paidAt?.toString(),
 	})) || [],
@@ -141,21 +147,19 @@ const BillView = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+	const [showOrdersModal, setShowOrdersModal] = useState(false);
 
 	const fetchBill = async (showLoading = true) => {
-		console.log('🔍 BillView: Starting fetch process');
-		console.log('🔍 BillView: billId =', billId);
-		console.log('🔍 BillView: billId length =', billId?.length);
 
 		if (!billId) {
-			console.log('❌ BillView: No billId provided');
+
 			setError('معرف الفاتورة غير صحيح أو غير موجود. تأكد من صحة الرابط.');
 			if (showLoading) setLoading(false);
 			return;
 		}
 
 		if (billId.length !== 24) {
-			console.log('❌ BillView: Invalid billId length. Expected 24, got', billId.length);
+
 			setError('معرف الفاتورة غير صحيح أو غير موجود. تأكد من صحة الرابط.');
 			if (showLoading) setLoading(false);
 			return;
@@ -165,36 +169,19 @@ const BillView = () => {
 			if (showLoading) setLoading(true);
 			if (!showLoading) setRefreshing(true);
 
-			console.log('🔍 BillView: Fetching bill with ID:', billId);
+
 			const response = await api.getBill(billId);
-			console.log('📥 BillView: API response:', response);
+
 
 			if (response.success && response.data) {
-				console.log('✅ BillView: Bill data received successfully:', response.data);
-				console.log('📋 BillView: Orders data:', response.data.orders);
-				if (response.data.orders) {
-					response.data.orders.forEach((order: any, index: number) => {
-						console.log(`📋 BillView: Order ${index + 1}:`, {
-							orderNumber: order.orderNumber,
-							status: order.status,
-							items: order.items?.map((item: any) => ({
-								name: item.name,
-								quantity: item.quantity,
-								preparedCount: item.preparedCount,
-								isReady: item.isReady,
-								preparedCountType: typeof item.preparedCount,
-								preparedCountDefined: item.preparedCount !== undefined
-							}))
-						});
-					});
-				}
+
 				setBill(normalizeBillDates(response.data));
 				setLastUpdate(new Date());
 			} else {
 				console.error('❌ BillView: API Error:', response.message);
 				setError(response.message || 'لم يتم العثور على الفاتورة. تأكد من صحة الرابط أو أن الفاتورة لم تُحذف.');
 			}
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error('❌ BillView: Fetch Error:', err);
 			setError('حدث خطأ في تحميل الفاتورة. تأكد من اتصالك بالخادم أو أعد المحاولة لاحقاً.');
 		} finally {
@@ -213,34 +200,7 @@ const BillView = () => {
 	}, [billId]);
 
 	// إضافة تأثير لمراقبة التغييرات في البيانات
-	useEffect(() => {
-		if (bill) {
-			console.log('📊 BillView: Bill data updated:', {
-				billNumber: bill.billNumber,
-				ordersCount: bill.orders?.length || 0,
-				ordersStatus: bill.orders?.map(order => ({
-					orderNumber: order.orderNumber,
-					status: order.status,
-					itemsWithPreparedCount: order.items?.filter(item => item.preparedCount !== undefined).length || 0,
-					totalItems: order.items?.length || 0
-				}))
-			});
-
-			// Log detailed item information
-			bill.orders?.forEach((order, orderIndex) => {
-				console.log(`📊 Order ${orderIndex + 1} (${order.orderNumber}) items:`,
-					order.items?.map((item, itemIndex) => ({
-						index: itemIndex,
-						name: item.name,
-						quantity: item.quantity,
-						preparedCount: item.preparedCount,
-						preparedCountDefined: item.preparedCount !== undefined,
-						preparedCountType: typeof item.preparedCount
-					}))
-				);
-			});
-		}
-	}, [bill]);
+	useEffect(() => {	}, [bill]);
 
 	const formatCurrency = (amount: number) => {
 		return new Intl.NumberFormat('ar-EG', {
@@ -371,6 +331,138 @@ const BillView = () => {
 		return paid;
 	};
 
+	// دالة لتجميع الأصناف والإضافات مع حساب الكمية والمدفوع والمتبقي
+		function aggregateItemsWithPayments(orders: Order[], partialPayments: BillDetails['partialPayments'], billStatus?: string, billPaid?: number, billTotal?: number) {
+		type AggregatedAddon = {
+			name: string;
+			price: number;
+			totalQuantity: number;
+			paidQuantity: number;
+			remainingQuantity: number;
+		};
+		type AggregatedItem = {
+			name: string;
+			price: number;
+			totalQuantity: number;
+			paidQuantity: number;
+			remainingQuantity: number;
+			addons?: AggregatedAddon[];
+		};
+		const map = new Map<string, AggregatedItem>();
+
+		// Helper لحساب المدفوع لصنف أو إضافة
+		function getPaidQty(itemName: string, addonName?: string) {
+			let paid = 0;
+
+			// إذا كانت الفاتورة مدفوعة بالكامل، جميع الأصناف مدفوعة بالكامل
+			if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal) {
+				// حساب الكمية الإجمالية للصنف أو الإضافة
+				let totalQty = 0;
+				orders.forEach(order => {
+					order.items.forEach(item => {
+						if (addonName) {
+							// إضافة
+							if (item.name === itemName && item.addons) {
+								const addon = item.addons.find(a => a.name === addonName);
+								if (addon) {
+									totalQty += item.quantity;
+								}
+							}
+						} else {
+							// صنف رئيسي
+							if (item.name === itemName) {
+								totalQty += item.quantity;
+							}
+						}
+					});
+				});
+				return totalQty; // جميع الكمية مدفوعة
+			}
+
+			// حساب المدفوعات الجزئية
+			if (!partialPayments) return 0;
+			partialPayments.forEach(payment => {
+				payment.items.forEach(item => {
+					if (addonName) {
+						// دفع إضافة - نبحث عن الإضافة في قائمة الإضافات
+						if (item.itemName === addonName) {
+							paid += item.quantity;
+						}
+					} else {
+						// دفع صنف رئيسي
+						if (item.itemName === itemName) {
+							paid += item.quantity;
+						}
+					}
+				});
+			});
+			return paid;
+		}
+
+		if (!orders || !Array.isArray(orders)) return [];
+
+		orders.forEach(order => {
+			if (!order.items) return; // تخطي الطلبات التي لا تحتوي على أصناف
+			order.items.forEach((item: OrderItem & { addons?: { name: string; price: number }[] }) => {
+				// مفتاح التجميع: اسم الصنف + السعر + أسماء الإضافات وأسعارها
+				const addonsKey = (item.addons || [])
+					.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+					.sort()
+					.join('|');
+				const key = `${item.name}|${item.price}|${addonsKey}`;
+				if (!map.has(key)) {
+					// تجميع الإضافات
+					const addons: AggregatedAddon[] = (item.addons || []).map((a: { name: string; price: number }) => {
+						const paidQty = getPaidQty(item.name, a.name);
+						return {
+							name: a.name,
+							price: a.price,
+							totalQuantity: item.quantity,
+							paidQuantity: paidQty,
+							remainingQuantity: item.quantity - paidQty,
+						};
+					});
+					const paidQty = getPaidQty(item.name);
+					map.set(key, {
+						name: item.name,
+						price: item.price,
+						totalQuantity: item.quantity,
+						paidQuantity: paidQty,
+						remainingQuantity: item.quantity - paidQty,
+						addons,
+					});
+				} else {
+					const agg = map.get(key)!;
+					agg.totalQuantity += item.quantity;
+					const paidQty = getPaidQty(item.name);
+					agg.paidQuantity = paidQty;
+					agg.remainingQuantity = agg.totalQuantity - paidQty;
+					// جمع كميات الإضافات
+					if (agg.addons && item.addons) {
+						item.addons.forEach(addon => {
+							const found = agg.addons!.find(a => a.name === addon.name && a.price === addon.price);
+							const paidQtyAddon = getPaidQty(item.name, addon.name);
+							if (found) {
+								found.totalQuantity += item.quantity;
+								found.paidQuantity = paidQtyAddon;
+								found.remainingQuantity = found.totalQuantity - paidQtyAddon;
+							} else {
+								agg.addons!.push({
+									name: addon.name,
+									price: addon.price,
+									totalQuantity: item.quantity,
+									paidQuantity: paidQtyAddon,
+									remainingQuantity: item.quantity - paidQtyAddon,
+								});
+							}
+						});
+					}
+				}
+			});
+		});
+		return Array.from(map.values());
+	}
+
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -409,6 +501,15 @@ const BillView = () => {
 							<span className={`px-3 py-1 rounded-full text-sm font-medium ${bill.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
 								{bill.status === 'paid' ? 'مدفوع' : 'غير مدفوع'}
 							</span>
+							{/* زر عرض الطلبات */}
+							{bill.orders && bill.orders.length > 0 && (
+								<button
+									className="mt-2 px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 text-xs"
+									onClick={() => setShowOrdersModal(true)}
+								>
+									عرض جميع الطلبات
+								</button>
+							)}
 						</div>
 					</div>
 					{/* Table of items with paid info */}
@@ -427,23 +528,33 @@ const BillView = () => {
 										</tr>
 									</thead>
 									<tbody>
-										{bill.orders?.flatMap(order =>
-											order.items.map((item, idx) => {
-												const paidQty = getPaidQuantityForItem(order.orderNumber, item.name);
-												const remainingQty = (item.quantity || 0) - paidQty;
-												const isFullyPaid = paidQty >= (item.quantity || 0);
-												return (
-													<tr key={order._id + '-' + idx} className={`border-b last:border-b-0 ${isFullyPaid ? 'bg-green-50' : ''}`}>
-														<td className="py-2 px-2 font-medium">{item.name}</td>
-														<td className="py-2 px-2">{item.quantity}</td>
-														<td className="py-2 px-2 text-green-700 font-bold">{paidQty > 0 ? paidQty : '-'}</td>
-														<td className="py-2 px-2 text-yellow-700">{remainingQty > 0 ? remainingQty : '-'}</td>
+										{aggregateItemsWithPayments(bill.orders, bill.partialPayments, bill.status, bill.paid, bill.total).map((item, idx) => {
+											const colorClass = idx % 2 === 0 ? 'bg-white' : 'bg-blue-50';
+											const totalPrice = item.price * item.totalQuantity;
+											return (
+												<>
+													<tr key={item.name + '-' + idx} className={`border-b last:border-b-0 ${colorClass} ${item.remainingQuantity === 0 ? 'bg-green-100' : ''}`}>
+														<td className="py-2 px-2 font-medium text-gray-900">{item.name}</td>
+														<td className="py-2 px-2">{item.totalQuantity}</td>
+														<td className="py-2 px-2">{item.paidQuantity}</td>
+														<td className="py-2 px-2">{item.remainingQuantity}</td>
 														<td className="py-2 px-2">{formatCurrency(item.price)}</td>
-														<td className="py-2 px-2 font-bold">{formatCurrency(item.price * item.quantity)}</td>
+														<td className="py-2 px-2">{formatCurrency(totalPrice)}</td>
 													</tr>
-												);
-											})
-										)}
+													{/* عرض الإضافات إن وجدت */}
+													{item.addons && item.addons.length > 0 && item.addons.map((addon, aidx) => (
+														<tr key={item.name + '-addon-' + addon.name + '-' + aidx} className="border-b last:border-b-0 bg-yellow-50">
+															<td className="py-1 px-2 pl-8 text-sm text-gray-700">↳ إضافة: {addon.name}</td>
+															<td className="py-1 px-2">{addon.totalQuantity}</td>
+															<td className="py-1 px-2">{addon.paidQuantity}</td>
+															<td className="py-1 px-2">{addon.remainingQuantity}</td>
+															<td className="py-1 px-2">{formatCurrency(addon.price)}</td>
+															<td className="py-1 px-2">{formatCurrency(addon.price * addon.totalQuantity)}</td>
+														</tr>
+													))}
+												</>
+											);
+										})}
 									</tbody>
 								</table>
 							</div>
@@ -453,7 +564,7 @@ const BillView = () => {
 								<span className="font-bold text-primary-700">
 									{formatCurrency(bill.orders.reduce((total, order) =>
 										total + order.items.reduce((orderTotal, item) =>
-											orderTotal + (item.price * item.quantity), 0
+											orderTotal + (item.price * item.quantity) + (item.addonsTotal || item.additionalPrice || (item.addons ? item.addons.reduce((sum, a) => sum + (a.price || 0), 0) : 0)), 0
 										), 0
 									))}
 								</span>
@@ -463,7 +574,19 @@ const BillView = () => {
 					{/* Unified Sessions Details */}
 					{bill.sessions && bill.sessions.length > 0 && (
 						<div className="mt-6 mb-6">
-							<h2 className="text-lg font-semibold text-gray-900 mb-4">الجلسات</h2>
+							<h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+								الجلسات
+								{(() => {
+									const hasActiveSession = bill.sessions.some(session => session.status === 'active');
+
+									return hasActiveSession && (
+										<div className="flex items-center gap-1">
+											<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+											<span className="text-sm text-red-600 font-bold">جلسة نشطة</span>
+										</div>
+									);
+								})()}
+							</h2>
 							<div className="space-y-6">
 								{bill.sessions.map((session) => (
 									<div key={session._id} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
@@ -471,6 +594,13 @@ const BillView = () => {
 											<div>
 												<span className="font-bold text-primary-700">{session.deviceName}</span>
 												<span className="text-xs text-gray-500 ml-2">({session.deviceType === 'playstation' ? 'بلايستيشن' : session.deviceType === 'computer' ? 'كمبيوتر' : session.deviceType})</span>
+											</div>
+											<div className={`px-2 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${session.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+												{(() => {
+
+													return session.status === 'active' && <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>;
+												})()}
+												{session.status === 'active' ? 'نشط' : 'منتهية'}
 											</div>
 										</div>
 										<div className="flex flex-wrap gap-4 mb-2 text-sm">
@@ -576,6 +706,44 @@ const BillView = () => {
 					</div>
 				</div>
 			</div>
+			{/* نافذة الطلبات */}
+			{showOrdersModal && (
+				<div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+					<div className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative">
+						<button
+							className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+							onClick={() => setShowOrdersModal(false)}
+						>×</button>
+						<h2 className="text-xl font-bold mb-4 text-center">جميع الطلبات المرتبطة بالفاتورة</h2>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							{bill.orders.map((order) => (
+								<div key={order._id} className="bg-gray-50 rounded-lg shadow border p-4 flex flex-col gap-2">
+									<div className="flex items-center justify-between mb-2">
+										<span className="font-bold text-primary-700">طلب #{order.orderNumber}</span>
+										<span className={`px-2 py-1 rounded text-xs font-medium ${getOrderStatusColor(order.status)}`}>{getOrderStatusText(order.status)}</span>
+									</div>
+									{order.customerName && <div className="text-gray-600 text-xs">{order.customerName}</div>}
+									<div className="text-gray-500 text-xs mb-2">{formatDate(order.createdAt)}</div>
+									<div>
+										<span className="font-semibold text-sm">الأصناف:</span>
+										<ul className="list-disc pr-4 mt-1">
+											{order.items.map((item, idx) => (
+												<li key={idx} className="text-xs text-gray-700">
+													{item.name} × {item.quantity} - {formatCurrency(item.price)}
+												</li>
+											))}
+										</ul>
+									</div>
+									{order.notes && <div className="text-xs text-gray-500 mt-2">ملاحظات: {order.notes}</div>}
+									<div className="mt-2 flex justify-between items-center">
+										<span className="text-xs text-gray-600">الإجمالي: <span className="font-bold text-primary-700">{formatCurrency(order.finalAmount ?? order.totalAmount ?? 0)}</span></span>
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 };

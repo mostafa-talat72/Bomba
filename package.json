@@ -1,5 +1,5 @@
 {
-  "name": "bastira-management-system",
+  "name": "bomba-management-system",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -12,7 +12,7 @@
     "nodejs",
     "mongodb"
   ],
-  "author": "Bastira Team",
+      "author": "Bomba Team",
   "license": "MIT",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
@@ -62,10 +62,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-repo/bastira.git"
+          "url": "https://github.com/your-repo/bomba.git"
   },
   "bugs": {
-    "url": "https://github.com/your-repo/bastira/issues"
+          "url": "https://github.com/your-repo/bomba/issues"
   },
-  "homepage": "https://bastira.com"
+      "homepage": "https://bomba.com"
 }

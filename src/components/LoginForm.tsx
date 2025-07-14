@@ -38,7 +38,7 @@ const LoginForm = () => {
               <Coffee className="h-8 w-8 text-primary-600" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">مرحباً بك في Bastira</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">مرحباً بك في Bomba</h1>
           <p className="text-gray-600">نظام إدارة الكافيه والبلايستيشن</p>
         </div>
 
@@ -117,7 +117,7 @@ const LoginForm = () => {
         <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h3 className="text-sm font-medium text-blue-800 mb-2">بيانات تجريبية:</h3>
           <div className="text-xs text-blue-600 space-y-1">
-            <p><strong>البريد:</strong> admin@bastira.com</p>
+                          <p><strong>البريد:</strong> admin@bomba.com</p>
             <p><strong>كلمة المرور:</strong> admin123</p>
           </div>
         </div>
@@ -125,7 +125,7 @@ const LoginForm = () => {
         {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
-            © 2024 Bastira. جميع الحقوق محفوظة.
+            © 2024 Bomba. جميع الحقوق محفوظة.
           </p>
         </div>
       </div>

@@ -1,28 +1,66 @@
-import express from 'express';
-import { protect, authorize } from '../middleware/auth.js';
-import sessionController from '../controllers/sessionController.js';
+import express from "express";
+import { protect, authorize } from "../middleware/auth.js";
+import sessionController from "../controllers/sessionController.js";
 
 const router = express.Router();
 
 // Apply authentication to all routes
 router.use(protect);
 
-// Get all sessions (admin and staff)
-router.get('/', authorize('admin', 'staff'), sessionController.getSessions);
+// Get all sessions (playstation and computer permissions)
+router.get(
+    "/",
+    authorize("playstation", "computer", "all"),
+    sessionController.getSessions
+);
 
-// Get single session (admin and staff)
-router.get('/:id', authorize('admin', 'staff'), sessionController.getSession);
+// Get single session (playstation and computer permissions)
+router.get(
+    "/:id",
+    authorize("playstation", "computer", "all"),
+    sessionController.getSession
+);
 
-// Create new session (admin and staff)
-router.post('/', authorize('admin', 'staff'), sessionController.createSession);
+// Create new session (playstation and computer permissions)
+router.post(
+    "/",
+    authorize("playstation", "computer", "all"),
+    sessionController.createSession
+);
 
-// Update controllers during session (admin and staff)
-router.put('/:sessionId/controllers', authorize('admin', 'staff'), sessionController.updateControllers);
+// Create new session with existing bill (playstation and computer permissions)
+router.post(
+    "/with-existing-bill",
+    authorize("playstation", "computer", "all"),
+    sessionController.createSessionWithExistingBill
+);
 
-// End session (admin and staff)
-router.put('/:id/end', authorize('admin', 'staff'), sessionController.endSession);
+// Update controllers during session (playstation and computer permissions)
+router.put(
+    "/:sessionId/controllers",
+    authorize("playstation", "computer", "all"),
+    sessionController.updateControllers
+);
 
-// Get active sessions (admin and staff)
-router.get('/status/active', authorize('admin', 'staff'), sessionController.getActiveSessions);
+// Update session cost in real-time (playstation and computer permissions)
+router.put(
+    "/:id/update-cost",
+    authorize("playstation", "computer", "all"),
+    sessionController.updateSessionCost
+);
+
+// End session (playstation and computer permissions)
+router.put(
+    "/:id/end",
+    authorize("playstation", "computer", "all"),
+    sessionController.endSession
+);
+
+// Get active sessions (playstation and computer permissions)
+router.get(
+    "/status/active",
+    authorize("playstation", "computer", "all"),
+    sessionController.getActiveSessions
+);
 
 export default router;

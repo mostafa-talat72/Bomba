@@ -25,6 +25,7 @@ interface AppContextType {
   settings: any;
   inventoryItems: InventoryItem[];
   users: User[];
+  notifications: any[];
 
   // Auth methods
   login: (email: string, password: string) => Promise<boolean>;
@@ -88,7 +89,7 @@ interface AppContextType {
   deleteUser: (id: string) => Promise<boolean>;
 
   // Utility methods
-  showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  showNotification: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 
   // New methods
   updateOrderItemPrepared: (orderId: string, itemIndex: number, data: { preparedCount: number }) => Promise<Order | null>;
@@ -100,6 +101,17 @@ interface AppContextType {
   getSessionsReport: (period?: string, device?: string) => Promise<any>;
   getInventoryReport: (category?: string) => Promise<any>;
   getFinancialReport: (period?: string) => Promise<any>;
+
+  // Notification methods
+  getNotifications: (options?: { category?: string; unreadOnly?: boolean; limit?: number }) => Promise<any[]>;
+  getNotificationStats: () => Promise<any>;
+  markNotificationAsRead: (notificationId: string) => Promise<boolean>;
+  markAllNotificationsAsRead: () => Promise<boolean>;
+  deleteNotification: (notificationId: string) => Promise<boolean>;
+  createNotification: (notificationData: any) => Promise<any>;
+  sendNotificationToRole: (role: string, notificationData: any) => Promise<any>;
+  sendNotificationToPermission: (permission: string, notificationData: any) => Promise<any>;
+  broadcastNotification: (notificationData: any) => Promise<any>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -123,69 +135,96 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [settings, setSettings] = useState<any>({});
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // Check authentication on app load
   useEffect(() => {
-    console.log('🔄 App loading, checking authentication...');
-
-    // Skip auth check if we're on a public bill page
-    if (window.location.pathname.startsWith('/bill/')) {
-      console.log('📄 Public bill page detected, skipping authentication check');
-      setIsLoading(false);
-      return;
-    }
-
     checkAuth();
   }, []);
 
+  // جلب الإشعارات غير المقروءة بشكل لحظي
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let interval: ReturnType<typeof setInterval>;
+    const fetchUnreadNotifications = async () => {
+      const notifs = await getNotifications({ unreadOnly: true, limit: 100 });
+      setNotifications(notifs);
+    };
+    fetchUnreadNotifications();
+    interval = setInterval(fetchUnreadNotifications, 5000); // كل 5 ثوانٍ
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
+  // جلب الطلبات بشكل لحظي
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let interval: ReturnType<typeof setInterval>;
+    const fetchCafeOrders = async () => {
+      await fetchOrders();
+    };
+    fetchCafeOrders();
+    interval = setInterval(fetchCafeOrders, 5000); // كل 5 ثوانٍ
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
+  // جلب الجلسات النشطة بشكل لحظي
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let interval: ReturnType<typeof setInterval>;
+    const fetchActiveSessions = async () => {
+      await fetchSessions();
+    };
+    fetchActiveSessions();
+    interval = setInterval(fetchActiveSessions, 5000); // كل 5 ثوانٍ
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
   const checkAuth = async () => {
     try {
-      console.log('🔍 Checking authentication...');
       const token = localStorage.getItem('token');
       if (token) {
-        console.log('🔑 Token found, validating...');
         const response = await api.getMe();
         if (response.success && response.data?.user) {
-          console.log('✅ Authentication successful, user:', response.data.user.name);
           setUser(response.data.user);
           setIsAuthenticated(true);
-          console.log('🔄 Refreshing data after authentication...');
           await refreshData();
         } else {
-          console.log('❌ Token invalid, removing...');
           localStorage.removeItem('token');
         }
-      } else {
-        console.log('❌ No token found');
       }
     } catch (error) {
-      console.error('❌ Auth check failed:', error);
       localStorage.removeItem('token');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Utility function to update notification count
+  const updateNotificationCount = (increment: number = 0) => {
+    const badge = document.querySelector('.notification-badge') as HTMLElement;
+    if (badge) {
+      const currentCount = parseInt(badge.textContent || '0');
+      const newCount = Math.max(0, currentCount + increment);
+      badge.textContent = newCount > 99 ? '99+' : newCount.toString();
+      badge.style.display = newCount > 0 ? 'flex' : 'none';
+    }
+  };
+
   // Auth methods
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      console.log('🔐 Attempting login for:', email);
       const response = await api.login(email, password);
       if (response.success && response.data?.user) {
-        console.log('✅ Login successful, user:', response.data.user.name);
         localStorage.setItem('token', response.data.token);
         api.setToken(response.data.token);
         setUser(response.data.user);
         setIsAuthenticated(true);
-        console.log('🔄 Refreshing data after login...');
         await refreshData();
         showNotification('تم تسجيل الدخول بنجاح', 'success');
         return true;
       }
-      console.log('❌ Login failed:', response.message);
       return false;
     } catch (error: any) {
-      console.error('❌ Login error:', error);
       showNotification(error.message || 'فشل في تسجيل الدخول', 'error');
       return false;
     }
@@ -194,8 +233,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const logout = async (): Promise<void> => {
     try {
       await api.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
     } finally {
       setUser(null);
       setIsAuthenticated(false);
@@ -211,43 +248,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Data fetching methods
   const fetchSessions = async (): Promise<void> => {
     try {
-      console.log('Fetching sessions...');
-      const response = await api.getSessions();
-      console.log('Sessions response:', response);
+      const response = await api.getActiveSessions();
       if (response.success && response.data) {
-        console.log('Setting sessions:', response.data);
         setSessions(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch sessions:', error);
+      console.error('Failed to fetch active sessions:', error);
     }
   };
 
   const fetchOrders = async (): Promise<void> => {
     try {
-      console.log('🔍 Fetching orders...');
       const response = await api.getOrders();
-      console.log('📥 Orders response:', response);
       if (response.success && response.data) {
-        console.log('📋 Setting orders:', response.data);
-
-        // Log details of each order
-        response.data.forEach((order, index) => {
-          console.log(`📋 Order ${index + 1} from API:`, {
-            _id: order._id,
-            orderNumber: order.orderNumber,
-            customerName: order.customerName,
-            itemsCount: order.items ? order.items.length : 0,
-            items: order.items,
-            status: order.status,
-            finalAmount: order.finalAmount
-          });
-        });
-
         setOrders(response.data);
-        console.log('✅ Orders set successfully');
-      } else {
-        console.log('❌ No orders data in response');
       }
     } catch (error) {
       console.error('❌ Failed to fetch orders:', error);
@@ -269,12 +283,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await api.getBills();
       if (response.success && response.data) {
-        // تضمين جميع الفواتير بما في ذلك الملغية
         setBills(response.data);
-        console.log('📋 AppContext: Fetched bills:', response.data.length, 'bills');
-        response.data.forEach(bill => {
-          console.log(`📄 Bill ${bill.billNumber}: status = ${bill.status}, paid = ${bill.paid}`);
-        });
       }
     } catch (error) {
       console.error('Failed to fetch bills:', error);
@@ -350,16 +359,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // CRUD methods for sessions
   const createSession = async (sessionData: any): Promise<Session | null> => {
     try {
-      console.log('بيانات الجلسة المرسلة:', sessionData);
       const response = await api.createSession(sessionData);
       if (response.success && response.data) {
-        setSessions(prev => [...prev, response.data!]);
-        showNotification('تم بدء الجلسة بنجاح', 'success');
-        return response.data;
+        const data = response.data as any;
+        const session = data.session;
+        const bill = data.bill;
+
+        setSessions(prev => [...prev, session]);
+
+        // Add bill to bills list if created
+        if (bill) {
+          setBills(prev => [...prev, bill]);
+          showNotification(`تم بدء جلسة جديدة على ${session.deviceName} - الفاتورة: ${bill.billNumber}`, 'success');
+        } else {
+          showNotification(`تم بدء جلسة جديدة على ${session.deviceName}`, 'success');
+        }
+
+        updateNotificationCount(1);
+        return session;
       }
       return null;
     } catch (error: any) {
-      console.error('createSession error:', error, sessionData);
       showNotification(error.message || 'فشل في إنشاء الجلسة', 'error');
       return null;
     }
@@ -394,12 +414,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           s.id === id ? session : s
         ));
 
-        // Add bill to bills list if created
+        // Update bill in bills list if exists
         if (bill) {
-          setBills(prev => [...prev, bill]);
-          showNotification(`تم إنهاء الجلسة وإنشاء الفاتورة ${bill.billNumber}`, 'success');
+          setBills(prev => prev.map(b => b.id === bill.id ? bill : b));
+          showNotification(`تم إنهاء الجلسة على ${session.deviceName} - إجمالي التكلفة: ${session.finalCost}`, 'success');
         } else {
-          showNotification('تم إنهاء الجلسة بنجاح', 'success');
+          showNotification(`تم إنهاء الجلسة على ${session.deviceName} بنجاح`, 'success');
         }
 
         return session;
@@ -415,8 +435,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // CRUD methods for orders
   const createOrder = async (orderData: any): Promise<Order | null> => {
     try {
-      console.log('🔍 AppContext: Creating order with data:', orderData);
-
       // Validate order data
       if (!orderData.customerName || !orderData.items || orderData.items.length === 0) {
         showNotification('بيانات الطلب غير مكتملة', 'error');
@@ -433,27 +451,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const response = await api.createOrder(orderData);
 
-      console.log('📥 AppContext: Order response:', response);
-
       if (response.success && response.data) {
-        console.log('✅ Order created successfully, adding to orders list');
-        setOrders(prev => {
-          console.log('📋 Previous orders:', prev);
-          const newOrders = [...prev, response.data!];
-          console.log('📋 New orders list:', newOrders);
-          return newOrders;
-        });
-        showNotification('تم إنشاء الطلب بنجاح', 'success');
-        console.log('✅ Order added to context successfully');
-        return response.data;
+        const newOrder = response.data;
+        setOrders(prev => [...prev, newOrder]);
+        showNotification(`تم إنشاء طلب جديد: ${newOrder.orderNumber}`, 'success');
+        updateNotificationCount(1);
+        return newOrder;
       } else {
         const errorMessage = response.message || 'فشل في إنشاء الطلب';
-        console.error('❌ Order creation failed:', errorMessage);
         showNotification(errorMessage, 'error');
         return null;
       }
     } catch (error: any) {
-      console.error('❌ AppContext: Order creation error:', error);
       const errorMessage = error.message || 'فشل في إنشاء الطلب';
       showNotification(errorMessage, 'error');
       return null;
@@ -497,13 +506,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateOrderStatus = async (orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'): Promise<Order | null> => {
     try {
-      const response = await api.updateOrder(orderId, { status });
+      const response = await api.updateOrderStatus(orderId, status);
       if (response.success && response.data) {
-        // Update the order in local state
-        setOrders(prev => prev.map(order =>
-          order.id === orderId ? response.data! : order
-        ));
-        showNotification('تم تحديث حالة الطلب بنجاح', 'success');
+        setOrders(prev => prev.map(order => order.id === orderId ? response.data! : order));
+
+        const statusMessages = {
+          pending: 'تم تحديث حالة الطلب إلى: في الانتظار',
+          preparing: 'تم تحديث حالة الطلب إلى: قيد التحضير',
+          ready: 'تم تحديث حالة الطلب إلى: جاهز',
+          delivered: 'تم تحديث حالة الطلب إلى: تم التسليم',
+          cancelled: 'تم إلغاء الطلب'
+        };
+
+        showNotification(statusMessages[status], 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
@@ -535,6 +551,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success && response.data) {
         setInventory(prev => [...prev, response.data!]);
         showNotification('تم إضافة المنتج بنجاح', 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
@@ -565,10 +582,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await api.updateStock(id, stockData);
       if (response.success && response.data) {
-        setInventory(prev => prev.map(item =>
-          item.id === id ? response.data! : item
-        ));
-        showNotification('تم تحديث المخزون بنجاح', 'success');
+        setInventory(prev => prev.map(item => item.id === id ? response.data! : item));
+        setInventoryItems(prev => prev.map(item => item.id === id ? response.data! : item));
+
+        const { quantity, operation } = stockData;
+        const operationText = operation === 'add' ? 'إضافة' : operation === 'subtract' ? 'خصم' : 'تحديث';
+        showNotification(`تم ${operationText} ${quantity} وحدة من المخزون بنجاح`, 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
@@ -585,6 +605,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success && response.data) {
         setBills(prev => [...prev, response.data!]);
         showNotification('تم إنشاء الفاتورة بنجاح', 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
@@ -615,45 +636,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await api.addPayment(id, paymentData);
       if (response.success && response.data) {
-        setBills(prev => prev.map(bill =>
-          bill.id === id ? response.data! : bill
-        ));
-        showNotification('تم تسجيل الدفع بنجاح', 'success');
+        setBills(prev => prev.map(bill => bill.id === id ? response.data! : bill));
+
+        const { amount, method } = paymentData;
+        const methodText = method === 'cash' ? 'نقداً' : method === 'card' ? 'بطاقة' : method === 'online' ? 'إلكتروني' : method;
+        showNotification(`تم إضافة دفعة ${amount} ريال ${methodText} بنجاح`, 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: any) {
-      showNotification(error.message || 'فشل في تسجيل الدفع', 'error');
+      showNotification(error.message || 'فشل في إضافة الدفعة', 'error');
       return null;
     }
   };
 
   const cancelBill = async (id: string): Promise<boolean> => {
     try {
-      console.log('🔄 AppContext: Cancelling bill with ID:', id);
       const response = await api.cancelBill(id);
-      console.log('📥 AppContext: Cancel bill response:', response);
 
       if (response.success) {
-        console.log('✅ AppContext: Bill cancelled successfully, updating local list');
-        // تحديث حالة الفاتورة في القائمة المحلية بدلاً من إزالتها
         setBills(prev => {
           const newBills = prev.map(bill =>
             bill.id === id
               ? { ...bill, status: 'cancelled' as const }
               : bill
           );
-          console.log('📋 AppContext: Bills after update:', newBills.length);
           return newBills;
         });
         showNotification('تم إلغاء الفاتورة بنجاح', 'success');
         return true;
       } else {
-        console.log('❌ AppContext: Cancel bill failed:', response.message);
         return false;
       }
     } catch (error: any) {
-      console.error('❌ AppContext: Cancel bill error:', error);
       showNotification(error.message || 'فشل في إلغاء الفاتورة', 'error');
       return false;
     }
@@ -664,7 +680,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getBillItems(id);
       return response.success && response.data ? response.data : [];
     } catch (error) {
-      console.error('Failed to get bill items:', error);
       return [];
     }
   };
@@ -693,6 +708,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success && response.data) {
         setCosts(prev => [...prev, response.data!]);
         showNotification('تم إضافة التكلفة بنجاح', 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
@@ -741,6 +757,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success && response.data) {
         setDevices(prev => [...prev, response.data!]);
         showNotification('تم إضافة الجهاز بنجاح', 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
@@ -804,7 +821,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getDeviceStats();
       return response.success ? response.data : null;
     } catch (error) {
-      console.error('Failed to get device stats:', error);
       return null;
     }
   };
@@ -816,6 +832,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success && response.data) {
         await fetchMenuItems();
         showNotification('تم إضافة العنصر بنجاح', 'success');
+        updateNotificationCount(1);
         return response.data;
       }
       return null;
@@ -860,7 +877,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getMenuItemsByCategory(category);
       return response.success && response.data ? response.data : [];
     } catch (error) {
-      console.error('Failed to get menu items by category:', error);
       return [];
     }
   };
@@ -870,7 +886,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getPopularMenuItems(limit);
       return response.success && response.data ? response.data : [];
     } catch (error) {
-      console.error('Failed to get popular menu items:', error);
       return [];
     }
   };
@@ -880,7 +895,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getMenuStats();
       return response.success ? response.data : null;
     } catch (error) {
-      console.error('Failed to get menu stats:', error);
       return null;
     }
   };
@@ -892,12 +906,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success && response.data) {
         showNotification('تم إضافة المستخدم بنجاح', 'success');
         await fetchUsers();
+        updateNotificationCount(1);
         return response.data;
       }
       showNotification(response.message || 'فشل في إضافة المستخدم', 'error');
       return null;
     } catch (error: any) {
-      console.error('Error creating user:', error);
       showNotification(error.message || 'فشل في إضافة المستخدم', 'error');
       return null;
     }
@@ -914,7 +928,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       showNotification(response.message || 'فشل في تحديث المستخدم', 'error');
       return null;
     } catch (error: any) {
-      console.error('Error updating user:', error);
       showNotification(error.message || 'فشل في تحديث المستخدم', 'error');
       return null;
     }
@@ -931,7 +944,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       showNotification(response.message || 'فشل في حذف المستخدم', 'error');
       return false;
     } catch (error: any) {
-      console.error('Error deleting user:', error);
       showNotification(error.message || 'فشل في حذف المستخدم', 'error');
       return false;
     }
@@ -940,12 +952,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Utility methods
   const refreshData = async (): Promise<void> => {
     if (!isAuthenticated && !user) {
-      console.log('❌ Not authenticated, skipping data refresh');
       return;
     }
 
     try {
-      console.log('🔄 Refreshing all data...');
       await Promise.all([
         fetchSessions(),
         fetchOrders(),
@@ -958,29 +968,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchUsers(),
         fetchSettings(),
       ]);
-      console.log('✅ Data refresh completed');
     } catch (error) {
       console.error('❌ Failed to refresh data:', error);
     }
   };
 
-  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info'): void => {
-    // Simple notification implementation
-    console.log(`[${type.toUpperCase()}] ${message}`);
-
+  const showNotification = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info'): void => {
     // Create a simple toast notification
     const toast = document.createElement('div');
-    toast.className = `fixed top-4 right-4 z-50 p-4 rounded-lg text-white max-w-sm ${type === 'success' ? 'bg-green-500' :
-      type === 'error' ? 'bg-red-500' : 'bg-blue-500'
-      }`;
+    toast.className = `fixed bottom-4 right-4 z-50 p-4 rounded-lg text-white max-w-sm shadow-lg transition-all duration-300 ${
+      type === 'success' ? 'bg-green-500' :
+      type === 'error' ? 'bg-red-500' :
+      type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+    }`;
     toast.textContent = message;
+
+    // Add RTL support
+    toast.style.direction = 'rtl';
+    toast.style.textAlign = 'right';
 
     document.body.appendChild(toast);
 
+    // Animate in
     setTimeout(() => {
-      if (document.body.contains(toast)) {
-        document.body.removeChild(toast);
-      }
+      toast.style.transform = 'translateX(0)';
+      toast.style.opacity = '1';
+    }, 100);
+
+    setTimeout(() => {
+      // Animate out
+      toast.style.transform = 'translateX(100%)';
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 300);
     }, 3000);
   };
 
@@ -989,7 +1012,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getRecentActivity(limit);
       return response.success && response.data ? response.data : [];
     } catch (error) {
-      console.error('Failed to get recent activity:', error);
       return [];
     }
   };
@@ -1000,7 +1022,125 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getSalesReport(period, groupBy);
       return response.success ? response.data : null;
     } catch (error) {
-      console.error('Error fetching sales report:', error);
+      return null;
+    }
+  };
+
+  // Notification methods
+  const getNotifications = async (options?: { category?: string; unreadOnly?: boolean; limit?: number }): Promise<any[]> => {
+    try {
+      const response = await api.getNotifications(options);
+      return response.success && response.data ? response.data : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const getNotificationStats = async (): Promise<any> => {
+    try {
+      const response = await api.getNotificationStats();
+      return response.success ? response.data : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId: string): Promise<boolean> => {
+    try {
+      const response = await api.markNotificationAsRead(notificationId);
+      if (response.success) {
+        // Update notification count in real-time
+        updateNotificationCount();
+      }
+      return response.success;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const markAllNotificationsAsRead = async (): Promise<boolean> => {
+    try {
+      const response = await api.markAllNotificationsAsRead();
+      if (response.success) {
+        updateNotificationCount();
+      }
+      return response.success;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const deleteNotification = async (notificationId: string): Promise<boolean> => {
+    try {
+      const response = await api.deleteNotification(notificationId);
+      if (response.success) {
+        // Update notification count in real-time if notification was unread
+        updateNotificationCount(-1);
+      }
+      return response.success;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  // Admin notification methods
+  const createNotification = async (notificationData: any): Promise<any> => {
+    try {
+      const response = await api.createNotification(notificationData);
+      if (response.success && response.data) {
+        showNotification('تم إنشاء الإشعار بنجاح', 'success');
+        // Update notification count in real-time
+        updateNotificationCount(1);
+        return response.data;
+      }
+      return null;
+    } catch (error: any) {
+      showNotification(error.message || 'فشل في إنشاء الإشعار', 'error');
+      return null;
+    }
+  };
+
+  const sendNotificationToRole = async (role: string, notificationData: any): Promise<any> => {
+    try {
+      const response = await api.sendNotificationToRole(role, notificationData);
+      if (response.success && response.data) {
+        showNotification(`تم إرسال الإشعار لدور ${role} بنجاح`, 'success');
+        updateNotificationCount(1);
+        return response.data;
+      }
+      return null;
+    } catch (error: any) {
+      showNotification(error.message || 'فشل في إرسال الإشعار', 'error');
+      return null;
+    }
+  };
+
+  const sendNotificationToPermission = async (permission: string, notificationData: any): Promise<any> => {
+    try {
+      const response = await api.sendNotificationToPermission(permission, notificationData);
+      if (response.success && response.data) {
+        showNotification(`تم إرسال الإشعار لمن لديهم صلاحية ${permission} بنجاح`, 'success');
+        updateNotificationCount(1);
+        return response.data;
+      }
+      return null;
+    } catch (error: any) {
+      showNotification(error.message || 'فشل في إرسال الإشعار', 'error');
+      return null;
+    }
+  };
+
+  const broadcastNotification = async (notificationData: any): Promise<any> => {
+    try {
+      const response = await api.broadcastNotification(notificationData);
+      if (response.success && response.data) {
+        showNotification('تم إرسال الإشعار لجميع المستخدمين بنجاح', 'success');
+        updateNotificationCount(1);
+        return response.data;
+      }
+      return null;
+    } catch (error: any) {
+      showNotification(error.message || 'فشل في إرسال الإشعار', 'error');
       return null;
     }
   };
@@ -1010,7 +1150,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getSessionsReport(period, device);
       return response.success ? response.data : null;
     } catch (error) {
-      console.error('Error fetching sessions report:', error);
       return null;
     }
   };
@@ -1020,7 +1159,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getInventoryReport(category);
       return response.success ? response.data : null;
     } catch (error) {
-      console.error('Error fetching inventory report:', error);
       return null;
     }
   };
@@ -1030,7 +1168,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getFinancialReport(period);
       return response.success ? response.data : null;
     } catch (error) {
-      console.error('Error fetching financial report:', error);
       return null;
     }
   };
@@ -1054,6 +1191,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     settings,
     inventoryItems,
     users,
+    notifications,
 
     // Auth methods
     login,
@@ -1116,7 +1254,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     getSalesReport,
     getSessionsReport,
     getInventoryReport,
-    getFinancialReport
+    getFinancialReport,
+
+    // Notification methods
+    getNotifications,
+    getNotificationStats,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    deleteNotification,
+    createNotification,
+    sendNotificationToRole,
+    sendNotificationToPermission,
+    broadcastNotification
   };
 
   return (
