@@ -143,12 +143,8 @@ export const createOrder = async (req, res) => {
                         message: `العنصر غير متاح: ${menuItem.name}`,
                     });
                 }
-                // Calculate addons total
-                const addonsTotal = item.addons
-                    ? item.addons.reduce((sum, addon) => sum + addon.price, 0)
-                    : 0;
                 // Calculate item total
-                const itemTotal = menuItem.price * item.quantity + addonsTotal;
+                const itemTotal = menuItem.price * item.quantity;
                 subtotal += itemTotal;
                 processedItems.push({
                     menuItem: menuItem._id,
@@ -156,25 +152,18 @@ export const createOrder = async (req, res) => {
                     arabicName: menuItem.arabicName || menuItem.name,
                     price: menuItem.price,
                     quantity: item.quantity,
-                    addons: item.addons || [],
-                    addonsTotal,
                     itemTotal,
                     notes: item.notes,
                     preparationTime: menuItem.preparationTime,
                 });
             } else {
                 // إذا لم يوجد menuItem، استخدم بيانات العنصر كما هي
-                const addonsTotal = item.addons
-                    ? item.addons.reduce((sum, addon) => sum + addon.price, 0)
-                    : 0;
-                const itemTotal = item.price * item.quantity + addonsTotal;
+                const itemTotal = item.price * item.quantity;
                 subtotal += itemTotal;
                 processedItems.push({
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
-                    addons: item.addons || [],
-                    addonsTotal,
                     itemTotal,
                     notes: item.notes,
                     preparationTime: item.preparationTime || 0,

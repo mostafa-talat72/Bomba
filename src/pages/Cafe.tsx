@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Coffee, Plus, Edit, Trash2, ShoppingCart, Clock, CheckCircle, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MenuItem, Order, OrderItem } from '../services/api';
+import { MenuItem } from '../services/api';
 import { api } from '../services/api';
 
 interface LocalOrderItem {
@@ -11,36 +11,24 @@ interface LocalOrderItem {
   price: number;
   quantity: number;
   preparedCount?: number;
-  addons: Array<{
-    name: string;
-    price: number;
-  }>;
   notes?: string;
-  _newAddonName?: string;
-  _newAddonPrice?: string;
 }
 
 const Cafe: React.FC = () => {
   const {
-    orders,
-    createOrder,
-    updateOrder,
     menuItems,
     fetchMenuItems,
-    bills,
-    fetchBills,
     showNotification
   } = useApp();
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'menu' | 'orders' | 'kitchen'>('menu');
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
-  const [readyOrders, setReadyOrders] = useState<Order[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
+  const [readyOrders, setReadyOrders] = useState<any[]>([]);
   const [currentOrder, setCurrentOrder] = useState<LocalOrderItem[]>([]);
 
   // فاتورة جديدة أو موجودة
@@ -50,7 +38,7 @@ const Cafe: React.FC = () => {
   const [searchBill, setSearchBill] = useState('');
   const [selectedBill, setSelectedBill] = useState<any>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [todayStats, setTodayStats] = useState<{
     totalOrders: number;
     totalSales: number;
@@ -335,7 +323,7 @@ const Cafe: React.FC = () => {
         price: item.price,
         quantity: 1,
         preparedCount: 0,
-        addons: []
+        notes: item.notes
       }]);
     }
   };
@@ -358,8 +346,7 @@ const Cafe: React.FC = () => {
 
   const calculateTotal = () => {
     return currentOrder.reduce((total, item) => {
-      const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
-      return total + (item.price * item.quantity) + addonsTotal;
+      return total + (item.price * item.quantity);
     }, 0);
   };
 
@@ -391,7 +378,6 @@ const Cafe: React.FC = () => {
           price: item.price,
           quantity: item.quantity,
           notes: item.notes,
-          addons: item.addons || []
         })),
         notes: orderNotes
       };
@@ -527,53 +513,37 @@ const Cafe: React.FC = () => {
   };
 
   // دالة للتحقق من وجود أصناف غير مجهزة
-  const hasUnpreparedItems = (order: Order) => {
+  const hasUnpreparedItems = (order: any) => {
     if (!order.items) return false;
-    return order.items.some(item => {
-      const prepared = item.preparedCount || 0;
-      const quantity = item.quantity || 0;
-      return prepared < quantity; // يوجد أصناف غير مجهزة بالكامل
+    return order.items.some((item: any) => {
+      return (item.preparedCount || 0) < (item.quantity || 0);
     });
   };
 
   // دالة للتحقق من وجود أصناف مجهزة
-  const hasAnyPreparedItems = (order: Order) => {
+  const hasAnyPreparedItems = (order: any) => {
     if (!order.items) return false;
-    return order.items.some(item => {
-      const prepared = item.preparedCount || 0;
-      return prepared > 0; // يوجد أصناف مجهزة (ولو جزئياً)
+    return order.items.some((item: any) => {
+      return (item.preparedCount || 0) > 0;
     });
   };
 
   // دالة للتحقق من أن جميع الأصناف مجهزة بالكامل
-  const hasAllItemsFullyPrepared = (order: Order) => {
+  const hasAllItemsFullyPrepared = (order: any) => {
     if (!order.items) return false;
-    return order.items.every(item => {
-      const prepared = item.preparedCount || 0;
-      const quantity = item.quantity || 0;
-      return prepared >= quantity; // جميع الأصناف مجهزة بالكامل
+    return order.items.every((item: any) => {
+      return (item.preparedCount || 0) >= (item.quantity || 0);
     });
   };
 
   // دالة للتحقق من أن الطلب جاهز للتسليم
-  const isOrderReadyForDelivery = (order: Order) => {
+  const isOrderReadyForDelivery = (order: any) => {
     // التحقق من الحالة أولاً
     if (order.status === 'ready') {
         return true;
       }
-
-    // التحقق من أن جميع الأصناف مجهزة بالكامل
-    if (!order.items || order.items.length === 0) {
-    return false;
-    }
-
-    const allItemsFullyPrepared = order.items.every(item => {
-      const prepared = item.preparedCount || 0;
-      const quantity = item.quantity || 0;
-      return prepared >= quantity;
-    });
-
-    return allItemsFullyPrepared;
+    if (!order.items) return false;
+    return order.items.every((item: any) => (item.preparedCount || 0) >= (item.quantity || 0));
   };
 
   // Filter orders with unprepared items using useMemo
@@ -670,28 +640,22 @@ const Cafe: React.FC = () => {
   // لذلك لا نحتاج لـ useEffect منفصل هنا
 
   // Helper: Get unprepared items count for an order
-  const getUnpreparedItemsCount = (order: Order) => {
+  const getUnpreparedItemsCount = (order: any) => {
     if (!order.items) return 0;
     let count = 0;
-    for (const item of order.items) {
-      const unprepared = (item.quantity || 0) - (item.preparedCount || 0);
-      if (unprepared > 0) {
-        count += unprepared;
-      }
-    }
+    order.items.forEach((item: any) => {
+      count += Math.max(0, (item.quantity || 0) - (item.preparedCount || 0));
+    });
     return count;
   };
 
   // دالة لحساب عدد الأصناف المجهزة
-  const getPreparedItemsCount = (order: Order) => {
+  const getPreparedItemsCount = (order: any) => {
     if (!order.items) return 0;
     let count = 0;
-    for (const item of order.items) {
-      const prepared = item.preparedCount || 0;
-      if (prepared > 0) {
-        count += prepared;
-      }
-    }
+    order.items.forEach((item: any) => {
+      count += item.preparedCount || 0;
+    });
     return count;
   };
 
@@ -1078,7 +1042,7 @@ const Cafe: React.FC = () => {
   };
 
   // Function to show order details
-  const handleOrderClick = (order: Order) => {
+  const handleOrderClick = (order: any) => {
     setSelectedOrder(order);
     setShowOrderDetails(true);
   };
@@ -1244,14 +1208,7 @@ const Cafe: React.FC = () => {
                                 <span className="truncate">{item.name}</span>
                                 <span className="font-medium text-gray-900">{item.quantity} قطعة</span>
                               </div>
-                              {item.notes && (
-                                <div className="text-xs text-blue-600 mt-1">ملاحظة لهذا المشروب: {item.notes}</div>
-                              )}
-                              {item.addons && item.addons.length > 0 && (
-                                <div className="text-xs text-green-700 mt-1">
-                                  إضافات لهذا المشروب: {item.addons.map(a => `${a.name} (${a.price} ج.م)`).join('، ')}
-                                </div>
-                              )}
+                              {/* ملاحظة لهذا المشروب: غير متوفرة */}
                             </div>
                           ))}
                         </div>
@@ -1354,16 +1311,9 @@ const Cafe: React.FC = () => {
                             <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
                               <div className="flex justify-between items-center">
                                 <span className="truncate">{item.name}</span>
-                                <span className="text-green-600 font-medium">{item.quantity} × {(item.price + (item.addonsTotal || 0))} ج.م</span>
+                                <span className="text-green-600 font-medium">{item.quantity} × {item.price} ج.م</span>
                               </div>
-                              {item.notes && (
-                                <div className="text-xs text-blue-600 mt-1">ملاحظة لهذا المشروب: {item.notes}</div>
-                              )}
-                              {item.addons && item.addons.length > 0 && (
-                                <div className="text-xs text-green-700 mt-1">
-                                  إضافات لهذا المشروب: {item.addons.map(a => `${a.name} (${a.price} ج.م)`).join('، ')}
-                                </div>
-                              )}
+                              {/* ملاحظة لهذا المشروب: غير متوفرة */}
                             </div>
                           ))}
                         </div>
@@ -1563,10 +1513,6 @@ const Cafe: React.FC = () => {
                             </button>
                             <span className="text-gray-600">{item.price} ج.م</span>
                           </div>
-                          {/* إجمالي الصنف مع الإضافات */}
-                          <div className="text-xs text-gray-700 mb-2">
-                            الإجمالي لهذا الصنف: {(item.price * item.quantity) + (item.addons?.reduce((sum, a) => sum + (a.price || 0), 0) || 0)} ج.م
-                          </div>
                           <div className="mb-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات هذا المشروب:</label>
                             <textarea
@@ -1580,71 +1526,6 @@ const Cafe: React.FC = () => {
                               rows={1}
                               placeholder="مثال: بدون سكر، مع حليب إضافي..."
                             />
-                          </div>
-                          <div className="mb-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">إضافات برسوم:</label>
-                            {item.addons && item.addons.length > 0 && (
-                              <ul className="mb-2">
-                                {item.addons.map((addon, aIdx) => (
-                                  <li key={aIdx} className="flex items-center space-x-2 space-x-reverse text-sm mb-1">
-                                    <span>{addon.name} ({addon.price} ج.م)</span>
-                                    <button
-                                      onClick={() => {
-                                        const updatedOrder = [...currentOrder];
-                                        updatedOrder[index].addons = updatedOrder[index].addons.filter((_, i) => i !== aIdx);
-                                        setCurrentOrder(updatedOrder);
-                                      }}
-                                      className="text-red-400 hover:text-red-600 text-xs ml-2"
-                                      title="حذف الإضافة"
-                                    >
-                                      حذف
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            <div className="flex items-center space-x-2 space-x-reverse">
-                              <input
-                                type="text"
-                                placeholder="اسم الإضافة"
-                                className="border border-gray-300 rounded px-2 py-1 text-xs w-1/2"
-                                value={item._newAddonName || ''}
-                                onChange={e => {
-                                  const updatedOrder = [...currentOrder];
-                                  updatedOrder[index]._newAddonName = e.target.value;
-                                  setCurrentOrder(updatedOrder);
-                                }}
-                              />
-                              <input
-                                type="number"
-                                placeholder="السعر"
-                                className="border border-gray-300 rounded px-2 py-1 text-xs w-1/4"
-                                min={0}
-                                value={item._newAddonPrice || ''}
-                                onChange={e => {
-                                  const updatedOrder = [...currentOrder];
-                                  updatedOrder[index]._newAddonPrice = e.target.value;
-                                  setCurrentOrder(updatedOrder);
-                                }}
-                              />
-                              <button
-                                type="button"
-                                className="bg-green-500 hover:bg-green-600 text-white rounded px-2 py-1 text-xs"
-                                onClick={() => {
-                                  if (!item._newAddonName || !item._newAddonPrice || isNaN(Number(item._newAddonPrice))) return;
-                                  const updatedOrder = [...currentOrder];
-                                  updatedOrder[index].addons = [
-                                    ...(updatedOrder[index].addons || []),
-                                    { name: item._newAddonName, price: Number(item._newAddonPrice) }
-                                  ];
-                                  delete updatedOrder[index]._newAddonName;
-                                  delete updatedOrder[index]._newAddonPrice;
-                                  setCurrentOrder(updatedOrder);
-                                }}
-                              >
-                                إضافة
-                              </button>
-                            </div>
                           </div>
                         </div>
                       ))

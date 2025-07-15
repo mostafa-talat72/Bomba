@@ -203,6 +203,10 @@ export interface Device {
   status: string;
   controllers: number;
   createdAt: Date;
+  // إضافة خاصية أسعار البلايستيشن
+  playstationRates?: { [controllers: number]: number };
+  // إضافة خاصية سعر الساعة للكمبيوتر (موجودة غالباً)
+  hourlyRate?: number;
 }
 
 export interface MenuItem {
@@ -759,6 +763,9 @@ class ApiClient {
     quantity: number;
     reason: string;
     reference?: string;
+    price?: number;
+    supplier?: string;
+    date?: string;
   }): Promise<ApiResponse<InventoryItem>> {
     const response = await this.request<InventoryItem>(`/inventory/${id}/stock`, {
       method: 'PUT',

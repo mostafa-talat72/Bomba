@@ -40,36 +40,39 @@ const Billing = () => {
     let interval: Interval | null = null;
 
     const updateActiveSessionsAndBills = async () => {
-      // ابحث عن كل الفواتير التي بها جلسة نشطة
       const activeSessionBills = bills.filter(bill => hasActiveSession(bill));
       if (activeSessionBills.length === 0) return;
-      // حدث كل جلسة نشطة
       await Promise.all(
         activeSessionBills.flatMap(bill =>
           bill.sessions
             .filter(session => session.status === 'active')
-            .map(session => api.updateSessionCost(session._id || session.id))
+            .map(async session => {
+              await api.updateSessionCost(session._id || session.id);
+              // تحديث الفاتورة المختارة إذا كانت هي نفسها
+              if (selectedBill && (selectedBill._id === bill._id || selectedBill.id === bill.id)) {
+                const billRes = await api.getBill(bill._id || bill.id);
+                if (billRes.success && billRes.data) {
+                  setSelectedBill(billRes.data);
+                }
+              }
+            })
         )
       );
-      // أعد تحميل الفواتير
-      fetchBills();
-
-      // تحديث حالة الفواتير التي بها جلسات نشطة
-      for (const bill of activeSessionBills) {
-        await updateBillStatus(bill.id || bill._id);
-      }
+      await fetchBills();
     };
 
-    // شغل التحديث إذا كان هناك جلسة نشطة
-    if (bills.some(bill => hasActiveSession(bill))) {
-      interval = setInterval(updateActiveSessionsAndBills, 60 * 1000); // كل دقيقة
+    // دالة لفحص وجود جلسة نشطة
+    const hasAnyActiveSession = () => bills.some(bill => hasActiveSession(bill));
+
+    if (hasAnyActiveSession()) {
+      interval = setInterval(updateActiveSessionsAndBills, 5000);
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-    // نراقب bills حتى إذا تغيرت الفواتير يعاد التحقق
-  }, [bills, statusFilter]);
+    // الاعتماد فقط على وجود جلسة نشطة
+  }, [bills.length, bills.map(b => b.sessions.map(s => s.status).join(',')).join(',')]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -162,19 +165,7 @@ const Billing = () => {
   };
 
   const getCustomerDisplay = (bill: Bill) => {
-    if (bill.billType === 'playstation') {
-      let psNum = '';
-      if (typeof bill.tableNumber === 'number') {
-        psNum = bill.tableNumber.toString();
-      } else if (bill.tableNumber) {
-        psNum = String(bill.tableNumber).replace(/[^0-9]/g, '');
-      }
-      return `عميل بلايستيشن${psNum ? ' (' + psNum + ')' : ''}`;
-    } else if (bill.billType === 'cafe') {
-      return bill.customerName || 'عميل كافيه';
-    } else {
       return bill.customerName || 'عميل';
-    }
   };
 
   const filteredBills = bills.filter(bill => statusFilter === 'all' || bill.status === statusFilter);
@@ -242,13 +233,6 @@ const Billing = () => {
         setSelectedBill(result.data);
         // إعادة تحميل قائمة الفواتير
         fetchBills();
-
-        // إظهار رسالة توضيحية
-        if (newStatus === 'paid') {
-          showNotification('تم تحديث حالة الفاتورة إلى: مدفوعة بالكامل');
-        } else if (newStatus === 'partial' && hasActive) {
-          showNotification('الفاتورة تبقى مدفوعة جزئياً بسبب وجود جلسات نشطة');
-        }
       }
     } catch (error) {
       console.error('Failed to update bill status:', error);
@@ -258,12 +242,6 @@ const Billing = () => {
 
   const handlePartialPaymentSubmit = async () => {
     if (!selectedBill) return;
-
-    // التحقق من وجود جلسات نشطة
-    if (selectedBill && hasActiveSession(selectedBill)) {
-      showNotification('لا يمكن الدفع - هذه الفاتورة تحتوي على جلسة نشطة. يرجى إنهاء الجلسة أولاً.');
-      return;
-    }
 
     // استخدم نفس منطق المفاتيح كما في aggregateItemsWithPayments
     const aggItems = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || []);
@@ -399,40 +377,23 @@ const Billing = () => {
 
   // دالة لتجميع الأصناف والإضافات مع حساب الكمية والمدفوع والمتبقي (نفس منطق BillView)
   function aggregateItemsWithPayments(orders: Order[], partialPayments: Bill['partialPayments']) {
-    type AggregatedAddon = {
-      name: string;
-      price: number;
-      totalQuantity: number;
-      paidQuantity: number;
-      remainingQuantity: number;
-    };
     type AggregatedItem = {
       name: string;
       price: number;
       totalQuantity: number;
       paidQuantity: number;
       remainingQuantity: number;
-      addons?: AggregatedAddon[];
     };
     const map = new Map<string, AggregatedItem>();
 
-    // Helper لحساب المدفوع لصنف أو إضافة
-    function getPaidQty(itemName: string, addonName?: string) {
+    // Helper لحساب المدفوع لصنف رئيسي فقط
+    function getPaidQty(itemName: string) {
       let paid = 0;
-      if (!partialPayments || !Array.isArray(partialPayments)) return 0;
       partialPayments.forEach(payment => {
         if (!payment.items || !Array.isArray(payment.items)) return;
-        payment.items.forEach((item: { itemName: string; mainItemName?: string; quantity: number }) => {
-          if (addonName) {
-            // دفع إضافة
-            if (item.itemName === addonName && item.mainItemName === itemName) {
-              paid += item.quantity;
-            }
-          } else {
-            // دفع صنف رئيسي
+        payment.items.forEach((item: { itemName: string; quantity: number }) => {
             if (item.itemName === itemName) {
               paid += item.quantity;
-            }
           }
         });
       });
@@ -443,25 +404,9 @@ const Billing = () => {
 
     orders.forEach(order => {
       if (!order.items) return; // تخطي الطلبات التي لا تحتوي على أصناف
-      order.items.forEach((item: OrderItem & { addons?: { name: string; price: number }[] }) => {
-      // مفتاح التجميع: اسم الصنف + السعر + أسماء الإضافات وأسعارها
-      const addonsKey = (item.addons || [])
-          .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-        .sort()
-        .join('|');
-        const key = `${item.name}|${item.price}|${addonsKey}`;
+      order.items.forEach((item: OrderItem) => {
+        const key = `${item.name}|${item.price}`;
       if (!map.has(key)) {
-        // تجميع الإضافات
-          const addons: AggregatedAddon[] = (item.addons || []).map((a: { name: string; price: number }) => {
-            const paidQty = getPaidQty(item.name, a.name);
-          return {
-            name: a.name,
-            price: a.price,
-            totalQuantity: item.quantity,
-            paidQuantity: paidQty,
-            remainingQuantity: item.quantity - paidQty,
-          };
-        });
           const paidQty = getPaidQty(item.name);
         map.set(key, {
             name: item.name,
@@ -469,34 +414,7 @@ const Billing = () => {
           totalQuantity: item.quantity,
           paidQuantity: paidQty,
           remainingQuantity: item.quantity - paidQty,
-          addons,
         });
-      } else {
-        const agg = map.get(key)!;
-        agg.totalQuantity += item.quantity;
-          const paidQty = getPaidQty(item.name);
-        agg.paidQuantity = paidQty;
-        agg.remainingQuantity = agg.totalQuantity - paidQty;
-        // جمع كميات الإضافات
-        if (agg.addons && item.addons) {
-            item.addons.forEach((addon: { name: string; price: number }) => {
-            const found = agg.addons!.find(a => a.name === addon.name && a.price === addon.price);
-              const paidQtyAddon = getPaidQty(item.name, addon.name);
-            if (found) {
-              found.totalQuantity += item.quantity;
-              found.paidQuantity = paidQtyAddon;
-              found.remainingQuantity = found.totalQuantity - paidQtyAddon;
-            } else {
-              agg.addons!.push({
-                name: addon.name,
-                price: addon.price,
-                totalQuantity: item.quantity,
-                paidQuantity: paidQtyAddon,
-                remainingQuantity: item.quantity - paidQtyAddon,
-              });
-            }
-          });
-        }
       }
       });
     });

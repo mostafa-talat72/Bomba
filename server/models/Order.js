@@ -1,17 +1,5 @@
 import mongoose from "mongoose";
 
-const orderItemAddonSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, "اسم الإضافة مطلوب"],
-    },
-    price: {
-        type: Number,
-        required: [true, "سعر الإضافة مطلوب"],
-        min: 0,
-    },
-});
-
 const orderItemSchema = new mongoose.Schema({
     menuItem: {
         type: mongoose.Schema.Types.ObjectId,
@@ -37,12 +25,6 @@ const orderItemSchema = new mongoose.Schema({
         min: 1,
     },
     preparedCount: {
-        type: Number,
-        default: 0,
-        min: 0,
-    },
-    addons: [orderItemAddonSchema],
-    addonsTotal: {
         type: Number,
         default: 0,
         min: 0,
@@ -186,8 +168,7 @@ orderSchema.pre("save", async function (next) {
         // Calculate item totals and subtotal
         if (this.items && this.items.length > 0) {
             this.subtotal = this.items.reduce((total, item) => {
-                const itemTotal =
-                    item.price * item.quantity + (item.addonsTotal || 0);
+                const itemTotal = item.price * item.quantity;
                 item.itemTotal = itemTotal;
                 return total + itemTotal;
             }, 0);

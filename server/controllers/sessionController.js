@@ -103,11 +103,12 @@ const sessionController = {
             }
 
             // Create new session
+            // اسم العميل دائماً "عميل (اسم الجهاز)"
             const session = new Session({
                 deviceNumber,
                 deviceName,
                 deviceType,
-                customerName: customerName ? customerName.trim() : "",
+                customerName: `عميل (${deviceName})`,
                 controllers: controllers || 1,
                 createdBy: req.user._id,
             });
@@ -115,36 +116,15 @@ const sessionController = {
             // Create bill automatically for the session
             let bill = null;
             try {
-                // Determine bill type and customer name based on device type
+                // تحديد اسم العميل ليكون دائماً "عميل (اسم الجهاز)"
                 let billType = "cafe";
-                let customerNameForBill = "";
+                let customerNameForBill = `عميل (${deviceName})`;
                 let tableName = deviceName;
 
                 if (deviceType === "playstation") {
                     billType = "playstation";
-                    // إذا لم يتم تحديد اسم العميل، استخدم "عميل بلايستيشن" مع رقم الجهاز
-                    if (!customerName || customerName.trim() === "") {
-                        customerNameForBill = `عميل بلايستيشن PS${deviceNumber}`;
-                    } else {
-                        // إذا تم إدخال اسم العميل، أضف رقم الجهاز إليه
-                        customerNameForBill = `${customerName.trim()} PS${deviceNumber}`;
-                    }
                 } else if (deviceType === "computer") {
                     billType = "computer";
-                    // إذا لم يتم تحديد اسم العميل، استخدم "عميل كمبيوتر" مع رقم الجهاز
-                    if (!customerName || customerName.trim() === "") {
-                        customerNameForBill = `عميل كمبيوتر PC${deviceNumber}`;
-                    } else {
-                        // إذا تم إدخال اسم العميل، أضف رقم الجهاز إليه
-                        customerNameForBill = `${customerName.trim()} PC${deviceNumber}`;
-                    }
-                } else {
-                    // للأنواع الأخرى (cafe)، استخدم اسم العميل أو "عميل"
-                    if (!customerName || customerName.trim() === "") {
-                        customerNameForBill = "عميل";
-                    } else {
-                        customerNameForBill = customerName.trim();
-                    }
                 }
 
                 const billData = {
@@ -318,7 +298,7 @@ const sessionController = {
             }
 
             // حساب التكلفة الحالية
-            const currentCost = session.calculateCost();
+            await session.calculateCost();
             await session.save();
 
             Logger.info("💰 Session cost updated:", {

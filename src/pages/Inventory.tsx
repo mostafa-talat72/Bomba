@@ -1,75 +1,254 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Package, Plus, AlertTriangle, Edit, Trash2 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { InventoryItem } from '../services/api';
+import { api } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 const Inventory = () => {
-  const [showAddItem, setShowAddItem] = useState(false);
+  const {
+    inventoryItems,
+    fetchInventoryItems,
+    updateStock,
+    createInventoryItem,
+    updateInventoryItem,
+    showNotification,
+  } = useApp();
 
-  const inventoryItems = [
-    {
-      id: 1,
-      name: 'قهوة تركية',
-      category: 'مشروبات',
-      currentStock: 25,
-      minStock: 10,
-      unit: 'علبة',
-      price: 45,
-      supplier: 'شركة القهوة الذهبية',
-      lastUpdated: new Date('2024-01-15')
-    },
-    {
-      id: 2,
-      name: 'سكر',
-      category: 'مواد خام',
-      currentStock: 5,
-      minStock: 15,
-      unit: 'كيس',
-      price: 12,
-      supplier: 'شركة السكر المصرية',
-      lastUpdated: new Date('2024-01-14')
-    },
-    {
-      id: 3,
-      name: 'شاي أحمر',
-      category: 'مشروبات',
-      currentStock: 18,
-      minStock: 12,
-      unit: 'علبة',
-      price: 25,
-      supplier: 'شركة الشاي الفاخر',
-      lastUpdated: new Date('2024-01-15')
-    },
-    {
-      id: 4,
-      name: 'لبن',
-      category: 'مواد خام',
-      currentStock: 8,
-      minStock: 20,
-      unit: 'لتر',
-      price: 18,
-      supplier: 'مزرعة الألبان',
-      lastUpdated: new Date('2024-01-15')
-    },
-    {
-      id: 5,
-      name: 'كاكاو',
-      category: 'مواد خام',
-      currentStock: 12,
-      minStock: 8,
-      unit: 'علبة',
-      price: 35,
-      supplier: 'شركة الكاكاو المستوردة',
-      lastUpdated: new Date('2024-01-13')
-    }
-  ];
+  // Modal states
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
 
-  const lowStockItems = inventoryItems.filter(item => item.currentStock <= item.minStock);
-  const totalValue = inventoryItems.reduce((sum, item) => sum + (item.currentStock * item.price), 0);
+  // Add/Edit form state
+  const [addType, setAddType] = useState<'existing' | 'new'>('existing');
+  const [addForm, setAddForm] = useState({
+    productId: '',
+    name: '',
+    category: '',
+    quantity: '',
+    price: '',
+    supplier: '',
+    minStock: '',
+    unit: '',
+    date: new Date().toISOString().slice(0, 10),
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // القيم المسموحة للفئة والوحدة
+  const categoryOptions = ['مشروبات ساخنة', 'مشروبات باردة', 'طعام', 'حلويات', 'مواد خام', 'أخرى'];
+  const unitOptions = ['قطعة', 'كيلو', 'جرام', 'لتر', 'مل', 'علبة', 'كيس', 'زجاجة'];
+
+  // جلب بيانات المخزون عند تحميل الصفحة
+  useEffect(() => {
+    fetchInventoryItems();
+    // eslint-disable-next-line
+  }, []);
+
+  // حساب المنتجات منخفضة المخزون وقيمة المخزون والفئات
+  const lowStockItems = useMemo(() =>
+    inventoryItems.filter(item => item.currentStock <= item.minStock),
+    [inventoryItems]
+  );
+  const totalValue = useMemo(() =>
+    inventoryItems.reduce((sum, item) => sum + (item.currentStock * item.price), 0),
+    [inventoryItems]
+  );
+  const categoriesCount = useMemo(() =>
+    new Set(inventoryItems.map(item => item.category)).size,
+    [inventoryItems]
+  );
 
   const getStockStatus = (current: number, min: number) => {
     if (current <= min) return { status: 'low', color: 'text-red-600', bgColor: 'bg-red-50' };
     if (current <= min * 1.5) return { status: 'medium', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
     return { status: 'good', color: 'text-green-600', bgColor: 'bg-green-50' };
   };
+
+  // فتح نافذة إضافة مخزون
+  const openAddModal = () => {
+    setAddType('existing');
+    setAddForm({
+      productId: '', name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '', date: new Date().toISOString().slice(0, 10)
+    });
+    setError('');
+    setSuccess('');
+    setShowAddModal(true);
+  };
+
+  // فتح نافذة تعديل منتج
+  const openEditModal = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setAddForm({
+      productId: item.id || item._id,
+      name: item.name,
+      category: item.category,
+      quantity: '',
+      price: String(item.price),
+      supplier: item.supplier || '',
+      minStock: String(item.minStock || ''),
+      unit: item.unit || '',
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setError('');
+    setSuccess('');
+    setShowEditModal(true);
+  };
+
+  // فتح نافذة حذف منتج
+  const openDeleteModal = (item: InventoryItem) => {
+    setDeleteTarget(item);
+    setShowDeleteModal(true);
+  };
+
+  // تغيير نوع الإضافة (منتج جديد أو إضافة كمية لمنتج موجود)
+  const handleAddTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setAddType(e.target.value as 'existing' | 'new');
+    setAddForm({
+      productId: '', name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '', date: new Date().toISOString().slice(0, 10)
+    });
+    setError('');
+    setSuccess('');
+  };
+
+  // تغيير الحقول
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setAddForm({ ...addForm, [e.target.name]: e.target.value });
+  };
+
+  // إضافة كمية جديدة أو منتج جديد
+  const handleAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      if (addType === 'existing') {
+        if (!addForm.productId || !addForm.quantity || !addForm.price) {
+          setError('يرجى اختيار المنتج وإدخال الكمية والسعر.');
+          setLoading(false);
+          return;
+        }
+        const res = await updateStock(addForm.productId, {
+          type: 'in',
+          quantity: Number(addForm.quantity),
+          reason: 'شراء مخزون جديد',
+          price: Number(addForm.price),
+          supplier: addForm.supplier,
+          date: addForm.date,
+        });
+        if (res) {
+          setSuccess('تمت إضافة الكمية بنجاح!');
+          showNotification('تمت إضافة الكمية بنجاح!', 'success');
+          fetchInventoryItems();
+          setShowAddModal(false);
+        } else {
+          setError('حدث خطأ أثناء الإضافة');
+        }
+      } else {
+        // إضافة منتج جديد بالكامل
+        if (!addForm.name || !addForm.category || !addForm.quantity || !addForm.price || !addForm.unit || !addForm.minStock) {
+          setError('يرجى إدخال جميع الحقول المطلوبة.');
+          setLoading(false);
+          return;
+        }
+        const res = await createInventoryItem({
+          name: addForm.name,
+          category: addForm.category,
+          currentStock: Number(addForm.quantity),
+          minStock: Number(addForm.minStock),
+          unit: addForm.unit,
+          price: Number(addForm.price),
+          supplier: addForm.supplier,
+        });
+        if (res) {
+          setSuccess('تمت إضافة المنتج بنجاح!');
+          showNotification('تمت إضافة المنتج بنجاح!', 'success');
+          fetchInventoryItems();
+          setShowAddModal(false);
+        } else {
+          setError('حدث خطأ أثناء إضافة المنتج');
+        }
+      }
+    } catch {
+      setError('حدث خطأ أثناء العملية');
+    }
+    setLoading(false);
+  };
+
+  // تعديل منتج
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      if (!selectedItem) return;
+      if (!addForm.name || !addForm.category || !addForm.price || !addForm.unit || !addForm.minStock) {
+        setError('يرجى إدخال جميع الحقول المطلوبة.');
+        setLoading(false);
+        return;
+      }
+      const res = await updateInventoryItem(selectedItem.id || selectedItem._id, {
+        name: addForm.name,
+        category: addForm.category,
+        price: Number(addForm.price),
+        minStock: Number(addForm.minStock),
+        unit: addForm.unit,
+        supplier: addForm.supplier,
+      });
+      if (res) {
+        setSuccess('تم تعديل المنتج بنجاح!');
+        showNotification('تم تعديل المنتج بنجاح!', 'success');
+        fetchInventoryItems();
+        setShowEditModal(false);
+      } else {
+        setError('حدث خطأ أثناء التعديل');
+      }
+    } catch {
+      setError('حدث خطأ أثناء العملية');
+    }
+    setLoading(false);
+  };
+
+  // حذف منتج
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await deleteInventoryItemApi(deleteTarget.id || deleteTarget._id);
+      if (res) {
+        showNotification('تم حذف المنتج بنجاح', 'success');
+        fetchInventoryItems();
+        setShowDeleteModal(false);
+      } else {
+        setError('حدث خطأ أثناء الحذف');
+      }
+    } catch {
+      setError('حدث خطأ أثناء الحذف');
+    }
+    setLoading(false);
+  };
+
+  // أضف دالة حذف المنتج من المخزون
+  const deleteInventoryItemApi = async (id: string) => {
+    try {
+      if (typeof api.deleteInventoryItem === 'function') {
+        const response = await api.deleteInventoryItem(id);
+        return response.success;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-6">
@@ -83,11 +262,11 @@ const Inventory = () => {
           </div>
         </div>
         <button
-          onClick={() => setShowAddItem(true)}
+          onClick={openAddModal}
           className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
         >
           <Plus className="h-5 w-5 ml-2" />
-          إضافة منتج
+          إضافة مخزون
         </button>
       </div>
 
@@ -104,7 +283,6 @@ const Inventory = () => {
             </div>
           </div>
         </div>
-
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
@@ -116,7 +294,6 @@ const Inventory = () => {
             </div>
           </div>
         </div>
-
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -128,7 +305,6 @@ const Inventory = () => {
             </div>
           </div>
         </div>
-
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -136,9 +312,7 @@ const Inventory = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">الفئات</p>
-              <p className="text-2xl font-bold text-purple-600">
-                {[...new Set(inventoryItems.map(item => item.category))].length}
-              </p>
+              <p className="text-2xl font-bold text-purple-600">{categoriesCount}</p>
             </div>
           </div>
         </div>
@@ -153,7 +327,7 @@ const Inventory = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {lowStockItems.map(item => (
-              <div key={item.id} className="bg-white rounded-lg p-3 border border-red-200">
+              <div key={item.id || item._id} className="bg-white rounded-lg p-3 border border-red-200">
                 <p className="font-medium text-gray-900">{item.name}</p>
                 <p className="text-sm text-red-600">
                   متبقي: {item.currentStock} {item.unit} (الحد الأدنى: {item.minStock})
@@ -173,72 +347,41 @@ const Inventory = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  المنتج
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  الفئة
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  المخزون الحالي
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  الحد الأدنى
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  السعر
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  القيمة الإجمالية
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  المورد
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  آخر تحديث
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  الإجراءات
-                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المنتج</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الفئة</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المخزون الحالي</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحد الأدنى</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الوحدة</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">السعر</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">القيمة الإجمالية</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المورد</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {inventoryItems.map((item) => {
                 const stockStatus = getStockStatus(item.currentStock, item.minStock);
                 return (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr key={item.id || item._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{item.name}</div>
-                      <div className="text-sm text-gray-500">{item.unit}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.category}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.category}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stockStatus.bgColor} ${stockStatus.color}`}>
                         {item.currentStock} {item.unit}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.minStock} {item.unit}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.price} ج.م
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {item.currentStock * item.price} ج.م
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.supplier}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {item.lastUpdated.toLocaleDateString('ar-EG')}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.minStock} {item.unit}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.unit}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.price} ج.م</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.currentStock * item.price} ج.م</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.supplier}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 space-x-reverse">
-                      <button className="text-blue-600 hover:text-blue-800">
+                      <button className="text-blue-600 hover:text-blue-800" onClick={() => openEditModal(item)}>
                         <Edit className="h-4 w-4" />
                       </button>
-                      <button className="text-red-600 hover:text-red-800">
+                      <button className="text-red-600 hover:text-red-800" onClick={() => openDeleteModal(item)}>
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </td>
@@ -250,94 +393,179 @@ const Inventory = () => {
         </div>
       </div>
 
-      {/* Add Item Modal */}
-      {showAddItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-2xl">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">إضافة منتج جديد</h3>
-            </div>
-            
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">اسم المنتج</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="أدخل اسم المنتج"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الفئة</label>
-                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                    <option value="">اختر الفئة</option>
-                    <option value="مشروبات">مشروبات</option>
-                    <option value="مواد خام">مواد خام</option>
-                    <option value="طعام">طعام</option>
-                    <option value="حلويات">حلويات</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الكمية الحالية</label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الحد الأدنى</label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الوحدة</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="كيلو، لتر، علبة..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">السعر</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">المورد</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="اسم المورد"
-                  />
-                </div>
+      {/* Modal إضافة مخزون */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative">
+            <button
+              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+              onClick={() => setShowAddModal(false)}
+            >×</button>
+            <h2 className="text-xl font-bold mb-4 text-center">إضافة مخزون</h2>
+            <form onSubmit={handleAddSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">نوع الإضافة</label>
+                <select name="addType" value={addType} onChange={handleAddTypeChange} className="w-full border rounded px-3 py-2">
+                  <option value="existing">إضافة كمية لمنتج موجود</option>
+                  <option value="new">إضافة منتج جديد</option>
+                </select>
               </div>
-            </div>
+              {addType === 'existing' ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">اختر المنتج</label>
+                    <select name="productId" value={addForm.productId} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required>
+                      <option value="">اختر المنتج</option>
+                      {inventoryItems.map(item => (
+                        <option key={item.id || item._id} value={item.id || item._id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">الكمية</label>
+                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="1" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">السعر للوحدة</label>
+                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
+                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ الإضافة</label>
+                    <input type="date" name="date" value={addForm.date} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">اسم المنتج</label>
+                    <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">الفئة</label>
+                    <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required>
+                      <option value="">اختر الفئة</option>
+                      {categoryOptions.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">الكمية</label>
+                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">الوحدة</label>
+                    <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required>
+                      <option value="">اختر الوحدة</option>
+                      {unitOptions.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">الحد الأدنى</label>
+                    <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">السعر للوحدة</label>
+                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
+                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+                  </div>
+                </>
+              )}
+              {error && <div className="text-red-600 text-sm">{error}</div>}
+              {success !== '' && (
+                <div className="text-green-600 text-sm flex flex-col gap-2">
+                  <span>{success}</span>
+                  <span>تم تسجيل هذه العملية أيضًا ضمن التكاليف تلقائيًا.</span>
+                  <button
+                    type="button"
+                    className="underline text-blue-700 hover:text-blue-900 w-fit self-end"
+                    onClick={() => navigate('/costs')}
+                  >عرض صفحة التكاليف</button>
+                </div>
+              )}
+              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold" disabled={loading}>
+                {loading ? 'جاري الحفظ...' : 'حفظ'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
+      {/* Modal تعديل منتج */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative">
+            <button
+              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+              onClick={() => setShowEditModal(false)}
+            >×</button>
+            <h2 className="text-xl font-bold mb-4 text-center">تعديل منتج</h2>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">اسم المنتج</label>
+                <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">الفئة</label>
+                <input type="text" name="category" value={addForm.category} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">الوحدة</label>
+                <input type="text" name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">الحد الأدنى</label>
+                <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">السعر للوحدة</label>
+                <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
+                <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+              </div>
+              {error && <div className="text-red-600 text-sm">{error}</div>}
+              {success && <div className="text-green-600 text-sm">{success}</div>}
+              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold" disabled={loading}>
+                {loading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal حذف منتج */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative text-center">
+            <button
+              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+              onClick={() => setShowDeleteModal(false)}
+            >×</button>
+            <h2 className="text-xl font-bold mb-4">تأكيد حذف المنتج</h2>
+            <p className="mb-6">هل أنت متأكد أنك تريد حذف المنتج <span className="font-bold text-red-600">{deleteTarget?.name}</span>؟ لا يمكن التراجع عن هذه العملية.</p>
+            {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
+            <div className="flex gap-4 justify-center">
               <button
-                onClick={() => setShowAddItem(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
-              >
-                إلغاء
-              </button>
-              <button className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200">
-                إضافة المنتج
-              </button>
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-bold"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={loading}
+              >إلغاء</button>
+              <button
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold"
+                onClick={handleDelete}
+                disabled={loading}
+              >{loading ? 'جاري الحذف...' : 'حذف'}</button>
             </div>
           </div>
         </div>

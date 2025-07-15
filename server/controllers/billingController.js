@@ -138,7 +138,29 @@ export const getBill = async (req, res) => {
             await bill.calculateSubtotal();
         }
 
-        // Format the response
+        // تجهيز الجلسات مع breakdown الفعلي من الداتا بيز (async)
+        const formattedSessions = await Promise.all(
+            (bill.sessions || []).map(async (session) => {
+                if (
+                    (session.deviceType === "playstation" ||
+                        session.deviceType === "computer") &&
+                    typeof session.getCostBreakdownAsync === "function"
+                ) {
+                    const { breakdown } = await session.getCostBreakdownAsync();
+                    const sessionObj =
+                        typeof session.toObject === "function"
+                            ? session.toObject()
+                            : session;
+                    return {
+                        ...sessionObj,
+                        controllersHistoryBreakdown: breakdown,
+                    };
+                }
+                return typeof session.toObject === "function"
+                    ? session.toObject()
+                    : session;
+            })
+        );
         const formattedBill = {
             _id: bill._id,
             billNumber: bill.billNumber,
@@ -146,7 +168,7 @@ export const getBill = async (req, res) => {
             customerPhone: bill.customerPhone,
             tableNumber: bill.tableNumber,
             orders: bill.orders || [],
-            sessions: bill.sessions || [],
+            sessions: formattedSessions,
             subtotal: bill.subtotal || 0,
             discount: bill.discount || 0,
             tax: bill.tax || 0,
@@ -731,12 +753,7 @@ export const addPartialPayment = async (req, res) => {
             });
         }
 
-        if (bill.status === "cancelled") {
-            return res.status(400).json({
-                success: false,
-                message: "لا يمكن إضافة مدفوعات لفاتورة ملغية",
-            });
-        }
+        // لا يوجد شرط يمنع الدفع الجزئي بسبب وجود جلسة نشطة، إذا وُجد مستقبلاً احذفه أو تجاهله.
 
         // Find the order
         const order = bill.orders.find((o) => o._id.toString() === orderId);
@@ -757,18 +774,13 @@ export const addPartialPayment = async (req, res) => {
 
         // Validate that items exist in the order
         const orderItems = order.items || [];
-        const validItems = items.filter((item) => {
-            // للعناصر الأساسية
-            if (!item.itemName.includes("(إضافة لـ")) {
-                return orderItems.some(
-                    (orderItem) =>
-                        orderItem.name === item.itemName &&
-                        orderItem.price === item.price
-                );
-            }
-            // للإضافات
-            return true; // نسمح بالإضافات لأنها تم إنشاؤها من النظام
-        });
+        const validItems = items.filter((item) =>
+            orderItems.some(
+                (orderItem) =>
+                    orderItem.name === item.itemName &&
+                    orderItem.price === item.price
+            )
+        );
 
         if (validItems.length !== items.length) {
             return res.status(400).json({
@@ -785,7 +797,6 @@ export const addPartialPayment = async (req, res) => {
                 itemName: item.itemName,
                 price: item.price,
                 quantity: item.quantity,
-                addons: item.addons || [],
             })),
             req.user,
             paymentMethod || "cash"
@@ -830,7 +841,6 @@ export const getBillItems = async (req, res) => {
 
         const items = [];
         // خريطة تتبع لكل قطعة: ما هي الإضافات التي تم دفعها معها
-        const paidAddonsMap = new Map(); // key: orderId-itemName, value: Array لكل قطعة => مصفوفة أسماء الإضافات المدفوعة
         const paidItemsMap = new Map(); // key: orderId-itemName, value: عدد القطع المدفوعة
 
         // تتبع المدفوعات الجزئية
@@ -839,22 +849,10 @@ export const getBillItems = async (req, res) => {
                 payment.items.forEach((item) => {
                     const key = `${payment.orderId}-${item.itemName}`;
 
-                    // إذا كان هذا عنصر إضافة، نتعامل معه بشكل منفصل
-                    if (item.itemName.includes("(إضافة لـ")) {
-                        // هذا عنصر إضافة، نضيفه إلى الخريطة
-                        const addonKey = `${payment.orderId}-${item.itemName}`;
-                        paidItemsMap.set(
-                            addonKey,
-                            (paidItemsMap.get(addonKey) || 0) +
-                                (item.quantity || 0)
-                        );
-                    } else {
-                        // هذا عنصر أساسي
-                        paidItemsMap.set(
-                            key,
-                            (paidItemsMap.get(key) || 0) + (item.quantity || 0)
-                        );
-                    }
+                    paidItemsMap.set(
+                        key,
+                        (paidItemsMap.get(key) || 0) + (item.quantity || 0)
+                    );
                 });
             });
         }

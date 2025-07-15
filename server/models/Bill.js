@@ -123,12 +123,6 @@ const billSchema = new mongoose.Schema(
                             required: true,
                             default: 1,
                         },
-                        addons: [
-                            {
-                                name: { type: String, required: true },
-                                price: { type: Number, required: true, min: 0 },
-                            },
-                        ],
                         paidAt: {
                             type: Date,
                             default: Date.now,
@@ -313,15 +307,7 @@ billSchema.methods.addPartialPayment = function (
         // حساب سعر العنصر الأساسي
         const itemTotal = item.price * item.quantity;
 
-        // حساب الإضافات إذا كانت موجودة
-        let addonsTotal = 0;
-        if (item.addons && item.addons.length > 0) {
-            addonsTotal =
-                item.addons.reduce((aSum, a) => aSum + (a.price || 0), 0) *
-                item.quantity; // ضرب في الكمية لأن الإضافات لكل قطعة
-        }
-
-        return sum + itemTotal + addonsTotal;
+        return sum + itemTotal;
     }, 0);
 
     this.partialPayments.push({
@@ -331,7 +317,7 @@ billSchema.methods.addPartialPayment = function (
             itemName: item.itemName,
             price: item.price,
             quantity: item.quantity,
-            addons: item.addons || [],
+            paidAt: item.paidAt,
             paidBy: user._id,
             paymentMethod,
         })),
@@ -383,13 +369,18 @@ billSchema.methods.calculateSubtotal = async function () {
             }, 0);
         }
 
-        // Add sessions total
+        // Add sessions total (استخدم breakdown الفعلي)
         if (this.sessions && this.sessions.length > 0) {
-            subtotal += this.sessions.reduce((sum, session) => {
-                const sessionAmount =
-                    session.finalCost || session.totalCost || 0;
-                return sum + sessionAmount;
-            }, 0);
+            for (const session of this.sessions) {
+                if (typeof session.getCostBreakdownAsync === "function") {
+                    const { totalCost } = await session.getCostBreakdownAsync();
+                    subtotal += totalCost;
+                } else {
+                    const sessionAmount =
+                        session.finalCost || session.totalCost || 0;
+                    subtotal += sessionAmount;
+                }
+            }
         }
 
         // If no orders or sessions, use the existing subtotal
@@ -406,7 +397,6 @@ billSchema.methods.calculateSubtotal = async function () {
         // Set default values if calculation fails
         this.subtotal = this.subtotal || 0;
         this.total = this.total || 0;
-        return this.save();
     }
 };
 

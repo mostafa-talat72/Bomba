@@ -1,6 +1,7 @@
 import InventoryItem from "../models/InventoryItem.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
+import Cost from "../models/Cost.js";
 
 // @desc    Get all inventory items
 // @route   GET /api/inventory
@@ -217,7 +218,8 @@ export const updateInventoryItem = async (req, res) => {
 // @access  Private
 export const updateStock = async (req, res) => {
     try {
-        const { type, quantity, reason, reference } = req.body;
+        const { type, quantity, reason, reference, price, supplier, date } =
+            req.body;
 
         const item = await InventoryItem.findById(req.params.id);
 
@@ -235,6 +237,21 @@ export const updateStock = async (req, res) => {
             req.user._id,
             reference
         );
+
+        // تسجيل تكلفة الشراء إذا كانت إضافة للمخزون (شراء)
+        if (type === "in" && quantity > 0 && price) {
+            await Cost.create({
+                category: "inventory",
+                description: `شراء مخزون: ${item.name}`,
+                amount: price * quantity,
+                currency: "EGP",
+                date: date || new Date(),
+                vendor: supplier || item.supplier || "",
+                createdBy: req.user._id,
+                notes: reason || "",
+                status: "paid",
+            });
+        }
 
         // Create notification for low stock or out of stock
         try {

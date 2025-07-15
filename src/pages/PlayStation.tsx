@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Gamepad2, Play, Square, Users, Clock, DollarSign, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import api, { Device } from '../services/api';
+import api, { Device, Bill, Session } from '../services/api';
 
 const PlayStation: React.FC = () => {
-  const { sessions, createSession, endSession, user, fetchDevices, createDevice, bills, fetchBills, showNotification } = useApp();
+  const { sessions, createSession, endSession, user, createDevice, fetchBills, showNotification } = useApp();
   const [showAddDevice, setShowAddDevice] = useState(false);
-  const [newDevice, setNewDevice] = useState({ name: '', number: '', controllers: 2 });
+  const [newDevice, setNewDevice] = useState({ name: '', number: '', controllers: 2, playstationRates: { 1: '', 2: '', 3: '', 4: '' } });
   const [addDeviceError, setAddDeviceError] = useState<string | null>(null);
 
   // جلسة جديدة
@@ -17,10 +17,9 @@ const PlayStation: React.FC = () => {
   // خيارات ربط الفاتورة
   const [billOption, setBillOption] = useState<'new' | 'existing'>('new');
   const [selectedBillId, setSelectedBillId] = useState<string>('');
-  const [searchBill, setSearchBill] = useState('');
 
   // جلب الفواتير المتاحة للربط بجلسة بلايستيشن
-  const [availableBills, setAvailableBills] = useState<any[]>([]);
+  const [availableBills, setAvailableBills] = useState<Bill[]>([]);
   const fetchAvailableBills = async () => {
     try {
       const response = await api.getAvailableBillsForSession('playstation');
@@ -29,10 +28,19 @@ const PlayStation: React.FC = () => {
       } else {
         setAvailableBills([]);
       }
-    } catch (error) {
+    } catch {
       setAvailableBills([]);
     }
   };
+
+  // تصفية الفواتير المتاحة لربط الجلسة
+  const filteredAvailableBills = availableBills.filter((bill: Bill) => {
+    // استبعاد الفواتير المدفوعة بالكامل أو الملغية
+    if (bill.status === 'paid' || bill.status === 'cancelled') return false;
+    // استبعاد الفواتير التي تحتوي على جلسة نشطة لأي جهاز
+    if (bill.sessions && bill.sessions.some((session: Session) => session.status === 'active')) return false;
+    return true;
+  });
 
   // عند فتح نافذة الجلسة الجديدة أو اختيار 'فاتورة موجودة'
   useEffect(() => {
@@ -48,6 +56,24 @@ const PlayStation: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
+  // إضافة أجهزة
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [searchBill, setSearchBill] = useState('');
+
+  // تحميل الأجهزة
+  const loadDevices = async () => {
+    try {
+      const response = await api.getDevices();
+      if (response.success && response.data) {
+        const playstationDevices = response.data.filter((device: Device) => device.type === 'playstation');
+        setDevices(playstationDevices);
+      }
+    } catch (error) {
+      console.error('Error loading devices:', error);
+      showNotification('خطأ في تحميل الأجهزة', 'error');
+    }
+  };
+
   // تحميل البيانات بشكل متوازي عند بدء الصفحة
   useEffect(() => {
     const loadAllData = async () => {
@@ -57,7 +83,7 @@ const PlayStation: React.FC = () => {
 
         // تحميل البيانات بشكل متوازي لتحسين السرعة
         await Promise.all([
-          fetchDevices(),
+          loadDevices(),
           fetchBills()
         ]);
 
@@ -87,16 +113,7 @@ const PlayStation: React.FC = () => {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [showNewSession, loadingSession]);
 
-  const loadDevices = async () => {
-    try {
-    await fetchDevices();
-    } catch (error) {
-      console.error('Error loading devices:', error);
-      showNotification('خطأ في تحميل الأجهزة', 'error');
-    }
-  };
-
-  // إضافة جهاز جديد (بدون تغيير)
+  // إضافة جهاز جديد
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddDeviceError(null);
@@ -109,20 +126,28 @@ const PlayStation: React.FC = () => {
       return;
     }
 
-    // اطبع البيانات المرسلة
+    // تجهيز playstationRates كأرقام
+    const playstationRates = {
+      1: parseFloat(newDevice.playstationRates[1]),
+      2: parseFloat(newDevice.playstationRates[2]),
+      3: parseFloat(newDevice.playstationRates[3]),
+      4: parseFloat(newDevice.playstationRates[4])
+    };
+
     const deviceData = {
       name: newDevice.name,
       number: Number(newDevice.number),
       type: 'playstation',
       status: 'available',
-      controllers: newDevice.controllers
+      controllers: newDevice.controllers,
+      playstationRates
     };
 
     try {
       const device = await createDevice(deviceData);
       if (device) {
         setShowAddDevice(false);
-        setNewDevice({ name: '', number: '', controllers: 2 });
+        setNewDevice({ name: '', number: '', controllers: 2, playstationRates: { 1: '', 2: '', 3: '', 4: '' } });
       } else {
         setAddDeviceError('حدث خطأ أثناء إضافة الجهاز.');
       }
@@ -140,60 +165,21 @@ const PlayStation: React.FC = () => {
     setShowNewSession(true);
   };
 
-  // دالة لحساب السعر حسب عدد الدراعات
-  const getPlayStationHourlyRate = (controllers: number) => {
-    if (controllers === 1 || controllers === 2) return 20;
-    if (controllers === 3) return 25;
-    if (controllers === 4) return 30;
-    return 20;
-  };
-
-  // دالة لفلترة الفواتير المفتوحة
-  const getOpenBills = () => {
-    return bills.filter(bill => {
-      // التحقق من حالة الفاتورة
-      if (bill.status === 'paid' || bill.status === 'cancelled') {
-        return false;
-      }
-
-      // التحقق من نوع الفاتورة
-      if (bill.billType !== 'playstation' && bill.billType !== 'cafe') {
-        return false;
-      }
-
-      // تصفية الفواتير التي تحتوي على جلسات نشطة
-      if (bill.sessions && bill.sessions.length > 0) {
-        const hasActiveSessions = bill.sessions.some((session: { status: string; deviceType: string }) =>
-          session.status === 'active' &&
-          (session.deviceType === 'playstation' || session.deviceType === 'computer')
-        );
-        return !hasActiveSessions;
-      }
-
-      return true; // إذا لم تكن هناك جلسات، احتفظ بالفاتورة
-    });
-  };
-
-  // دالة لفلترة الفواتير حسب البحث
-  const getFilteredBills = () => {
-    if (!searchBill.trim()) return availableBills;
-    return availableBills.filter(bill =>
-      bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
-      bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
-    );
+  // استبدال دالة getPlayStationHourlyRate بدالة تعتمد على بيانات الجهاز
+  const getPlayStationHourlyRate = (device: Device | null, controllers: number) => {
+    if (!device || !device.playstationRates) return 0;
+    return device.playstationRates[controllers] || 0;
   };
 
   // دالة لاختيار فاتورة
   const handleBillSelection = (bill: { _id?: string; id?: string }) => {
     setSelectedBillId(bill._id || bill.id || '');
-    setSearchBill('');
   };
 
   // دالة لتغيير خيار الفاتورة
   const handleBillOptionChange = (option: 'new' | 'existing') => {
     setBillOption(option);
     setSelectedBillId('');
-    setSearchBill('');
   };
 
   const handleStartSession = async () => {
@@ -202,7 +188,7 @@ const PlayStation: React.FC = () => {
       setSessionError(null);
       if (!selectedDevice || !selectedControllers) return;
 
-      const hourlyRate = getPlayStationHourlyRate(selectedControllers);
+      const hourlyRate = getPlayStationHourlyRate(selectedDevice, selectedControllers);
 
       let session;
       let apiResponse;
@@ -213,7 +199,7 @@ const PlayStation: React.FC = () => {
           deviceType: 'playstation',
           deviceNumber: selectedDevice.number,
           deviceName: selectedDevice.name,
-          customerName: `عميل بلايستيشن(${selectedDevice.number})`,
+          customerName: `عميل (${selectedDevice.name})`,
           controllers: selectedControllers,
           hourlyRate,
         });
@@ -224,7 +210,7 @@ const PlayStation: React.FC = () => {
           deviceType: 'playstation',
           deviceNumber: selectedDevice.number,
           deviceName: selectedDevice.name,
-          customerName: `عميل بلايستيشن(${selectedDevice.number})`,
+          customerName: `عميل (${selectedDevice.name})`,
           controllers: selectedControllers,
           hourlyRate,
           billId: selectedBillId // إضافة معرف الفاتورة
@@ -260,7 +246,6 @@ const PlayStation: React.FC = () => {
         setSessionError(null);
         setBillOption('new');
         setSelectedBillId('');
-        setSearchBill('');
 
         // رسالة نجاح
         const billInfo = billOption === 'existing' ? ' وربطها بفاتورة موجودة' : '';
@@ -401,7 +386,7 @@ const PlayStation: React.FC = () => {
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <DollarSign className="h-4 w-4 ml-1" />
-                    {getPlayStationHourlyRate(activeSession.controllers!)} ج.م/ساعة
+                    {getPlayStationHourlyRate(device, activeSession?.controllers ?? 1)} ج.م/ساعة
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -533,7 +518,7 @@ const PlayStation: React.FC = () => {
                       >+</button>
                     </div>
                     <div className="text-left">
-                      <p className="font-bold text-green-600">{getPlayStationHourlyRate(session.controllers ?? 1)} ج.م/ساعة</p>
+                      <p className="font-bold text-green-600">{getPlayStationHourlyRate(devices.find(d => d.number === session.deviceNumber) || null, session.controllers ?? 1)} ج.م/ساعة</p>
                       <p className="text-xs text-gray-500">السعر الحالي</p>
                     </div>
                     <button
@@ -553,111 +538,57 @@ const PlayStation: React.FC = () => {
         </>
       )}
 
-      {/* New Session Modal */}
+      {/* نافذة بدء جلسة جديدة */}
       {showNewSession && selectedDevice && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !loadingSession) {
-              setShowNewSession(false);
-              setSelectedDevice(null);
-              setSelectedControllers(null);
-              setSessionError(null);
-            }
-          }}
-        >
-          <div className="bg-white rounded-lg w-full max-w-md relative max-h-[90vh] flex flex-col">
-            {/* Header - ثابت */}
-            <div className="p-6 border-b border-gray-200 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!loadingSession) {
-                    setShowNewSession(false);
-                    setSelectedDevice(null);
-                    setSelectedControllers(null);
-                    setSessionError(null);
-                  }
-                }}
-                className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors duration-200"
-                disabled={loadingSession}
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <h3 className="text-lg font-semibold text-gray-900 text-center">بدء جلسة جديدة</h3>
-            </div>
-
-            {/* Content - قابل للتمرير */}
-            <div className="p-6 overflow-y-auto flex-1">
-              {/* خيارات الفاتورة - مطابق للبلايستيشن */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">ربط الفاتورة</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleBillOptionChange('new')}
-                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'new' ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
-                  >
-                    <div className="text-lg mb-1">🆕</div>
-                    <div className="text-sm font-medium">فاتورة جديدة</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBillOptionChange('existing')}
-                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'existing' ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
-                  >
-                    <div className="text-lg mb-1">🔗</div>
-                    <div className="text-sm font-medium">فاتورة موجودة</div>
-                  </button>
-                </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4 text-center">بدء جلسة جديدة لجهاز {selectedDevice.name}</h2>
+            {/* خيارات ربط الفاتورة */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">ربط الجلسة بفاتورة</label>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => { setBillOption('new'); setSelectedBillId(''); }}
+                  className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'new' ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
+                >
+                  <div className="text-lg mb-1">🆕</div>
+                  <div className="text-sm font-medium">فاتورة جديدة</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setBillOption('existing'); setSelectedBillId(''); }}
+                  className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'existing' ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
+                >
+                  <div className="text-lg mb-1">🔗</div>
+                  <div className="text-sm font-medium">فاتورة موجودة</div>
+                </button>
               </div>
-
-              {/* اختيار فاتورة موجودة */}
               {billOption === 'existing' && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">اختر الفاتورة</label>
+                <div className="mb-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">اختر الفاتورة</label>
                   <input
                     type="text"
                     placeholder="ابحث عن فاتورة..."
                     value={searchBill}
-                    onChange={(e) => setSearchBill(e.target.value)}
+                    onChange={e => setSearchBill(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
-
-                  {/* عرض الفاتورة المختارة */}
-                  {selectedBillId && (
-                    <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-green-800">
-                            {getFilteredBills().find(bill => (bill._id || bill.id) === selectedBillId)?.billNumber}
-                          </p>
-                          <p className="text-sm text-green-600">
-                            {getFilteredBills().find(bill => (bill._id || bill.id) === selectedBillId)?.customerName || 'بدون اسم'}
-                          </p>
-                          <p className="text-sm text-green-600">
-                            المجموع: {getFilteredBills().find(bill => (bill._id || bill.id) === selectedBillId)?.total} ج.م
-                          </p>
-                        </div>
-                        <div className="text-green-600">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {getFilteredBills().length > 0 && (
+                  {/* عند تحميل availableBills أو تصفيتها: */}
+                  {filteredAvailableBills.filter(bill =>
+                    bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
+                    bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
+                  ).length > 0 && (
                     <div className="mt-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg">
-                      {getFilteredBills().map((bill) => (
+                      {filteredAvailableBills.filter(bill =>
+                        bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
+                        bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
+                      ).map((bill) => (
                         <button
-                          key={bill._id || bill.id}
+                          key={bill._id}
                           type="button"
-                          onClick={() => handleBillSelection(bill)}
-                          className={`w-full p-2 text-right text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${selectedBillId === (bill._id || bill.id) ? 'bg-primary-50 text-primary-700' : 'text-gray-700'}`}
+                          onClick={() => setSelectedBillId(bill._id)}
+                          className={`w-full p-2 text-right text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${selectedBillId === bill._id ? 'bg-primary-50 text-primary-700' : 'text-gray-700'}`}
                         >
                           <div className="font-medium">#{bill.billNumber}</div>
                           <div className="text-xs text-gray-500">{bill.customerName || 'بدون اسم'}</div>
@@ -665,121 +596,95 @@ const PlayStation: React.FC = () => {
                       ))}
                     </div>
                   )}
-                  {searchBill && getFilteredBills().length === 0 && (
+                  {searchBill && filteredAvailableBills.filter(bill =>
+                    bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
+                    bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
+                  ).length === 0 && (
                     <div className="mt-2 text-sm text-gray-500 text-center">لا توجد فواتير مطابقة</div>
+                  )}
+                  {selectedBillId && (
+                    <div className="mt-2 p-2 bg-gray-50 border border-primary-200 rounded">
+                      {(() => {
+                        const bill = availableBills.find(b => b._id === selectedBillId || b.id === selectedBillId);
+                        if (!bill) return null;
+                        return (
+                          <div>
+                            <div className="font-bold text-primary-700">فاتورة #{bill.billNumber}</div>
+                            <div className="text-sm text-gray-700">العميل: {bill.customerName || 'بدون اسم'}</div>
+                            <div className="text-xs text-gray-500">الإجمالي: {bill.total} ج.م</div>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   )}
                 </div>
               )}
-
-              <div className="mb-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">الجهاز</label>
-                <div className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
-                  {selectedDevice.name}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">عدد الدراعات</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[1, 2, 3, 4].map(num => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setSelectedControllers(num)}
-                      className={`p-3 rounded-lg border text-center transition-colors duration-200 ${selectedControllers === num ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
-                    >
-                      <Users className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-sm">{num}</span>
-                      <div className="text-xs text-gray-500">{getPlayStationHourlyRate(num)} ج.م/س</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {sessionError && <div className="text-red-600 text-sm mb-2">{sessionError}</div>}
             </div>
-
-            {/* Footer - ثابت */}
-            <div className="p-6 border-t border-gray-200 flex-shrink-0">
-              <button
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg mb-3"
-                disabled={!selectedControllers || loadingSession}
-                onClick={handleStartSession}
-              >
-                {loadingSession ? 'جاري البدء...' : 'بدء الجلسة'}
-              </button>
-              <div className="flex justify-end space-x-3 space-x-reverse">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowNewSession(false);
-                    setSelectedDevice(null);
-                    setSelectedControllers(null);
-                    setSessionError(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
-                  disabled={loadingSession}
-                >
-                  إلغاء
-                </button>
+            {/* عدد الدراعات */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">عدد الدراعات</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[1, 2, 3, 4].map(num => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setSelectedControllers(num)}
+                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${selectedControllers === num ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
+                  >
+                    <Users className="h-5 w-5 mx-auto mb-1" />
+                    <span className="text-sm">{num}</span>
+                    <div className="text-xs text-gray-500">
+                      {selectedDevice.playstationRates && selectedDevice.playstationRates[num] ? `${selectedDevice.playstationRates[num]} ج.م/س` : '-'}
+                    </div>
+                  </button>
+                ))}
               </div>
+            </div>
+            {sessionError && <div className="text-red-600 mb-2 text-sm">{sessionError}</div>}
+            <div className="flex justify-between mt-6">
+              <button type="button" onClick={() => setShowNewSession(false)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">إلغاء</button>
+              <button type="button" onClick={handleStartSession} className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700" disabled={loadingSession || (billOption === 'existing' && !selectedBillId)}>بدء الجلسة</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Device Modal (بدون تغيير) */}
-      {showAddDevice && user?.role === 'admin' && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <form onSubmit={handleAddDevice} className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">إضافة جهاز بلايستيشن جديد</h3>
-            <div className="space-y-4">
+      {/* نافذة إضافة جهاز جديد */}
+      {showAddDevice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <form onSubmit={handleAddDevice} className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4 text-center">إضافة جهاز بلايستيشن جديد</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">اسم الجهاز</label>
+              <input type="text" value={newDevice.name} onChange={e => setNewDevice({ ...newDevice, name: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2" required />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">رقم الجهاز</label>
+              <input type="number" value={newDevice.number} onChange={e => setNewDevice({ ...newDevice, number: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2" required min="1" />
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <label className="block text-sm font-medium text-gray-700 col-span-2">سعر الساعة لكل عدد دراعات</label>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">اسم الجهاز</label>
-                <input
-                  type="text"
-                  value={newDevice.name}
-                  onChange={e => setNewDevice({ ...newDevice, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  required
-                />
+                <span className="block text-xs text-gray-600 mb-1">دراع واحد</span>
+                <input type="number" value={newDevice.playstationRates[1]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 1: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">رقم الجهاز</label>
-                <input
-                  type="number"
-                  value={newDevice.number}
-                  onChange={e => setNewDevice({ ...newDevice, number: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  required
-                />
+                <span className="block text-xs text-gray-600 mb-1">درعين</span>
+                <input type="number" value={newDevice.playstationRates[2]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 2: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">عدد الدراعات الافتراضي</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={4}
-                  value={newDevice.controllers}
-                  onChange={e => setNewDevice({ ...newDevice, controllers: Number(e.target.value) })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  required
-                />
+                <span className="block text-xs text-gray-600 mb-1">3 دراعات</span>
+                <input type="number" value={newDevice.playstationRates[3]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 3: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
+              </div>
+              <div>
+                <span className="block text-xs text-gray-600 mb-1">4 دراعات</span>
+                <input type="number" value={newDevice.playstationRates[4]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 4: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
               </div>
             </div>
-            {addDeviceError && <div className="text-red-600 text-sm mb-2">{addDeviceError}</div>}
-            <div className="flex justify-end space-x-3 space-x-reverse mt-6">
-              <button
-                type="button"
-                onClick={() => setShowAddDevice(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
-              >
-                إلغاء
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200"
-              >
-                إضافة
-              </button>
+            {addDeviceError && <div className="text-red-600 mb-2 text-sm">{addDeviceError}</div>}
+            <div className="flex justify-between mt-6">
+              <button type="button" onClick={() => setShowAddDevice(false)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">إلغاء</button>
+              <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">إضافة</button>
             </div>
           </form>
         </div>

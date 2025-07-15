@@ -6,6 +6,32 @@ interface NotificationSoundProps {
   onSoundPlayed?: () => void;
 }
 
+// AudioContext عالمي واحد فقط
+let audioContext: AudioContext | null = null;
+const getAudioContext = () => {
+  if (!audioContext) {
+    const win = window as unknown as { webkitAudioContext?: typeof AudioContext };
+    audioContext = new (window.AudioContext || win.webkitAudioContext)();
+  }
+  return audioContext;
+};
+
+// دالة مساعدة لتشغيل الصوت بعد تفاعل المستخدم إذا لزم الأمر
+const resumeAudioContextIfNeeded = async (): Promise<void> => {
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') {
+    return new Promise((resolve) => {
+      const resume = () => {
+        ctx.resume().then(resolve);
+        window.removeEventListener('click', resume);
+        window.removeEventListener('keydown', resume);
+      };
+      window.addEventListener('click', resume);
+      window.addEventListener('keydown', resume);
+    });
+  }
+};
+
 const NotificationSound: React.FC<NotificationSoundProps> = ({
   playSound,
   soundType = 'default',
@@ -14,13 +40,13 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
   // تشغيل الصوت
   const playNotificationSound = async () => {
     try {
-      // إنشاء نغمة بسيطة باستخدام Web Audio API
-      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      await resumeAudioContextIfNeeded();
+      const ctx = getAudioContext();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
 
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(ctx.destination);
 
       // تحديد التردد والمدة حسب نوع الصوت
       let frequency = 800;
@@ -45,15 +71,15 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
           // نغمة متكررة للعاجل
           for (let i = 0; i < 3; i++) {
             setTimeout(() => {
-              const urgentOscillator = audioContext.createOscillator();
-              const urgentGainNode = audioContext.createGain();
+              const urgentOscillator = ctx.createOscillator();
+              const urgentGainNode = ctx.createGain();
               urgentOscillator.connect(urgentGainNode);
-              urgentGainNode.connect(audioContext.destination);
-              urgentOscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-              urgentGainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-              urgentGainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-              urgentOscillator.start(audioContext.currentTime);
-              urgentOscillator.stop(audioContext.currentTime + 0.1);
+              urgentGainNode.connect(ctx.destination);
+              urgentOscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
+              urgentGainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+              urgentGainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+              urgentOscillator.start(ctx.currentTime);
+              urgentOscillator.stop(ctx.currentTime + 0.1);
             }, i * 150);
           }
           onSoundPlayed?.();
@@ -64,12 +90,12 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
           break;
       }
 
-      oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+      oscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
+      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
 
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + duration);
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + duration);
 
       // تنظيف بعد التشغيل
       setTimeout(() => {
