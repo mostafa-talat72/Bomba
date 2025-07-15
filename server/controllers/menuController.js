@@ -1,5 +1,8 @@
 import MenuItem from "../models/MenuItem.js";
-import { validateRequest } from "../middleware/validation.js";
+import {
+    validateRequest,
+    validateRequestData,
+} from "../middleware/validation.js";
 
 // Get all menu items with optional filtering
 export const getAllMenuItems = async (req, res) => {
@@ -97,7 +100,7 @@ export const getMenuItemById = async (req, res) => {
 // Create new menu item
 export const createMenuItem = async (req, res) => {
     try {
-        const validation = validateRequest(req);
+        const validation = validateRequestData(req);
         if (!validation.isValid) {
             return res.status(400).json({
                 success: false,
@@ -141,7 +144,7 @@ export const createMenuItem = async (req, res) => {
 export const updateMenuItem = async (req, res) => {
     try {
         const { id } = req.params;
-        const validation = validateRequest(req);
+        const validation = validateRequestData(req);
 
         if (!validation.isValid) {
             return res.status(400).json({

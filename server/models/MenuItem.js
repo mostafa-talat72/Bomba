@@ -7,11 +7,7 @@ const menuItemSchema = new mongoose.Schema(
             required: [true, "اسم المنتج مطلوب"],
             trim: true,
         },
-        arabicName: {
-            type: String,
-            required: [true, "الاسم العربي مطلوب"],
-            trim: true,
-        },
+        // تم حذف arabicName نهائياً
         category: {
             type: String,
             required: [true, "فئة المنتج مطلوبة"],
@@ -111,7 +107,7 @@ const menuItemSchema = new mongoose.Schema(
 
 // Indexes
 menuItemSchema.index({ name: 1 });
-menuItemSchema.index({ arabicName: 1 });
+// تم حذف index الخاص بـ arabicName
 menuItemSchema.index({ category: 1 });
 menuItemSchema.index({ isAvailable: 1 });
 menuItemSchema.index({ isPopular: 1 });

@@ -1370,6 +1370,20 @@ const Cafe: React.FC = () => {
                 {/* Menu Items for Order */}
                 <div>
                   <h4 className="font-medium text-gray-900 mb-4">اختر من القائمة</h4>
+                  {/* فلتر الفئة */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">الفئة</label>
+                    <select
+                      value={selectedCategory}
+                      onChange={e => setSelectedCategory(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="all">جميع الفئات</option>
+                      {categories.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </div>
                   {loading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
@@ -1377,23 +1391,25 @@ const Cafe: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      {Object.entries(menuItemsByCategory).map(([category, items]) => (
-                        <div key={category}>
-                          <h5 className="font-medium text-gray-700 mb-2">{category}</h5>
-                          <div className="space-y-2">
-                            {items.filter(item => item.isAvailable).map(item => (
-                              <button
-                                key={item.id}
-                                onClick={() => addToOrder(item)}
-                                className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-                              >
-                                <span className="text-gray-900">{item.name}</span>
-                                <span className="text-gray-600">{item.price} ج.م</span>
-                              </button>
-                            ))}
+                      {categories
+                        .filter(category => selectedCategory === 'all' || category === selectedCategory)
+                        .map(category => (
+                          <div key={category}>
+                            <h5 className="font-medium text-gray-700 mb-2">{category}</h5>
+                            <div className="space-y-2">
+                              {(menuItemsByCategory[category] || []).filter(item => item.isAvailable).map(item => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => addToOrder(item)}
+                                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                                >
+                                  <span className="text-gray-900">{item.name}</span>
+                                  <span className="text-gray-600">{item.price} ج.م</span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   )}
                 </div>
