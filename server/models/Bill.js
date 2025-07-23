@@ -259,11 +259,12 @@ billSchema.pre("save", function (next) {
 billSchema.post("save", async function (doc) {
     if (!doc.qrCode) {
         try {
+            const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
             const qrData = {
                 billId: doc._id,
                 billNumber: doc.billNumber,
                 total: doc.total,
-                url: `http://localhost:3000/bill/${doc._id}`,
+                url: `${baseUrl}/bill/${doc._id}`,
             };
 
             const qrCodeDataURL = await QRCode.toDataURL(
