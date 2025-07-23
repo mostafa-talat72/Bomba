@@ -74,6 +74,11 @@ const sessionSchema = new mongoose.Schema(
             type: String,
             trim: true,
         },
+        organization: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Organization",
+            required: true,
+        },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",

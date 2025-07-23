@@ -9,6 +9,8 @@ import Order from "../models/Order.js";
 import Session from "../models/Session.js";
 import Cost from "../models/Cost.js";
 import NotificationService from "../services/notificationService.js";
+import Subscription from "../models/Subscription.js";
+import { sendSubscriptionNotification } from "../controllers/notificationController.js";
 
 // Check for low stock items and send alerts
 const checkLowStock = async () => {
@@ -205,6 +207,30 @@ const createRecurringCosts = async () => {
     }
 };
 
+export const scheduleSubscriptionExpiryNotifications = () => {
+    setInterval(async () => {
+        const now = new Date();
+        const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000); // بعد 3 أيام
+        // جلب الاشتراكات التي ستنتهي خلال 3 أيام ولم يتم إرسال إشعار لها
+        const expiring = await Subscription.find({
+            status: "active",
+            endDate: { $gte: now, $lte: soon },
+        });
+        for (const sub of expiring) {
+            const orgOwner = await User.findOne({
+                organization: sub.organization,
+                role: "owner",
+            });
+            if (orgOwner) {
+                await sendSubscriptionNotification(
+                    orgOwner._id,
+                    "تنبيه: اشتراك منشأتك سينتهي خلال 3 أيام. يرجى التجديد لتجنب توقف الخدمة."
+                );
+            }
+        }
+    }, 24 * 60 * 60 * 1000); // كل 24 ساعة
+};
+
 // Initialize all scheduled tasks
 export const initializeScheduler = () => {
     // Check low stock every hour
@@ -237,6 +263,9 @@ export const initializeScheduler = () => {
             Logger.error("❌ Failed to clean expired notifications:", error);
         }
     });
+
+    // Schedule subscription expiry notifications
+    scheduleSubscriptionExpiryNotifications();
 
     Logger.info("All scheduled tasks initialized");
 };

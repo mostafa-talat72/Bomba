@@ -115,6 +115,7 @@ const NotificationManagement = () => {
       await loadNotifications();
       await loadStats();
       showNotification('تم تحديد جميع الإشعارات كمقروءة', 'success');
+      // احذف أي رسالة alert
     } catch {
       showNotification('خطأ في تحديد الإشعارات كمقروءة', 'error');
     }

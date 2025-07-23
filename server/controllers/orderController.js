@@ -17,6 +17,7 @@ export const getOrders = async (req, res) => {
         const query = {};
         if (status) query.status = status;
         if (tableNumber) query.tableNumber = tableNumber;
+        query.organization = req.user.organization;
 
         // Filter by date if provided
         if (date) {
@@ -80,7 +81,10 @@ export const getOrders = async (req, res) => {
 // @access  Private
 export const getOrder = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id)
+        const order = await Order.findOne({
+            _id: req.params.id,
+            organization: req.user.organization,
+        })
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name")
@@ -182,6 +186,7 @@ export const createOrder = async (req, res) => {
             notes,
             bill,
             createdBy: req.user.id,
+            organization: req.user.organization,
         };
 
         Logger.info("💰 Order totals calculated:", {
@@ -305,7 +310,10 @@ export const updateOrder = async (req, res) => {
     try {
         const { status, notes, preparedBy, deliveredBy } = req.body;
 
-        const order = await Order.findById(req.params.id);
+        const order = await Order.findOne({
+            _id: req.params.id,
+            organization: req.user.organization,
+        });
 
         if (!order) {
             return res.status(404).json({
@@ -357,7 +365,10 @@ export const updateOrder = async (req, res) => {
 // @access  Private
 export const deleteOrder = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id);
+        const order = await Order.findOne({
+            _id: req.params.id,
+            organization: req.user.organization,
+        });
 
         if (!order) {
             return res.status(404).json({
@@ -416,6 +427,7 @@ export const getPendingOrders = async (req, res) => {
 
         const orders = await Order.find({
             status: { $in: ["pending", "preparing"] },
+            organization: req.user.organization,
         })
             .populate("items.menuItem", "name arabicName preparationTime")
             .populate("bill", "billNumber customerName tableNumber")
@@ -512,7 +524,10 @@ export const cancelOrder = async (req, res) => {
         const { id } = req.params;
         const { reason } = req.body;
 
-        const order = await Order.findById(id);
+        const order = await Order.findOne({
+            _id: id,
+            organization: req.user.organization,
+        });
         if (!order) {
             return res.status(404).json({
                 success: false,
@@ -558,7 +573,10 @@ export const updateOrderItemStatus = async (req, res) => {
         const { id, itemIndex } = req.params;
         const { isReady } = req.body;
 
-        const order = await Order.findById(id);
+        const order = await Order.findOne({
+            _id: id,
+            organization: req.user.organization,
+        });
         if (!order) {
             return res.status(404).json({
                 success: false,
@@ -616,7 +634,10 @@ export const updateOrderStatus = async (req, res) => {
             });
         }
 
-        const order = await Order.findById(id);
+        const order = await Order.findOne({
+            _id: id,
+            organization: req.user.organization,
+        });
         if (!order) {
             return res.status(404).json({
                 success: false,
@@ -723,7 +744,10 @@ export const updateOrderItemPrepared = async (req, res) => {
             preparedCount,
         });
 
-        const order = await Order.findById(orderId);
+        const order = await Order.findOne({
+            _id: orderId,
+            organization: req.user.organization,
+        });
         if (!order) {
             Logger.error("❌ Order not found:", orderId);
             return res
@@ -905,6 +929,7 @@ export const getTodayOrdersStats = async (req, res) => {
                 $gte: startOfDay,
                 $lt: endOfDay,
             },
+            organization: req.user.organization,
         }).select("finalAmount totalAmount status createdAt");
 
         Logger.info("📋 Found today's orders:", todayOrders.length);
@@ -961,7 +986,10 @@ export const deliverItem = async (req, res) => {
 
         Logger.info("🚚 Delivering item:", { orderId: id, itemIndex });
 
-        const order = await Order.findById(id);
+        const order = await Order.findOne({
+            _id: id,
+            organization: req.user.organization,
+        });
         if (!order) {
             return res.status(404).json({
                 success: false,

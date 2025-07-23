@@ -28,6 +28,10 @@ router.get("/", async (req, res) => {
                 { email: { $regex: search, $options: "i" } },
             ];
         }
+        // تصفية حسب المنشأة
+        if (req.user && req.user.organization) {
+            query.organization = req.user.organization;
+        }
 
         const users = await User.find(query)
             .select("-password -refreshToken")
@@ -91,6 +95,7 @@ router.post(
                 phone: phone || null,
                 address: address || null,
                 permissions: permissions || [],
+                organization: req.user.organization, // ربط المستخدم بنفس منشأة المدير
             };
 
             const user = new User(userData);

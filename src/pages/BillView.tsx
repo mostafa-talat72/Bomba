@@ -261,8 +261,8 @@ const BillView = () => {
 		}
 	};
 
-	// دالة لتجميع الأصناف والإضافات مع حساب الكمية والمدفوع والمتبقي
-		function aggregateItemsWithPayments(orders: Order[], partialPayments: BillDetails['partialPayments'], billStatus?: string, billPaid?: number, billTotal?: number) {
+	// دالة لتجميع الأصناف عبر جميع الطلبات مع احتساب الكمية والمدفوع والمتبقي
+	function aggregateItemsWithPayments(orders: Order[], partialPayments: BillDetails['partialPayments'], billStatus?: string, billPaid?: number, billTotal?: number) {
 		type AggregatedAddon = {
 			name: string;
 			price: number;
@@ -280,15 +280,13 @@ const BillView = () => {
 		};
 		const map = new Map<string, AggregatedItem>();
 
-		// Helper لحساب المدفوع لصنف رئيسي فقط
-		function getPaidQty(itemName: string) {
+		function getPaidQty(itemName: string, itemPrice: number) {
 			let paid = 0;
-			// إذا كانت الفاتورة مدفوعة بالكامل، جميع الأصناف مدفوعة بالكامل
 			if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal) {
 				let totalQty = 0;
 				orders.forEach(order => {
 					order.items.forEach(item => {
-						if (item.name === itemName) {
+						if (item.name === itemName && item.price === itemPrice) {
 							totalQty += item.quantity;
 						}
 					});
@@ -298,7 +296,7 @@ const BillView = () => {
 			if (!partialPayments) return 0;
 			partialPayments.forEach(payment => {
 				payment.items.forEach(item => {
-					if (item.itemName === itemName) {
+					if (item.itemName === itemName && item.price === itemPrice) {
 						paid += item.quantity;
 					}
 				});
@@ -309,11 +307,11 @@ const BillView = () => {
 		if (!orders || !Array.isArray(orders)) return [];
 
 		orders.forEach(order => {
-			if (!order.items) return; // تخطي الطلبات التي لا تحتوي على أصناف
+			if (!order.items) return;
 			order.items.forEach((item: OrderItem) => {
 				const key = `${item.name}|${item.price}`;
 				if (!map.has(key)) {
-					const paidQty = getPaidQty(item.name);
+					const paidQty = getPaidQty(item.name, item.price);
 					map.set(key, {
 						name: item.name,
 						price: item.price,
@@ -321,10 +319,25 @@ const BillView = () => {
 						paidQuantity: paidQty,
 						remainingQuantity: item.quantity - paidQty,
 					});
+				} else {
+					const agg = map.get(key)!;
+					agg.totalQuantity += item.quantity;
+					// إعادة احتساب paid/remaining بعد جمع الكميات
+					agg.paidQuantity = getPaidQty(item.name, item.price);
+					agg.remainingQuantity = agg.totalQuantity - agg.paidQuantity;
 				}
 			});
 		});
 		return Array.from(map.values());
+	}
+
+	// دالة لحساب إجمالي تكلفة الطلبات مع الإضافات
+	function getOrdersTotal(orders: Order[]) {
+		return orders.reduce((total, order) =>
+			total + order.items.reduce((orderTotal, item) =>
+				orderTotal + (item.price * item.quantity) + (item.addonsTotal || item.additionalPrice || 0), 0
+			), 0
+		);
 	}
 
 	if (loading) {
@@ -395,7 +408,6 @@ const BillView = () => {
 										{aggregateItemsWithPayments(bill.orders, bill.partialPayments, bill.status, bill.paid, bill.total).map((item, idx) => {
 											const colorClass = idx % 2 === 0 ? 'bg-white' : 'bg-blue-50';
 											const totalPrice = item.price * item.totalQuantity;
-											// مفتاح فريد باستخدام الاسم والسعر والفهرس
 											return (
 												<tr key={`${item.name}-${item.price}-${idx}`} className={`border-b last:border-b-0 ${colorClass} ${item.remainingQuantity === 0 ? 'bg-green-100' : ''}`}>
 													<td className="py-2 px-2 font-medium text-gray-900">{item.name}</td>
@@ -414,11 +426,7 @@ const BillView = () => {
 							<div className="mt-4 flex justify-between items-center">
 								<span className="text-gray-700 font-medium">إجمالي تكلفة الطلبات:</span>
 								<span className="font-bold text-primary-700">
-									{formatCurrency(bill.orders.reduce((total, order) =>
-										total + order.items.reduce((orderTotal, item) =>
-											orderTotal + (item.price * item.quantity) + (item.addonsTotal || item.additionalPrice || 0), 0
-										), 0
-									))}
+									{formatCurrency(getOrdersTotal(bill.orders))}
 								</span>
 							</div>
 						</>
@@ -541,6 +549,18 @@ const BillView = () => {
 							<span className="text-gray-600">الإجمالي:</span>
 							<span className="font-medium">{formatCurrency(bill.total)}</span>
 						</div>
+						{bill.discount > 0 && (
+							<div className="flex justify-between">
+								<span className="text-gray-600">الخصم:</span>
+								<span className="font-medium">{formatCurrency(bill.discount)}</span>
+							</div>
+						)}
+						{bill.tax > 0 && (
+							<div className="flex justify-between">
+								<span className="text-gray-600">الضريبة:</span>
+								<span className="font-medium">{formatCurrency(bill.tax)}</span>
+							</div>
+						)}
 						<div className="flex justify-between">
 							<span className="text-gray-600">المدفوع:</span>
 							<span className="font-medium">{formatCurrency(bill.paid)}</span>
@@ -549,21 +569,37 @@ const BillView = () => {
 							<span className="text-gray-600">المتبقي:</span>
 							<span className="font-medium">{formatCurrency(bill.remaining)}</span>
 						</div>
-
+						{bill.notes && (
+							<div className="flex justify-between">
+								<span className="text-gray-600">ملاحظات:</span>
+								<span className="font-medium">{bill.notes}</span>
+							</div>
+						)}
 					</div>
+
 				</div>
 			</div>
 			{/* نافذة الطلبات */}
-			{showOrdersModal && (
-				<div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-					<div className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative">
+			{showOrdersModal && bill && Array.isArray(bill.orders) && (
+				<div
+					className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+					onClick={(e) => {
+						// أغلق النافذة إذا تم الضغط على الخلفية فقط وليس على محتوى النافذة
+						if (e.target === e.currentTarget) setShowOrdersModal(false);
+					}}
+				>
+					<div
+						className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative max-h-[90vh] flex flex-col"
+						style={{ direction: 'rtl' }}
+					>
 						<button
-							className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+							className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold z-10"
 							onClick={() => setShowOrdersModal(false)}
+							tabIndex={0}
 						>×</button>
 						<h2 className="text-xl font-bold mb-4 text-center">جميع الطلبات المرتبطة بالفاتورة</h2>
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-							{bill.orders.map((order) => (
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pr-1" style={{ maxHeight: '70vh' }}>
+							{bill.orders?.map((order) => (
 								<div key={order._id} className="bg-gray-50 rounded-lg shadow border p-4 flex flex-col gap-2">
 									<div className="flex items-center justify-between mb-2">
 										<span className="font-bold text-primary-700">طلب #{order.orderNumber}</span>
@@ -574,8 +610,7 @@ const BillView = () => {
 									<div>
 										<span className="font-semibold text-sm">الأصناف:</span>
 										<ul className="list-disc pr-4 mt-1">
-											{order.items.map((item, idx) => (
-												// مفتاح فريد باستخدام الاسم والسعر والفهرس فقط
+											{order.items?.map((item, idx) => (
 												<li key={`${item.name}-${item.price}-${idx}`} className="text-xs text-gray-700">
 													{item.name} × {item.quantity} - {formatCurrency(item.price)}
 												</li>

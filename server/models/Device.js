@@ -24,6 +24,11 @@ const deviceSchema = new mongoose.Schema(
             default: "available",
             required: true,
         },
+        organization: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Organization",
+            required: true,
+        },
         controllers: {
             type: Number,
             default: 2,

@@ -85,6 +85,11 @@ const menuItemSchema = new mongoose.Schema(
                 default: null,
             },
         },
+        organization: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Organization",
+            required: true,
+        },
         sortOrder: {
             type: Number,
             default: 0,

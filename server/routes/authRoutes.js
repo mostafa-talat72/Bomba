@@ -6,6 +6,7 @@ import {
     logout,
     getMe,
     updatePassword,
+    verifyEmail,
 } from "../controllers/authController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import {
@@ -16,18 +17,17 @@ import {
 
 const router = express.Router();
 
-router.post(
-    "/register",
-    protect,
-    authorize("users", "all"),
-    validateUserRegistration,
-    validateRequest,
-    register
-);
-router.post("/login", validateUserLogin, validateRequest, login);
+// Registration
+router.post("/register", register);
+// Email verification
+router.get("/verify-email", verifyEmail);
+// Login
+router.post("/login", login);
+// Refresh token
 router.post("/refresh", refreshToken);
-router.post("/logout", protect, logout);
-router.get("/me", protect, getMe);
-router.put("/password", protect, updatePassword);
+// Logout
+router.post("/logout", logout);
+// Get current user
+router.get("/me", getMe);
 
 export default router;

@@ -118,6 +118,11 @@ const notificationSchema = new mongoose.Schema(
             ref: "User",
             required: true,
         },
+        organization: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Organization",
+            required: true,
+        },
     },
     {
         timestamps: true,
@@ -227,6 +232,8 @@ notificationSchema.statics.createSessionNotification = function (
         ...notificationData,
         metadata: { sessionId: session._id, deviceType: session.deviceType },
         createdBy,
+        organization:
+            session.organization || (createdBy && createdBy.organization),
     });
 };
 
@@ -279,6 +286,8 @@ notificationSchema.statics.createOrderNotification = function (
         ...notificationData,
         metadata: { orderId: order._id, orderNumber: order.orderNumber },
         createdBy,
+        organization:
+            order.organization || (createdBy && createdBy.organization),
     });
 };
 
@@ -322,6 +331,8 @@ notificationSchema.statics.createInventoryNotification = function (
         ...notificationData,
         metadata: { itemId: item._id, itemName: item.name },
         createdBy,
+        organization:
+            item.organization || (createdBy && createdBy.organization),
     });
 };
 
@@ -371,6 +382,8 @@ notificationSchema.statics.createBillingNotification = function (
         ...notificationData,
         metadata: { billId: bill._id, billNumber: bill.billNumber },
         createdBy,
+        organization:
+            bill.organization || (createdBy && createdBy.organization),
     });
 };
 
@@ -378,6 +391,7 @@ notificationSchema.statics.createBillingNotification = function (
 notificationSchema.statics.getForUser = function (userId, user, options = {}) {
     const query = {
         isActive: true,
+        organization: user.organization,
         $or: [
             { targetUsers: userId },
             { targetRoles: "all" },
@@ -402,11 +416,12 @@ notificationSchema.statics.getForUser = function (userId, user, options = {}) {
 };
 
 // Static method to mark all notifications as read for user
-notificationSchema.statics.markAllAsRead = function (userId) {
+notificationSchema.statics.markAllAsRead = function (userId, organization) {
     return this.updateMany(
         {
             "readBy.user": { $ne: userId },
             isActive: true,
+            organization,
         },
         {
             $push: {
@@ -420,9 +435,10 @@ notificationSchema.statics.markAllAsRead = function (userId) {
 };
 
 // Static method to clean expired notifications
-notificationSchema.statics.cleanExpired = function () {
+notificationSchema.statics.cleanExpired = function (organization) {
     return this.deleteMany({
         expiresAt: { $lt: new Date() },
+        organization,
     });
 };
 

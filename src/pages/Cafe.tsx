@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Coffee, Plus, Edit, Trash2, ShoppingCart, Clock, CheckCircle, User } from 'lucide-react';
+import { ShoppingCart, Plus, Edit, Trash2, Clock, CheckCircle, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MenuItem } from '../services/api';
 import { api } from '../services/api';
@@ -1070,10 +1070,10 @@ const Cafe: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Coffee className="h-8 w-8 text-primary-600 ml-3" />
+          <ShoppingCart className="h-8 w-8 text-primary-600 ml-3" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">إدارة الكافيه</h1>
-            <p className="text-gray-600">طلبات الكافيه والمشروبات للعملاء</p>
+            <h1 className="text-2xl font-bold text-gray-900">إدارة الطلبات</h1>
+            <p className="text-gray-600">طلبات المشروبات والأصناف للعملاء</p>
           </div>
         </div>
         <div className="flex items-center space-x-3 space-x-reverse">
@@ -1133,7 +1133,7 @@ const Cafe: React.FC = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Coffee className="h-6 w-6 text-blue-600" />
+              <ShoppingCart className="h-6 w-6 text-blue-600" />
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">أصناف مجهزة</p>
@@ -1224,7 +1224,7 @@ const Cafe: React.FC = () => {
 
                   {/* Footer - أزرار التجهيز */}
                   <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-lg">
-                    {preparingOrders[order._id] ? (
+                    {order.status === 'preparing' ? (
                       // حالة التجهيز - إظهار زر "تم التجهيز"
                       <button
                         onClick={(e) => {
@@ -1239,13 +1239,25 @@ const Cafe: React.FC = () => {
                     ) : (
                       // الحالة العادية - إظهار زر "بدء التجهيز"
                       <button
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          togglePreparing(order._id);
+                          try {
+                            const response = await api.updateOrderStatus(order._id, 'preparing');
+                            if (response && response.success) {
+                              // تحديث حالة الطلب محلياً ليظهر الزر فوراً
+                              setPendingOrders(prevOrders => prevOrders.map(o =>
+                                o._id === order._id ? { ...o, status: 'preparing' } : o
+                              ));
+                            } else {
+                              showNotification('حدث خطأ أثناء بدء التجهيز، يرجى المحاولة مرة أخرى', 'error');
+                            }
+                          } catch (error) {
+                            showNotification('حدث خطأ أثناء بدء التجهيز، يرجى المحاولة مرة أخرى', 'error');
+                          }
                         }}
                         className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center"
                       >
-                        <Coffee className="h-4 w-4 ml-2" />
+                        <ShoppingCart className="h-4 w-4 ml-2" />
                         بدء التجهيز
                       </button>
                     )}
@@ -1339,7 +1351,7 @@ const Cafe: React.FC = () => {
                         onClick={() => handleOrderClick(order)}
                         className="text-sm font-medium text-primary-600 hover:text-primary-700"
                       >
-                        <Coffee className="h-4 w-4 mr-1 inline" />
+                        <ShoppingCart className="h-4 w-4 mr-1 inline" />
                         عرض التفاصيل
                       </button>
                       <button

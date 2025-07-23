@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Calendar, DollarSign, Coffee, Gamepad2, Monitor, Download, RefreshCw, Users, Clock, Target } from 'lucide-react';
+import { BarChart3, TrendingUp, Calendar, DollarSign, ShoppingCart, Gamepad2, Monitor, Download, RefreshCw, Users, Clock, Target } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 const Reports = () => {
@@ -148,7 +148,7 @@ const Reports = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Coffee className="h-6 w-6 text-blue-600" />
+              <ShoppingCart className="h-6 w-6 text-blue-600" />
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">عدد الطلبات</p>
@@ -212,8 +212,8 @@ const Reports = () => {
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <Coffee className="h-5 w-5 ml-2 text-orange-500" />
-            الكافيه
+            <ShoppingCart className="h-5 w-5 ml-2 text-orange-500" />
+            الطلبات
           </h3>
           <div className="text-center">
             <p className="text-3xl font-bold text-orange-600">{formatCurrency(revenueBreakdown.cafe)}</p>

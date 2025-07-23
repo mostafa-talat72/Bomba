@@ -178,6 +178,11 @@ const billSchema = new mongoose.Schema(
             ref: "User",
             default: null,
         },
+        organization: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Organization",
+            required: true,
+        },
     },
     {
         timestamps: true,

@@ -1,8 +1,89 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save, Bell, Palette, Shield, Database } from 'lucide-react';
+import { api } from '../services/api';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('general');
+  const [general, setGeneral] = useState({
+    cafeName: '',
+    currency: 'EGP',
+    timezone: 'Africa/Cairo',
+    language: 'ar',
+    address: '',
+    phone: '',
+    email: '',
+  });
+  // إعدادات كل تبويب
+  const [notifications, setNotifications] = useState<any>(null);
+  const [appearance, setAppearance] = useState<any>(null);
+  const [security, setSecurity] = useState<any>(null);
+  const [backup, setBackup] = useState<any>(null);
+  // حالة التحميل/الحفظ/النجاح/الخطأ لكل تبويب
+  const [tabState, setTabState] = useState({
+    general: { loading: false, saving: false, success: '', error: '' },
+    notifications: { loading: false, saving: false, success: '', error: '' },
+    appearance: { loading: false, saving: false, success: '', error: '' },
+    security: { loading: false, saving: false, success: '', error: '' },
+    backup: { loading: false, saving: false, success: '', error: '' },
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+
+  // دالة جلب الإعدادات لأي تبويب
+  const fetchTabSettings = async (category: string) => {
+    setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: true, error: '', success: '' } }));
+    const res = await api.getSettings(category);
+    if (res.success && res.data) {
+      switch (category) {
+        case 'general': setGeneral({ ...general, ...res.data.settings }); break;
+        case 'notifications': setNotifications(res.data.settings); break;
+        case 'appearance': setAppearance(res.data.settings); break;
+        case 'security': setSecurity(res.data.settings); break;
+        case 'backup': setBackup(res.data.settings); break;
+      }
+      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: '', success: '' } }));
+    } else {
+      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: res.message || 'تعذر تحميل الإعدادات', success: '' } }));
+    }
+  };
+
+  // دالة استعادة الإعدادات الافتراضية لأي تبويب
+  const handleReset = async (category: string) => {
+    setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: true, error: '', success: '' } }));
+    const res = await api.resetSettings(category);
+    if (res.success && res.data) {
+      await fetchTabSettings(category);
+      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: '', success: 'تم استعادة الإعدادات الافتراضية بنجاح' } }));
+    } else {
+      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: res.message || 'تعذر استعادة الإعدادات الافتراضية', success: '' } }));
+    }
+  };
+
+  // جلب الإعدادات عند تغيير التبويب
+  useEffect(() => {
+    fetchTabSettings(activeTab);
+    // eslint-disable-next-line
+  }, [activeTab]);
+
+  const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setGeneral({ ...general, [e.target.name]: e.target.value });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSuccess('');
+    setError('');
+    const res = await api.updateSettings('general', general);
+    if (res.success) {
+      setSuccess('تم حفظ الإعدادات بنجاح');
+    } else {
+      setError(res.message || 'حدث خطأ أثناء الحفظ');
+    }
+    setSaving(false);
+  };
 
   const tabs = [
     { id: 'general', name: 'عام', icon: SettingsIcon },
@@ -57,19 +138,43 @@ const Settings = () => {
             {activeTab === 'general' && (
               <div className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">الإعدادات العامة</h3>
+                {tabState.general.loading ? (
+                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
+                ) : tabState.general.error ? (
+                  <div className="text-center text-red-600">
+                    {tabState.general.error}
+                    {tabState.general.error.includes('غير موجودة') && (
+                      <button
+                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+                        onClick={() => handleReset('general')}
+                        disabled={tabState.general.loading}
+                      >
+                        استعادة الإعدادات الافتراضية
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <div className="space-y-6">
+                  {tabState.general.success && <div className="text-green-600 text-center">{tabState.general.success}</div>}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">اسم الكافيه</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">اسم الطلبات</label>
                       <input
                         type="text"
-                        defaultValue="Bomba Café"
+                        name="cafeName"
+                        value={general.cafeName}
+                        onChange={handleGeneralChange}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">العملة</label>
-                      <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                      <select
+                        name="currency"
+                        value={general.currency}
+                        onChange={handleGeneralChange}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
                         <option value="EGP">جنيه مصري (ج.م)</option>
                         <option value="USD">دولار أمريكي ($)</option>
                         <option value="EUR">يورو (€)</option>
@@ -80,7 +185,12 @@ const Settings = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">المنطقة الزمنية</label>
-                      <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                      <select
+                        name="timezone"
+                        value={general.timezone}
+                        onChange={handleGeneralChange}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
                         <option value="Africa/Cairo">القاهرة (GMT+2)</option>
                         <option value="Asia/Dubai">دبي (GMT+4)</option>
                         <option value="Asia/Riyadh">الرياض (GMT+3)</option>
@@ -88,7 +198,12 @@ const Settings = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">اللغة</label>
-                      <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                      <select
+                        name="language"
+                        value={general.language}
+                        onChange={handleGeneralChange}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
                         <option value="ar">العربية</option>
                         <option value="en">English</option>
                       </select>
@@ -96,10 +211,12 @@ const Settings = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">عنوان الكافيه</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">عنوان الطلبات</label>
                     <textarea
+                      name="address"
                       rows={3}
-                      defaultValue="123 شارع الجامعة، القاهرة، مصر"
+                      value={general.address}
+                      onChange={handleGeneralChange}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
@@ -109,7 +226,9 @@ const Settings = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">رقم الهاتف</label>
                       <input
                         type="tel"
-                        defaultValue="+20 123 456 7890"
+                        name="phone"
+                        value={general.phone}
+                        onChange={handleGeneralChange}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
@@ -117,12 +236,15 @@ const Settings = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">البريد الإلكتروني</label>
                       <input
                         type="email"
-                        defaultValue="info@bomba.com"
+                        name="email"
+                        value={general.email}
+                        onChange={handleGeneralChange}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
@@ -130,7 +252,24 @@ const Settings = () => {
             {activeTab === 'notifications' && (
               <div className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات الإشعارات</h3>
-                <div className="space-y-6">
+                {tabState.notifications.loading ? (
+                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
+                ) : tabState.notifications.error ? (
+                  <div className="text-center text-red-600">
+                    {tabState.notifications.error}
+                    {tabState.notifications.error.includes('غير موجودة') && (
+                      <button
+                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+                        onClick={() => handleReset('notifications')}
+                        disabled={tabState.notifications.loading}
+                      >
+                        استعادة الإعدادات الافتراضية
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {tabState.notifications.success && <div className="text-green-600 text-center">{tabState.notifications.success}</div>}
                   <div>
                     <h4 className="font-medium text-gray-900 mb-4">إشعارات الجلسات</h4>
                     <div className="space-y-3">
@@ -331,6 +470,7 @@ const Settings = () => {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
@@ -338,7 +478,24 @@ const Settings = () => {
             {activeTab === 'appearance' && (
               <div className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات المظهر</h3>
-                <div className="space-y-6">
+                {tabState.appearance.loading ? (
+                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
+                ) : tabState.appearance.error ? (
+                  <div className="text-center text-red-600">
+                    {tabState.appearance.error}
+                    {tabState.appearance.error.includes('غير موجودة') && (
+                      <button
+                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+                        onClick={() => handleReset('appearance')}
+                        disabled={tabState.appearance.loading}
+                      >
+                        استعادة الإعدادات الافتراضية
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {tabState.appearance.success && <div className="text-green-600 text-center">{tabState.appearance.success}</div>}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">السمة</label>
                     <div className="grid grid-cols-3 gap-3">
@@ -396,6 +553,7 @@ const Settings = () => {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
@@ -403,7 +561,24 @@ const Settings = () => {
             {activeTab === 'security' && (
               <div className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات الأمان</h3>
-                <div className="space-y-6">
+                {tabState.security.loading ? (
+                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
+                ) : tabState.security.error ? (
+                  <div className="text-center text-red-600">
+                    {tabState.security.error}
+                    {tabState.security.error.includes('غير موجودة') && (
+                      <button
+                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+                        onClick={() => handleReset('security')}
+                        disabled={tabState.security.loading}
+                      >
+                        استعادة الإعدادات الافتراضية
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {tabState.security.success && <div className="text-green-600 text-center">{tabState.security.success}</div>}
                   <div>
                     <h4 className="font-medium text-gray-900 mb-4">كلمة المرور</h4>
                     <div className="space-y-4">
@@ -467,6 +642,7 @@ const Settings = () => {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
@@ -474,7 +650,24 @@ const Settings = () => {
             {activeTab === 'backup' && (
               <div className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">النسخ الاحتياطي</h3>
-                <div className="space-y-6">
+                {tabState.backup.loading ? (
+                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
+                ) : tabState.backup.error ? (
+                  <div className="text-center text-red-600">
+                    {tabState.backup.error}
+                    {tabState.backup.error.includes('غير موجودة') && (
+                      <button
+                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+                        onClick={() => handleReset('backup')}
+                        disabled={tabState.backup.loading}
+                      >
+                        استعادة الإعدادات الافتراضية
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {tabState.backup.success && <div className="text-green-600 text-center">{tabState.backup.success}</div>}
                   <div>
                     <h4 className="font-medium text-gray-900 mb-4">النسخ الاحتياطي التلقائي</h4>
                     <div className="space-y-4">
@@ -539,14 +732,19 @@ const Settings = () => {
                     </p>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
             {/* Save Button */}
             <div className="border-t border-gray-200 px-6 py-4 flex justify-end">
-              <button className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-lg flex items-center transition-colors duration-200">
+              <button
+                className={`bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-lg flex items-center transition-colors duration-200 ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}
+                onClick={handleSave}
+                disabled={saving || loading}
+              >
                 <Save className="h-4 w-4 ml-2" />
-                حفظ التغييرات
+                {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
               </button>
             </div>
           </div>

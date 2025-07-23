@@ -19,6 +19,8 @@ import Costs from './pages/Costs';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import NotificationManagement from './pages/NotificationManagement';
+import Subscription from './pages/Subscription';
+import VerifyEmail from './pages/VerifyEmail';
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
@@ -111,6 +113,7 @@ const RouteHandler = () => {
   if (isAuthenticated) {
     return (
       <Routes>
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<HomeRedirect />} />
           <Route path="dashboard" element={
@@ -173,6 +176,7 @@ const RouteHandler = () => {
               <NotificationManagement />
             </ProtectedRoute>
           } />
+          <Route path="/subscription" element={<Subscription />} />
         </Route>
 
         {/* Public route for bill viewing - متاح للجميع */}
@@ -184,32 +188,32 @@ const RouteHandler = () => {
   // إذا لم يكن المستخدم مسجل دخول، اعرض الصفحات العامة فقط
   return (
     <Routes>
+      {/* Always allow verify-email route for public access */}
+      <Route path="/verify-email" element={<VerifyEmail />} />
       {/* Public route for bill viewing - متاح للجميع */}
       <Route path="/bill/:billId" element={<BillView />} />
 
       {/* Login route */}
+      <Route path="/login" element={<LoginForm />} />
+      {/* Route للجذر */}
+      <Route path="/" element={<LoginForm />} />
+      {/* Catch-all fallback */}
       <Route path="*" element={<LoginForm />} />
     </Routes>
   );
 };
 
-const AppContent = () => {
-  return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 font-cairo container-responsive">
-        <RouteHandler />
-      </div>
-    </BrowserRouter>
-  );
-};
-
 const App = () => {
   return (
-    <AppProvider>
-      <ToastManager>
-        <AppContent />
-      </ToastManager>
-    </AppProvider>
+    <BrowserRouter>
+      <AppProvider>
+        <ToastManager>
+          <div className="min-h-screen bg-gray-50 font-cairo container-responsive">
+            <RouteHandler />
+          </div>
+        </ToastManager>
+      </AppProvider>
+    </BrowserRouter>
   );
 };
 

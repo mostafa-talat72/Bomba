@@ -250,6 +250,7 @@ export interface BillItem {
 class ApiClient {
   private baseURL: string;
   private token: string | null = null;
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
@@ -258,7 +259,8 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryOn401: boolean = true // إضافة متغير للتحكم في إعادة المحاولة بعد التحديث
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseURL}${endpoint}`;
@@ -290,7 +292,7 @@ class ApiClient {
       try {
         const text = await response.text();
         data = text ? JSON.parse(text) : {};
-      } catch (jsonError) {
+      } catch {
         return {
           success: false,
           message: 'خطأ في تحليل البيانات المستلمة من الخادم'
@@ -298,14 +300,46 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        if (response.status === 401) {
-          this.clearToken();
-          return {
-            success: false,
-            message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى'
-          };
+        if (response.status === 401 && retryOn401) {
+          // Singleton refresh logic
+          const refreshToken = localStorage.getItem('refreshToken');
+          if (refreshToken) {
+            if (!this.refreshPromise) {
+              this.refreshPromise = (async () => {
+                const refreshResponse = await this.refreshToken(refreshToken);
+                if (refreshResponse.success && refreshResponse.data?.token) {
+                  this.setToken(refreshResponse.data.token);
+                  localStorage.setItem('token', refreshResponse.data.token);
+                  if (refreshResponse.data.refreshToken) {
+                    localStorage.setItem('refreshToken', refreshResponse.data.refreshToken);
+                  }
+                  return true;
+                } else {
+                  this.clearToken();
+                  localStorage.removeItem('refreshToken');
+                  return false;
+                }
+              })();
+            }
+            const refreshResult = await this.refreshPromise;
+            this.refreshPromise = null;
+            if (refreshResult) {
+              // إعادة المحاولة مرة واحدة فقط
+              return this.request<T>(endpoint, options, false);
+            } else {
+              return {
+                success: false,
+                message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى'
+              };
+            }
+          } else {
+            this.clearToken();
+            return {
+              success: false,
+              message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى'
+            };
+          }
         }
-
         return {
           success: false,
           message: data.message || `خطأ ${response.status}: ${response.statusText}`
@@ -313,14 +347,13 @@ class ApiClient {
       }
 
       return data;
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
           success: false,
           message: 'خطأ في الاتصال بالخادم، تأكد من اتصالك بالإنترنت'
         };
       }
-
       return {
         success: false,
         message: error instanceof Error ? error.message : 'خطأ في الاتصال بالخادم'
@@ -371,7 +404,7 @@ class ApiClient {
       }
 
       return data;
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
           success: false,
@@ -448,6 +481,9 @@ class ApiClient {
 
     if (response.success && response.data?.token) {
       this.setToken(response.data.token);
+      if (response.data.refreshToken) {
+        localStorage.setItem('refreshToken', response.data.refreshToken);
+      }
       if (response.data.user) {
         response.data.user = this.normalizeData(response.data.user);
       }
@@ -462,9 +498,11 @@ class ApiClient {
         method: 'POST',
       });
       this.clearToken();
+      localStorage.removeItem('refreshToken');
       return response;
-    } catch (error) {
+    } catch (error: unknown) {
       this.clearToken();
+      localStorage.removeItem('refreshToken');
       return { success: true, message: 'تم تسجيل الخروج' };
     }
   }
@@ -671,8 +709,8 @@ class ApiClient {
         body: JSON.stringify(updates)
       });
       return response;
-    } catch (error: any) {
-      throw new Error(error.message || 'فشل في تحديث الطلب');
+    } catch (error: unknown) {
+      throw new Error(error instanceof Error ? error.message : 'فشل في تحديث الطلب');
     }
   }
 
@@ -810,7 +848,14 @@ class ApiClient {
   }
 
   async getBill(id: string): Promise<ApiResponse<Bill>> {
-    const response = await this.publicRequest<Bill>(`/billing/public/${id}`);
+    // إذا كان هناك توكن (مستخدم مسجل)، استخدم endpoint الخاص
+    const token = this.getToken && this.getToken();
+    let response: ApiResponse<Bill>;
+    if (token) {
+      response = await this.request<Bill>(`/billing/${id}`);
+    } else {
+      response = await this.publicRequest<Bill>(`/billing/public/${id}`);
+    }
     if (response.success && response.data) {
       response.data = this.normalizeData(response.data);
     }
@@ -1069,7 +1114,7 @@ class ApiClient {
 
       const response = await this.request<any[]>(`/reports/recent-activity?${params}`);
       return response;
-    } catch (error) {
+    } catch (error: unknown) {
       throw new Error('فشل في جلب النشاط الأخير');
     }
   }
@@ -1109,8 +1154,11 @@ class ApiClient {
     phone?: string;
     address?: string;
     permissions: string[];
+    businessName?: string;
+    businessType?: string;
   }): Promise<ApiResponse<User>> {
-    const response = await this.request<User>('/users', {
+    const endpoint = userData.role === 'owner' ? '/auth/register' : '/users';
+    const response = await this.request<User>(endpoint, {
       method: 'POST',
       body: JSON.stringify(userData),
     });

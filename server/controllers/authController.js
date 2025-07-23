@@ -19,9 +19,16 @@ const generateRefreshToken = (id) => {
     });
 };
 
+// دالة لتوحيد البريد الإلكتروني (إزالة النقاط من الجزء الأول)
+function normalizeEmail(email) {
+    if (!email) return "";
+    const [local, domain] = email.toLowerCase().trim().split("@");
+    return local.replace(/\./g, "") + "@" + domain;
+}
+
 // @desc    Register user
 // @route   POST /api/auth/register
-// @access  Private (Admin only)
+// @access  Public
 export const register = async (req, res) => {
     try {
         const {
@@ -33,95 +40,70 @@ export const register = async (req, res) => {
             businessName,
             businessType,
         } = req.body;
-
-        // Check if user exists
-        const userExists = await User.findOne({ email });
+        const normalizedEmail = normalizeEmail(email);
+        const userExists = await User.findOne({ email: normalizedEmail });
         if (userExists) {
-            return res.status(400).json({
-                success: false,
-                message: "المستخدم موجود بالفعل",
-            });
+            return res
+                .status(400)
+                .json({ success: false, message: "المستخدم موجود بالفعل" });
         }
-
+        let user = null;
         let organization = null;
-        // إذا كان المستخدم صاحب مكان، أنشئ منشأة جديدة
+        const verificationToken = crypto.randomBytes(32).toString("hex");
         if (role === "owner") {
+            user = await User.create({
+                name,
+                email: normalizedEmail,
+                password,
+                role: "admin",
+                permissions: ["all"],
+                status: "pending",
+                verificationToken,
+            });
             organization = await Organization.create({
                 name: businessName,
                 type: businessType,
-                owner: null, // سيتم ربطه بعد إنشاء المستخدم
+                owner: user._id,
+            });
+            user.organization = organization._id;
+            await user.save();
+        } else {
+            user = await User.create({
+                name,
+                email: normalizedEmail,
+                password,
+                role: role || "staff",
+                permissions: permissions || [],
+                status: "pending",
+                verificationToken,
             });
         }
-
-        // Create user
-        const user = await User.create({
-            name,
-            email,
-            password,
-            role: role || "staff",
-            permissions: permissions || [],
-            organization: organization ? organization._id : undefined,
-            status: "pending", // الحساب غير مفعل حتى يتم التحقق
-            verificationToken: crypto.randomBytes(32).toString("hex"),
-        });
-
-        // ربط المالك بالمنشأة
-        if (organization) {
-            organization.owner = user._id;
-            await organization.save();
-            // إنشاء اشتراك تجريبي تلقائي
-            const now = new Date();
-            const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 يوم
-            await Subscription.create({
-                organization: organization._id,
-                plan: "trial",
-                status: "active",
-                startDate: now,
-                endDate: trialEnd,
-                paymentMethod: "manual",
-            });
-        }
-
-        // إرسال رسالة تأكيد إلى البريد الإلكتروني
+        // إرسال إيميل التفعيل
         const verificationUrl = `${
-            process.env.FRONTEND_URL || "http://localhost:5173"
-        }/verify-email?token=${user.verificationToken}`;
-        await sendEmail({
-            to: user.email,
-            subject: "تأكيد بريدك الإلكتروني - نظام Bomba",
-            html: `<div dir="rtl" style="font-family: Arial, sans-serif;">
-                <h2>مرحباً ${user.name}</h2>
-                <p>يرجى تأكيد بريدك الإلكتروني لتفعيل حسابك في نظام Bomba.</p>
-                <a href="${verificationUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:5px;text-decoration:none;">تأكيد البريد الإلكتروني</a>
-                <p>إذا لم تقم بإنشاء هذا الحساب، يمكنك تجاهل هذه الرسالة.</p>
-                <hr><small>رسالة تلقائية من نظام Bomba</small>
-            </div>`,
-        });
-
-        // Generate tokens
-        const token = generateToken(user._id);
-        const refreshToken = generateRefreshToken(user._id);
-
-        // Save refresh token
-        user.refreshToken = refreshToken;
-        await user.save({ validateBeforeSave: false });
-
-        res.status(201).json({
+            process.env.FRONTEND_URL || "http://localhost:3000"
+        }/verify-email?token=${verificationToken}`;
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: "تفعيل حسابك - نظام Bomba",
+                html: `<div dir="rtl"><h2>مرحباً ${user.name}</h2><p>يرجى تفعيل حسابك عبر الرابط التالي:</p><a href="${verificationUrl}" style="padding:10px 20px;background:#2563eb;color:#fff;border-radius:5px;text-decoration:none;">تفعيل الحساب</a></div>`,
+            });
+        } catch (emailError) {
+            // إذا فشل الإرسال، احذف المستخدم والمنشأة (إن وجدت)
+            if (user) await User.deleteOne({ _id: user._id });
+            if (organization)
+                await Organization.deleteOne({ _id: organization._id });
+            return res.status(500).json({
+                success: false,
+                message:
+                    "فشل إرسال رسالة التفعيل إلى بريدك الإلكتروني. يرجى المحاولة لاحقًا.",
+                error: emailError.message,
+            });
+        }
+        return res.status(201).json({
             success: true,
-            message: "تم إنشاء المستخدم بنجاح",
-            data: {
-                user: {
-                    id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    role: user.role,
-                    permissions: user.permissions,
-                    status: user.status,
-                    organization: user.organization,
-                },
-                token,
-                refreshToken,
-            },
+            message:
+                "تم إرسال رابط التفعيل إلى بريدك الإلكتروني. يرجى تفعيل الحساب قبل تسجيل الدخول.",
         });
     } catch (error) {
         res.status(500).json({
@@ -138,44 +120,32 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        // Check for user
-        const user = await User.findOne({ email }).select("+password");
+        const normalizedLoginEmail = normalizeEmail(email);
+        let user = await User.findOne({ email: normalizedLoginEmail }).select(
+            "+password"
+        );
         if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "بيانات الدخول غير صحيحة",
-            });
+            return res
+                .status(401)
+                .json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
-
-        // Check password
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                message: "بيانات الدخول غير صحيحة",
-            });
+            return res
+                .status(401)
+                .json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
-
-        // Check if user is active
         if (user.status !== "active") {
             return res.status(401).json({
                 success: false,
-                message: "حسابك غير نشط، يرجى التواصل مع الإدارة",
+                message: "الحساب غير مفعل. يرجى تفعيل بريدك الإلكتروني أولاً.",
             });
         }
-
-        // Update last login
         await user.updateLastLogin();
-
-        // Generate tokens
         const token = generateToken(user._id);
         const refreshToken = generateRefreshToken(user._id);
-
-        // Save refresh token
         user.refreshToken = refreshToken;
         await user.save({ validateBeforeSave: false });
-
         res.json({
             success: true,
             message: "تم تسجيل الدخول بنجاح",
@@ -186,8 +156,8 @@ export const login = async (req, res) => {
                     email: user.email,
                     role: user.role,
                     permissions: user.permissions,
-                    status: user.status,
                     lastLogin: user.lastLogin,
+                    organization: user.organization,
                 },
                 token,
                 refreshToken,
@@ -280,8 +250,44 @@ export const logout = async (req, res) => {
 // @access  Private
 export const getMe = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
-
+        // استخراج التوكن من الهيدر
+        const authHeader = req.headers.authorization;
+        const token =
+            authHeader && authHeader.startsWith("Bearer ")
+                ? authHeader.split(" ")[1]
+                : null;
+        console.log("[GET_ME][TOKEN]", token);
+        if (!token) {
+            console.log("[GET_ME][NO_TOKEN]");
+            return res
+                .status(401)
+                .json({ success: false, message: "توكن مفقود" });
+        }
+        // تحقق من التوكن
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (err) {
+            console.log("[GET_ME][INVALID_TOKEN]", err.message);
+            return res
+                .status(401)
+                .json({
+                    success: false,
+                    message: "توكن غير صالح أو منتهي الصلاحية",
+                });
+        }
+        const user = await User.findById(decoded.id);
+        if (!user) {
+            console.log("[GET_ME][USER_NOT_FOUND]", decoded.id);
+            return res
+                .status(401)
+                .json({ success: false, message: "المستخدم غير موجود" });
+        }
+        console.log("[GET_ME][USER]", {
+            id: user._id,
+            email: user.email,
+            status: user.status,
+        });
         res.json({
             success: true,
             data: {
@@ -291,16 +297,14 @@ export const getMe = async (req, res) => {
                     email: user.email,
                     role: user.role,
                     permissions: user.permissions,
-                    status: user.status,
                     lastLogin: user.lastLogin,
-                    avatar: user.avatar,
-                    phone: user.phone,
-                    address: user.address,
-                    createdAt: user.createdAt,
+                    organization: user.organization,
+                    status: user.status,
                 },
             },
         });
     } catch (error) {
+        console.log("[GET_ME][ERROR]", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب بيانات المستخدم",
@@ -348,31 +352,58 @@ export const updatePassword = async (req, res) => {
 // @route   GET /api/auth/verify-email?token=...
 // @access  Public
 export const verifyEmail = async (req, res) => {
+    console.log("[VERIFY][REQUEST]", {
+        query: req.query,
+        ip: req.ip,
+        headers: req.headers,
+    });
     try {
         const { token } = req.query;
         if (!token) {
+            console.log("[VERIFY][NO_TOKEN]");
             return res
                 .status(400)
-                .json({ success: false, message: "رمز التحقق مفقود" });
+                .json({ success: false, message: "رمز التفعيل مفقود" });
         }
-        const user = await User.findOne({ verificationToken: token });
+        const user = await User.findOne({
+            verificationToken: token,
+            status: "pending",
+        });
         if (!user) {
+            const pendingUsers = await User.find({
+                status: "pending",
+                verificationToken: { $ne: null },
+            }).select("email verificationToken");
+            console.log("[VERIFY][NOT_FOUND]", { token, pendingUsers });
             return res.status(400).json({
                 success: false,
-                message: "رمز التحقق غير صالح أو منتهي",
+                message: "رابط التفعيل غير صالح أو الحساب مفعل بالفعل",
             });
         }
+        console.log("[VERIFY][FOUND_USER_BEFORE]", {
+            id: user._id,
+            email: user.email,
+            status: user.status,
+            verificationToken: user.verificationToken,
+        });
         user.status = "active";
         user.verificationToken = undefined;
         await user.save();
+        console.log("[VERIFY][AFTER]", {
+            id: user._id,
+            email: user.email,
+            status: user.status,
+            verificationToken: user.verificationToken,
+        });
         return res.json({
             success: true,
             message: "تم تفعيل الحساب بنجاح. يمكنك الآن تسجيل الدخول.",
         });
     } catch (error) {
+        console.log("[VERIFY][ERROR]", error);
         res.status(500).json({
             success: false,
-            message: "خطأ في تفعيل الحساب",
+            message: "خطأ أثناء تفعيل الحساب",
             error: error.message,
         });
     }

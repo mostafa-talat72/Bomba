@@ -6,6 +6,22 @@ import {
 
 // Get all menu items with optional filtering
 export const getAllMenuItems = async (req, res) => {
+    // لوج تشخيصي
+    const authHeader = req.headers.authorization;
+    const token =
+        authHeader && authHeader.startsWith("Bearer")
+            ? authHeader.split(" ")[1]
+            : null;
+    console.log("[MENU][TOKEN]", token);
+    if (req.user) {
+        console.log("[MENU][USER]", {
+            id: req.user._id,
+            email: req.user.email,
+            organization: req.user.organization,
+        });
+    } else {
+        console.log("[MENU][NO_USER]");
+    }
     try {
         const {
             category,
@@ -17,6 +33,14 @@ export const getAllMenuItems = async (req, res) => {
             limit = 50,
         } = req.query;
 
+        // تحقق من وجود المستخدم والمنشأة
+        if (!req.user || !req.user.organization) {
+            return res.status(401).json({
+                success: false,
+                message:
+                    "يجب تسجيل الدخول للوصول إلى عناصر المنيو أو لا توجد منشأة مرتبطة بالمستخدم.",
+            });
+        }
         // Build filter object
         const filter = {};
         if (category && category !== "all") {
@@ -28,6 +52,7 @@ export const getAllMenuItems = async (req, res) => {
         if (search) {
             filter.$text = { $search: search };
         }
+        filter.organization = req.user.organization;
 
         // Build sort object
         const sort = {};
@@ -37,7 +62,10 @@ export const getAllMenuItems = async (req, res) => {
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         // Execute query
-        const menuItems = await MenuItem.find(filter)
+        const menuItems = await MenuItem.find({
+            organization: req.user.organization,
+            ...filter,
+        })
             .sort(sort)
             .skip(skip)
             .limit(parseInt(limit))
@@ -71,7 +99,10 @@ export const getAllMenuItems = async (req, res) => {
 export const getMenuItemById = async (req, res) => {
     try {
         const { id } = req.params;
-        const menuItem = await MenuItem.findById(id)
+        const menuItem = await MenuItem.findOne({
+            _id: id,
+            organization: req.user.organization,
+        })
             .populate("createdBy", "name")
             .populate("updatedBy", "name");
 
@@ -112,6 +143,7 @@ export const createMenuItem = async (req, res) => {
         const menuItemData = {
             ...req.body,
             createdBy: req.user.id,
+            organization: req.user.organization,
         };
 
         const menuItem = new MenuItem(menuItemData);
@@ -159,10 +191,14 @@ export const updateMenuItem = async (req, res) => {
             updatedBy: req.user.id,
         };
 
-        const menuItem = await MenuItem.findByIdAndUpdate(id, updateData, {
-            new: true,
-            runValidators: true,
-        })
+        const menuItem = await MenuItem.findByIdAndUpdate(
+            { _id: id, organization: req.user.organization },
+            updateData,
+            {
+                new: true,
+                runValidators: true,
+            }
+        )
             .populate("createdBy", "name")
             .populate("updatedBy", "name");
 
@@ -201,7 +237,10 @@ export const deleteMenuItem = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const menuItem = await MenuItem.findByIdAndDelete(id);
+        const menuItem = await MenuItem.findOneAndDelete({
+            _id: id,
+            organization: req.user.organization,
+        });
 
         if (!menuItem) {
             return res.status(404).json({

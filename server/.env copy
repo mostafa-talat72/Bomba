@@ -3,8 +3,7 @@ PORT=5000
 NODE_ENV=development
 
 # Database
-MONGODB_URI=mongodb://Saa3d-DB:NrPd3ziWiiZUeumA@cluster0-shard-00-00.kqay8.mongodb.net:27017,cluster0-shard-00-01.kqay8.mongodb.net:27017,cluster0-shard-00-02.kqay8.mongodb.net:27017/?ssl=true&replicaSet=atlas-ll01dn-shard-0&authSource=admin&retryWrites=true&w=majority&appName=Cluster0
-
+MONGODB_URI=mongodb+srv://Saa3d-DB:NrPd3ziWiiZUeumA@cluster0.kqay8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
 # JWT
 JWT_SECRET=your_super_secret_jwt_key_here
 JWT_EXPIRE=7d

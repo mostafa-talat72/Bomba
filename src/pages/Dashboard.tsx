@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Gamepad2, Monitor, Coffee, Receipt, TrendingUp, Clock, Users, DollarSign, BarChart3, Calendar } from 'lucide-react';
+import { Gamepad2, Monitor, ShoppingCart, Receipt, TrendingUp, Clock, Users, DollarSign, BarChart3, Calendar, Coffee } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import api from '../services/api';
 
@@ -169,7 +169,7 @@ const Dashboard = () => {
     {
       name: 'الطلبات المعلقة',
       value: realTimePendingOrders,
-      icon: Coffee,
+      icon: ShoppingCart,
       color: 'bg-orange-500',
       bgColor: 'bg-orange-50',
       textColor: 'text-orange-700',
@@ -255,7 +255,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-3">مرحباً بك في نظام Bomba</h1>
-            <p className="text-primary-100 text-lg">لوحة تحكم شاملة لإدارة الكافيه والبلايستيشن</p>
+            <p className="text-primary-100 text-lg">لوحة تحكم شاملة لإدارة الطلبات والبلايستيشن</p>
             <div className="flex items-center mt-4 space-x-4 space-x-reverse">
               <div className="flex items-center">
                 <Calendar className="h-5 w-5 ml-2" />
@@ -464,7 +464,7 @@ const Dashboard = () => {
             </div>
             <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
               <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Coffee className="h-6 w-6 text-orange-600" />
+                <ShoppingCart className="h-6 w-6 text-orange-600" />
               </div>
               <h4 className="font-semibold text-orange-800 mb-1">الطلبات المعلقة</h4>
               <p className="text-sm text-orange-600">

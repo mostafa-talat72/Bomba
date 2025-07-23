@@ -13,6 +13,7 @@ const sessionController = {
             const query = {};
             if (status) query.status = status;
             if (deviceType) query.deviceType = deviceType;
+            query.organization = req.user.organization;
 
             const sessions = await Session.find(query)
                 .populate("createdBy", "name")
@@ -42,7 +43,10 @@ const sessionController = {
     // Get single session
     getSession: async (req, res) => {
         try {
-            const session = await Session.findById(req.params.id)
+            const session = await Session.findOne({
+                _id: req.params.id,
+                organization: req.user.organization,
+            })
                 .populate("createdBy", "name")
                 .populate("updatedBy", "name");
 
@@ -111,6 +115,7 @@ const sessionController = {
                 customerName: `عميل (${deviceName})`,
                 controllers: controllers || 1,
                 createdBy: req.user._id,
+                organization: req.user.organization,
             });
 
             // Create bill automatically for the session
@@ -139,6 +144,7 @@ const sessionController = {
                     billType: billType,
                     status: "draft", // فاتورة مسودة حتى تنتهي الجلسة
                     createdBy: req.user._id,
+                    organization: req.user.organization,
                 };
 
                 bill = await Bill.create(billData);
@@ -231,7 +237,10 @@ const sessionController = {
                 });
             }
 
-            const session = await Session.findById(sessionId);
+            const session = await Session.findOne({
+                _id: sessionId,
+                organization: req.user.organization,
+            });
 
             if (!session) {
                 return res.status(404).json({
@@ -277,7 +286,10 @@ const sessionController = {
             const { id } = req.params;
             Logger.info("🔄 Updating session cost for ID:", id);
 
-            const session = await Session.findById(id).populate("bill");
+            const session = await Session.findOne({
+                _id: id,
+                organization: req.user.organization,
+            }).populate("bill");
 
             if (!session) {
                 Logger.error("❌ Session not found:", id);
@@ -365,7 +377,10 @@ const sessionController = {
             const { id } = req.params;
             Logger.info("🔄 Ending session with ID:", id);
 
-            const session = await Session.findById(id).populate("bill");
+            const session = await Session.findOne({
+                _id: id,
+                organization: req.user.organization,
+            }).populate("bill");
 
             if (!session) {
                 Logger.error("❌ Session not found:", id);
@@ -601,6 +616,7 @@ const sessionController = {
                 controllers: controllers || 1,
                 createdBy: req.user._id,
                 bill: billId, // Link to existing bill
+                organization: req.user.organization,
             });
 
             // Save session
@@ -659,7 +675,10 @@ const sessionController = {
     // Get active sessions
     getActiveSessions: async (req, res) => {
         try {
-            const sessions = await Session.find({ status: "active" })
+            const sessions = await Session.find({
+                status: "active",
+                organization: req.user.organization,
+            })
                 .populate("createdBy", "name")
                 .populate(
                     "bill",

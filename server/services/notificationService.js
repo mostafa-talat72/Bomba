@@ -4,9 +4,12 @@ import Logger from "../middleware/logger.js";
 
 class NotificationService {
     // إنشاء إشعار جديد
-    static async createNotification(notificationData) {
+    static async createNotification(notificationData, user) {
         try {
-            const notification = new Notification(notificationData);
+            const notification = new Notification({
+                ...notificationData,
+                organization: user.organization,
+            });
             await notification.save();
 
             Logger.info("Notification created:", {
@@ -130,11 +133,10 @@ class NotificationService {
     // الحصول على إشعارات المستخدم
     static async getUserNotifications(userId, user, options = {}) {
         try {
-            const notifications = await Notification.getForUser(
-                userId,
-                user,
-                options
-            );
+            const notifications = await Notification.getForUser(userId, user, {
+                ...options,
+                organization: user.organization,
+            });
             return notifications;
         } catch (error) {
             Logger.error("Error getting user notifications:", error);
@@ -147,6 +149,7 @@ class NotificationService {
         try {
             const count = await Notification.countDocuments({
                 isActive: true,
+                organization: user.organization,
                 "readBy.user": { $ne: userId },
                 $or: [
                     { targetUsers: userId },
@@ -172,6 +175,7 @@ class NotificationService {
             // إنشاء استعلام أساسي
             const baseQuery = {
                 isActive: true,
+                organization: user.organization,
                 $or: [
                     { targetUsers: userId },
                     { targetRoles: "all" },
@@ -402,6 +406,7 @@ class NotificationService {
         try {
             const baseQuery = {
                 isActive: true,
+                organization: user.organization,
                 $or: [
                     { targetUsers: userId },
                     { targetRoles: "all" },

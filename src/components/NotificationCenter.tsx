@@ -19,6 +19,12 @@ interface Notification {
   createdBy: { name: string };
 }
 
+// عرف نوع read بشكل صحيح
+interface NotificationRead {
+  user: string;
+  readAt: string;
+}
+
 const NotificationCenter: React.FC = () => {
   const {
     getNotifications,
@@ -26,49 +32,61 @@ const NotificationCenter: React.FC = () => {
     markNotificationAsRead,
     markAllNotificationsAsRead,
     deleteNotification,
-    user
+    user,
+    notifications, // استخدم notifications من context
+    forceRefreshNotifications,
   } = useApp();
 
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState<{ total: number; unread: number } | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'read' | 'high' | 'urgent'>('all');
-  const [unreadCount, setUnreadCount] = useState(0);
   const [hoveredNotification, setHoveredNotification] = useState<string | null>(null);
   const [playSound, setPlaySound] = useState(false);
   const [soundType, setSoundType] = useState<'default' | 'success' | 'warning' | 'error' | 'urgent'>('default');
+  const [prevUnreadCount, setPrevUnreadCount] = useState(0);
+
+  // احسب unreadCount دائماً من notifications في context
+  const unreadCount = notifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id)).length;
+
+  // عند تحديث notifications من context، شغل الصوت فقط إذا زاد العدد
+  useEffect(() => {
+    if (!isOpen && unreadCount > prevUnreadCount) {
+      // تحديد نوع الصوت حسب أولوية الإشعارات الجديدة
+      const newNotifications = notifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id));
+      const urgentNotification = newNotifications.find(n => n.priority === 'urgent');
+      const highPriorityNotification = newNotifications.find(n => n.priority === 'high');
+      if (urgentNotification) {
+        setSoundType('urgent');
+      } else if (highPriorityNotification) {
+        setSoundType('warning');
+      } else {
+        setSoundType('default');
+      }
+      setPlaySound(true);
+    }
+    setPrevUnreadCount(unreadCount);
+    // حدث الشارة في كل مكان
+    const badge = document.querySelector('.notification-badge') as HTMLElement;
+    if (badge) {
+      badge.textContent = unreadCount > 99 ? '99+' : unreadCount.toString();
+      badge.style.display = unreadCount > 0 ? 'flex' : 'none';
+    }
+  }, [notifications, unreadCount, isOpen, prevUnreadCount]);
 
   // Close panel when clicking outside (now handled by backdrop)
 
   useEffect(() => {
     if (isOpen) {
-      loadNotifications();
+      forceRefreshNotifications();
       loadStats();
     }
   }, [isOpen, filter]);
 
   // Update count when opening panel
   const handleTogglePanel = () => {
-    if (!isOpen) {
-      // Refresh data when opening
-      loadNotifications();
-      loadStats();
-    }
     setIsOpen(!isOpen);
   };
-
-  // Update count when notifications change
-  useEffect(() => {
-    const count = notifications.filter(notification => isUnread(notification)).length;
-    setUnreadCount(count);
-    // Update the badge count in real-time
-    const badge = document.querySelector('.notification-badge') as HTMLElement;
-    if (badge) {
-      badge.textContent = count > 99 ? '99+' : count.toString();
-      badge.style.display = count > 0 ? 'flex' : 'none';
-    }
-  }, [notifications]);
 
   // Load notifications and stats on mount
   useEffect(() => {
@@ -87,6 +105,11 @@ const NotificationCenter: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [isOpen]);
+
+  useEffect(() => {
+    // عند إغلاق المكون، أعد ضبط الحالة
+    return () => {};
+  }, []);
 
   const loadNotifications = async () => {
     setLoading(true);
@@ -119,8 +142,8 @@ const NotificationCenter: React.FC = () => {
         setPlaySound(true);
       }
 
-      setNotifications(data);
-      setUnreadCount(newCount);
+      // setNotifications(data); // This line was removed as per the edit hint
+      // setUnreadCount(newCount); // This line was removed as per the edit hint
 
       // Update badge count after loading notifications
       const badge = document.querySelector('.notification-badge') as HTMLElement;
@@ -142,7 +165,7 @@ const NotificationCenter: React.FC = () => {
 
       // Update badge count from stats
       if (data && data.unread) {
-        setUnreadCount(data.unread);
+        // setUnreadCount(data.unread); // This line was removed as per the edit hint
         const badge = document.querySelector('.notification-badge') as HTMLElement;
         if (badge) {
           badge.textContent = data.unread > 99 ? '99+' : data.unread.toString();
@@ -163,17 +186,17 @@ const NotificationCenter: React.FC = () => {
     try {
       const success = await markNotificationAsRead(notificationId);
       if (success) {
-        setNotifications(prev =>
-          prev.map(notification =>
-            notification.id === notificationId
-              ? { ...notification, readBy: [...notification.readBy, { user: user?.id || '', readAt: new Date().toISOString() }] }
-              : notification
-          )
-        );
-        loadStats();
+        // setNotifications(prev => // This line was removed as per the edit hint
+        //   prev.map(notification => // This line was removed as per the edit hint
+        //     notification.id === notificationId
+        //       ? { ...notification, readBy: [...notification.readBy, { user: user?.id || '', readAt: new Date().toISOString() }] }
+        //       : notification
+        //   )
+        // );
+        // loadStats(); // This line was removed as per the edit hint
         // Update badge count immediately
         const newCount = Math.max(0, unreadCount - 1);
-        setUnreadCount(newCount);
+        // setUnreadCount(newCount); // This line was removed as per the edit hint
         const badge = document.querySelector('.notification-badge') as HTMLElement;
         if (badge) {
           badge.textContent = newCount > 99 ? '99+' : newCount.toString();
@@ -185,17 +208,13 @@ const NotificationCenter: React.FC = () => {
     }
   };
 
-  // Mark notification as read on hover
+  // Mark notification as read on hover (instant, no delay, no temp message)
   const handleNotificationHover = async (notification: Notification) => {
     if (isUnread(notification)) {
       const id = notification.id || notification._id;
       if (id) {
-        setHoveredNotification(id);
-        // Add a small delay to avoid accidental marking
-        setTimeout(async () => {
-          await handleMarkAsRead(id);
-          setHoveredNotification(null);
-        }, 1000); // 1 second delay
+        await handleMarkAsRead(id);
+        setHoveredNotification(null);
       }
     }
   };
@@ -207,13 +226,14 @@ const NotificationCenter: React.FC = () => {
   const handleMarkAllAsRead = async () => {
     try {
       await markAllNotificationsAsRead();
-      setNotifications(prev =>
-        prev.map(notification => ({
-          ...notification,
-          readBy: [...notification.readBy, { user: user?.id || '', readAt: new Date().toISOString() }]
-        }))
-      );
-      loadStats();
+      // setNotifications(prev => // This line was removed as per the edit hint
+      //   prev.map(notification => ({ // This line was removed as per the edit hint
+      //     ...notification,
+      //     readBy: [...notification.readBy, { user: user?.id || '', readAt: new Date().toISOString() }]
+      //   }))
+      // );
+      // loadStats(); // This line was removed as per the edit hint
+      // احذف أي رسالة alert
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }
@@ -232,13 +252,12 @@ const NotificationCenter: React.FC = () => {
         const deletedNotification = notifications.find(n => n.id === notificationId);
         const wasUnread = deletedNotification ? isUnread(deletedNotification) : false;
 
-        setNotifications(prev => prev.filter(notification => notification.id !== notificationId));
-        loadStats();
+        // setNotifications(prev => prev.filter(notification => notification.id !== notificationId)); // This line was removed as per the edit hint
+        // loadStats(); // This line was removed as per the edit hint
 
         // Update badge count immediately if notification was unread
         if (wasUnread) {
           const newCount = Math.max(0, unreadCount - 1);
-          setUnreadCount(newCount);
           const badge = document.querySelector('.notification-badge') as HTMLElement;
           if (badge) {
             badge.textContent = newCount > 99 ? '99+' : newCount.toString();
@@ -286,12 +305,12 @@ const NotificationCenter: React.FC = () => {
   };
 
   const isUnread = (notification: Notification) => {
-    return !notification.readBy.some(read => read.user === user?.id);
+    return !notification.readBy.some((read: NotificationRead) => read.user === user?.id);
   };
 
   const filteredNotifications = notifications.filter(notification => {
     if (filter === 'unread') return isUnread(notification);
-    if (filter === 'read') return notification.readBy.some(read => read.user === user?.id);
+    if (filter === 'read') return notification.readBy.some((read: NotificationRead) => read.user === user?.id);
     if (filter === 'high') return notification.priority === 'high' || notification.priority === 'urgent';
     if (filter === 'urgent') return notification.priority === 'urgent';
     return true;
@@ -501,7 +520,7 @@ const NotificationCenter: React.FC = () => {
                         isUnread(notification) ? 'text-gray-700' : 'text-gray-500'
                       }`}>
                         <span>{notification.createdBy?.name}</span>
-                        <span>{new Date(notification.createdAt).toLocaleString('ar-SA')}</span>
+                        <span>{new Date(notification.createdAt).toLocaleString('ar-EG')}</span>
                       </div>
                     </div>
                   </div>

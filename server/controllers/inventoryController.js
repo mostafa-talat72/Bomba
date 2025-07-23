@@ -19,6 +19,7 @@ export const getInventoryItems = async (req, res) => {
         if (search) {
             query.name = { $regex: search, $options: "i" };
         }
+        query.organization = req.user.organization;
 
         const items = await InventoryItem.find(query)
             .populate("recipe.ingredient", "name unit")
@@ -111,6 +112,7 @@ export const createInventoryItem = async (req, res) => {
             isRawMaterial,
             recipe,
             expiryDate,
+            organization: req.user.organization,
         });
 
         // Add initial stock movement

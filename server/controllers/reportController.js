@@ -19,6 +19,7 @@ export const getDashboardStats = async (req, res) => {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
                     status: { $in: ["partial", "paid"] },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -36,6 +37,7 @@ export const getDashboardStats = async (req, res) => {
             {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -52,6 +54,7 @@ export const getDashboardStats = async (req, res) => {
             {
                 $match: {
                     startTime: { $gte: startDate, $lte: endDate },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -71,6 +74,7 @@ export const getDashboardStats = async (req, res) => {
             {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -85,6 +89,7 @@ export const getDashboardStats = async (req, res) => {
         // Active sessions (real-time)
         const activeSessions = await Session.countDocuments({
             status: "active",
+            organization: req.user.organization,
         });
 
         // تنظيف الطلبات القديمة (أكثر من 24 ساعة) وتحديث حالتها
@@ -94,6 +99,7 @@ export const getDashboardStats = async (req, res) => {
         const oldPendingOrders = await Order.find({
             status: { $in: ["pending", "preparing", "ready"] },
             createdAt: { $lt: oneDayAgo },
+            organization: req.user.organization,
         });
 
         if (oldPendingOrders.length > 0) {
@@ -102,6 +108,7 @@ export const getDashboardStats = async (req, res) => {
                 {
                     status: { $in: ["pending", "preparing", "ready"] },
                     createdAt: { $lt: oneDayAgo },
+                    organization: req.user.organization,
                 },
                 {
                     $set: {
@@ -115,6 +122,7 @@ export const getDashboardStats = async (req, res) => {
         // إعادة حساب الطلبات المعلقة بعد التنظيف
         const cleanPendingOrders = await Order.countDocuments({
             status: { $in: ["pending", "preparing", "ready"] },
+            organization: req.user.organization,
         });
 
         // فحص تفصيلي للطلبات
@@ -129,12 +137,14 @@ export const getDashboardStats = async (req, res) => {
         // Low stock items (real-time)
         const lowStockItems = await InventoryItem.countDocuments({
             isActive: true,
+            organization: req.user.organization,
             $expr: { $lte: ["$currentStock", "$minStock"] },
         });
 
         // Today's bills count
         const todayBills = await Bill.countDocuments({
             createdAt: { $gte: startDate, $lte: endDate },
+            organization: req.user.organization,
         });
 
         // Today's total revenue (including all bills)
@@ -142,6 +152,7 @@ export const getDashboardStats = async (req, res) => {
             {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -240,6 +251,7 @@ export const getSalesReport = async (req, res) => {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
                     status: { $in: ["partial", "paid"] },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -261,6 +273,7 @@ export const getSalesReport = async (req, res) => {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
                     status: "delivered",
+                    organization: req.user.organization,
                 },
             },
             {
@@ -292,6 +305,7 @@ export const getSalesReport = async (req, res) => {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
                     status: { $in: ["partial", "paid"] },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -361,7 +375,7 @@ export const getInventoryReport = async (req, res) => {
     try {
         const { category } = req.query;
 
-        const query = { isActive: true };
+        const query = { isActive: true, organization: req.user.organization };
         if (category) query.category = category;
 
         // Current inventory status
@@ -476,6 +490,7 @@ export const getFinancialReport = async (req, res) => {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
                     status: { $in: ["partial", "paid"] },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -493,6 +508,7 @@ export const getFinancialReport = async (req, res) => {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
                     status: "paid",
+                    organization: req.user.organization,
                 },
             },
             {
@@ -528,6 +544,7 @@ export const getFinancialReport = async (req, res) => {
                         $lte: previousPeriod.endDate,
                     },
                     status: { $in: ["partial", "paid"] },
+                    organization: req.user.organization,
                 },
             },
             {
@@ -584,6 +601,7 @@ export const getSessionsReport = async (req, res) => {
 
         const query = {
             startTime: { $gte: startDate, $lte: endDate },
+            organization: req.user.organization,
         };
 
         if (device) query.device = device;
@@ -677,21 +695,27 @@ export const getRecentActivity = async (req, res) => {
         const { limit = 10 } = req.query;
 
         // Get recent sessions
-        const recentSessions = await Session.find({})
+        const recentSessions = await Session.find({
+            organization: req.user.organization,
+        })
             .sort({ createdAt: -1 })
             .limit(parseInt(limit) / 2)
             .populate("createdBy", "name")
             .lean();
 
         // Get recent orders
-        const recentOrders = await Order.find({})
+        const recentOrders = await Order.find({
+            organization: req.user.organization,
+        })
             .sort({ createdAt: -1 })
             .limit(parseInt(limit) / 2)
             .populate("createdBy", "name")
             .lean();
 
         // Get recent bills
-        const recentBills = await Bill.find({})
+        const recentBills = await Bill.find({
+            organization: req.user.organization,
+        })
             .sort({ createdAt: -1 })
             .limit(parseInt(limit) / 2)
             .populate("createdBy", "name")

@@ -1,5 +1,6 @@
 import NotificationService from "../services/notificationService.js";
 import Logger from "../middleware/logger.js";
+import Notification from "../models/Notification.js";
 
 // @desc    Get user notifications
 // @route   GET /api/notifications
@@ -385,4 +386,14 @@ export const cleanExpiredNotifications = async (req, res) => {
             error: error.message,
         });
     }
+};
+
+export const sendSubscriptionNotification = async (userId, message) => {
+    await Notification.create({
+        user: userId,
+        message,
+        type: "subscription",
+        read: false,
+        createdAt: new Date(),
+    });
 };

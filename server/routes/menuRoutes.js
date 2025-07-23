@@ -64,13 +64,10 @@ const menuItemValidation = [
 ];
 
 // Public routes (for customers) - NO AUTHENTICATION REQUIRED
-router.get("/items", getAllMenuItems);
+router.get("/items", protect, getAllMenuItems);
 router.get("/items/popular", getPopularMenuItems);
 router.get("/categories", getMenuCategories);
 router.get("/items/:id", getMenuItemById);
-
-// Apply authentication to protected routes only
-router.use(protect);
 
 // Protected routes (for staff)
 router.use(authenticateToken);

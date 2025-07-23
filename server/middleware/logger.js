@@ -43,6 +43,17 @@ class Logger {
         const logEntry = createLogEntry(LOG_LEVELS.ERROR, message, meta);
         writeLog("error.log", logEntry);
         console.error("يوجد خطأ! راجع ملف logs/error.log");
+        if (meta && meta.error) {
+            console.error("تفاصيل الخطأ:", meta.error);
+        }
+        if (meta && meta.stack) {
+            console.error("Stack Trace:", meta.stack);
+        }
+        if (typeof message === "object") {
+            console.error(JSON.stringify(message, null, 2));
+        } else {
+            console.error(message);
+        }
     }
 
     static warn(message, meta = {}) {

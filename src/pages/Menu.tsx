@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, Plus, Edit, Trash2, Save, X, Search, TrendingUp, Clock, Star } from 'lucide-react';
+import { Utensils, Plus, Edit, Trash2, Save, X, Search, TrendingUp, Clock, Star } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MenuItem } from '../services/api';
 
@@ -170,7 +170,7 @@ const Menu: React.FC = () => {
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div className="flex items-center">
-					<Coffee className="h-8 w-8 text-primary-600 ml-3" />
+					<Utensils className="h-8 w-8 text-primary-600 ml-3" />
 					<div>
 						<h1 className="text-2xl font-bold text-gray-900">إدارة المنيو</h1>
 						<p className="text-gray-600">إدارة قائمة الطعام والمشروبات</p>
@@ -300,7 +300,7 @@ const Menu: React.FC = () => {
 
 			{!loading && filteredItems.length === 0 && (
 				<div className="text-center py-8">
-					<Coffee className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+					<Utensils className="h-12 w-12 text-gray-400 mx-auto mb-4" />
 					<p className="text-gray-500">لا توجد عناصر في القائمة</p>
 				</div>
 			)}

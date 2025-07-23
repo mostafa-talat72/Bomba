@@ -4,7 +4,7 @@ import {
   Home,
   Gamepad2,
   Monitor,
-  Coffee,
+  ShoppingCart,
   Receipt,
   BarChart3,
   Package,
@@ -16,11 +16,18 @@ import {
   User,
   LogOut,
   Utensils,
-  Bell
+  Bell,
+  Server
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import NotificationCenter from './NotificationCenter';
 import PermissionGuard from './PermissionGuard';
+
+// عرف نوع read بشكل صحيح
+interface NotificationRead {
+  user: string;
+  readAt: string;
+}
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -31,7 +38,7 @@ const Layout = () => {
   const activePlaystationSessions = sessions.filter(s => s.status === 'active' && s.deviceType === 'playstation').length;
   const activeComputerSessions = sessions.filter(s => s.status === 'active' && s.deviceType === 'computer').length;
   // عدد الإشعارات غير المقروءة
-  const unreadNotifications = notifications.filter(n => !n.read).length;
+  const unreadNotifications = notifications.filter(n => !n.readBy || !n.readBy.some((read: NotificationRead) => read.user === user?.id)).length;
   // عدد الطلبات قيد التجهيز (pending/preparing)
   const preparingOrders = orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
   // عدد الطلبات الجاهزة للتسليم (ready)
@@ -39,11 +46,18 @@ const Layout = () => {
 
   const navigation = [
     { name: 'لوحة التحكم', href: '/dashboard', icon: Home, permissions: ['dashboard'] },
-    { name: 'البلايستيشن', href: '/playstation', icon: Gamepad2, permissions: ['playstation'], badge: activePlaystationSessions },
-    { name: 'الكمبيوتر', href: '/computer', icon: Monitor, permissions: ['computer'], badge: activeComputerSessions },
-    { name: 'الكافيه', href: '/cafe', icon: Coffee, permissions: ['cafe'], badgePreparing: preparingOrders, badgeReady: readyOrders },
-    { name: 'المنيو', href: '/menu', icon: Utensils, permissions: ['menu'] },
+    { name: 'الطلبات', href: '/cafe', icon: ShoppingCart, permissions: ['cafe'], badgePreparing: preparingOrders, badgeReady: readyOrders },
     { name: 'الفواتير', href: '/billing', icon: Receipt, permissions: ['billing'] },
+    {
+      name: 'الأجهزة',
+      icon: Server,
+      permissions: ['playstation', 'computer'],
+      children: [
+        { name: 'البلايستيشن', href: '/playstation', icon: Gamepad2, permissions: ['playstation'], badge: activePlaystationSessions },
+        { name: 'الكمبيوتر', href: '/computer', icon: Monitor, permissions: ['computer'], badge: activeComputerSessions },
+      ]
+    },
+    { name: 'المنيو', href: '/menu', icon: Utensils, permissions: ['menu'] },
     { name: 'التقارير', href: '/reports', icon: BarChart3, permissions: ['reports'] },
     { name: 'المخزون', href: '/inventory', icon: Package, permissions: ['inventory'] },
     { name: 'التكاليف', href: '/costs', icon: Wallet, permissions: ['costs'] },
@@ -70,6 +84,9 @@ const Layout = () => {
     await logout();
   };
 
+  // حالة فتح قائمة الأجهزة
+  const [devicesOpen, setDevicesOpen] = useState(false);
+
   return (
     <div className="flex h-screen bg-gray-50 relative overflow-hidden container-responsive">
       {/* Sidebar Overlay (Mobile) */}
@@ -79,7 +96,6 @@ const Layout = () => {
           onClick={() => setSidebarOpen(false)}
         />
       )}
-
       {/* Sidebar */}
       <div
         className={`
@@ -92,7 +108,7 @@ const Layout = () => {
         {/* Sidebar Header */}
         <div className="flex items-center justify-between h-16 px-4 sm:px-6 bg-primary-600 text-white flex-shrink-0">
           <div className="flex items-center min-w-0">
-            <Coffee className="h-6 w-6 sm:h-8 sm:w-8 mr-2 sm:mr-3 flex-shrink-0" />
+            <ShoppingCart className="h-6 w-6 sm:h-8 sm:w-8 mr-2 sm:mr-3 flex-shrink-0" />
             <h1 className="text-lg sm:text-xl font-bold truncate">Bomba</h1>
           </div>
           <button
@@ -102,7 +118,6 @@ const Layout = () => {
             <X className="h-6 w-6" />
           </button>
         </div>
-
         {/* User Info */}
         <div className="p-3 sm:p-4 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center min-w-0">
@@ -129,7 +144,6 @@ const Layout = () => {
             </button>
           </div>
         </div>
-
         {/* Navigation */}
         <nav className="mt-4 flex-1 overflow-y-auto">
           <div className="px-2 sm:px-3 space-y-1">
@@ -145,6 +159,54 @@ const Layout = () => {
               </div>
             ) : (
               filteredNavigation.map((item) => {
+                // إذا كان عنصر الأجهزة
+                if (item.name === 'الأجهزة' && item.children) {
+                  return (
+                    <div key={item.name}>
+                      <button
+                        className={`group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-gray-700 hover:bg-gray-50 hover:text-gray-900 ${devicesOpen ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600' : ''}`}
+                        onClick={() => setDevicesOpen((open) => !open)}
+                      >
+                        <item.icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                        <span className="truncate">{item.name}</span>
+                        <span className="ml-auto">
+                          <svg className={`w-4 h-4 transition-transform duration-200 ${devicesOpen ? 'transform rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </span>
+                      </button>
+                      {devicesOpen && (
+                        <div className="pl-6 space-y-1">
+                          {item.children.map((child) => (
+                            <PermissionGuard
+                              key={child.name}
+                              requiredPermissions={child.permissions}
+                              showIfNoPermission={false}
+                            >
+                              <Link
+                                to={child.href}
+                                className={`${isActive(child.href)
+                                  ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600'
+                                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                                  } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
+                                onClick={() => setSidebarOpen(false)}
+                              >
+                                <child.icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                                <span className="truncate">{child.name}</span>
+                                {(child.badge ?? 0) > 0 && (
+                                  <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">
+                                    {child.badge}
+                                  </span>
+                                )}
+                              </Link>
+                            </PermissionGuard>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                // العناصر العادية
                 const Icon = item.icon;
                 return (
                   <PermissionGuard
@@ -162,19 +224,17 @@ const Layout = () => {
                     >
                       <Icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                       <span className="truncate">{item.name}</span>
-                      {/* Badge: إشعارات، بلايستيشن، كمبيوتر */}
                       {(item.badge ?? 0) > 0 && (
                         <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">
                           {item.badge}
                         </span>
                       )}
-                      {/* عدادات الكافيه */}
-                      {item.name === 'الكافيه' && (item.badgePreparing ?? 0) > 0 && (
+                      {Number(item.badgePreparing) > 0 && (
                         <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500 text-white">
                           {item.badgePreparing}
                         </span>
                       )}
-                      {item.name === 'الكافيه' && (item.badgeReady ?? 0) > 0 && (
+                      {Number(item.badgeReady) > 0 && (
                         <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-green-600 text-white">
                           {item.badgeReady}
                         </span>

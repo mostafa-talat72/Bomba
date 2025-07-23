@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema(
         },
         role: {
             type: String,
-            enum: ["admin", "staff", "cashier", "kitchen"],
+            enum: ["admin", "staff", "cashier", "kitchen", "owner"],
             default: "staff",
         },
         permissions: [
@@ -55,7 +55,7 @@ const userSchema = new mongoose.Schema(
         ],
         status: {
             type: String,
-            enum: ["active", "inactive", "suspended"],
+            enum: ["active", "inactive", "suspended", "pending"],
             default: "active",
         },
         lastLogin: {
@@ -75,6 +75,14 @@ const userSchema = new mongoose.Schema(
             default: null,
         },
         address: {
+            type: String,
+            default: null,
+        },
+        organization: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Organization",
+        },
+        verificationToken: {
             type: String,
             default: null,
         },

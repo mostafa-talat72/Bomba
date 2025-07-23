@@ -4,6 +4,10 @@ import Order from "../models/Order.js";
 import Session from "../models/Session.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
+import Subscription from "../models/Subscription.js";
+import User from "../models/User.js";
+import { sendSubscriptionNotification } from "./notificationController.js";
+import { createFawryPayment } from "../services/fawryService.js";
 
 // @desc    Get all bills
 // @route   GET /api/bills
@@ -24,6 +28,7 @@ export const getBills = async (req, res) => {
         if (tableNumber) query.tableNumber = tableNumber;
         if (customerName)
             query.customerName = { $regex: customerName, $options: "i" };
+        query.organization = req.user.organization;
 
         // Filter by date if provided
         if (date) {
@@ -37,7 +42,10 @@ export const getBills = async (req, res) => {
             };
         }
 
-        const bills = await Bill.find(query)
+        const bills = await Bill.find({
+            organization: req.user.organization,
+            ...query,
+        })
             .populate({
                 path: "orders",
                 populate: {
@@ -90,15 +98,66 @@ export const getBills = async (req, res) => {
 // @access  Public (for QR code access)
 export const getBill = async (req, res) => {
     try {
-        // Validate bill ID format
+        // إذا كان الطلب من /public/:id (أي لم يوجد req.user أو organization)
+        if (!req.user || !req.user.organization) {
+            // السماح بعرض الفاتورة للجميع إذا كان الطلب من المسار العام
+            const bill = await Bill.findOne({ _id: req.params.id })
+                .populate({
+                    path: "orders",
+                    populate: [
+                        {
+                            path: "items.menuItem",
+                            select: "name arabicName preparationTime price",
+                        },
+                        {
+                            path: "createdBy",
+                            select: "name",
+                        },
+                    ],
+                })
+                .populate({
+                    path: "sessions",
+                    populate: {
+                        path: "createdBy",
+                        select: "name",
+                    },
+                })
+                .populate("createdBy", "name")
+                .populate("updatedBy", "name")
+                .populate("payments.user", "name")
+                .populate("partialPayments.items.paidBy", "name");
+            if (!bill) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الفاتورة غير موجودة",
+                });
+            }
+            // لا نتحقق من حالة الفاتورة هنا (نسمح بعرض أي فاتورة)
+            return res.json({
+                success: true,
+                data: bill,
+            });
+        }
+        // تحقق من وجود المستخدم والمنشأة للمسار المحمي
+        if (!req.user || !req.user.organization) {
+            return res.status(401).json({
+                success: false,
+                message:
+                    "المستخدم غير مصرح أو لا يوجد منشأة مرتبطة به. يرجى إعادة تسجيل الدخول.",
+            });
+        }
+        // تحقق من صحة معرف الفاتورة
         if (!req.params.id || req.params.id.length !== 24) {
             return res.status(400).json({
                 success: false,
                 message: "معرف الفاتورة غير صحيح",
             });
         }
-
-        const bill = await Bill.findById(req.params.id)
+        // جلب الفاتورة للمستخدم المسجل والمنشأة
+        const bill = await Bill.findOne({
+            _id: req.params.id,
+            organization: req.user.organization,
+        })
             .populate({
                 path: "orders",
                 populate: [
@@ -121,77 +180,17 @@ export const getBill = async (req, res) => {
             })
             .populate("createdBy", "name")
             .populate("updatedBy", "name")
-            .populate({
-                path: "payments.user",
-                select: "name",
-            });
-
+            .populate("payments.user", "name")
+            .populate("partialPayments.items.paidBy", "name");
         if (!bill) {
             return res.status(404).json({
                 success: false,
-                message: "الفاتورة غير موجودة",
+                message: "الفاتورة غير موجودة أو غير مصرح لك بالوصول إليها",
             });
         }
-
-        // Update bill if it has orders but zero total
-        if (bill.orders && bill.orders.length > 0 && bill.total === 0) {
-            await bill.calculateSubtotal();
-        }
-
-        // تجهيز الجلسات مع breakdown الفعلي من الداتا بيز (async)
-        const formattedSessions = await Promise.all(
-            (bill.sessions || []).map(async (session) => {
-                if (
-                    (session.deviceType === "playstation" ||
-                        session.deviceType === "computer") &&
-                    typeof session.getCostBreakdownAsync === "function"
-                ) {
-                    const { breakdown } = await session.getCostBreakdownAsync();
-                    const sessionObj =
-                        typeof session.toObject === "function"
-                            ? session.toObject()
-                            : session;
-                    return {
-                        ...sessionObj,
-                        controllersHistoryBreakdown: breakdown,
-                    };
-                }
-                return typeof session.toObject === "function"
-                    ? session.toObject()
-                    : session;
-            })
-        );
-        const formattedBill = {
-            _id: bill._id,
-            billNumber: bill.billNumber,
-            customerName: bill.customerName,
-            customerPhone: bill.customerPhone,
-            tableNumber: bill.tableNumber,
-            orders: bill.orders || [],
-            sessions: formattedSessions,
-            subtotal: bill.subtotal || 0,
-            discount: bill.discount || 0,
-            tax: bill.tax || 0,
-            total: bill.total || 0,
-            paid: bill.paid || 0,
-            remaining: bill.remaining || 0,
-            status: bill.status,
-            billType: bill.billType,
-            payments: bill.payments || [],
-            partialPayments: bill.partialPayments || [],
-            qrCode: bill.qrCode,
-            qrCodeUrl: bill.qrCodeUrl,
-            notes: bill.notes,
-            dueDate: bill.dueDate,
-            createdBy: bill.createdBy,
-            updatedBy: bill.updatedBy,
-            createdAt: bill.createdAt,
-            updatedAt: bill.updatedAt,
-        };
-
-        res.json({
+        return res.json({
             success: true,
-            data: formattedBill,
+            data: bill,
         });
     } catch (error) {
         Logger.error("خطأ في جلب الفاتورة", error);
@@ -273,6 +272,7 @@ export const createBill = async (req, res) => {
             billType: billType || "cafe",
             dueDate,
             createdBy: req.user._id,
+            organization: req.user.organization,
         });
         Logger.info("Bill created:", bill);
 
@@ -672,7 +672,13 @@ export const getBillByQR = async (req, res) => {
                 message: "الفاتورة غير موجودة",
             });
         }
-
+        if (!["paid", "partial"].includes(bill.status)) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "لا يمكن عرض الفاتورة إلا إذا كانت مدفوعة أو مدفوعة جزئياً.",
+            });
+        }
         res.json({
             success: true,
             data: bill,
@@ -954,6 +960,7 @@ export const getAvailableBillsForSession = async (req, res) => {
         // جلب الفواتير غير المدفوعة أو الملغاة
         const bills = await Bill.find({
             status: { $nin: ["paid", "cancelled"] },
+            organization: req.user.organization,
         }).populate("sessions");
 
         // فلترة الفواتير التي لا تحتوي على جلسة نشطة من نفس النوع
@@ -974,6 +981,140 @@ export const getAvailableBillsForSession = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في جلب الفواتير المتاحة للربط",
+            error: error.message,
+        });
+    }
+};
+
+export const getSubscriptionStatus = async (req, res) => {
+    try {
+        // جلب المستخدم الحالي
+        const user = await User.findById(req.user.id);
+        console.log("getSubscriptionStatus: user", user);
+        if (!user || !user.organization) {
+            console.log("getSubscriptionStatus: No organization for user");
+            return res.status(401).json({
+                status: "expired",
+                message: "لا يوجد منشأة مرتبطة بهذا الحساب",
+            });
+        }
+        // جلب أحدث اشتراك للمنشأة
+        const subscription = await Subscription.findOne({
+            organization: user.organization,
+        }).sort({ endDate: -1 });
+        console.log("getSubscriptionStatus: subscription", subscription);
+        if (!subscription) {
+            return res
+                .status(200)
+                .json({ status: "expired", message: "لا يوجد اشتراك فعال" });
+        }
+        const now = new Date();
+        if (subscription.status === "active" && subscription.endDate > now) {
+            return res.status(200).json({ status: "active" });
+        } else {
+            return res.status(200).json({ status: "expired" });
+        }
+    } catch (error) {
+        console.log("getSubscriptionStatus: error", error);
+        res.status(500).json({
+            status: "expired",
+            message: "خطأ في جلب حالة الاشتراك",
+        });
+    }
+};
+
+export const createSubscriptionPayment = async (req, res) => {
+    try {
+        const { plan } = req.body;
+        const user = await User.findById(req.user.id);
+        if (!user || !user.organization) {
+            return res.status(401).json({
+                success: false,
+                message: "لا يوجد منشأة مرتبطة بهذا الحساب",
+            });
+        }
+        // تحديد السعر حسب الباقة
+        let amount = 0,
+            description = "";
+        if (plan === "monthly") {
+            amount = 299;
+            description = "اشتراك شهري في النظام";
+        } else if (plan === "yearly") {
+            amount = 2999;
+            description = "اشتراك سنوي في النظام";
+        } else {
+            return res
+                .status(400)
+                .json({ success: false, message: "خطة اشتراك غير صحيحة" });
+        }
+        // رقم الطلب (يمكنك توليده بأي طريقة فريدة)
+        const orderId = `${user.organization}-${Date.now()}`;
+        // رابط العودة بعد الدفع
+        const returnUrl = `${
+            process.env.FRONTEND_URL || "http://localhost:5173"
+        }/subscription?success=1`;
+        // إنشاء طلب دفع فوري
+        const payment = await createFawryPayment({
+            customerEmail: user.email,
+            customerName: user.name,
+            amount,
+            orderId,
+            description,
+            returnUrl,
+        });
+        res.json({ success: true, payment });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إنشاء طلب الدفع",
+            error: error.message,
+        });
+    }
+};
+
+export const fawryWebhook = async (req, res) => {
+    try {
+        const { merchantRefNumber, paymentStatus, paymentAmount } = req.body;
+        // تحقق من نجاح الدفع
+        if (paymentStatus !== "PAID") {
+            return res.status(200).json({
+                success: true,
+                message: "تم الاستلام، لكن لم يتم الدفع بعد.",
+            });
+        }
+        // استخراج organizationId من رقم الطلب
+        const [organizationId] = merchantRefNumber.split("-");
+        // جلب أحدث اشتراك غير مفعل لهذه المنشأة
+        const subscription = await Subscription.findOne({
+            organization: organizationId,
+            status: { $ne: "active" },
+        }).sort({ endDate: -1 });
+        if (!subscription) {
+            return res.status(404).json({
+                success: false,
+                message: "لم يتم العثور على اشتراك لتفعيله",
+            });
+        }
+        // تفعيل الاشتراك
+        subscription.status = "active";
+        await subscription.save();
+        // إرسال إشعار للمالك
+        const organization = subscription.organization;
+        const orgOwner = await User.findOne({ organization, role: "owner" });
+        if (orgOwner) {
+            await sendSubscriptionNotification(
+                orgOwner._id,
+                "تم تفعيل اشتراك منشأتك بنجاح. شكراً لاستخدامك منصتنا!"
+            );
+        }
+        res.status(200).json({
+            success: true,
+            message: "تم تفعيل الاشتراك بنجاح",
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في معالجة Webhook",
             error: error.message,
         });
     }

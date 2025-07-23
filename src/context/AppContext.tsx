@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import api, { User, Session, Order, InventoryItem, Bill, Cost, Device, MenuItem, BillItem } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 interface NotificationType {
   message: string;
@@ -26,9 +27,10 @@ interface AppContextType {
   inventoryItems: InventoryItem[];
   users: User[];
   notifications: any[];
+  subscriptionStatus: 'active' | 'expired' | 'pending' | 'loading';
 
   // Auth methods
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   refreshData: () => Promise<void>;
 
@@ -112,6 +114,7 @@ interface AppContextType {
   sendNotificationToRole: (role: string, notificationData: any) => Promise<any>;
   sendNotificationToPermission: (permission: string, notificationData: any) => Promise<any>;
   broadcastNotification: (notificationData: any) => Promise<any>;
+  forceRefreshNotifications: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -136,6 +139,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [users, setUsers] = useState<User[]>([]);
   const [settings, setSettings] = useState<any>({});
   const [notifications, setNotifications] = useState<any[]>([]);
+  // دالة لجلب حالة الاشتراك من السيرفر
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'expired' | 'pending' | 'loading'>('loading');
+
+  const navigate = useNavigate();
+  const firstLoginRef = useRef(true);
+
+  // Force logout and redirect if token is missing (session expired or refresh failed)
+  useEffect(() => {
+    const checkToken = () => {
+      const token = localStorage.getItem('token'); // إصلاح الخطأ: تعريف المتغير
+      const path = window.location.pathname;
+      // استثناء صفحة التفعيل وصفحة الفاتورة من أي redirect
+      const isVerifyEmail = path.startsWith('/verify-email');
+      const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(path);
+      if (!token && !isVerifyEmail && !isBillView) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setSessions([]);
+        setOrders([]);
+        setInventory([]);
+        setBills([]);
+        setCosts([]);
+        navigate('/login', { replace: true });
+      }
+    };
+    checkToken();
+    const interval = setInterval(checkToken, 1000);
+    return () => clearInterval(interval);
+  }, [navigate]);
 
   // Check authentication on app load
   useEffect(() => {
@@ -147,7 +179,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isAuthenticated) return;
     let interval: ReturnType<typeof setInterval>;
     const fetchUnreadNotifications = async () => {
-      const notifs = await getNotifications({ unreadOnly: true, limit: 100 });
+      const notifs = await getNotifications({ limit: 100 });
       setNotifications(notifs);
     };
     fetchUnreadNotifications();
@@ -179,21 +211,76 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      try {
+        setSubscriptionStatus('loading');
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/billing/subscription/status', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        const data = await res.json();
+        if (data.status === 'active') setSubscriptionStatus('active');
+        else setSubscriptionStatus('expired');
+      } catch {
+        setSubscriptionStatus('expired');
+      }
+    };
+    fetchSubscription();
+  }, []);
+
+  useEffect(() => {
+    // تم تعطيل التوجيه التلقائي لصفحة الاشتراكات، النظام مجاني حالياً
+    // if (subscriptionStatus === 'expired') {
+    //   navigate('/subscription');
+    // }
+  }, [subscriptionStatus, navigate]);
+
   const checkAuth = async () => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        const response = await api.getMe();
+        let response = await api.getMe();
         if (response.success && response.data?.user) {
           setUser(response.data.user);
           setIsAuthenticated(true);
           await refreshData();
+        } else if (response.message && response.message.includes('توكن غير صالح')) {
+          // محاولة تجديد التوكن تلقائياً
+          const refreshToken = localStorage.getItem('refreshToken');
+          if (refreshToken) {
+            const refreshRes = await api.refreshToken(refreshToken);
+            if (refreshRes.success && refreshRes.data?.token) {
+              localStorage.setItem('token', refreshRes.data.token);
+              if (refreshRes.data.refreshToken) {
+                localStorage.setItem('refreshToken', refreshRes.data.refreshToken);
+              }
+              api.setToken(refreshRes.data.token);
+              // أعد محاولة getMe بعد التجديد
+              response = await api.getMe();
+              if (response.success && response.data?.user) {
+                setUser(response.data.user);
+                setIsAuthenticated(true);
+                await refreshData();
+                setIsLoading(false);
+                return;
+              }
+            }
+          }
+          // إذا فشل التجديد أو لم يوجد refreshToken
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
+          navigate('/login', { replace: true });
         } else {
           localStorage.removeItem('token');
         }
       }
     } catch (error) {
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
+      navigate('/login', { replace: true });
     } finally {
       setIsLoading(false);
     }
@@ -211,22 +298,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Auth methods
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
+      console.log('[LOGIN][FRONTEND] محاولة تسجيل الدخول:', email);
       const response = await api.login(email, password);
-      if (response.success && response.data?.user) {
-        localStorage.setItem('token', response.data.token);
-        api.setToken(response.data.token);
-        setUser(response.data.user);
+      console.log('[LOGIN][FRONTEND] رد السيرفر:', response);
+      const user = response.data?.user;
+      const token = response.data?.token;
+      if (response.success && user && token) {
+        localStorage.setItem('token', token);
+        api.setToken(token);
+        setUser(user);
         setIsAuthenticated(true);
         await refreshData();
-        showNotification('تم تسجيل الدخول بنجاح', 'success');
-        return true;
+        // رسالة ترحيب فقط عند تسجيل الدخول وليس عند reload
+        if (firstLoginRef.current) {
+          showNotification(`مرحباً بك يا ${user.name}!`, 'success');
+          firstLoginRef.current = false;
+        }
+        return { success: true };
       }
-      return false;
+      return { success: false, message: response.message || 'بيانات الدخول غير صحيحة' };
     } catch (error: any) {
       showNotification(error.message || 'فشل في تسجيل الدخول', 'error');
-      return false;
+      return { success: false, message: error.message || 'فشل في تسجيل الدخول' };
     }
   };
 
@@ -902,7 +997,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // User CRUD methods
   const createUser = async (userData: any): Promise<User | null> => {
     try {
-      const response = await api.createUser(userData);
+      // تمرير businessName و businessType إذا كان الدور owner
+      const payload = { ...userData };
+      if (userData.role === 'owner') {
+        payload.businessName = userData.businessName;
+        payload.businessType = userData.businessType;
+      } else {
+        delete payload.businessName;
+        delete payload.businessType;
+      }
+      const response = await api.createUser(payload);
       if (response.success && response.data) {
         showNotification('تم إضافة المستخدم بنجاح', 'success');
         await fetchUsers();
@@ -1036,6 +1140,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // دالة تجبر تحديث notifications في الـcontext (مثلاً عند فتح نافذة الإشعارات)
+  const forceRefreshNotifications = async () => {
+    const notifs = await getNotifications({ limit: 100 });
+    setNotifications(notifs);
+  };
+
   const getNotificationStats = async (): Promise<any> => {
     try {
       const response = await api.getNotificationStats();
@@ -1051,6 +1161,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success) {
         // Update notification count in real-time
         updateNotificationCount();
+        // تحديث notifications فوراً
+        const notifs = await getNotifications({ limit: 100 });
+        setNotifications(notifs);
       }
       return response.success;
     } catch (error) {
@@ -1063,6 +1176,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.markAllNotificationsAsRead();
       if (response.success) {
         updateNotificationCount();
+        // تحديث notifications فوراً
+        const notifs = await getNotifications({ limit: 100 });
+        setNotifications(notifs);
       }
       return response.success;
     } catch (error) {
@@ -1192,6 +1308,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     inventoryItems,
     users,
     notifications,
+    subscriptionStatus,
 
     // Auth methods
     login,
@@ -1265,7 +1382,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     createNotification,
     sendNotificationToRole,
     sendNotificationToPermission,
-    broadcastNotification
+    broadcastNotification,
+    forceRefreshNotifications,
   };
 
   return (
@@ -1282,3 +1400,5 @@ export const useApp = () => {
   }
   return context;
 };
+
+export { AppContext };

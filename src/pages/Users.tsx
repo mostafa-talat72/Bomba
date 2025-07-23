@@ -23,7 +23,9 @@ const Users = () => {
     status: 'active',
     phone: '',
     address: '',
-    permissions: [] as string[]
+    permissions: [] as string[],
+    businessName: '', // اسم المنشأة
+    businessType: '', // نوع المنشأة
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null);
@@ -34,8 +36,9 @@ const Users = () => {
   const roles = [
     { id: 'admin', name: 'مدير', icon: Crown, color: 'text-purple-600', bgColor: 'bg-purple-100', description: 'صلاحيات كاملة على النظام - جميع الصلاحيات' },
     { id: 'staff', name: 'موظف', icon: User, color: 'text-blue-600', bgColor: 'bg-blue-100', description: 'صلاحيات محدودة - لوحة التحكم، التقارير، الإعدادات' },
-    { id: 'cashier', name: 'كاشير', icon: Shield, color: 'text-green-600', bgColor: 'bg-green-100', description: 'إدارة المبيعات والفواتير - الكافيه، المنيو، الفواتير، التقارير' },
-    { id: 'kitchen', name: 'مطبخ', icon: Shield, color: 'text-orange-600', bgColor: 'bg-orange-100', description: 'إدارة الطلبات والمطبخ - الكافيه، المنيو، المخزون، التكاليف' },
+    { id: 'cashier', name: 'كاشير', icon: Shield, color: 'text-green-600', bgColor: 'bg-green-100', description: 'إدارة المبيعات والفواتير - الطلبات، المنيو، الفواتير، التقارير' },
+    { id: 'kitchen', name: 'مطبخ', icon: Shield, color: 'text-orange-600', bgColor: 'bg-orange-100', description: 'إدارة الطلبات والمطبخ - الطلبات، المنيو، المخزون، التكاليف' },
+    { id: 'owner', name: 'مالك', icon: User, color: 'text-red-600', bgColor: 'bg-red-100', description: 'إدارة المنشأة والمستخدمين الآخرين' },
   ];
 
   const permissions = [
@@ -43,7 +46,7 @@ const Users = () => {
     { id: 'dashboard', name: 'لوحة التحكم', description: 'التحكم الكامل في لوحة التحكم وعرض الإحصائيات والتقارير' },
     { id: 'playstation', name: 'البلايستيشن', description: 'التحكم الكامل في أجهزة البلايستيشن وجلسات اللعب' },
     { id: 'computer', name: 'الكمبيوتر', description: 'التحكم الكامل في أجهزة الكمبيوتر وجلسات الاستخدام' },
-    { id: 'cafe', name: 'الكافيه', description: 'التحكم الكامل في طلبات الكافيه والمشروبات والخدمة' },
+    { id: 'cafe', name: 'الطلبات', description: 'التحكم الكامل في طلبات الطلبات والمشروبات والخدمة' },
     { id: 'menu', name: 'المنيو', description: 'التحكم الكامل في قائمة الطعام والمشروبات والأسعار' },
     { id: 'billing', name: 'الفواتير', description: 'التحكم الكامل في إنشاء وإدارة الفواتير والمدفوعات' },
     { id: 'reports', name: 'التقارير', description: 'التحكم الكامل في عرض وتصدير جميع التقارير' },
@@ -51,6 +54,12 @@ const Users = () => {
     { id: 'costs', name: 'التكاليف', description: 'التحكم الكامل في التكاليف والمصروفات والميزانية' },
     { id: 'users', name: 'المستخدمين', description: 'التحكم الكامل في المستخدمين والصلاحيات والأدوار' },
     { id: 'settings', name: 'الإعدادات', description: 'التحكم الكامل في إعدادات النظام والتكوين' },
+  ];
+
+  const businessTypes = [
+    { id: 'cafe', name: 'كافيه' },
+    { id: 'restaurant', name: 'مطعم' },
+    { id: 'playstation', name: 'بلايستيشن' },
   ];
 
   // Get accessible pages for a user based on their permissions
@@ -87,7 +96,7 @@ const Users = () => {
       dashboard: 'لوحة التحكم',
       playstation: 'البلايستيشن',
       computer: 'الكمبيوتر',
-      cafe: 'الكافيه',
+      cafe: 'الطلبات',
       menu: 'المنيو',
       billing: 'الفواتير',
       reports: 'التقارير',
@@ -172,10 +181,7 @@ const Users = () => {
   // معالجة النماذج
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePermissionChange = (permissionId: string, checked: boolean) => {
@@ -217,7 +223,9 @@ const Users = () => {
       status: 'active',
       phone: '',
       address: '',
-      permissions: ['dashboard'] // صلاحية افتراضية للوحة التحكم
+      permissions: ['dashboard'], // صلاحية افتراضية للوحة التحكم
+      businessName: '',
+      businessType: '',
     });
   };
 
@@ -253,6 +261,8 @@ const Users = () => {
         address: string;
         permissions: string[];
         password?: string;
+        businessName?: string;
+        businessType?: string;
       } = {
         name: formData.name,
         email: formData.email,
@@ -272,8 +282,22 @@ const Users = () => {
         setShowEditUser(false);
       } else {
         userData.password = formData.password;
-        await createUser(userData);
-        setShowAddUser(false);
+        const user = await createUser(userData);
+        setLoading(false);
+        if (user) {
+          if (formData.role === 'owner') {
+            showNotification('تم إرسال رسالة تأكيد إلى بريدك الإلكتروني. يرجى تفعيل الحساب من الإيميل ثم تسجيل الدخول.', 'success');
+            setTimeout(() => {
+              resetForm();
+              setShowAddUser(false);
+              window.location.href = '/login';
+            }, 3000);
+          } else {
+            showNotification('تم إضافة المستخدم بنجاح', 'success');
+            setShowAddUser(false);
+            resetForm();
+          }
+        }
       }
 
       resetForm();
@@ -297,7 +321,9 @@ const Users = () => {
       status: user.status,
       phone: user.phone || '',
       address: user.address || '',
-      permissions: user.permissions || []
+      permissions: user.permissions || [],
+      businessName: user.businessName || '',
+      businessType: user.businessType || '',
     });
     setSelectedUser(user);
     setShowEditUser(true);
@@ -709,6 +735,38 @@ const Users = () => {
                     <option value="suspended">معلق</option>
                   </select>
                 </div>
+
+                {formData.role === 'owner' && (
+                  <>
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">اسم المنشأة *</label>
+                      <input
+                        type="text"
+                        name="businessName"
+                        value={formData.businessName}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="أدخل اسم المنشأة"
+                      />
+                    </div>
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">نوع المنشأة *</label>
+                      <select
+                        name="businessType"
+                        value={formData.businessType}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="">اختر نوع المنشأة</option>
+                        {businessTypes.map((type) => (
+                          <option key={type.id} value={type.id}>{type.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">العنوان</label>

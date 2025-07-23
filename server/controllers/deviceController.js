@@ -31,12 +31,18 @@ const deviceController = {
             sort[sortBy] = sortOrder === "desc" ? -1 : 1;
 
             // Execute query with pagination
-            const devices = await Device.find(query)
+            const devices = await Device.find({
+                organization: req.user.organization,
+                ...query,
+            })
                 .sort(sort)
                 .limit(limit * 1)
                 .skip((page - 1) * limit);
 
-            const total = await Device.countDocuments(query);
+            const total = await Device.countDocuments({
+                organization: req.user.organization,
+                ...query,
+            });
 
             res.json({
                 success: true,
@@ -61,7 +67,10 @@ const deviceController = {
         try {
             const { id } = req.params;
 
-            const device = await Device.findById(id);
+            const device = await Device.findOne({
+                _id: id,
+                organization: req.user.organization,
+            });
 
             if (!device) {
                 return res.status(404).json({
@@ -133,6 +142,7 @@ const deviceController = {
 
             const existingDevice = await Device.findOne({
                 number: deviceNumber,
+                organization: req.user.organization,
             });
             if (existingDevice) {
                 return res.status(400).json({
@@ -193,6 +203,7 @@ const deviceController = {
                 type: type || "playstation",
                 status: status || "available",
                 controllers: controllers || 2,
+                organization: req.user.organization,
             };
             if ((type === "computer" || !type) && hourlyRate !== undefined) {
                 deviceData.hourlyRate = hourlyRate;
@@ -243,7 +254,10 @@ const deviceController = {
             } = req.body;
 
             // Check if device exists
-            const existingDevice = await Device.findById(id);
+            const existingDevice = await Device.findOne({
+                _id: id,
+                organization: req.user.organization,
+            });
             if (!existingDevice) {
                 return res.status(404).json({
                     success: false,
@@ -259,6 +273,7 @@ const deviceController = {
                 const deviceNumber = `${prefix}${number}`;
                 const numberConflict = await Device.findOne({
                     number: deviceNumber,
+                    organization: req.user.organization,
                     _id: { $ne: id },
                 });
                 if (numberConflict) {
@@ -339,10 +354,14 @@ const deviceController = {
                 updateData.playstationRates = playstationRates;
             }
 
-            const device = await Device.findByIdAndUpdate(id, updateData, {
-                new: true,
-                runValidators: true,
-            });
+            const device = await Device.findOneAndUpdate(
+                { _id: id, organization: req.user.organization },
+                updateData,
+                {
+                    new: true,
+                    runValidators: true,
+                }
+            );
 
             res.status(200).json({
                 success: true,
@@ -383,8 +402,8 @@ const deviceController = {
                 });
             }
 
-            const device = await Device.findByIdAndUpdate(
-                id,
+            const device = await Device.findOneAndUpdate(
+                { _id: id, organization: req.user.organization },
                 { status },
                 { new: true, runValidators: true }
             );
@@ -418,7 +437,10 @@ const deviceController = {
             const { id } = req.params;
 
             // Check if device exists
-            const device = await Device.findById(id);
+            const device = await Device.findOne({
+                _id: id,
+                organization: req.user.organization,
+            });
             if (!device) {
                 return res.status(404).json({
                     success: false,
@@ -443,6 +465,7 @@ const deviceController = {
             // Check if device has any sessions (for data integrity)
             const sessionCount = await Session.countDocuments({
                 deviceNumber: device.number,
+                organization: req.user.organization,
             });
 
             if (sessionCount > 0) {
@@ -453,7 +476,10 @@ const deviceController = {
                 });
             }
 
-            await Device.findByIdAndDelete(id);
+            await Device.findOneAndDelete({
+                _id: id,
+                organization: req.user.organization,
+            });
 
             res.json({
                 success: true,
@@ -569,7 +595,10 @@ const deviceController = {
             }
 
             const result = await Device.updateMany(
-                { _id: { $in: deviceIds } },
+                {
+                    _id: { $in: deviceIds },
+                    organization: req.user.organization,
+                },
                 updates,
                 { runValidators: true }
             );

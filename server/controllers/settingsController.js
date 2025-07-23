@@ -7,10 +7,10 @@ export const getSettings = async (req, res) => {
     try {
         const { category } = req.params;
 
-        const settings = await Settings.findOne({ category }).populate(
-            "updatedBy",
-            "name"
-        );
+        const settings = await Settings.findOne({
+            category,
+            organization: req.user.organization,
+        }).populate("updatedBy", "name");
 
         if (!settings) {
             return res.status(404).json({
@@ -41,11 +41,12 @@ export const updateSettings = async (req, res) => {
         const { settings } = req.body;
 
         const updatedSettings = await Settings.findOneAndUpdate(
-            { category },
+            { category, organization: req.user.organization },
             {
                 category,
                 settings,
                 updatedBy: req.user._id,
+                organization: req.user.organization,
             },
             {
                 new: true,
@@ -73,7 +74,9 @@ export const updateSettings = async (req, res) => {
 // @access  Private
 export const getAllSettings = async (req, res) => {
     try {
-        const settings = await Settings.find()
+        const settings = await Settings.find({
+            organization: req.user.organization,
+        })
             .populate("updatedBy", "name")
             .sort({ category: 1 });
 
@@ -156,11 +159,12 @@ export const resetSettings = async (req, res) => {
         }
 
         const updatedSettings = await Settings.findOneAndUpdate(
-            { category },
+            { category, organization: req.user.organization },
             {
                 category,
                 settings,
                 updatedBy: req.user._id,
+                organization: req.user.organization,
             },
             {
                 new: true,
@@ -188,9 +192,9 @@ export const resetSettings = async (req, res) => {
 // @access  Private (Admin only)
 export const exportSettings = async (req, res) => {
     try {
-        const settings = await Settings.find().select(
-            "-updatedBy -createdAt -updatedAt -__v"
-        );
+        const settings = await Settings.find({
+            organization: req.user.organization,
+        }).select("-updatedBy -createdAt -updatedAt -__v");
 
         const exportData = {
             exportDate: new Date(),
@@ -238,11 +242,12 @@ export const importSettings = async (req, res) => {
 
         for (const [category, categorySettings] of Object.entries(settings)) {
             const updatedSetting = await Settings.findOneAndUpdate(
-                { category },
+                { category, organization: req.user.organization },
                 {
                     category,
                     settings: categorySettings,
                     updatedBy: req.user._id,
+                    organization: req.user.organization,
                 },
                 {
                     new: true,

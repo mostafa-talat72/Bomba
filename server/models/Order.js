@@ -117,6 +117,11 @@ const orderSchema = new mongoose.Schema(
             ref: "Bill",
             default: null,
         },
+        organization: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Organization",
+            required: true,
+        },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
