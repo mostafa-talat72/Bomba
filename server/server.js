@@ -268,7 +268,7 @@ app.use("/api/orders", (req, res, next) => {
     next();
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
     Logger.info(`Server started on port ${PORT}`, {
