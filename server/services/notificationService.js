@@ -12,13 +12,6 @@ class NotificationService {
             });
             await notification.save();
 
-            Logger.info("Notification created:", {
-                id: notification._id,
-                title: notification.title,
-                category: notification.category,
-                targetRoles: notification.targetRoles,
-            });
-
             return notification;
         } catch (error) {
             Logger.error("Error creating notification:", error);
@@ -36,12 +29,6 @@ class NotificationService {
             );
             if (notification) {
                 await notification.save();
-
-                Logger.info("Session notification created:", {
-                    type,
-                    sessionId: session._id,
-                    deviceName: session.deviceName,
-                });
 
                 return notification;
             }
@@ -63,12 +50,6 @@ class NotificationService {
             if (notification) {
                 await notification.save();
 
-                Logger.info("Order notification created:", {
-                    type,
-                    orderId: order._id,
-                    orderNumber: order.orderNumber,
-                });
-
                 return notification;
             }
             return null;
@@ -89,12 +70,6 @@ class NotificationService {
             if (notification) {
                 await notification.save();
 
-                Logger.info("Inventory notification created:", {
-                    type,
-                    itemId: item._id,
-                    itemName: item.name,
-                });
-
                 return notification;
             }
             return null;
@@ -114,12 +89,6 @@ class NotificationService {
             );
             if (notification) {
                 await notification.save();
-
-                Logger.info("Billing notification created:", {
-                    type,
-                    billId: bill._id,
-                    billNumber: bill.billNumber,
-                });
 
                 return notification;
             }
@@ -232,11 +201,6 @@ class NotificationService {
 
             await notification.markAsRead(userId);
 
-            Logger.info("Notification marked as read:", {
-                notificationId,
-                userId,
-            });
-
             return notification;
         } catch (error) {
             Logger.error("Error marking notification as read:", error);
@@ -248,11 +212,6 @@ class NotificationService {
     static async markAllAsRead(userId) {
         try {
             const result = await Notification.markAllAsRead(userId);
-
-            Logger.info("All notifications marked as read:", {
-                userId,
-                modifiedCount: result.modifiedCount,
-            });
 
             return result;
         } catch (error) {
@@ -279,11 +238,6 @@ class NotificationService {
 
             await notification.deleteOne();
 
-            Logger.info("Notification deleted:", {
-                notificationId,
-                deletedBy: userId,
-            });
-
             return true;
         } catch (error) {
             Logger.error("Error deleting notification:", error);
@@ -295,10 +249,6 @@ class NotificationService {
     static async cleanExpiredNotifications() {
         try {
             const result = await Notification.cleanExpired();
-
-            Logger.info("Expired notifications cleaned:", {
-                deletedCount: result.deletedCount,
-            });
 
             return result;
         } catch (error) {
@@ -324,11 +274,6 @@ class NotificationService {
 
             if (notifications.length > 0) {
                 await Notification.insertMany(notifications);
-
-                Logger.info("Broadcast notification sent:", {
-                    title: notificationData.title,
-                    recipientCount: notifications.length,
-                });
             }
 
             return notifications;
@@ -346,12 +291,6 @@ class NotificationService {
                 targetUsers: [userId],
             });
             await notification.save();
-
-            Logger.info("Notification sent to user:", {
-                userId,
-                title: notification.title,
-            });
-
             return notification;
         } catch (error) {
             Logger.error("Error sending notification to user:", error);
@@ -367,12 +306,6 @@ class NotificationService {
                 targetRoles: [role],
             });
             await notification.save();
-
-            Logger.info("Notification sent to role:", {
-                role,
-                title: notification.title,
-            });
-
             return notification;
         } catch (error) {
             Logger.error("Error sending notification to role:", error);
@@ -388,12 +321,6 @@ class NotificationService {
                 targetPermissions: [permission],
             });
             await notification.save();
-
-            Logger.info("Notification sent to permission:", {
-                permission,
-                title: notification.title,
-            });
-
             return notification;
         } catch (error) {
             Logger.error("Error sending notification to permission:", error);

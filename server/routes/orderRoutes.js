@@ -11,6 +11,8 @@ import {
     updateOrderItemPrepared,
     getTodayOrdersStats,
     deliverItem,
+    updateOrder,
+    deleteOrder,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
 import { validateOrder, validateRequest } from "../middleware/validation.js";
@@ -30,6 +32,12 @@ router.get(
     getTodayOrdersStats
 );
 router.get("/:id", authorize("cafe", "menu", "all"), getOrder);
+
+// إضافة مسار حذف الطلب
+router.delete("/:id", authorize("cafe", "menu", "all"), deleteOrder);
+
+// إضافة مسار تحديث الطلبات
+router.patch("/:id", authorize("cafe", "menu", "all"), updateOrder);
 
 // Create order (cafe and menu permissions)
 router.post(

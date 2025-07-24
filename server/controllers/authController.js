@@ -22,8 +22,7 @@ const generateRefreshToken = (id) => {
 // دالة لتوحيد البريد الإلكتروني (إزالة النقاط من الجزء الأول)
 function normalizeEmail(email) {
     if (!email) return "";
-    const [local, domain] = email.toLowerCase().trim().split("@");
-    return local.replace(/\./g, "") + "@" + domain;
+    return email.toLowerCase().trim();
 }
 
 // @desc    Register user
@@ -67,15 +66,60 @@ export const register = async (req, res) => {
             });
             user.organization = organization._id;
             await user.save();
+            // إضافة اشتراك وهمي تلقائي للمنشأة الجديدة
+            await Subscription.create({
+                organization: organization._id,
+                plan: "yearly",
+                status: "active",
+                startDate: new Date(),
+                endDate: new Date(2099, 0, 1),
+                paymentMethod: "manual",
+                paymentRef: "dummy",
+                createdAt: new Date(),
+            });
         } else {
+            // إذا لم يتم تمرير organization، اربطه بنفس منشأة المستخدم الحالي (المدير)
+            let orgId = req.body.organization;
+            if (!orgId && req.user && req.user.organization) {
+                orgId = req.user.organization;
+            }
+            // لا يسمح بإضافة مستخدم بدور owner من لوحة المدير
+            let safeRole = role;
+            if (role === "owner") {
+                safeRole = "staff";
+            }
+            // توزيع الصلاحيات تلقائيًا حسب الدور
+            let autoPermissions = [];
+            if ((safeRole || "staff") === "admin") {
+                autoPermissions = ["all"];
+            } else if ((safeRole || "staff") === "staff") {
+                autoPermissions = [
+                    "playstation",
+                    "computer",
+                    "cafe",
+                    "menu",
+                    "billing",
+                    "reports",
+                    "inventory",
+                    "costs",
+                ];
+            } else if ((safeRole || "staff") === "cashier") {
+                autoPermissions = ["billing", "cafe"];
+            } else if ((safeRole || "staff") === "kitchen") {
+                autoPermissions = ["cafe"];
+            }
             user = await User.create({
                 name,
                 email: normalizedEmail,
                 password,
-                role: role || "staff",
-                permissions: permissions || [],
+                role: safeRole || "staff",
+                permissions:
+                    permissions && permissions.length > 0
+                        ? permissions
+                        : autoPermissions,
                 status: "pending",
                 verificationToken,
+                organization: orgId,
             });
         }
         // إرسال إيميل التفعيل
@@ -125,21 +169,20 @@ export const login = async (req, res) => {
             "+password"
         );
         if (!user) {
-            return res
-                .status(401)
-                .json({ success: false, message: "بيانات الدخول غير صحيحة" });
+            const msg = { success: false, message: "بيانات الدخول غير صحيحة" };
+            return res.status(401).json(msg);
         }
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
-            return res
-                .status(401)
-                .json({ success: false, message: "بيانات الدخول غير صحيحة" });
+            const msg = { success: false, message: "بيانات الدخول غير صحيحة" };
+            return res.status(401).json(msg);
         }
         if (user.status !== "active") {
-            return res.status(401).json({
+            const msg = {
                 success: false,
                 message: "الحساب غير مفعل. يرجى تفعيل بريدك الإلكتروني أولاً.",
-            });
+            };
+            return res.status(401).json(msg);
         }
         await user.updateLastLogin();
         const token = generateToken(user._id);
@@ -228,6 +271,12 @@ export const refreshToken = async (req, res) => {
 // @access  Private
 export const logout = async (req, res) => {
     try {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: "يجب تسجيل الدخول أولاً",
+            });
+        }
         // Clear refresh token
         req.user.refreshToken = null;
         await req.user.save({ validateBeforeSave: false });
@@ -256,9 +305,7 @@ export const getMe = async (req, res) => {
             authHeader && authHeader.startsWith("Bearer ")
                 ? authHeader.split(" ")[1]
                 : null;
-        console.log("[GET_ME][TOKEN]", token);
         if (!token) {
-            console.log("[GET_ME][NO_TOKEN]");
             return res
                 .status(401)
                 .json({ success: false, message: "توكن مفقود" });
@@ -268,26 +315,17 @@ export const getMe = async (req, res) => {
         try {
             decoded = jwt.verify(token, process.env.JWT_SECRET);
         } catch (err) {
-            console.log("[GET_ME][INVALID_TOKEN]", err.message);
-            return res
-                .status(401)
-                .json({
-                    success: false,
-                    message: "توكن غير صالح أو منتهي الصلاحية",
-                });
+            return res.status(401).json({
+                success: false,
+                message: "توكن غير صالح أو منتهي الصلاحية",
+            });
         }
         const user = await User.findById(decoded.id);
         if (!user) {
-            console.log("[GET_ME][USER_NOT_FOUND]", decoded.id);
             return res
                 .status(401)
                 .json({ success: false, message: "المستخدم غير موجود" });
         }
-        console.log("[GET_ME][USER]", {
-            id: user._id,
-            email: user.email,
-            status: user.status,
-        });
         res.json({
             success: true,
             data: {
@@ -304,7 +342,6 @@ export const getMe = async (req, res) => {
             },
         });
     } catch (error) {
-        console.log("[GET_ME][ERROR]", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب بيانات المستخدم",
@@ -352,15 +389,9 @@ export const updatePassword = async (req, res) => {
 // @route   GET /api/auth/verify-email?token=...
 // @access  Public
 export const verifyEmail = async (req, res) => {
-    console.log("[VERIFY][REQUEST]", {
-        query: req.query,
-        ip: req.ip,
-        headers: req.headers,
-    });
     try {
         const { token } = req.query;
         if (!token) {
-            console.log("[VERIFY][NO_TOKEN]");
             return res
                 .status(400)
                 .json({ success: false, message: "رمز التفعيل مفقود" });
@@ -374,33 +405,19 @@ export const verifyEmail = async (req, res) => {
                 status: "pending",
                 verificationToken: { $ne: null },
             }).select("email verificationToken");
-            console.log("[VERIFY][NOT_FOUND]", { token, pendingUsers });
             return res.status(400).json({
                 success: false,
                 message: "رابط التفعيل غير صالح أو الحساب مفعل بالفعل",
             });
         }
-        console.log("[VERIFY][FOUND_USER_BEFORE]", {
-            id: user._id,
-            email: user.email,
-            status: user.status,
-            verificationToken: user.verificationToken,
-        });
         user.status = "active";
         user.verificationToken = undefined;
         await user.save();
-        console.log("[VERIFY][AFTER]", {
-            id: user._id,
-            email: user.email,
-            status: user.status,
-            verificationToken: user.verificationToken,
-        });
         return res.json({
             success: true,
             message: "تم تفعيل الحساب بنجاح. يمكنك الآن تسجيل الدخول.",
         });
     } catch (error) {
-        console.log("[VERIFY][ERROR]", error);
         res.status(500).json({
             success: false,
             message: "خطأ أثناء تفعيل الحساب",

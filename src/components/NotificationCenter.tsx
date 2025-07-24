@@ -161,16 +161,18 @@ const NotificationCenter: React.FC = () => {
   const loadStats = async () => {
     try {
       const data = await getNotificationStats();
-      setStats(data);
-
-      // Update badge count from stats
-      if (data && data.unread) {
-        // setUnreadCount(data.unread); // This line was removed as per the edit hint
+      // تأكيد النوع
+      if (data && typeof data === 'object' && 'total' in data && 'unread' in data) {
+        setStats(data as { total: number; unread: number });
+        // Update badge count from stats
         const badge = document.querySelector('.notification-badge') as HTMLElement;
+        const unread = (data as { unread: number }).unread;
         if (badge) {
-          badge.textContent = data.unread > 99 ? '99+' : data.unread.toString();
-          badge.style.display = data.unread > 0 ? 'flex' : 'none';
+          badge.textContent = unread > 99 ? '99+' : unread.toString();
+          badge.style.display = unread > 0 ? 'flex' : 'none';
         }
+      } else {
+        setStats(null);
       }
     } catch (error) {
       console.error('Error loading notification stats:', error);
@@ -186,22 +188,7 @@ const NotificationCenter: React.FC = () => {
     try {
       const success = await markNotificationAsRead(notificationId);
       if (success) {
-        // setNotifications(prev => // This line was removed as per the edit hint
-        //   prev.map(notification => // This line was removed as per the edit hint
-        //     notification.id === notificationId
-        //       ? { ...notification, readBy: [...notification.readBy, { user: user?.id || '', readAt: new Date().toISOString() }] }
-        //       : notification
-        //   )
-        // );
-        // loadStats(); // This line was removed as per the edit hint
-        // Update badge count immediately
-        const newCount = Math.max(0, unreadCount - 1);
-        // setUnreadCount(newCount); // This line was removed as per the edit hint
-        const badge = document.querySelector('.notification-badge') as HTMLElement;
-        if (badge) {
-          badge.textContent = newCount > 99 ? '99+' : newCount.toString();
-          badge.style.display = newCount > 0 ? 'flex' : 'none';
-        }
+        await forceRefreshNotifications(); // تحديث الإشعارات فوراً بعد تحديد إشعار كمقروء
       }
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -226,14 +213,8 @@ const NotificationCenter: React.FC = () => {
   const handleMarkAllAsRead = async () => {
     try {
       await markAllNotificationsAsRead();
-      // setNotifications(prev => // This line was removed as per the edit hint
-      //   prev.map(notification => ({ // This line was removed as per the edit hint
-      //     ...notification,
-      //     readBy: [...notification.readBy, { user: user?.id || '', readAt: new Date().toISOString() }]
-      //   }))
-      // );
-      // loadStats(); // This line was removed as per the edit hint
-      // احذف أي رسالة alert
+      await forceRefreshNotifications(); // تحديث الإشعارات فوراً بعد تحديد الكل كمقروء
+      await loadStats(); // تحديث الإحصائيات فوراً
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }

@@ -258,7 +258,6 @@ export const initializeScheduler = () => {
     cron.schedule("0 3 * * *", async () => {
         try {
             await NotificationService.cleanExpiredNotifications();
-            Logger.info("✅ Expired notifications cleaned");
         } catch (error) {
             Logger.error("❌ Failed to clean expired notifications:", error);
         }
@@ -266,8 +265,6 @@ export const initializeScheduler = () => {
 
     // Schedule subscription expiry notifications
     scheduleSubscriptionExpiryNotifications();
-
-    Logger.info("All scheduled tasks initialized");
 };
 
 // Manual task execution (for testing)

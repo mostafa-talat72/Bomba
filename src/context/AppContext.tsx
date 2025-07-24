@@ -2,6 +2,23 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useRe
 import api, { User, Session, Order, InventoryItem, Bill, Cost, Device, MenuItem, BillItem } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
+// تعريف Notification (مأخوذ من NotificationCenter)
+interface Notification {
+  _id: string;
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error' | 'session' | 'order' | 'inventory' | 'billing' | 'system';
+  category: 'session' | 'order' | 'inventory' | 'billing' | 'system' | 'security' | 'backup';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  actionRequired: boolean;
+  actionUrl?: string;
+  actionText?: string;
+  createdAt: string;
+  readBy: Array<{ user: string; readAt: string }>;
+  createdBy: { name: string };
+}
+
 interface NotificationType {
   message: string;
   type: 'success' | 'error' | 'warning' | 'info';
@@ -105,8 +122,8 @@ interface AppContextType {
   getFinancialReport: (period?: string) => Promise<any>;
 
   // Notification methods
-  getNotifications: (options?: { category?: string; unreadOnly?: boolean; limit?: number }) => Promise<any[]>;
-  getNotificationStats: () => Promise<any>;
+  getNotifications: (options?: { category?: string; unreadOnly?: boolean; limit?: number }) => Promise<Notification[]>;
+  getNotificationStats: () => Promise<unknown>;
   markNotificationAsRead: (notificationId: string) => Promise<boolean>;
   markAllNotificationsAsRead: () => Promise<boolean>;
   deleteNotification: (notificationId: string) => Promise<boolean>;
@@ -199,9 +216,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // جلب الجلسات النشطة بشكل لحظي
+  // تحقق من صلاحية مشاهدة الجلسات
+  const canViewSessions = user && user.permissions && (
+    user.permissions.includes('playstation') ||
+    user.permissions.includes('computer') ||
+    user.permissions.includes('all')
+  );
+
+  // جلب الجلسات النشطة بشكل لحظي فقط إذا كان لديه الصلاحية
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (!canViewSessions) return;
     let interval: ReturnType<typeof setInterval>;
     const fetchActiveSessions = async () => {
       await fetchSessions();
@@ -209,7 +234,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchActiveSessions();
     interval = setInterval(fetchActiveSessions, 5000); // كل 5 ثوانٍ
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, canViewSessions]);
 
   useEffect(() => {
     const fetchSubscription = async () => {
@@ -300,9 +325,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Auth methods
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      console.log('[LOGIN][FRONTEND] محاولة تسجيل الدخول:', email);
       const response = await api.login(email, password);
-      console.log('[LOGIN][FRONTEND] رد السيرفر:', response);
       const user = response.data?.user;
       const token = response.data?.token;
       if (response.success && user && token) {
@@ -318,26 +341,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         return { success: true };
       }
+      // عرض رسالة الخطأ الحقيقية القادمة من السيرفر
+      showNotification(response.message || 'بيانات الدخول غير صحيحة', 'error');
       return { success: false, message: response.message || 'بيانات الدخول غير صحيحة' };
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تسجيل الدخول', 'error');
-      return { success: false, message: error.message || 'فشل في تسجيل الدخول' };
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تسجيل الدخول', 'error');
+      return { success: false, message: err.message || 'فشل في تسجيل الدخول' };
     }
   };
 
   const logout = async (): Promise<void> => {
-    try {
-      await api.logout();
-    } finally {
-      setUser(null);
-      setIsAuthenticated(false);
-      setSessions([]);
-      setOrders([]);
-      setInventory([]);
-      setBills([]);
-      setCosts([]);
-      showNotification('تم تسجيل الخروج بنجاح', 'info');
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        await api.logout();
+      } catch {
+        // تجاهل أي خطأ (401 أو غيره)
+      }
     }
+    setUser(null);
+    setIsAuthenticated(false);
+    setSessions([]);
+    setOrders([]);
+    setInventory([]);
+    setBills([]);
+    setCosts([]);
+    showNotification('تم تسجيل الخروج بنجاح', 'info');
   };
 
   // Data fetching methods
@@ -346,9 +376,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getActiveSessions();
       if (response.success && response.data) {
         setSessions(response.data);
+      } else {
+        // إذا لم يكن لديه صلاحية أو فشل الطلب، لا تعرض أي إشعار
+        setSessions([]);
       }
-    } catch (error) {
-      console.error('Failed to fetch active sessions:', error);
+    } catch {
+      // تجاهل أي خطأ (خاصة 403) ولا تعرض أي إشعار
+      setSessions([]);
     }
   };
 
@@ -474,8 +508,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return session;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إنشاء الجلسة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إنشاء الجلسة', 'error');
       return null;
     }
   };
@@ -491,8 +526,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث الجلسة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث الجلسة', 'error');
       return null;
     }
   };
@@ -520,8 +556,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return session;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إنهاء الجلسة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إنهاء الجلسة', 'error');
       return null;
     }
   };
@@ -557,9 +594,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         showNotification(errorMessage, 'error');
         return null;
       }
-    } catch (error: any) {
-      const errorMessage = error.message || 'فشل في إنشاء الطلب';
-      showNotification(errorMessage, 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إنشاء الطلب', 'error');
       return null;
     }
   };
@@ -575,8 +612,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث الطلب', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث الطلب', 'error');
       return null;
     }
   };
@@ -593,8 +631,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث حالة التجهيز', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث حالة التجهيز', 'error');
       return null;
     }
   };
@@ -618,8 +657,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث حالة الطلب', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث حالة الطلب', 'error');
       return null;
     }
   };
@@ -633,8 +673,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return true;
       }
       return false;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في حذف الطلب', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في حذف الطلب', 'error');
       return false;
     }
   };
@@ -650,8 +691,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إضافة المنتج', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إضافة المنتج', 'error');
       return null;
     }
   };
@@ -667,8 +709,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث المنتج', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث المنتج', 'error');
       return null;
     }
   };
@@ -687,8 +730,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث المخزون', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث المخزون', 'error');
       return null;
     }
   };
@@ -704,8 +748,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إنشاء الفاتورة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إنشاء الفاتورة', 'error');
       return null;
     }
   };
@@ -721,8 +766,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث الفاتورة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث الفاتورة', 'error');
       return null;
     }
   };
@@ -740,8 +786,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إضافة الدفعة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إضافة الدفعة', 'error');
       return null;
     }
   };
@@ -764,8 +811,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         return false;
       }
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إلغاء الفاتورة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إلغاء الفاتورة', 'error');
       return false;
     }
   };
@@ -790,8 +838,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تسجيل الدفع الجزئي', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تسجيل الدفع الجزئي', 'error');
       return null;
     }
   };
@@ -807,8 +856,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إضافة التكلفة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إضافة التكلفة', 'error');
       return null;
     }
   };
@@ -824,8 +874,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث التكلفة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث التكلفة', 'error');
       return null;
     }
   };
@@ -839,8 +890,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return true;
       }
       return false;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في حذف التكلفة', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في حذف التكلفة', 'error');
       return false;
     }
   };
@@ -856,8 +908,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إضافة الجهاز', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إضافة الجهاز', 'error');
       return null;
     }
   };
@@ -873,8 +926,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث الجهاز', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث الجهاز', 'error');
       return null;
     }
   };
@@ -890,8 +944,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث حالة الجهاز', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث حالة الجهاز', 'error');
       return null;
     }
   };
@@ -905,8 +960,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return true;
       }
       return false;
-    } catch (error: any) {
-      showNotification(error.message || 'خطأ في حذف الجهاز', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في حذف الجهاز', 'error');
       return false;
     }
   };
@@ -931,8 +987,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'خطأ في إضافة العنصر', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في إضافة العنصر', 'error');
       return null;
     }
   };
@@ -946,8 +1003,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'خطأ في تحديث العنصر', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في تحديث العنصر', 'error');
       return null;
     }
   };
@@ -961,8 +1019,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return true;
       }
       return false;
-    } catch (error: any) {
-      showNotification(error.message || 'خطأ في حذف العنصر', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في حذف العنصر', 'error');
       return false;
     }
   };
@@ -1015,8 +1074,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       showNotification(response.message || 'فشل في إضافة المستخدم', 'error');
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إضافة المستخدم', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إضافة المستخدم', 'error');
       return null;
     }
   };
@@ -1031,8 +1091,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       showNotification(response.message || 'فشل في تحديث المستخدم', 'error');
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في تحديث المستخدم', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تحديث المستخدم', 'error');
       return null;
     }
   };
@@ -1047,8 +1108,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       showNotification(response.message || 'فشل في حذف المستخدم', 'error');
       return false;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في حذف المستخدم', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في حذف المستخدم', 'error');
       return false;
     }
   };
@@ -1131,7 +1193,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Notification methods
-  const getNotifications = async (options?: { category?: string; unreadOnly?: boolean; limit?: number }): Promise<any[]> => {
+  const getNotifications = async (options?: { category?: string; unreadOnly?: boolean; limit?: number }): Promise<Notification[]> => {
     try {
       const response = await api.getNotifications(options);
       return response.success && response.data ? response.data : [];
@@ -1141,12 +1203,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // دالة تجبر تحديث notifications في الـcontext (مثلاً عند فتح نافذة الإشعارات)
-  const forceRefreshNotifications = async () => {
+  const forceRefreshNotifications = async (): Promise<void> => {
     const notifs = await getNotifications({ limit: 100 });
     setNotifications(notifs);
   };
 
-  const getNotificationStats = async (): Promise<any> => {
+  const getNotificationStats = async (): Promise<unknown> => {
     try {
       const response = await api.getNotificationStats();
       return response.success ? response.data : null;
@@ -1159,8 +1221,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await api.markNotificationAsRead(notificationId);
       if (response.success) {
-        // Update notification count in real-time
-        updateNotificationCount();
         // تحديث notifications فوراً
         const notifs = await getNotifications({ limit: 100 });
         setNotifications(notifs);
@@ -1175,7 +1235,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await api.markAllNotificationsAsRead();
       if (response.success) {
-        updateNotificationCount();
         // تحديث notifications فوراً
         const notifs = await getNotifications({ limit: 100 });
         setNotifications(notifs);
@@ -1190,8 +1249,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await api.deleteNotification(notificationId);
       if (response.success) {
-        // Update notification count in real-time if notification was unread
-        updateNotificationCount(-1);
+        // تحديث notifications فوراً بعد الحذف
+        const notifs = await getNotifications({ limit: 100 });
+        setNotifications(notifs);
       }
       return response.success;
     } catch (error) {
@@ -1210,8 +1270,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إنشاء الإشعار', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إنشاء الإشعار', 'error');
       return null;
     }
   };
@@ -1225,8 +1286,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إرسال الإشعار', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إرسال الإشعار', 'error');
       return null;
     }
   };
@@ -1240,8 +1302,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إرسال الإشعار', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إرسال الإشعار', 'error');
       return null;
     }
   };
@@ -1255,8 +1318,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       return null;
-    } catch (error: any) {
-      showNotification(error.message || 'فشل في إرسال الإشعار', 'error');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في إرسال الإشعار', 'error');
       return null;
     }
   };

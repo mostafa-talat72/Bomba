@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingCart, Plus, Edit, Trash2, Clock, CheckCircle, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MenuItem } from '../services/api';
-import { api } from '../services/api';
+import { api, cancelOrder } from '../services/api';
 
 interface LocalOrderItem {
   menuItem: string;
@@ -18,7 +18,10 @@ const Cafe: React.FC = () => {
   const {
     menuItems,
     fetchMenuItems,
-    showNotification
+    showNotification,
+    user,
+    updateOrder,
+    cancelOrder
   } = useApp();
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -1065,6 +1068,41 @@ const Cafe: React.FC = () => {
     }
   };
 
+  // أضف الدالتين داخل مكون Cafe
+  const handleEditOrder = (order: any) => {
+    setSelectedOrder(order);
+    setShowOrderDetails(true);
+    // يمكن لاحقاً تفعيل وضع التعديل في نافذة التفاصيل
+  };
+
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<any>(null);
+
+  const handleCancelOrder = (order: any) => {
+    setOrderToCancel(order);
+    setShowCancelModal(true);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!orderToCancel) return;
+    try {
+      const response = await api.cancelOrder(orderToCancel._id);
+      if (response && response.success) {
+        showNotification('تم إلغاء الطلب بنجاح', 'success');
+        setShowCancelModal(false);
+        setOrderToCancel(null);
+        setPendingOrders(prev => prev.filter(o => o._id !== orderToCancel._id));
+        setReadyOrders(prev => prev.filter(o => o._id !== orderToCancel._id));
+      }
+    } catch (err) {
+      console.log("CANCEL ERROR:", err); // طباعة الخطأ
+      showNotification('حدث خطأ أثناء إلغاء الطلب', 'error');
+    }
+  };
+
+  const [showEditOrder, setShowEditOrder] = useState(false);
+  const [editOrderData, setEditOrderData] = useState<any>(null);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1170,8 +1208,50 @@ const Cafe: React.FC = () => {
               {incompleteOrders.map((order) => (
                 <div
                   key={order._id}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200"
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 relative pt-8"
                 >
+                  {/* زر الإلغاء أعلى الكارت */}
+                  {(
+                    (user && user.role === 'admin') ||
+                    (user && user.role === 'staff' && order.status !== 'preparing')
+                  ) && (
+                    <>
+                      <button
+                        onClick={() => handleCancelOrder(order)}
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-red-100 hover:bg-red-200 text-red-600 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-2 z-10"
+                        title="إلغاء الطلب"
+                      >
+                        ×
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditOrderData({
+                            ...order,
+                            items: order.items.map(item => {
+                              let menuItemId = item.menuItem;
+                              if (typeof menuItemId === 'object' && menuItemId !== null && menuItemId._id) {
+                                menuItemId = menuItemId._id;
+                              }
+                              const found = menuItems.find(m =>
+                                (menuItemId && (String(m._id) === String(menuItemId) || String(m.id) === String(menuItemId))) ||
+                                (!menuItemId && m.name === item.name)
+                              );
+                              return {
+                                ...item,
+                                menuItem: found ? String(found._id) : (menuItemId ? String(menuItemId) : undefined),
+                                name: found ? found.name : item.name
+                              };
+                            })
+                          });
+                          setShowEditOrder(true);
+                        }}
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-yellow-100 hover:bg-yellow-200 text-yellow-700 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-12 z-10"
+                        title="تعديل الطلب"
+                      >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-1.414.828l-4.243 1.414 1.414-4.243a4 4 0 01.828-1.414z" /></svg>
+                      </button>
+                    </>
+                  )}
                   {/* Header */}
                   <div className="p-4 border-b border-gray-100">
                     <div className="flex items-center justify-between mb-2">
@@ -1222,10 +1302,10 @@ const Cafe: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Footer - أزرار التجهيز */}
-                  <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-lg">
+                  {/* Footer - أزرار التجهيز وأزرار التحكم */}
+                  <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-lg flex flex-col gap-2">
+                    {/* أزرار التجهيز */}
                     {order.status === 'preparing' ? (
-                      // حالة التجهيز - إظهار زر "تم التجهيز"
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1237,14 +1317,12 @@ const Cafe: React.FC = () => {
                         تم التجهيز
                       </button>
                     ) : (
-                      // الحالة العادية - إظهار زر "بدء التجهيز"
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
                           try {
                             const response = await api.updateOrderStatus(order._id, 'preparing');
                             if (response && response.success) {
-                              // تحديث حالة الطلب محلياً ليظهر الزر فوراً
                               setPendingOrders(prevOrders => prevOrders.map(o =>
                                 o._id === order._id ? { ...o, status: 'preparing' } : o
                               ));
@@ -1261,6 +1339,7 @@ const Cafe: React.FC = () => {
                         بدء التجهيز
                       </button>
                     )}
+
                   </div>
                 </div>
               ))}
@@ -1801,6 +1880,228 @@ const Cafe: React.FC = () => {
                   تحديث
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative text-center">
+            <button
+              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+              onClick={() => setShowCancelModal(false)}
+            >×</button>
+            <h2 className="text-xl font-bold mb-4">تأكيد إلغاء الطلب</h2>
+            <p className="mb-6">هل أنت متأكد أنك تريد إلغاء الطلب رقم <span className="font-bold text-red-600">#{orderToCancel?.orderNumber}</span>؟</p>
+            <div className="flex gap-4 justify-center">
+              <button
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-bold"
+                onClick={() => setShowCancelModal(false)}
+              >تراجع</button>
+              <button
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold"
+                onClick={confirmCancelOrder}
+              >تأكيد الإلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditOrder && editOrderData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">تعديل الطلب #{editOrderData.orderNumber}</h3>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Menu Items for Order */}
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-4">اختر من القائمة</h4>
+                  {/* فلتر الفئة */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">الفئة</label>
+                    <select
+                      value={selectedCategory}
+                      onChange={e => setSelectedCategory(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="all">جميع الفئات</option>
+                      {categories.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {loading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                      <p className="mt-2 text-gray-600">جاري تحميل القائمة...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {categories
+                        .filter(category => selectedCategory === 'all' || category === selectedCategory)
+                        .map(category => (
+                          <div key={category}>
+                            <h5 className="font-medium text-gray-700 mb-2">{category}</h5>
+                            <div className="space-y-2">
+                              {(menuItemsByCategory[category] || []).filter(item => item.isAvailable).map(item => (
+                                <button
+                                  key={item.id || item._id}
+                                  onClick={() => {
+                                    const menuItemId = item._id || item.id;
+                                    const existingIndex = editOrderData.items.findIndex(
+                                      (i) =>
+                                        (i.menuItem && String(i.menuItem) === String(menuItemId)) ||
+                                        (!i.menuItem && i.name === item.name)
+                                    );
+                                    if (existingIndex !== -1) {
+                                      const items = [...editOrderData.items];
+                                      items[existingIndex].quantity += 1;
+                                      setEditOrderData({ ...editOrderData, items });
+                                    } else {
+                                      const items = [
+                                        ...editOrderData.items,
+                                        {
+                                          menuItem: String(menuItemId),
+                                          name: item.name,
+                                          price: item.price,
+                                          quantity: 1,
+                                          notes: ''
+                                        }
+                                      ];
+                                      setEditOrderData({ ...editOrderData, items });
+                                    }
+                                  }}
+                                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                                >
+                                  <span className="text-gray-900">{item.name}</span>
+                                  <span className="text-gray-600">{item.price} ج.م</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Order Details */}
+                <div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">اسم العميل</label>
+                    <input
+                      type="text"
+                      value={editOrderData.customerName || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-100"
+                      readOnly
+                    />
+                  </div>
+                  <h4 className="font-medium text-gray-900 mb-4">تفاصيل الطلب</h4>
+                  <div className="space-y-3">
+                    {editOrderData.items.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">لا توجد عناصر في الطلب</p>
+                    ) : (
+                      editOrderData.items.map((item, index) => (
+                        <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-gray-900">{item.name}</span>
+                            <button
+                              onClick={() => {
+                                const items = editOrderData.items.filter((_, i) => i !== index);
+                                setEditOrderData({ ...editOrderData, items });
+                              }}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                            <button
+                              onClick={() => {
+                                const items = [...editOrderData.items];
+                                if (items[index].quantity > 1) items[index].quantity -= 1;
+                                setEditOrderData({ ...editOrderData, items });
+                              }}
+                              className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                            >
+                              -
+                            </button>
+                            <span className="w-8 text-center">{item.quantity}</span>
+                            <button
+                              onClick={() => {
+                                const items = [...editOrderData.items];
+                                items[index].quantity += 1;
+                                setEditOrderData({ ...editOrderData, items });
+                              }}
+                              className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                            >
+                              +
+                            </button>
+                            <span className="text-gray-600">{item.price} ج.م</span>
+                          </div>
+                          <div className="mb-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات هذا المشروب:</label>
+                            <textarea
+                              value={item.notes || ''}
+                              onChange={e => {
+                                const items = [...editOrderData.items];
+                                items[index].notes = e.target.value;
+                                setEditOrderData({ ...editOrderData, items });
+                              }}
+                              className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                              rows={1}
+                              placeholder="مثال: بدون سكر، مع حليب إضافي..."
+                            />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    {editOrderData.items.length > 0 && (
+                      <div className="border-t pt-3">
+                        <div className="flex justify-between items-center font-bold text-lg">
+                          <span>الإجمالي:</span>
+                          <span className="text-green-600">
+                            {editOrderData.items.reduce((total, item) => total + (item.price * item.quantity), 0).toFixed(2)} ج.م
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
+              <button
+                onClick={() => setShowEditOrder(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+              >إلغاء</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const updatedOrder = {
+                      customerName: editOrderData.customerName,
+                      notes: editOrderData.notes,
+                      items: editOrderData.items.map(item => ({
+                        menuItem: item.menuItem,
+                        name: item.name,
+                        price: item.price,
+                        quantity: item.quantity,
+                        notes: item.notes || ''
+                      }))
+                    };
+                    await updateOrder(editOrderData._id, updatedOrder);
+                    setShowEditOrder(false);
+                    setEditOrderData(null);
+                    fetchPendingOrders();
+                    fetchReadyOrders();
+                  } catch (err) {
+                    showNotification('حدث خطأ أثناء تحديث الطلب', 'error');
+                  }
+                }}
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200"
+              >حفظ التعديلات</button>
             </div>
           </div>
         </div>

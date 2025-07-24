@@ -178,11 +178,6 @@ const sessionController = {
                 // Verify the link was created successfully
                 if (!session.bill) {
                     Logger.error("❌ Session bill reference not set properly");
-                } else {
-                    Logger.info(
-                        "✅ Session bill reference set successfully:",
-                        session.bill
-                    );
                 }
             } catch (billError) {
                 Logger.error("❌ خطأ في إنشاء الفاتورة التلقائية:", billError);
@@ -284,7 +279,6 @@ const sessionController = {
     updateSessionCost: async (req, res) => {
         try {
             const { id } = req.params;
-            Logger.info("🔄 Updating session cost for ID:", id);
 
             const session = await Session.findOne({
                 _id: id,
@@ -313,18 +307,6 @@ const sessionController = {
             await session.calculateCost();
             await session.save();
 
-            Logger.info("💰 Session cost updated:", {
-                sessionId: session._id,
-                currentCost: session.finalCost,
-                totalCost: session.totalCost,
-                duration: session.startTime
-                    ? Math.floor(
-                          (new Date() - new Date(session.startTime)) /
-                              (1000 * 60)
-                      )
-                    : 0,
-            });
-
             // تحديث الفاتورة المرتبطة إذا وجدت
             let billUpdated = false;
             if (session.bill) {
@@ -334,11 +316,6 @@ const sessionController = {
                         await bill.calculateSubtotal();
                         await bill.save();
                         billUpdated = true;
-                        Logger.info("✅ Bill updated successfully:", {
-                            billId: bill._id,
-                            billNumber: bill.billNumber,
-                            newTotal: bill.total,
-                        });
                     }
                 } catch (billError) {
                     Logger.error("❌ Error updating bill:", billError);
@@ -375,7 +352,6 @@ const sessionController = {
     endSession: async (req, res) => {
         try {
             const { id } = req.params;
-            Logger.info("🔄 Ending session with ID:", id);
 
             const session = await Session.findOne({
                 _id: id,
@@ -400,27 +376,12 @@ const sessionController = {
                 });
             }
 
-            Logger.info("📊 Session before ending:", {
-                id: session._id,
-                deviceType: session.deviceType,
-                deviceName: session.deviceName,
-                startTime: session.startTime,
-                controllers: session.controllers,
-                controllersHistory: session.controllersHistory,
-            });
-
             // End session using the method
             session.endSession();
             session.updatedBy = req.user._id;
 
             await session.save();
             await session.populate(["createdBy", "updatedBy", "bill"], "name");
-
-            Logger.info("✅ Session ended successfully:", {
-                finalCost: session.finalCost,
-                totalCost: session.totalCost,
-                endTime: session.endTime,
-            });
 
             // Create notification for session end
             try {

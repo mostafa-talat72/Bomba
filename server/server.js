@@ -43,10 +43,8 @@ const fixUsernameIndex = async () => {
         try {
             // Try to drop the username index if it exists
             await db.collection("users").dropIndex("username_1");
-            Logger.info("✅ Username index removed successfully");
         } catch (indexError) {
             if (indexError.code === 26) {
-                Logger.info("ℹ️ Username index does not exist");
             } else {
                 Logger.warn(
                     "⚠️ Error removing username index:",
@@ -92,7 +90,7 @@ app.use(
     cors({
         origin: allowedOrigins,
         credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allowedHeaders: ["Content-Type", "Authorization"],
     })
 );
@@ -317,7 +315,6 @@ process.on("uncaughtException", (err) => {
         error: err.message,
         stack: err.stack,
     });
-    console.error("🚨 Uncaught Exception:", err);
     process.exit(1);
 });
 
@@ -327,7 +324,6 @@ process.on("unhandledRejection", (err) => {
         error: err.message,
         stack: err.stack,
     });
-    console.error("🚨 Unhandled Rejection:", err);
     server.close(() => {
         process.exit(1);
     });

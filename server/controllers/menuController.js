@@ -6,22 +6,6 @@ import {
 
 // Get all menu items with optional filtering
 export const getAllMenuItems = async (req, res) => {
-    // لوج تشخيصي
-    const authHeader = req.headers.authorization;
-    const token =
-        authHeader && authHeader.startsWith("Bearer")
-            ? authHeader.split(" ")[1]
-            : null;
-    console.log("[MENU][TOKEN]", token);
-    if (req.user) {
-        console.log("[MENU][USER]", {
-            id: req.user._id,
-            email: req.user.email,
-            organization: req.user.organization,
-        });
-    } else {
-        console.log("[MENU][NO_USER]");
-    }
     try {
         const {
             category,

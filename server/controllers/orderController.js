@@ -4,14 +4,13 @@ import MenuItem from "../models/MenuItem.js";
 import Bill from "../models/Bill.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
+import mongoose from "mongoose";
 
 // @desc    Get all orders
 // @route   GET /api/orders
 // @access  Private
 export const getOrders = async (req, res) => {
     try {
-        Logger.info("🔍 Getting orders with query:", req.query);
-
         const { status, tableNumber, page = 1, limit = 10, date } = req.query;
 
         const query = {};
@@ -31,8 +30,6 @@ export const getOrders = async (req, res) => {
             };
         }
 
-        Logger.info("🔍 Query:", query);
-
         const orders = await Order.find(query)
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
@@ -41,22 +38,6 @@ export const getOrders = async (req, res) => {
             .sort({ createdAt: -1 })
             .limit(limit * 1)
             .skip((page - 1) * limit);
-
-        Logger.info("📋 Found orders:", orders.length);
-        Logger.info("📋 Orders data:", orders);
-
-        // Log details of each order
-        orders.forEach((order, index) => {
-            Logger.info(`📋 Order ${index + 1}:`, {
-                _id: order._id,
-                orderNumber: order.orderNumber,
-                customerName: order.customerName,
-                itemsCount: order.items ? order.items.length : 0,
-                items: order.items,
-                status: order.status,
-                finalAmount: order.finalAmount,
-            });
-        });
 
         const total = await Order.countDocuments(query);
 
@@ -67,7 +48,6 @@ export const getOrders = async (req, res) => {
             data: orders,
         });
     } catch (error) {
-        Logger.error("❌ Error getting orders:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب الطلبات",
@@ -115,8 +95,6 @@ export const getOrder = async (req, res) => {
 // @access  Private
 export const createOrder = async (req, res) => {
     try {
-        Logger.info("📝 Creating new order with data:", req.body);
-
         const { tableNumber, customerName, customerPhone, items, notes, bill } =
             req.body;
 
@@ -189,25 +167,8 @@ export const createOrder = async (req, res) => {
             organization: req.user.organization,
         };
 
-        Logger.info("💰 Order totals calculated:", {
-            subtotal,
-            finalAmount: orderData.finalAmount,
-            itemsCount: processedItems.length,
-        });
-
-        Logger.info("📋 Processed items:", processedItems);
-        Logger.info("📄 Order data:", orderData);
-
-        const order = new Order(orderData);
-
         // Manual calculation as fallback
-        order.finalAmount = order.subtotal - (order.discount || 0);
-
-        Logger.info("💰 Final order amounts:", {
-            subtotal: order.subtotal,
-            discount: order.discount,
-            finalAmount: order.finalAmount,
-        });
+        orderData.finalAmount = orderData.subtotal - (orderData.discount || 0);
 
         // Generate order number manually
         const today = new Date();
@@ -226,25 +187,20 @@ export const createOrder = async (req, res) => {
                 ),
             },
         });
-        order.orderNumber = `ORD-${dateStr}-${String(count + 1).padStart(
+        orderData.orderNumber = `ORD-${dateStr}-${String(count + 1).padStart(
             3,
             "0"
         )}`;
 
-        Logger.info("🔢 Generated order number:", order.orderNumber);
-        Logger.info("💾 Saving order...");
+        const order = new Order(orderData);
 
         await order.save();
-
-        Logger.info("✅ Order saved successfully");
 
         // Populate the order with related data for response
         const populatedOrder = await Order.findById(order._id)
             .populate("createdBy", "name")
             .populate("bill")
             .populate("items.menuItem");
-
-        Logger.info("📋 Final populated order:", populatedOrder);
 
         // Add order to bill if bill exists
         if (bill) {
@@ -253,14 +209,12 @@ export const createOrder = async (req, res) => {
                 if (billDoc) {
                     billDoc.orders.push(order._id);
                     await billDoc.save();
-                    Logger.info("✅ Order added to bill:", billDoc.billNumber);
 
                     // Recalculate bill totals
                     await billDoc.calculateSubtotal();
-                    Logger.info("✅ Bill totals recalculated");
                 }
             } catch (error) {
-                Logger.error("❌ Error adding order to bill:", error);
+                //
             }
         }
 
@@ -272,10 +226,7 @@ export const createOrder = async (req, res) => {
                 req.user._id
             );
         } catch (notificationError) {
-            Logger.error(
-                "Failed to create order notification:",
-                notificationError
-            );
+            //
         }
 
         res.status(201).json({
@@ -284,8 +235,6 @@ export const createOrder = async (req, res) => {
             data: populatedOrder,
         });
     } catch (error) {
-        Logger.error("❌ Error creating order:", error);
-
         if (error.name === "ValidationError") {
             const errors = Object.values(error.errors).map((e) => e.message);
             return res.status(400).json({
@@ -308,7 +257,7 @@ export const createOrder = async (req, res) => {
 // @access  Private
 export const updateOrder = async (req, res) => {
     try {
-        const { status, notes, preparedBy, deliveredBy } = req.body;
+        const { status, notes, preparedBy, deliveredBy, items } = req.body;
 
         const order = await Order.findOne({
             _id: req.params.id,
@@ -325,7 +274,6 @@ export const updateOrder = async (req, res) => {
         // Update fields
         if (status) {
             order.status = status;
-
             if (status === "preparing" && preparedBy) {
                 order.preparedBy = preparedBy;
             } else if (status === "delivered" && deliveredBy) {
@@ -335,11 +283,93 @@ export const updateOrder = async (req, res) => {
 
         if (notes !== undefined) order.notes = notes;
 
+        // تحديث أصناف الطلب بالكامل (إضافة/تعديل/حذف)
+        if (Array.isArray(items)) {
+            // 1. تحديث أو إضافة الأصناف
+            for (let i = 0; i < items.length; i++) {
+                const updatedItem = items[i];
+                let orderItem = null;
+                if (updatedItem.menuItem) {
+                    orderItem = order.items.find(
+                        (item) =>
+                            item.menuItem?.toString() ===
+                            updatedItem.menuItem.toString()
+                    );
+                } else {
+                    orderItem = order.items.find(
+                        (item) => item.name === updatedItem.name
+                    );
+                }
+                if (orderItem) {
+                    // تحديث الكمية والملاحظات
+                    const newQuantity = Math.max(
+                        updatedItem.quantity,
+                        orderItem.preparedCount || 0
+                    );
+                    orderItem.quantity = newQuantity;
+                    orderItem.notes =
+                        updatedItem.notes !== undefined
+                            ? updatedItem.notes
+                            : orderItem.notes;
+                    orderItem.price = updatedItem.price;
+                    orderItem.name = updatedItem.name;
+                    orderItem.menuItem = updatedItem.menuItem;
+                    // أعد حساب itemTotal
+                    orderItem.itemTotal = orderItem.price * orderItem.quantity;
+                } else {
+                    // إضافة صنف جديد
+                    order.items.push({
+                        menuItem: updatedItem.menuItem,
+                        name: updatedItem.name,
+                        price: updatedItem.price,
+                        quantity: updatedItem.quantity,
+                        notes: updatedItem.notes || "",
+                        itemTotal: updatedItem.price * updatedItem.quantity,
+                    });
+                }
+            }
+            // 2. حذف الأصناف التي لم تعد موجودة في القائمة الجديدة
+            order.items = order.items.filter((item) => {
+                return items.some((updatedItem) => {
+                    if (updatedItem.menuItem) {
+                        return (
+                            item.menuItem?.toString() ===
+                            updatedItem.menuItem.toString()
+                        );
+                    } else {
+                        return item.name === updatedItem.name;
+                    }
+                });
+            });
+        }
+
+        // أعد حساب subtotal و finalAmount
+        if (order.items && order.items.length > 0) {
+            order.subtotal = order.items.reduce((total, item) => {
+                const itemTotal = item.price * item.quantity;
+                item.itemTotal = itemTotal;
+                return total + itemTotal;
+            }, 0);
+        } else {
+            order.subtotal = 0;
+        }
+        order.finalAmount = order.subtotal - (order.discount || 0);
+
         await order.save();
         await order.populate(
             ["createdBy", "preparedBy", "deliveredBy"],
             "name"
         );
+
+        // تحديث الفاتورة إذا كان الطلب مرتبطًا بفاتورة
+        if (order.bill) {
+            const Bill = (await import("../models/Bill.js")).default;
+            const billDoc = await Bill.findById(order.bill);
+            if (billDoc) {
+                await billDoc.calculateSubtotal();
+                await billDoc.save();
+            }
+        }
 
         // Notify via Socket.IO
         if (req.io) {
@@ -403,6 +433,19 @@ export const deleteOrder = async (req, res) => {
             }
         }
 
+        // Remove order from bill.orders if linked to a bill
+        if (order.bill) {
+            const Bill = (await import("../models/Bill.js")).default;
+            const orderIdStr = order._id.toString();
+            let billDoc = await Bill.findById(order.bill); // بدون populate
+            if (billDoc) {
+                billDoc.orders = billDoc.orders.filter(
+                    (id) => id.toString() !== orderIdStr
+                );
+                await billDoc.save();
+            }
+        }
+
         await order.deleteOne();
 
         res.json({
@@ -423,8 +466,6 @@ export const deleteOrder = async (req, res) => {
 // @access  Private
 export const getPendingOrders = async (req, res) => {
     try {
-        Logger.info("🔍 Getting pending orders...");
-
         const orders = await Order.find({
             status: { $in: ["pending", "preparing"] },
             organization: req.user.organization,
@@ -434,30 +475,12 @@ export const getPendingOrders = async (req, res) => {
             .populate("createdBy", "name")
             .sort({ createdAt: 1 });
 
-        Logger.info("📋 Found pending orders:", orders.length);
-
-        // Log details of each order
-        orders.forEach((order, index) => {
-            Logger.info(`📋 Order ${index + 1}:`, {
-                _id: order._id,
-                orderNumber: order.orderNumber,
-                customerName: order.customerName,
-                itemsCount: order.items ? order.items.length : 0,
-                items: order.items?.map((item) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                    preparedCount: item.preparedCount || 0,
-                })),
-            });
-        });
-
         res.json({
             success: true,
             data: orders,
             count: orders.length,
         });
     } catch (error) {
-        Logger.error("❌ Error getting pending orders:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب الطلبات المعلقة",
@@ -507,7 +530,6 @@ export const getOrderStats = async (req, res) => {
             },
         });
     } catch (error) {
-        Logger.error("❌ Error getting order stats:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب إحصائيات الطلبات",
@@ -548,7 +570,23 @@ export const cancelOrder = async (req, res) => {
                 ? `${order.notes}\nسبب الإلغاء: ${reason}`
                 : `سبب الإلغاء: ${reason}`;
         }
-
+        // إزالة ربط الطلب من الفاتورة وتحديث الفاتورة
+        if (order.bill) {
+            const Bill = (await import("../models/Bill.js")).default;
+            const billDoc = await Bill.findById(order.bill); // بدون populate
+            if (billDoc) {
+                await Bill.updateOne(
+                    { _id: order.bill },
+                    { $pull: { orders: order._id } }
+                );
+                const billDocAfter = await Bill.findById(order.bill);
+                if (billDocAfter) {
+                    await billDocAfter.calculateSubtotal();
+                    await billDocAfter.save();
+                }
+                order.bill = undefined;
+            }
+        }
         await order.save();
 
         res.json({
@@ -671,7 +709,6 @@ export const updateOrderStatus = async (req, res) => {
         if (status === "delivered" && order.status !== "delivered") {
             updateData.deliveredBy = req.user.id;
             updateData.deliveredTime = new Date();
-            Logger.info("🚚 Order status changed to delivered");
         }
 
         const updatedOrder = await Order.findByIdAndUpdate(id, updateData, {
@@ -686,12 +723,6 @@ export const updateOrderStatus = async (req, res) => {
 
         // التحقق من أن الأصناف تم تحديثها بشكل صحيح
         if (status === "delivered" && updatedOrder) {
-            Logger.info("✅ Order delivered successfully - verifying items:");
-            updatedOrder.items.forEach((item) => {
-                Logger.info(
-                    `📦 Item "${item.name}": preparedCount = ${item.preparedCount}`
-                );
-            });
         }
 
         // Create notification for order status change
@@ -710,10 +741,7 @@ export const updateOrderStatus = async (req, res) => {
                 );
             }
         } catch (notificationError) {
-            Logger.error(
-                "Failed to create order status notification:",
-                notificationError
-            );
+            //
         }
 
         res.json({
@@ -738,37 +766,21 @@ export const updateOrderItemPrepared = async (req, res) => {
         const { orderId, itemIndex } = req.params;
         const { preparedCount } = req.body;
 
-        Logger.info("🔄 Updating prepared count:", {
-            orderId,
-            itemIndex,
-            preparedCount,
-        });
-
         const order = await Order.findOne({
             _id: orderId,
             organization: req.user.organization,
         });
         if (!order) {
-            Logger.error("❌ Order not found:", orderId);
             return res
                 .status(404)
                 .json({ success: false, message: "الطلب غير موجود" });
         }
 
         if (!order.items[itemIndex]) {
-            Logger.error("❌ Item not found at index:", itemIndex);
             return res
                 .status(404)
                 .json({ success: false, message: "العنصر غير موجود في الطلب" });
         }
-
-        Logger.info("📋 Before update - Item:", {
-            name: order.items[itemIndex].name,
-            quantity: order.items[itemIndex].quantity,
-            preparedCount: order.items[itemIndex].preparedCount,
-            isReady: order.items[itemIndex].isReady,
-            wasEverReady: order.items[itemIndex].wasEverReady,
-        });
 
         // تحديث العدد الجاهز مع التأكد من عدم تجاوز الكمية المطلوبة
         const newPreparedCount = Math.max(
@@ -797,33 +809,15 @@ export const updateOrderItemPrepared = async (req, res) => {
             // إذا تم تجهيز جميع الأصناف بالكامل، الطلب أصبح ready
             order.status = "ready";
             order.actualReadyTime = new Date();
-            Logger.info(
-                "✅ Order status updated to ready (all items fully prepared)"
-            );
         } else if (anyItemsPrepared && order.status !== "preparing") {
             // إذا كان هناك أي صنف مجهز، الطلب أصبح preparing
             order.status = "preparing";
-            Logger.info(
-                "✅ Order status updated to preparing (some items prepared)"
-            );
         } else if (!anyItemsPrepared && order.status !== "pending") {
             // إذا لم تكن هناك أي أصناف مجهزة، الطلب أصبح pending
             order.status = "pending";
-            Logger.info(
-                "⚠ Order status updated to pending (no items prepared)"
-            );
         }
 
-        Logger.info("📋 After update - Item:", {
-            name: order.items[itemIndex].name,
-            quantity: order.items[itemIndex].quantity,
-            preparedCount: order.items[itemIndex].preparedCount,
-            isReady: order.items[itemIndex].isReady,
-            wasEverReady: order.items[itemIndex].wasEverReady,
-        });
-
         await order.save();
-        Logger.info("✅ Order saved successfully");
 
         // إعادة تحميل الطلب مع البيانات المحدثة
         const updatedOrder = await Order.findById(order._id)
@@ -835,25 +829,12 @@ export const updateOrderItemPrepared = async (req, res) => {
             .lean(); // استخدام lean() للحصول على كائن JavaScript عادي
 
         if (!updatedOrder) {
-            Logger.error("❌ Failed to reload updated order");
             return res.status(500).json({
                 success: false,
                 message: "خطأ في إعادة تحميل الطلب المحدث",
                 error: "Order not found after update",
             });
         }
-
-        Logger.info("📋 Updated order data:", {
-            orderNumber: updatedOrder.orderNumber,
-            itemsCount: updatedOrder.items?.length || 0,
-            items: updatedOrder.items?.map((item) => ({
-                name: item.name,
-                quantity: item.quantity,
-                preparedCount: item.preparedCount || 0,
-                isReady: item.isReady,
-                wasEverReady: item.wasEverReady,
-            })),
-        });
 
         // التحقق من حالة الطلب الكلية (بعد التحديث)
         const finalAllItemsReady = updatedOrder.items?.every(
@@ -870,14 +851,6 @@ export const updateOrderItemPrepared = async (req, res) => {
             (item) => item.isReady === true
         );
 
-        Logger.info("📋 Order overall status:", {
-            allItemsReady: finalAllItemsReady,
-            anyItemsPrepared: finalAnyItemsPrepared,
-            allItemsDelivered: finalAllItemsDelivered,
-            allItemsWereReady: finalAllItemsWereReady,
-            currentStatus: updatedOrder.status,
-        });
-
         return res.json({
             success: true,
             message: "تم تحديث حالة التجهيز بنجاح",
@@ -892,7 +865,6 @@ export const updateOrderItemPrepared = async (req, res) => {
             },
         });
     } catch (error) {
-        Logger.error("❌ Error updating preparedCount:", error);
         return res.status(500).json({
             success: false,
             message: "خطأ في تحديث حالة التجهيز",
@@ -906,8 +878,6 @@ export const updateOrderItemPrepared = async (req, res) => {
 // @access  Private
 export const getTodayOrdersStats = async (req, res) => {
     try {
-        Logger.info("📊 Getting today's orders statistics...");
-
         // Get today's date range
         const today = new Date();
         const startOfDay = new Date(
@@ -921,8 +891,6 @@ export const getTodayOrdersStats = async (req, res) => {
             today.getDate() + 1
         );
 
-        Logger.info("📅 Date range:", { startOfDay, endOfDay });
-
         // Get all orders created today
         const todayOrders = await Order.find({
             createdAt: {
@@ -932,13 +900,15 @@ export const getTodayOrdersStats = async (req, res) => {
             organization: req.user.organization,
         }).select("finalAmount totalAmount status createdAt");
 
-        Logger.info("📋 Found today's orders:", todayOrders.length);
-
         // Calculate statistics
         const totalOrders = todayOrders.length;
-        const totalSales = todayOrders.reduce((sum, order) => {
-            return sum + (order.finalAmount || order.totalAmount || 0);
-        }, 0);
+        const totalSales = todayOrders
+            .filter((order) => order.status !== "cancelled")
+            .reduce(
+                (sum, order) =>
+                    sum + (order.finalAmount || order.totalAmount || 0),
+                0
+            );
 
         // Group by status
         const ordersByStatus = todayOrders.reduce((acc, order) => {
@@ -951,12 +921,6 @@ export const getTodayOrdersStats = async (req, res) => {
             return acc;
         }, {});
 
-        Logger.info("📊 Today's statistics:", {
-            totalOrders,
-            totalSales,
-            ordersByStatus,
-        });
-
         res.json({
             success: true,
             data: {
@@ -967,7 +931,6 @@ export const getTodayOrdersStats = async (req, res) => {
             },
         });
     } catch (error) {
-        Logger.error("❌ Error getting today's orders statistics:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب إحصائيات طلبات اليوم",
@@ -983,8 +946,6 @@ export const deliverItem = async (req, res) => {
     try {
         const { id } = req.params;
         const { itemIndex } = req.params;
-
-        Logger.info("🚚 Delivering item:", { orderId: id, itemIndex });
 
         const order = await Order.findOne({
             _id: id,
@@ -1020,9 +981,6 @@ export const deliverItem = async (req, res) => {
 
         // تحديث preparedCount للصنف إلى الكمية الكاملة (تم تسليمه)
         item.preparedCount = requiredQuantity;
-        Logger.info(
-            `✅ Item ${item.name} delivered: ${currentPreparedCount} -> ${requiredQuantity}`
-        );
 
         // التحقق من حالة الطلب الكلية وتحديثها إذا لزم الأمر
         const allItemsReady = order.items.every(
@@ -1034,9 +992,6 @@ export const deliverItem = async (req, res) => {
             order.status = "delivered";
             order.deliveredTime = new Date();
             order.deliveredBy = req.user.id;
-            Logger.info(
-                "✅ Order status updated to delivered (all items fully delivered)"
-            );
 
             // تحديث الفاتورة المرتبطة إذا وجدت
             if (order.bill) {
@@ -1045,15 +1000,9 @@ export const deliverItem = async (req, res) => {
                     if (bill) {
                         // إعادة حساب إجمالي الفاتورة
                         await bill.calculateSubtotal();
-                        Logger.info(
-                            "✅ Bill totals recalculated after order delivery"
-                        );
                     }
                 } catch (error) {
-                    Logger.error(
-                        "❌ Error updating bill after order delivery:",
-                        error
-                    );
+                    //
                 }
             }
         }
@@ -1083,7 +1032,6 @@ export const deliverItem = async (req, res) => {
             },
         });
     } catch (error) {
-        Logger.error("❌ Error delivering item:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في تسليم الصنف",

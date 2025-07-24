@@ -33,12 +33,13 @@ const Users = () => {
   const [deleteError, setDeleteError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // إخفاء خيار 'مالك' من قائمة الأدوار في لوحة المدير
   const roles = [
     { id: 'admin', name: 'مدير', icon: Crown, color: 'text-purple-600', bgColor: 'bg-purple-100', description: 'صلاحيات كاملة على النظام - جميع الصلاحيات' },
     { id: 'staff', name: 'موظف', icon: User, color: 'text-blue-600', bgColor: 'bg-blue-100', description: 'صلاحيات محدودة - لوحة التحكم، التقارير، الإعدادات' },
     { id: 'cashier', name: 'كاشير', icon: Shield, color: 'text-green-600', bgColor: 'bg-green-100', description: 'إدارة المبيعات والفواتير - الطلبات، المنيو، الفواتير، التقارير' },
     { id: 'kitchen', name: 'مطبخ', icon: Shield, color: 'text-orange-600', bgColor: 'bg-orange-100', description: 'إدارة الطلبات والمطبخ - الطلبات، المنيو، المخزون، التكاليف' },
-    { id: 'owner', name: 'مالك', icon: User, color: 'text-red-600', bgColor: 'bg-red-100', description: 'إدارة المنشأة والمستخدمين الآخرين' },
+    // لا تضف خيار 'مالك' هنا
   ];
 
   const permissions = [
@@ -312,18 +313,19 @@ const Users = () => {
   };
 
   const handleEdit = (user: UserType) => {
+    const u = user as Partial<UserType & { businessName?: string; businessType?: string }>;
     setFormData({
-      name: user.name,
-      email: user.email,
+      name: u.name || '',
+      email: u.email || '',
       password: '',
       confirmPassword: '',
-      role: user.role,
-      status: user.status,
-      phone: user.phone || '',
-      address: user.address || '',
-      permissions: user.permissions || [],
-      businessName: user.businessName || '',
-      businessType: user.businessType || '',
+      role: u.role || 'staff',
+      status: u.status || 'active',
+      phone: u.phone || '',
+      address: u.address || '',
+      permissions: u.permissions || [],
+      businessName: u.businessName || '',
+      businessType: u.businessType || '',
     });
     setSelectedUser(user);
     setShowEditUser(true);

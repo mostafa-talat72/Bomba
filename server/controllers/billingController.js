@@ -274,7 +274,6 @@ export const createBill = async (req, res) => {
             createdBy: req.user._id,
             organization: req.user.organization,
         });
-        Logger.info("Bill created:", bill);
 
         // Calculate subtotal from orders and sessions (only if there are orders or sessions)
         if (
@@ -714,7 +713,9 @@ export const cancelBill = async (req, res) => {
 
         bill.status = "cancelled";
         bill.updatedBy = req.user._id;
-
+        bill.subtotal = 0;
+        bill.total = 0;
+        bill.remaining = 0;
         await bill.save();
 
         // Remove bill reference from orders and sessions
@@ -990,9 +991,7 @@ export const getSubscriptionStatus = async (req, res) => {
     try {
         // جلب المستخدم الحالي
         const user = await User.findById(req.user.id);
-        console.log("getSubscriptionStatus: user", user);
         if (!user || !user.organization) {
-            console.log("getSubscriptionStatus: No organization for user");
             return res.status(401).json({
                 status: "expired",
                 message: "لا يوجد منشأة مرتبطة بهذا الحساب",
@@ -1002,7 +1001,6 @@ export const getSubscriptionStatus = async (req, res) => {
         const subscription = await Subscription.findOne({
             organization: user.organization,
         }).sort({ endDate: -1 });
-        console.log("getSubscriptionStatus: subscription", subscription);
         if (!subscription) {
             return res
                 .status(200)
@@ -1015,7 +1013,6 @@ export const getSubscriptionStatus = async (req, res) => {
             return res.status(200).json({ status: "expired" });
         }
     } catch (error) {
-        console.log("getSubscriptionStatus: error", error);
         res.status(500).json({
             status: "expired",
             message: "خطأ في جلب حالة الاشتراك",

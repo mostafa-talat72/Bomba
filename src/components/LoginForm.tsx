@@ -68,7 +68,6 @@ const LoginForm: React.FC = () => {
           } else {
             setError(data.message || 'حدث خطأ أثناء التسجيل.');
           }
-          console.log(data); // لعرض تفاصيل الخطأ في الكونسول
         }
       } catch {
         setError('حدث خطأ أثناء التسجيل. حاول مرة أخرى.');

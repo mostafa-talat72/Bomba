@@ -18,7 +18,6 @@ const VerifyEmail: React.FC = () => {
         // إرسال الطلب مباشرة إلى backend
         const res = await fetch(`http://localhost:5000/api/auth/verify-email?token=${token}`);
         const data = await res.json();
-        console.log('[VERIFY][FRONTEND_RESPONSE]', data);
         if (data.success) {
           setStatus('success');
           setMessage(data.message || 'تم تفعيل الحساب بنجاح. يمكنك الآن تسجيل الدخول.');

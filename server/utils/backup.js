@@ -28,14 +28,7 @@ export const createDatabaseBackup = async () => {
         // Create mongodump command
         const command = `mongodump --uri="${process.env.MONGODB_URI}" --gzip --archive="${backupPath}"`;
 
-        Logger.info("Starting database backup", { fileName: backupFileName });
-
         await execAsync(command);
-
-        Logger.info("Database backup completed successfully", {
-            fileName: backupFileName,
-            path: backupPath,
-        });
 
         // Clean up old backups
         await cleanupOldBackups();
@@ -67,13 +60,7 @@ export const restoreDatabaseBackup = async (backupFileName) => {
         // Create mongorestore command
         const command = `mongorestore --uri="${process.env.MONGODB_URI}" --gzip --archive="${backupPath}" --drop`;
 
-        Logger.info("Starting database restore", { fileName: backupFileName });
-
         await execAsync(command);
-
-        Logger.info("Database restore completed successfully", {
-            fileName: backupFileName,
-        });
 
         return {
             success: true,
@@ -122,9 +109,6 @@ const cleanupOldBackups = async () => {
             for (const backup of backupsToDelete) {
                 const backupPath = path.join(BACKUP_DIR, backup.fileName);
                 fs.unlinkSync(backupPath);
-                Logger.info("Old backup deleted", {
-                    fileName: backup.fileName,
-                });
             }
         }
     } catch (error) {
@@ -142,7 +126,6 @@ export const deleteBackup = (backupFileName) => {
         }
 
         fs.unlinkSync(backupPath);
-        Logger.info("Backup deleted", { fileName: backupFileName });
 
         return { success: true };
     } catch (error) {
@@ -158,11 +141,8 @@ export const scheduleBackups = () => {
     setInterval(async () => {
         try {
             await createDatabaseBackup();
-            Logger.info("Scheduled backup completed");
         } catch (error) {
             Logger.error("Scheduled backup failed", { error: error.message });
         }
     }, BACKUP_INTERVAL);
-
-    Logger.info("Automatic backup scheduler started");
 };

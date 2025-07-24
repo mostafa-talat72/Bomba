@@ -15,7 +15,7 @@ import {
     createSubscriptionPayment,
     fawryWebhook,
 } from "../controllers/billingController.js";
-import { protect, authorize } from "../middleware/auth.js";
+import { protect, authorize, adminOnly } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -41,7 +41,8 @@ router.post("/:id/payment", authorize("billing", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "all"), addPayment);
 router.post("/:id/orders", authorize("billing", "all"), addOrderToBill);
 router.post("/:id/sessions", authorize("billing", "all"), addSessionToBill);
-router.put("/:id/cancel", authorize("billing", "all"), cancelBill);
+// إلغاء الفاتورة - للمدير فقط
+router.put("/:id/cancel", protect, adminOnly, cancelBill);
 router.get("/:id/items", authorize("billing", "all"), getBillItems);
 router.post(
     "/:id/partial-payment",

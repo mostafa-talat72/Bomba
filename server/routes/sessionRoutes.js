@@ -59,7 +59,19 @@ router.put(
 // Get active sessions (playstation and computer permissions)
 router.get(
     "/status/active",
-    authorize("playstation", "computer", "all"),
+    (req, res, next) => {
+        if (!req.user) {
+            return res.sendStatus(401);
+        }
+        const allowed = ["playstation", "computer", "all"];
+        const hasPermission =
+            req.user.permissions &&
+            allowed.some((p) => req.user.permissions.includes(p));
+        if (!hasPermission) {
+            return res.sendStatus(403);
+        }
+        next();
+    },
     sessionController.getActiveSessions
 );
 

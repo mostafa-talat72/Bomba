@@ -748,6 +748,12 @@ class ApiClient {
     return response;
   }
 
+  async cancelOrder(orderId: string): Promise<ApiResponse<Order>> {
+    return this.request<Order>(`/orders/${orderId}/cancel`, {
+      method: 'PATCH',
+    });
+  }
+
   // Inventory endpoints
   async getInventoryItems(params?: { category?: string; lowStock?: boolean; page?: number; limit?: number; search?: string }): Promise<ApiResponse<InventoryItem[]>> {
     const searchParams = new URLSearchParams();

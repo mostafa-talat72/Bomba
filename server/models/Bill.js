@@ -369,10 +369,13 @@ billSchema.methods.calculateSubtotal = async function () {
 
         // Add orders total
         if (this.orders && this.orders.length > 0) {
-            subtotal += this.orders.reduce((sum, order) => {
-                const orderAmount = order.finalAmount || order.totalAmount || 0;
-                return sum + orderAmount;
-            }, 0);
+            subtotal += this.orders
+                .filter((order) => order.status !== "cancelled")
+                .reduce((sum, order) => {
+                    const orderAmount =
+                        order.finalAmount || order.totalAmount || 0;
+                    return sum + orderAmount;
+                }, 0);
         }
 
         // Add sessions total (استخدم breakdown الفعلي)
@@ -387,11 +390,6 @@ billSchema.methods.calculateSubtotal = async function () {
                     subtotal += sessionAmount;
                 }
             }
-        }
-
-        // If no orders or sessions, use the existing subtotal
-        if (subtotal === 0 && this.subtotal > 0) {
-            subtotal = this.subtotal;
         }
 
         this.subtotal = subtotal;
