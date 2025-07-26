@@ -126,6 +126,24 @@ const Users = () => {
     return () => clearInterval(interval);
   }, [showAddUser, showEditUser, showViewUser]);
 
+  // إضافة دعم مفتاح ESC للخروج من النوافذ
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAddUser(false);
+        setShowEditUser(false);
+        setShowViewUser(false);
+        setShowDeleteModal(false);
+        setDeleteTarget(null);
+        setDeletePassword('');
+        setDeleteError('');
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
   const loadUsers = async () => {
     try {
       setLoading(true);
@@ -626,12 +644,29 @@ const Users = () => {
 
       {/* Add/Edit User Modal */}
       {(showAddUser || showEditUser) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {showEditUser ? 'تعديل المستخدم' : 'إضافة مستخدم جديد'}
-              </h3>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddUser(false);
+              setShowEditUser(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {showEditUser ? 'تعديل المستخدم' : 'إضافة مستخدم جديد'}
+                </h3>
+                <button
+                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  onClick={() => {
+                    setShowAddUser(false);
+                    setShowEditUser(false);
+                  }}
+                >×</button>
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6">
@@ -850,9 +885,17 @@ const Users = () => {
 
       {/* View User Modal */}
       {showViewUser && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-primary-100">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowViewUser(false);
+              setSelectedUser(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-primary-100 border-b border-gray-200 px-6 py-4 rounded-t-xl">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-900">تفاصيل المستخدم</h3>
                 <button
@@ -860,12 +903,8 @@ const Users = () => {
                     setShowViewUser(false);
                     setSelectedUser(null);
                   }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 text-2xl font-bold"
+                >×</button>
               </div>
             </div>
 
@@ -1007,10 +1046,31 @@ const Users = () => {
 
       {/* Delete User Modal */}
       {showDeleteModal && deleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">تأكيد حذف المستخدم</h3>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteModal(false);
+              setDeleteTarget(null);
+              setDeletePassword('');
+              setDeleteError('');
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">تأكيد حذف المستخدم</h3>
+                <button
+                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeleteTarget(null);
+                    setDeletePassword('');
+                    setDeleteError('');
+                  }}
+                >×</button>
+              </div>
             </div>
             <div className="p-6 space-y-4">
               <p className="text-gray-700">هل أنت متأكد أنك تريد حذف المستخدم <span className="font-bold text-red-600">{deleteTarget.name}</span>؟</p>

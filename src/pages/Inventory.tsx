@@ -49,6 +49,20 @@ const Inventory = () => {
     // eslint-disable-next-line
   }, []);
 
+  // إضافة دعم مفتاح ESC للخروج من النوافذ
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAddModal(false);
+        setShowEditModal(false);
+        setShowDeleteModal(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
   // حساب المنتجات منخفضة المخزون وقيمة المخزون والفئات
   const lowStockItems = useMemo(() =>
     inventoryItems.filter(item => item.currentStock <= item.minStock),
@@ -395,12 +409,25 @@ const Inventory = () => {
 
       {/* Modal إضافة مخزون */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative">
-            <button
-              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
-              onClick={() => setShowAddModal(false)}
-            >×</button>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddModal(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">إضافة مخزون</h2>
+                <button
+                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  onClick={() => setShowAddModal(false)}
+                >×</button>
+              </div>
+            </div>
+            <div className="p-6">
             <h2 className="text-xl font-bold mb-4 text-center">إضافة مخزون</h2>
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div>
@@ -492,22 +519,36 @@ const Inventory = () => {
                   >عرض صفحة التكاليف</button>
                 </div>
               )}
-              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold" disabled={loading}>
+              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
                 {loading ? 'جاري الحفظ...' : 'حفظ'}
               </button>
             </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Modal تعديل منتج */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative">
-            <button
-              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
-              onClick={() => setShowEditModal(false)}
-            >×</button>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEditModal(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">تعديل منتج</h2>
+                <button
+                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  onClick={() => setShowEditModal(false)}
+                >×</button>
+              </div>
+            </div>
+            <div className="p-6">
             <h2 className="text-xl font-bold mb-4 text-center">تعديل منتج</h2>
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
@@ -536,36 +577,51 @@ const Inventory = () => {
               </div>
               {error && <div className="text-red-600 text-sm">{error}</div>}
               {success && <div className="text-green-600 text-sm">{success}</div>}
-              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold" disabled={loading}>
+              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
                 {loading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
               </button>
             </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Modal حذف منتج */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative text-center">
-            <button
-              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
-              onClick={() => setShowDeleteModal(false)}
-            >×</button>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteModal(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">تأكيد حذف المنتج</h2>
+                <button
+                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  onClick={() => setShowDeleteModal(false)}
+                >×</button>
+              </div>
+            </div>
+            <div className="p-6 text-center">
             <h2 className="text-xl font-bold mb-4">تأكيد حذف المنتج</h2>
             <p className="mb-6">هل أنت متأكد أنك تريد حذف المنتج <span className="font-bold text-red-600">{deleteTarget?.name}</span>؟ لا يمكن التراجع عن هذه العملية.</p>
             {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
             <div className="flex gap-4 justify-center">
               <button
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-bold"
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-bold transition-colors duration-200"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={loading}
               >إلغاء</button>
               <button
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold"
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200"
                 onClick={handleDelete}
                 disabled={loading}
               >{loading ? 'جاري الحذف...' : 'حذف'}</button>
+            </div>
             </div>
           </div>
         </div>

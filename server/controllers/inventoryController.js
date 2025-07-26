@@ -96,10 +96,11 @@ export const createInventoryItem = async (req, res) => {
             expiryDate,
         } = req.body;
 
+        // دائماً أنشئ المنتج بكمية 0
         const item = await InventoryItem.create({
             name,
             category,
-            currentStock,
+            currentStock: 0,
             minStock,
             maxStock,
             unit,
@@ -115,13 +116,36 @@ export const createInventoryItem = async (req, res) => {
             organization: req.user.organization,
         });
 
-        // Add initial stock movement
+        // إذا كان هناك كمية أولية، أضفها كحركة مخزون
         if (currentStock > 0) {
             await item.addStockMovement(
                 "in",
                 currentStock,
                 "المخزون الأولي",
                 req.user._id
+            );
+        }
+
+        // إضافة سجل تكلفة تلقائي عند إضافة منتج جديد
+        try {
+            await Cost.create({
+                category: "inventory",
+                subcategory: category,
+                description: `شراء مخزون جديد: ${name}`,
+                amount: price * (currentStock || 1),
+                currency: "EGP",
+                date: new Date(),
+                status: "pending",
+                paymentMethod: "cash",
+                vendor: supplier || undefined,
+                createdBy: req.user._id,
+                organization: req.user.organization,
+                notes: `إضافة تلقائية عند إضافة منتج جديد للمخزون (${name})`,
+            });
+        } catch (costError) {
+            Logger.error(
+                "فشل في تسجيل التكلفة تلقائياً عند إضافة منتج للمخزون",
+                costError
             );
         }
 
@@ -242,17 +266,26 @@ export const updateStock = async (req, res) => {
 
         // تسجيل تكلفة الشراء إذا كانت إضافة للمخزون (شراء)
         if (type === "in" && quantity > 0 && price) {
-            await Cost.create({
-                category: "inventory",
-                description: `شراء مخزون: ${item.name}`,
-                amount: price * quantity,
-                currency: "EGP",
-                date: date || new Date(),
-                vendor: supplier || item.supplier || "",
-                createdBy: req.user._id,
-                notes: reason || "",
-                status: "paid",
-            });
+            try {
+                await Cost.create({
+                    category: "inventory",
+                    subcategory: item.category,
+                    description: `شراء كمية جديدة: ${item.name}`,
+                    amount: price * quantity,
+                    currency: "EGP",
+                    date: date || new Date(),
+                    vendor: supplier || item.supplier || "",
+                    createdBy: req.user._id,
+                    organization: req.user.organization,
+                    notes: reason || "",
+                    status: "paid",
+                });
+            } catch (costError) {
+                Logger.error(
+                    "فشل في تسجيل التكلفة تلقائياً عند إضافة كمية للمخزون",
+                    costError
+                );
+            }
         }
 
         // Create notification for low stock or out of stock

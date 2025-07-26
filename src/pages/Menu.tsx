@@ -49,6 +49,18 @@ const Menu: React.FC = () => {
 		loadMenuItems();
 	}, []);
 
+	// إضافة دعم مفتاح ESC للخروج من النوافذ
+	useEffect(() => {
+		const handleEscape = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				setShowAddModal(false);
+			}
+		};
+
+		document.addEventListener('keydown', handleEscape);
+		return () => document.removeEventListener('keydown', handleEscape);
+	}, []);
+
 	const loadMenuItems = async () => {
 		setLoading(true);
 		try {
@@ -307,19 +319,29 @@ const Menu: React.FC = () => {
 
 			{/* Add/Edit Modal */}
 			{showAddModal && (
-				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-					<div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-						<div className="flex items-center justify-between mb-4">
-							<h3 className="text-lg font-semibold text-gray-900">
-								{editingItem ? 'تعديل العنصر' : 'إضافة عنصر جديد'}
-							</h3>
-							<button
-								onClick={() => setShowAddModal(false)}
-								className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
-							>
-								<X className="h-6 w-6" />
-							</button>
+				<div
+					className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+					onClick={(e) => {
+						if (e.target === e.currentTarget) {
+							setShowAddModal(false);
+						}
+					}}
+				>
+					<div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+						<div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+							<div className="flex items-center justify-between">
+								<h3 className="text-lg font-semibold text-gray-900">
+									{editingItem ? 'تعديل العنصر' : 'إضافة عنصر جديد'}
+								</h3>
+								<button
+									onClick={() => setShowAddModal(false)}
+									className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+								>
+									<X className="h-6 w-6" />
+								</button>
+							</div>
 						</div>
+						<div className="p-6">
 
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<div>
@@ -447,6 +469,7 @@ const Menu: React.FC = () => {
 								<Save className="h-4 w-4 ml-2" />
 								{editingItem ? 'تحديث' : 'حفظ'}
 							</button>
+						</div>
 						</div>
 					</div>
 				</div>
