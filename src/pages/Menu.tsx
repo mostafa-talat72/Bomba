@@ -62,13 +62,6 @@ const Menu: React.FC = () => {
 		}
 	}, [showAddModal]);
 
-	// Debug: طباعة عدد الخامات المتاحة
-	useEffect(() => {
-		if (inventoryItems.length > 0) {
-			console.log('عدد الخامات المتاحة:', inventoryItems.length);
-			console.log('الخامات المتاحة:', inventoryItems.filter(item => item.isRawMaterial).map(item => item.name));
-		}
-	}, [inventoryItems]);
 
 	// إضافة دعم مفتاح ESC للخروج من النوافذ
 	useEffect(() => {
