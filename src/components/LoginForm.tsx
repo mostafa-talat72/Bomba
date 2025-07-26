@@ -99,7 +99,8 @@ const LoginForm: React.FC = () => {
     try {
       if (isRegister) {
         // Registration logic
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/register`, {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const response = await fetch(`${apiUrl}/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

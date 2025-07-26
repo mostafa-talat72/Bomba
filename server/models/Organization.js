@@ -5,7 +5,7 @@ const OrganizationSchema = new mongoose.Schema({
     type: {
         type: String,
         enum: ["cafe", "restaurant", "playstation"],
-        required: true,
+        default: "cafe", // جعل الحقل اختياري مع قيمة افتراضية
     },
     owner: {
         type: mongoose.Schema.Types.ObjectId,

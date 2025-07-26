@@ -4,6 +4,7 @@ import Organization from "../models/Organization.js";
 import Subscription from "../models/Subscription.js";
 import { sendEmail } from "../utils/email.js";
 import crypto from "crypto";
+import Logger from "../middleware/logger.js";
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -43,6 +44,12 @@ export const register = async (req, res) => {
         let organization = null;
         const verificationToken = crypto.randomBytes(32).toString("hex");
         if (role === "owner") {
+            Logger.info("Creating owner user", {
+                name,
+                email: normalizedEmail,
+                businessName,
+            });
+
             user = await User.create({
                 name,
                 email: normalizedEmail,
@@ -52,12 +59,32 @@ export const register = async (req, res) => {
                 status: "pending",
                 verificationToken,
             });
+
+            Logger.info("User created successfully", {
+                userId: user._id,
+                email: user.email,
+            });
+
             organization = await Organization.create({
                 name: businessName,
+                type: "cafe", // إضافة النوع المطلوب
                 owner: user._id,
             });
+
+            Logger.info("Organization created successfully", {
+                organizationId: organization._id,
+                organizationName: organization.name,
+                ownerId: organization.owner,
+            });
+
             user.organization = organization._id;
             await user.save();
+
+            Logger.info("User linked to organization", {
+                userId: user._id,
+                organizationId: user.organization,
+            });
+
             // إضافة اشتراك وهمي تلقائي للمنشأة الجديدة
             await Subscription.create({
                 organization: organization._id,
@@ -68,6 +95,10 @@ export const register = async (req, res) => {
                 paymentMethod: "manual",
                 paymentRef: "dummy",
                 createdAt: new Date(),
+            });
+
+            Logger.info("Subscription created for organization", {
+                organizationId: organization._id,
             });
         } else {
             // إذا لم يتم تمرير organization، اربطه بنفس منشأة المستخدم الحالي (المدير)
@@ -118,21 +149,49 @@ export const register = async (req, res) => {
         const verificationUrl = `${
             process.env.FRONTEND_URL || "http://localhost:3000"
         }/verify-email?token=${verificationToken}`;
+
+        Logger.info("Attempting to send verification email", {
+            to: user.email,
+            verificationUrl: verificationUrl,
+            frontendUrl: process.env.FRONTEND_URL,
+        });
+
         try {
             await sendEmail({
                 to: user.email,
                 subject: "تفعيل حسابك - نظام Bomba",
-                html: `<div dir="rtl"><h2>مرحباً ${user.name}</h2><p>يرجى تفعيل حسابك عبر الرابط التالي:</p><a href="${verificationUrl}" style="padding:10px 20px;background:#2563eb;color:#fff;border-radius:5px;text-decoration:none;">تفعيل الحساب</a></div>`,
+                html: `<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; color: white; text-align: center;">
+                        <h1 style="margin: 0 0 20px 0; font-size: 24px;">مرحباً ${user.name}</h1>
+                        <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6;">شكراً لك على التسجيل في نظام بومبا لإدارة المقهى</p>
+                        <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6;">يرجى تفعيل حسابك عبر الرابط التالي:</p>
+                        <a href="${verificationUrl}" style="display: inline-block; padding: 15px 30px; background: #ffffff; color: #667eea; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; transition: all 0.3s ease;">تفعيل الحساب</a>
+                    </div>
+                    <div style="margin-top: 20px; text-align: center; color: #666; font-size: 14px;">
+                        <p>إذا لم تطلب هذا الحساب، يمكنك تجاهل هذا البريد الإلكتروني.</p>
+                        <p>رابط التفعيل صالح لمدة 24 ساعة فقط.</p>
+                    </div>
+                </div>`,
+            });
+
+            Logger.info("Verification email sent successfully", {
+                userId: user._id,
+                email: user.email,
+                organizationId: organization?._id,
             });
         } catch (emailError) {
-            // إذا فشل الإرسال، احذف المستخدم والمنشأة (إن وجدت)
-            if (user) await User.deleteOne({ _id: user._id });
-            if (organization)
-                await Organization.deleteOne({ _id: organization._id });
+            Logger.error("Failed to send verification email", {
+                userId: user._id,
+                email: user.email,
+                error: emailError.message,
+                stack: emailError.stack,
+            });
+
+            // لا نحذف المستخدم عند فشل الإيميل، فقط نرسل رسالة خطأ
             return res.status(500).json({
                 success: false,
                 message:
-                    "فشل إرسال رسالة التفعيل إلى بريدك الإلكتروني. يرجى المحاولة لاحقًا.",
+                    "تم إنشاء الحساب بنجاح ولكن فشل إرسال رسالة التفعيل. يرجى التواصل مع الإدارة لتفعيل الحساب.",
                 error: emailError.message,
             });
         }
@@ -140,6 +199,13 @@ export const register = async (req, res) => {
             success: true,
             message:
                 "تم إرسال رابط التفعيل إلى بريدك الإلكتروني. يرجى تفعيل الحساب قبل تسجيل الدخول.",
+        });
+
+        Logger.info("Registration process completed successfully", {
+            userId: user._id,
+            email: user.email,
+            organizationId: organization?._id,
+            role: role,
         });
     } catch (error) {
         res.status(500).json({

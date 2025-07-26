@@ -14,26 +14,101 @@ const createTransporter = () => {
         return null;
     }
 
-    return nodemailer.createTransport({
-        host: process.env.EMAIL_HOST,
-        port: process.env.EMAIL_PORT || 587,
-        secure: process.env.EMAIL_PORT === "465",
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
+    // Try different configurations
+    const configs = [
+        {
+            service: "gmail",
+            host: process.env.EMAIL_HOST,
+            port: process.env.EMAIL_PORT || 587,
+            secure: false,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+            tls: {
+                rejectUnauthorized: false,
+            },
         },
-    });
+        {
+            host: process.env.EMAIL_HOST,
+            port: 465,
+            secure: true,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        },
+        {
+            host: process.env.EMAIL_HOST,
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        },
+        // Simple fallback configuration
+        {
+            host: "smtp.gmail.com",
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        },
+    ];
+
+    for (let i = 0; i < configs.length; i++) {
+        try {
+            const transporter = nodemailer.createTransport(configs[i]);
+            Logger.info(`Trying email config ${i + 1}`);
+            return transporter;
+        } catch (error) {
+            Logger.warn(`Email config ${i + 1} failed:`, error.message);
+            if (i === configs.length - 1) {
+                throw new Error("All email configurations failed");
+            }
+        }
+    }
 };
 
 // Send email
 export const sendEmail = async (options) => {
-    const transporter = createTransporter();
+    let transporter = createTransporter();
 
     if (!transporter) {
-        throw new Error("Email service not configured");
+        // Fallback: create simple transporter
+        try {
+            transporter = nodemailer.createTransport({
+                host: "smtp.gmail.com",
+                port: 587,
+                secure: false,
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS,
+                },
+            });
+            Logger.info("Using fallback email transporter");
+        } catch (fallbackError) {
+            throw new Error("Email service not configured and fallback failed");
+        }
     }
 
     try {
+        // Try to verify transporter configuration
+        try {
+            await transporter.verify();
+            Logger.info("Email transporter verified successfully");
+        } catch (verifyError) {
+            Logger.warn(
+                "Email transporter verification failed, trying to send anyway",
+                {
+                    error: verifyError.message,
+                }
+            );
+        }
+
         const mailOptions = {
             from: `"Bomba System" <${process.env.EMAIL_USER}>`,
             to: options.to,
@@ -42,7 +117,18 @@ export const sendEmail = async (options) => {
             html: options.html,
         };
 
+        Logger.info("Sending email", {
+            to: options.to,
+            subject: options.subject,
+            from: process.env.EMAIL_USER,
+        });
+
         const result = await transporter.sendMail(mailOptions);
+
+        Logger.info("Email sent successfully", {
+            messageId: result.messageId,
+            to: options.to,
+        });
 
         return result;
     } catch (error) {
@@ -50,6 +136,7 @@ export const sendEmail = async (options) => {
             to: options.to,
             subject: options.subject,
             error: error.message,
+            stack: error.stack,
         });
         throw error;
     }

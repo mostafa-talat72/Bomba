@@ -79,10 +79,17 @@ const io = new Server(server, {
 // إعدادات CORS مرنة حسب البيئة
 const allowedOrigins =
     process.env.NODE_ENV === "production"
-        ? [process.env.FRONTEND_URL]
+        ? [
+              process.env.FRONTEND_URL,
+              "https://*.zeabur.app",
+              "https://*.vercel.app",
+              "https://*.netlify.app",
+          ]
         : [
               "http://localhost:3000",
               "https://localhost:3000",
+              "http://localhost:5173",
+              "https://localhost:5173",
               process.env.FRONTEND_URL || "http://localhost:3000",
           ];
 
