@@ -24,6 +24,7 @@ const LoginForm: React.FC = () => {
   const [errors, setErrors] = useState<Partial<FormData>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Refs for form stability
   const formRef = useRef<HTMLFormElement>(null);
@@ -42,11 +43,11 @@ const LoginForm: React.FC = () => {
     setSuccessMessage(null);
   }, []);
 
-  // Handle input changes - لا نمسح الأخطاء عند الكتابة للبريد والباسورد فقط
+  // Handle input changes
   const handleInputChange = useCallback((field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear field-specific error only for name and businessName
-    if (errors[field] && (field === 'name' || field === 'businessName')) {
+    // Clear field-specific error
+    if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
   }, [errors]);
@@ -162,11 +163,11 @@ const LoginForm: React.FC = () => {
   }, [isRegister]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-600 via-blue-500 to-indigo-700 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 p-4">
       <div className="relative bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl p-8 max-w-md w-full border border-gray-100">
         {/* Header */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-indigo-500 rounded-full flex items-center justify-center shadow-lg mb-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center shadow-lg mb-4">
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M9 7a4 4 0 108 0 4 4 0 00-8 0z" />
             </svg>
@@ -200,17 +201,18 @@ const LoginForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                   اسم المالك
                 </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                    errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                  }`}
-                  placeholder="أدخل اسم المالك"
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
+                                 <input
+                   type="text"
+                   value={formData.name}
+                   onChange={(e) => handleInputChange('name', e.target.value)}
+                   className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                     errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                   }`}
+                   placeholder="أدخل اسم المالك"
+                   disabled={isSubmitting}
+                   autoComplete="off"
+                   dir="rtl"
+                 />
                 {errors.name && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.name}</p>
                 )}
@@ -220,17 +222,18 @@ const LoginForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                   اسم المنشأة
                 </label>
-                <input
-                  type="text"
-                  value={formData.businessName}
-                  onChange={(e) => handleInputChange('businessName', e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                    errors.businessName ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                  }`}
-                  placeholder="أدخل اسم المنشأة"
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
+                                 <input
+                   type="text"
+                   value={formData.businessName}
+                   onChange={(e) => handleInputChange('businessName', e.target.value)}
+                   className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                     errors.businessName ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                   }`}
+                   placeholder="أدخل اسم المنشأة"
+                   disabled={isSubmitting}
+                   autoComplete="off"
+                   dir="rtl"
+                 />
                 {errors.businessName && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.businessName}</p>
                 )}
@@ -243,18 +246,22 @@ const LoginForm: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
               البريد الإلكتروني
             </label>
-            <input
-              ref={emailRef}
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-              }`}
-              placeholder="أدخل بريدك الإلكتروني"
-              disabled={isSubmitting}
-              autoComplete="email"
-            />
+                         <input
+               key={`email-${isRegister ? 'register' : 'login'}`}
+               ref={emailRef}
+               type="email"
+               value={formData.email}
+               onChange={(e) => handleInputChange('email', e.target.value)}
+               className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                 errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+               }`}
+               placeholder="أدخل بريدك الإلكتروني"
+               disabled={isSubmitting}
+               autoComplete={isRegister ? "username" : "email"}
+               name={isRegister ? "register-email" : "login-email"}
+               id={isRegister ? "register-email" : "login-email"}
+               dir="rtl"
+             />
             {errors.email && (
               <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
             )}
@@ -265,18 +272,41 @@ const LoginForm: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
               كلمة المرور
             </label>
-            <input
-              ref={passwordRef}
-              type="password"
-              value={formData.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-              }`}
-              placeholder="أدخل كلمة المرور"
-              disabled={isSubmitting}
-              autoComplete={isRegister ? "new-password" : "current-password"}
-            />
+            <div className="relative">
+                                                                                                                       <input
+                   key={`password-${isRegister ? 'register' : 'login'}`}
+                   ref={passwordRef}
+                   type={showPassword ? "text" : "password"}
+                   value={formData.password}
+                   onChange={(e) => handleInputChange('password', e.target.value)}
+                   className={`w-full px-4 py-3 pr-12 pl-4 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                     errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                   }`}
+                   placeholder="أدخل كلمة المرور"
+                   disabled={isSubmitting}
+                   autoComplete={isRegister ? "new-password" : "current-password"}
+                   name={isRegister ? "register-password" : "login-password"}
+                   id={isRegister ? "register-password" : "login-password"}
+                   dir="rtl"
+                 />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700 transition-colors"
+                disabled={isSubmitting}
+              >
+                {showPassword ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
             {errors.password && (
               <p className="mt-1 text-sm text-red-600 text-right">{errors.password}</p>
             )}
@@ -286,10 +316,10 @@ const LoginForm: React.FC = () => {
           <button
             type="submit"
             disabled={isSubmitting || isLoading}
-            className={`w-full py-3 px-4 rounded-xl font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+            className={`w-full py-3 px-4 rounded-xl font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
               isSubmitting || isLoading
                 ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 active:scale-95'
+                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 active:scale-95'
             }`}
           >
             {isSubmitting || isLoading ? (
@@ -309,7 +339,7 @@ const LoginForm: React.FC = () => {
             type="button"
             onClick={handleToggleMode}
             disabled={isSubmitting}
-            className="text-primary-600 hover:text-primary-700 font-medium text-sm transition-colors disabled:opacity-50"
+            className="text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors disabled:opacity-50"
           >
             {isRegister ? 'لديك حساب بالفعل؟ تسجيل الدخول' : 'ليس لديك حساب؟ سجل منشأتك الآن'}
           </button>
