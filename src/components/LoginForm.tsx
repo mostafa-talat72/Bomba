@@ -42,27 +42,14 @@ const LoginForm: React.FC = () => {
     setSuccessMessage(null);
   }, []);
 
-  // Handle input changes
+  // Handle input changes - لا نمسح الأخطاء عند الكتابة للبريد والباسورد فقط
   const handleInputChange = useCallback((field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear field-specific error
-    if (errors[field]) {
+    // Clear field-specific error only for name and businessName
+    if (errors[field] && (field === 'name' || field === 'businessName')) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
   }, [errors]);
-
-  // Prevent autocomplete from interfering
-  const handleInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
-    // Ensure the input is stable
-    e.target.setAttribute('data-focused', 'true');
-  }, []);
-
-  const handleInputBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
-    // Remove focus attribute after a delay
-    setTimeout(() => {
-      e.target.removeAttribute('data-focused');
-    }, 100);
-  }, []);
 
   // Validation
   const validateForm = useCallback((): boolean => {
@@ -152,11 +139,11 @@ const LoginForm: React.FC = () => {
           navigate('/dashboard', { replace: true });
         }
       }
-         } catch {
-       setErrors({
-         email: isRegister ? 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.' : 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.'
-       });
-     } finally {
+    } catch {
+      setErrors({
+        email: isRegister ? 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.' : 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.'
+      });
+    } finally {
       setIsSubmitting(false);
     }
   }, [formData, isRegister, validateForm, login, navigate, clearForm]);
@@ -164,25 +151,15 @@ const LoginForm: React.FC = () => {
   // Handle mode toggle
   const handleToggleMode = useCallback(() => {
     setIsRegister(prev => !prev);
-    // Don't clear form immediately to prevent autocomplete flickering
-    setTimeout(() => {
-      clearForm();
-    }, 300);
+    clearForm();
   }, [clearForm]);
 
   // Auto-focus email field when switching to login
   useEffect(() => {
     if (!isRegister && emailRef.current) {
-      setTimeout(() => emailRef.current?.focus(), 400);
+      setTimeout(() => emailRef.current?.focus(), 100);
     }
   }, [isRegister]);
-
-  // Prevent form submission on Enter key in certain cases
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && isSubmitting) {
-      e.preventDefault();
-    }
-  }, [isSubmitting]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-600 via-blue-500 to-indigo-700 p-4">
@@ -215,7 +192,7 @@ const LoginForm: React.FC = () => {
         )}
 
         {/* Form */}
-        <form ref={formRef} onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
           {/* Register Fields */}
           {isRegister && (
             <>
@@ -223,21 +200,17 @@ const LoginForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                   اسم المالك
                 </label>
-                                 <input
-                   type="text"
-                   value={formData.name}
-                   onChange={(e) => handleInputChange('name', e.target.value)}
-                   onFocus={handleInputFocus}
-                   onBlur={handleInputBlur}
-                   className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                     errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                   }`}
-                   placeholder="أدخل اسم المالك"
-                   disabled={isSubmitting}
-                   autoComplete="off"
-                   data-lpignore="true"
-                   data-form-type="other"
-                 />
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
+                    errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                  }`}
+                  placeholder="أدخل اسم المالك"
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
                 {errors.name && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.name}</p>
                 )}
@@ -247,21 +220,17 @@ const LoginForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
                   اسم المنشأة
                 </label>
-                                 <input
-                   type="text"
-                   value={formData.businessName}
-                   onChange={(e) => handleInputChange('businessName', e.target.value)}
-                   onFocus={handleInputFocus}
-                   onBlur={handleInputBlur}
-                   className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                     errors.businessName ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                   }`}
-                   placeholder="أدخل اسم المنشأة"
-                   disabled={isSubmitting}
-                   autoComplete="off"
-                   data-lpignore="true"
-                   data-form-type="other"
-                 />
+                <input
+                  type="text"
+                  value={formData.businessName}
+                  onChange={(e) => handleInputChange('businessName', e.target.value)}
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
+                    errors.businessName ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                  }`}
+                  placeholder="أدخل اسم المنشأة"
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
                 {errors.businessName && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.businessName}</p>
                 )}
@@ -274,21 +243,18 @@ const LoginForm: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
               البريد الإلكتروني
             </label>
-                         <input
-               ref={emailRef}
-               type="email"
-               value={formData.email}
-               onChange={(e) => handleInputChange('email', e.target.value)}
-               onFocus={handleInputFocus}
-               onBlur={handleInputBlur}
-               className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                 errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-               }`}
-               placeholder="أدخل بريدك الإلكتروني"
-               disabled={isSubmitting}
-               autoComplete={isRegister ? "email" : "username"}
-               data-lpignore="true"
-             />
+            <input
+              ref={emailRef}
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
+                errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+              }`}
+              placeholder="أدخل بريدك الإلكتروني"
+              disabled={isSubmitting}
+              autoComplete="email"
+            />
             {errors.email && (
               <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
             )}
@@ -299,21 +265,18 @@ const LoginForm: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
               كلمة المرور
             </label>
-                         <input
-               ref={passwordRef}
-               type="password"
-               value={formData.password}
-               onChange={(e) => handleInputChange('password', e.target.value)}
-               onFocus={handleInputFocus}
-               onBlur={handleInputBlur}
-               className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
-                 errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-               }`}
-               placeholder="أدخل كلمة المرور"
-               disabled={isSubmitting}
-               autoComplete={isRegister ? "new-password" : "current-password"}
-               data-lpignore="true"
-             />
+            <input
+              ref={passwordRef}
+              type="password"
+              value={formData.password}
+              onChange={(e) => handleInputChange('password', e.target.value)}
+              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors ${
+                errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+              }`}
+              placeholder="أدخل كلمة المرور"
+              disabled={isSubmitting}
+              autoComplete={isRegister ? "new-password" : "current-password"}
+            />
             {errors.password && (
               <p className="mt-1 text-sm text-red-600 text-right">{errors.password}</p>
             )}
