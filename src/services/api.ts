@@ -500,16 +500,18 @@ class ApiClient {
   }
 
   async logout(): Promise<ApiResponse> {
+    // تنظيف البيانات المحلية أولاً
+    this.clearToken();
+    localStorage.removeItem('refreshToken');
+
+    // محاولة إرسال طلب logout للـ backend (اختياري)
     try {
       const response = await this.request('/auth/logout', {
         method: 'POST',
-      });
-      this.clearToken();
-      localStorage.removeItem('refreshToken');
+      }, false); // لا تحاول إعادة المحاولة عند 401
       return response;
     } catch (error: unknown) {
-      this.clearToken();
-      localStorage.removeItem('refreshToken');
+      // حتى لو فشل الطلب، نعتبر أن logout نجح
       return { success: true, message: 'تم تسجيل الخروج' };
     }
   }

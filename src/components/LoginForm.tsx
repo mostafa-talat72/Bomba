@@ -9,7 +9,6 @@ const LoginForm: React.FC = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [businessName, setBusinessName] = useState('');
-  const [businessType, setBusinessType] = useState('cafe');
   const [isRegister, setIsRegister] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +34,6 @@ const LoginForm: React.FC = () => {
         setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
         return;
       }
-      if (!['cafe', 'restaurant', 'playstation'].includes(businessType)) {
-        setError('يرجى اختيار نوع نشاط صحيح.');
-        return;
-      }
       // منطق التسجيل
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/register`, {
@@ -50,7 +45,6 @@ const LoginForm: React.FC = () => {
             password,
             role: 'owner',
             businessName,
-            businessType
           })
         });
         const data = await res.json();
@@ -59,7 +53,6 @@ const LoginForm: React.FC = () => {
           setIsRegister(false);
           setName('');
           setBusinessName('');
-          setBusinessType('cafe');
           setEmail('');
           setPassword('');
         } else {
@@ -134,19 +127,6 @@ const LoginForm: React.FC = () => {
                 onChange={e => setBusinessName(e.target.value)}
                 required
               />
-            </div>
-            <div className="mb-4">
-              <label className="block mb-1 text-right font-semibold text-gray-700">نوع النشاط</label>
-              <select
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
-                value={businessType}
-                onChange={e => setBusinessType(e.target.value)}
-                required
-              >
-                <option value="cafe">كافيه</option>
-                <option value="restaurant">مطعم</option>
-                <option value="playstation">بلايستيشن</option>
-              </select>
             </div>
             <div className="mb-4">
               <label className="block mb-1 text-right font-semibold text-gray-700">البريد الإلكتروني</label>

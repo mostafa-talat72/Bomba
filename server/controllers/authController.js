@@ -30,15 +30,8 @@ function normalizeEmail(email) {
 // @access  Public
 export const register = async (req, res) => {
     try {
-        const {
-            name,
-            email,
-            password,
-            role,
-            permissions,
-            businessName,
-            businessType,
-        } = req.body;
+        const { name, email, password, role, permissions, businessName } =
+            req.body;
         const normalizedEmail = normalizeEmail(email);
         const userExists = await User.findOne({ email: normalizedEmail });
         if (userExists) {
@@ -61,7 +54,6 @@ export const register = async (req, res) => {
             });
             organization = await Organization.create({
                 name: businessName,
-                type: businessType,
                 owner: user._id,
             });
             user.organization = organization._id;
