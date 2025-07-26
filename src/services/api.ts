@@ -224,6 +224,11 @@ export interface MenuItem {
   preparationTime: number;
   calories?: number;
   allergens?: string[];
+  ingredients?: {
+    item: string; // InventoryItem ID
+    quantity: number;
+    unit: string;
+  }[];
   isPopular: boolean;
   isNew: boolean;
   createdBy: User;
@@ -1376,6 +1381,11 @@ class ApiClient {
     calories?: number;
     allergens?: string[];
     isPopular?: boolean;
+    ingredients?: {
+      item: string;
+      quantity: number;
+      unit: string;
+    }[];
   }): Promise<ApiResponse<MenuItem>> {
     const response = await this.request<MenuItem>('/menu/items', {
       method: 'POST',

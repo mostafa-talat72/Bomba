@@ -67,6 +67,24 @@ const menuItemSchema = new mongoose.Schema(
                 ],
             },
         ],
+        ingredients: [
+            {
+                item: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "InventoryItem",
+                    required: true,
+                },
+                quantity: {
+                    type: Number,
+                    required: true,
+                    min: 0,
+                },
+                unit: {
+                    type: String,
+                    required: true,
+                },
+            },
+        ],
         nutritionalInfo: {
             calories: {
                 type: Number,

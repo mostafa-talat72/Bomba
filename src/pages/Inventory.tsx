@@ -36,6 +36,7 @@ const Inventory = () => {
     date: new Date().toISOString().slice(0, 10),
     costStatus: 'pending',
     paidAmount: '',
+    isRawMaterial: false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -82,6 +83,10 @@ const Inventory = () => {
   );
   const categoriesCount = useMemo(() =>
     new Set(inventoryItems.map(item => item.category)).size,
+    [inventoryItems]
+  );
+  const rawMaterialsCount = useMemo(() =>
+    inventoryItems.filter(item => item.isRawMaterial).length,
     [inventoryItems]
   );
 
@@ -131,7 +136,8 @@ const Inventory = () => {
       unit: '',
       date: new Date().toISOString().slice(0, 10),
       costStatus: 'pending',
-      paidAmount: ''
+      paidAmount: '',
+      isRawMaterial: false
     });
     setError('');
     setSuccess('');
@@ -153,6 +159,7 @@ const Inventory = () => {
       date: new Date().toISOString().slice(0, 10),
       costStatus: 'pending',
       paidAmount: '',
+      isRawMaterial: item.isRawMaterial || false,
     });
     setError('');
     setSuccess('');
@@ -179,7 +186,8 @@ const Inventory = () => {
       unit: '',
       date: new Date().toISOString().slice(0, 10),
       costStatus: 'pending',
-      paidAmount: ''
+      paidAmount: '',
+      isRawMaterial: false
     });
     setError('');
     setSuccess('');
@@ -238,6 +246,7 @@ const Inventory = () => {
           supplier: addForm.supplier,
           costStatus: addForm.costStatus,
           paidAmount: Number(addForm.paidAmount) || 0,
+          isRawMaterial: addForm.isRawMaterial,
         });
         if (res) {
           setSuccess('تمت إضافة المنتج بنجاح!');
@@ -274,6 +283,7 @@ const Inventory = () => {
         minStock: Number(addForm.minStock),
         unit: addForm.unit,
         supplier: addForm.supplier,
+        isRawMaterial: addForm.isRawMaterial,
       });
       if (res) {
         setSuccess('تم تعديل المنتج بنجاح!');
@@ -390,6 +400,17 @@ const Inventory = () => {
             </div>
           </div>
         </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center">
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <Package className="h-6 w-6 text-orange-600" />
+            </div>
+            <div className="mr-4">
+              <p className="text-sm font-medium text-gray-600">الخامات</p>
+              <p className="text-2xl font-bold text-orange-600">{rawMaterialsCount}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Low Stock Alert */}
@@ -422,6 +443,7 @@ const Inventory = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المنتج</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">النوع</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الفئة</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المخزون الحالي</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحد الأدنى</th>
@@ -439,6 +461,15 @@ const Inventory = () => {
                   <tr key={item.id || item._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{item.name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        item.isRawMaterial
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {item.isRawMaterial ? 'خامة' : 'منتج'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.category}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -623,6 +654,19 @@ const Inventory = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
                     <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
                   </div>
+                  <div className="md:col-span-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        name="isRawMaterial"
+                        checked={addForm.isRawMaterial}
+                        onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <span className="mr-2 text-sm text-gray-700">خامة (مادة خام)</span>
+                    </label>
+                    <p className="text-xs text-gray-500 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">حالة الدفع</label>
                     <select
@@ -750,6 +794,19 @@ const Inventory = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
                 <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+              </div>
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="isRawMaterial"
+                    checked={addForm.isRawMaterial}
+                    onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <span className="mr-2 text-sm text-gray-700">خامة (مادة خام)</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
               </div>
               {error && <div className="text-red-600 text-sm">{error}</div>}
               {success && <div className="text-green-600 text-sm">{success}</div>}

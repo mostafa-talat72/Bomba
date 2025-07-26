@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Utensils, Plus, Edit, Trash2, Save, X, Search, TrendingUp, Clock, Star } from 'lucide-react';
+import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MenuItem } from '../services/api';
 
@@ -10,6 +10,8 @@ const Menu: React.FC = () => {
 		createMenuItem,
 		updateMenuItem,
 		deleteMenuItem,
+		inventoryItems,
+		fetchInventoryItems,
 		showNotification
 	} = useApp();
 	const [loading, setLoading] = useState(false);
@@ -28,7 +30,8 @@ const Menu: React.FC = () => {
 		preparationTime: '5',
 		calories: '',
 		allergens: [] as string[],
-		isPopular: false
+		isPopular: false,
+		ingredients: [] as { item: string; quantity: number; unit: string }[]
 	});
 
 	const categories = [
@@ -45,9 +48,27 @@ const Menu: React.FC = () => {
 		'حليب', 'بيض', 'فول سوداني', 'مكسرات', 'سمك', 'محار', 'قمح', 'صويا'
 	];
 
+	const unitOptions = ['جرام', 'كيلو', 'مل', 'لتر', 'قطعة', 'ملعقة', 'كوب'];
+
 	useEffect(() => {
 		loadMenuItems();
+		fetchInventoryItems();
 	}, []);
+
+	// إعادة تحميل الخامات عند فتح النافذة
+	useEffect(() => {
+		if (showAddModal && inventoryItems.length === 0) {
+			fetchInventoryItems();
+		}
+	}, [showAddModal]);
+
+	// Debug: طباعة عدد الخامات المتاحة
+	useEffect(() => {
+		if (inventoryItems.length > 0) {
+			console.log('عدد الخامات المتاحة:', inventoryItems.length);
+			console.log('الخامات المتاحة:', inventoryItems.filter(item => item.isRawMaterial).map(item => item.name));
+		}
+	}, [inventoryItems]);
 
 	// إضافة دعم مفتاح ESC للخروج من النوافذ
 	useEffect(() => {
@@ -61,16 +82,16 @@ const Menu: React.FC = () => {
 		return () => document.removeEventListener('keydown', handleEscape);
 	}, []);
 
-	const loadMenuItems = async () => {
-		setLoading(true);
-		try {
-			await fetchMenuItems();
-		} catch (error) {
-			showNotification('خطأ في تحميل قائمة الطعام', 'error');
-		} finally {
-			setLoading(false);
-		}
-	};
+			const loadMenuItems = async () => {
+			setLoading(true);
+			try {
+				await fetchMenuItems();
+			} catch {
+				showNotification('خطأ في تحميل قائمة الطعام', 'error');
+			} finally {
+				setLoading(false);
+			}
+		};
 
 	const handleAddItem = () => {
 		setEditingItem(null);
@@ -83,7 +104,8 @@ const Menu: React.FC = () => {
 			preparationTime: '5',
 			calories: '',
 			allergens: [],
-			isPopular: false
+			isPopular: false,
+			ingredients: []
 		});
 		setShowAddModal(true);
 	};
@@ -99,7 +121,8 @@ const Menu: React.FC = () => {
 			preparationTime: item.preparationTime.toString(),
 			calories: item.calories?.toString() || '',
 			allergens: item.allergens || [],
-			isPopular: item.isPopular
+			isPopular: item.isPopular,
+			ingredients: item.ingredients || []
 		});
 		setShowAddModal(true);
 	};
@@ -134,7 +157,8 @@ const Menu: React.FC = () => {
 			preparationTime: parseInt(formData.preparationTime),
 			calories: formData.calories ? parseFloat(formData.calories) : undefined,
 			allergens: formData.allergens,
-			isPopular: formData.isPopular
+			isPopular: formData.isPopular,
+			ingredients: formData.ingredients
 		};
 
 		if (editingItem) {
@@ -176,6 +200,56 @@ const Menu: React.FC = () => {
 				: [...prev.allergens, allergen]
 		}));
 	};
+
+	const addIngredient = () => {
+		// التحقق من وجود خامات متاحة للاختيار
+		const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
+		const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
+		const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
+
+		if (availableItems.length === 0) {
+			// إظهار رسالة للمستخدم أنه لا توجد خامات متاحة
+			alert('لا توجد خامات متاحة للاختيار. جميع الخامات مختارة بالفعل.');
+			return;
+		}
+
+		setFormData(prev => ({
+			...prev,
+			ingredients: [...prev.ingredients, { item: '', quantity: 0, unit: 'جرام' }]
+		}));
+	};
+
+	const removeIngredient = (index: number) => {
+		setFormData(prev => ({
+			...prev,
+			ingredients: prev.ingredients.filter((_, i) => i !== index)
+		}));
+	};
+
+	const updateIngredient = (index: number, field: 'item' | 'quantity' | 'unit', value: string | number) => {
+		setFormData(prev => ({
+			...prev,
+			ingredients: prev.ingredients.map((ingredient, i) =>
+				i === index ? { ...ingredient, [field]: value } : ingredient
+			)
+		}));
+
+		// إذا تم تغيير الخامة، تأكد من عدم تكرارها في صفوف أخرى
+		if (field === 'item' && value !== '') {
+			setFormData(prev => ({
+				...prev,
+				ingredients: prev.ingredients.map((ingredient, i) => {
+					if (i !== index && ingredient.item === value) {
+						// إزالة الخامة المكررة من الصفوف الأخرى
+						return { ...ingredient, item: '' };
+					}
+					return ingredient;
+				})
+			}));
+		}
+	};
+
+
 
 	return (
 		<div className="space-y-6">
@@ -258,6 +332,14 @@ const Menu: React.FC = () => {
 									<p className="text-sm text-gray-600 mb-2">{item.category}</p>
 									{item.description && (
 										<p className="text-sm text-gray-500 mb-3">{item.description}</p>
+									)}
+									{item.ingredients && item.ingredients.length > 0 && (
+										<div className="text-xs text-blue-600 mb-2">
+											الخامات: {item.ingredients.map(ing => {
+												const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
+												return ingredientItem ? `${ingredientItem.name} (${ing.quantity} ${ing.unit})` : `${ing.quantity} ${ing.unit}`;
+											}).join(', ')}
+										</div>
 									)}
 								</div>
 								<span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.isAvailable)}`}>
@@ -342,8 +424,7 @@ const Menu: React.FC = () => {
 							</div>
 						</div>
 						<div className="p-6">
-
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<div>
 								<label className="block text-sm font-medium text-gray-700 mb-2">اسم العنصر *</label>
 								<input
@@ -383,7 +464,7 @@ const Menu: React.FC = () => {
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">وقت التحضير (دقائق)</label>
+								<label className="block text-sm font-medium text-gray-700 mb-2">وقت التحضير (دقيقة)</label>
 								<input
 									type="number"
 									value={formData.preparationTime}
@@ -433,6 +514,132 @@ const Menu: React.FC = () => {
 								</div>
 							</div>
 
+							<div className="md:col-span-2">
+								<label className="block text-sm font-medium text-gray-700 mb-2">
+									الخامات المرتبطة
+									<span className="text-xs text-gray-500 mr-2">
+										({(() => {
+											const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
+											const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
+											const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
+											return `${availableItems.length} من ${availableRawMaterials.length} خامة متاحة`;
+										})()})
+									</span>
+									{inventoryItems.length === 0 && (
+										<button
+											type="button"
+											onClick={() => fetchInventoryItems()}
+											className="text-xs text-blue-600 hover:text-blue-800 mr-2"
+										>
+											تحديث الخامات
+										</button>
+									)}
+								</label>
+								<div className="space-y-3">
+									{formData.ingredients.map((ingredient, index) => (
+										<div key={index} className="flex items-center space-x-2 space-x-reverse bg-gray-50 p-3 rounded-lg">
+											<div className="flex-1">
+												<select
+													value={ingredient.item}
+													onChange={(e) => updateIngredient(index, 'item', e.target.value)}
+													className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+												>
+													<option value="">اختر الخامة</option>
+													{inventoryItems && inventoryItems.length > 0 ? (
+														inventoryItems.filter(item => item.isRawMaterial).length > 0 ? (
+															(() => {
+																const availableItems = inventoryItems
+																	.filter(item => item.isRawMaterial)
+																	.filter(item => {
+																		// لا تظهر الخامة إذا كانت مختارة في صف آخر
+																		const isSelectedInOtherRows = formData.ingredients.some((ing, ingIndex) =>
+																			ingIndex !== index && ing.item === item.id
+																		);
+																		return !isSelectedInOtherRows;
+																	});
+
+																if (availableItems.length === 0) {
+																	return <option value="" disabled>جميع الخامات مختارة بالفعل</option>;
+																}
+
+																return availableItems.map(item => (
+																	<option key={item.id} value={item.id}>{item.name}</option>
+																));
+															})()
+														) : (
+															<option value="" disabled>لا توجد خامات في المخزون</option>
+														)
+													) : (
+														<option value="" disabled>جاري تحميل الخامات...</option>
+													)}
+												</select>
+											</div>
+											<div className="w-24">
+												<input
+													type="number"
+													value={ingredient.quantity}
+													onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
+													className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+													placeholder="الكمية"
+													min="0"
+													step="0.1"
+												/>
+											</div>
+											<div className="w-24">
+												<select
+													value={ingredient.unit}
+													onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
+													className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+												>
+													{unitOptions.map(unit => (
+														<option key={unit} value={unit}>{unit}</option>
+													))}
+												</select>
+											</div>
+											<button
+												type="button"
+												onClick={() => removeIngredient(index)}
+												className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+											>
+												<Trash2 className="h-4 w-4" />
+											</button>
+										</div>
+									))}
+									{(() => {
+										const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
+										const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
+										const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
+										const hasAvailableItems = availableItems.length > 0;
+
+										return (
+											<button
+												type="button"
+												onClick={addIngredient}
+												disabled={!hasAvailableItems}
+												className={`w-full border-2 border-dashed rounded-lg p-3 transition-colors duration-200 ${
+													hasAvailableItems
+														? 'border-gray-300 text-gray-600 hover:border-primary-500 hover:text-primary-600'
+														: 'border-gray-200 text-gray-400 cursor-not-allowed'
+												}`}
+											>
+												<Plus className="h-4 w-4 ml-2 inline" />
+												{hasAvailableItems ? 'إضافة خامة مرتبطة' : 'لا توجد خامات متاحة'}
+											</button>
+										);
+									})()}
+								</div>
+								{inventoryItems.length === 0 && (
+									<div className="text-xs text-orange-600 mt-2">
+										💡 ملاحظة: تأكد من وجود خامات في المخزون مع تحديد "خامة" في نوع العنصر
+									</div>
+								)}
+								{inventoryItems.length > 0 && inventoryItems.filter(item => item.isRawMaterial).length === 0 && (
+									<div className="text-xs text-orange-600 mt-2">
+										💡 ملاحظة: لا توجد خامات في المخزون. أضف خامات جديدة من صفحة المخزون
+									</div>
+								)}
+							</div>
+
 							<div className="md:col-span-2 flex items-center space-x-4 space-x-reverse">
 								<label className="flex items-center">
 									<input
@@ -454,8 +661,9 @@ const Menu: React.FC = () => {
 								</label>
 							</div>
 						</div>
+					</div>
 
-						<div className="flex justify-end space-x-3 space-x-reverse mt-6">
+					<div className="mt-6 flex justify-end space-x-3 space-x-reverse">
 							<button
 								onClick={() => setShowAddModal(false)}
 								className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
@@ -464,12 +672,11 @@ const Menu: React.FC = () => {
 							</button>
 							<button
 								onClick={handleSaveItem}
-								className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg flex items-center transition-colors duration-200"
+								disabled={loading}
+								className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
 							>
-								<Save className="h-4 w-4 ml-2" />
-								{editingItem ? 'تحديث' : 'حفظ'}
+								{loading ? 'جاري الحفظ...' : (editingItem ? 'تحديث العنصر' : 'إضافة العنصر')}
 							</button>
-						</div>
 						</div>
 					</div>
 				</div>

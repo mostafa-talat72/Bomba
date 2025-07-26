@@ -212,7 +212,7 @@ inventoryItemSchema.methods.consumeIngredients = async function (quantity = 1) {
 };
 
 // Indexes
-inventoryItemSchema.index({ name: 1 }, { unique: true });
+inventoryItemSchema.index({ name: 1 }); // Removed unique constraint
 inventoryItemSchema.index({ category: 1 });
 inventoryItemSchema.index({ currentStock: 1 });
 inventoryItemSchema.index({ isActive: 1 });
