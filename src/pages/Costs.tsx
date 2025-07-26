@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Plus, TrendingUp, TrendingDown, Calendar, Receipt, BarChart3, PieChart, Filter, Download, Edit, Trash2, Eye } from 'lucide-react';
+import { Wallet, Plus, TrendingUp, TrendingDown, Calendar, Receipt, Filter, Edit, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Cost } from '../services/api';
 
@@ -24,7 +24,8 @@ const Costs = () => {
     receipt: '',
     vendor: '',
     vendorContact: '',
-    notes: ''
+    notes: '',
+    paidAmount: ''
   });
 
   const costCategories = [
@@ -59,30 +60,32 @@ const Costs = () => {
   const getFilteredCosts = () => {
     if (!costs || costs.length === 0) return [];
 
-    const now = new Date();
     let startDate: Date;
     let endDate: Date;
 
     switch (selectedPeriod) {
       case 'today':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        startDate = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+        endDate = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1);
         break;
-      case 'week':
-        const dayOfWeek = now.getDay();
+      case 'week': {
+        const dayOfWeek = new Date().getDay();
         const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysToSubtract);
+        startDate = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - daysToSubtract);
         endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
         break;
-      case 'month':
+      }
+      case 'month': {
         startDate = new Date(selectedYear, selectedMonth, 1);
         endDate = new Date(selectedYear, selectedMonth + 1, 1);
         break;
-      case 'quarter':
+      }
+      case 'quarter': {
         const quarter = Math.floor(selectedMonth / 3);
         startDate = new Date(selectedYear, quarter * 3, 1);
         endDate = new Date(selectedYear, (quarter + 1) * 3, 1);
         break;
+      }
       case 'year':
         startDate = new Date(selectedYear, 0, 1);
         endDate = new Date(selectedYear + 1, 0, 1);
@@ -141,7 +144,6 @@ const Costs = () => {
   const getDailyAverage = () => {
     if (selectedPeriod === 'today') return stats.totalAmount;
 
-    const now = new Date();
     let daysCount = 1;
 
     switch (selectedPeriod) {
@@ -189,6 +191,32 @@ const Costs = () => {
 
   const monthlyData = getMonthlyComparison();
 
+  // حساب المبلغ المتبقي بناءً على حالة الدفع والمبلغ المدفوع
+  const calculateRemainingAmount = () => {
+    const totalAmount = parseFloat(formData.amount || '0');
+    const paidAmount = parseFloat(formData.paidAmount || '0');
+    return Math.max(0, totalAmount - paidAmount);
+  };
+
+  // تحديث حالة الدفع تلقائياً بناءً على المبلغ المدفوع
+  const updatePaymentStatus = () => {
+    const totalAmount = parseFloat(formData.amount || '0');
+    const paidAmount = parseFloat(formData.paidAmount || '0');
+
+    if (paidAmount >= totalAmount && totalAmount > 0) {
+      setFormData(prev => ({ ...prev, status: 'paid' }));
+    } else if (paidAmount > 0 && paidAmount < totalAmount) {
+      setFormData(prev => ({ ...prev, status: 'partially_paid' }));
+    } else {
+      setFormData(prev => ({ ...prev, status: 'pending' }));
+    }
+  };
+
+  // مراقبة تغييرات المبلغ والمبلغ المدفوع
+  useEffect(() => {
+    updatePaymentStatus();
+  }, [formData.amount, formData.paidAmount]);
+
   // معالجة النماذج
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -209,7 +237,8 @@ const Costs = () => {
       receipt: '',
       vendor: '',
       vendorContact: '',
-      notes: ''
+      notes: '',
+      paidAmount: ''
     });
   };
 
@@ -222,6 +251,7 @@ const Costs = () => {
       const costData = {
         ...formData,
         amount: parseFloat(formData.amount),
+        paidAmount: parseFloat(formData.paidAmount || '0'),
         date: new Date(formData.date)
       };
 
@@ -259,7 +289,8 @@ const Costs = () => {
       receipt: cost.receipt || '',
       vendor: cost.vendor || '',
       vendorContact: cost.vendorContact || '',
-      notes: cost.notes || ''
+      notes: cost.notes || '',
+      paidAmount: cost.paidAmount?.toString() || '0'
     });
     setShowEditCost(true);
   };
@@ -284,10 +315,6 @@ const Costs = () => {
     return costCategories.find(cat => cat.id === categoryId)?.name || 'غير معروف';
   };
 
-  const getCategoryColor = (categoryId: string) => {
-    return costCategories.find(cat => cat.id === categoryId)?.color || 'bg-gray-500';
-  };
-
   const getCategoryIcon = (categoryId: string) => {
     return costCategories.find(cat => cat.id === categoryId)?.icon || '📋';
   };
@@ -296,6 +323,7 @@ const Costs = () => {
     switch (status) {
       case 'paid': return 'bg-green-100 text-green-800';
       case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'partially_paid': return 'bg-blue-100 text-blue-800';
       case 'overdue': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -305,6 +333,7 @@ const Costs = () => {
     switch (status) {
       case 'paid': return 'مدفوع';
       case 'pending': return 'معلق';
+      case 'partially_paid': return 'مدفوع جزئياً';
       case 'overdue': return 'متأخر';
       default: return 'غير معروف';
     }
@@ -585,6 +614,12 @@ const Costs = () => {
                   المبلغ
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  المدفوع
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  المتبقي
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   رقم الإيصال
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -598,13 +633,13 @@ const Costs = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
                     جاري التحميل...
                   </td>
                 </tr>
               ) : filteredCosts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
                     لا توجد تكاليف في الفترة المحددة
                   </td>
                 </tr>
@@ -625,6 +660,12 @@ const Costs = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
                       {formatCurrency(cost.amount)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                      {formatCurrency(cost.paidAmount)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-yellow-600">
+                      {formatCurrency(cost.remainingAmount)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {cost.receipt || '-'}
@@ -754,9 +795,54 @@ const Costs = () => {
                 >
                   <option value="pending">معلق</option>
                   <option value="paid">مدفوع</option>
+                  <option value="partially_paid">مدفوع جزئياً</option>
                   <option value="overdue">متأخر</option>
                 </select>
               </div>
+
+              {/* إظهار حقول الدفع فقط إذا كانت الحالة ليست "مدفوع" */}
+              {formData.status !== 'paid' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    المبلغ المدفوع
+                    {formData.status === 'partially_paid' && (
+                      <span className="text-xs text-gray-500 mr-2">(جزئي)</span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    name="paidAmount"
+                    value={formData.paidAmount}
+                    onChange={handleInputChange}
+                    step="0.01"
+                    min="0"
+                    max={parseFloat(formData.amount || '0')}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="0.00"
+                  />
+                  {formData.paidAmount && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* إظهار ملخص التكلفة */}
+              {formData.amount && (
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
+                  <div className="text-sm text-gray-600">
+                    <div>إجمالي التكلفة: {parseFloat(formData.amount || '0').toFixed(2)} ج.م</div>
+                    {formData.paidAmount && (
+                      <>
+                        <div>المدفوع: {parseFloat(formData.paidAmount || '0').toFixed(2)} ج.م</div>
+                        <div>المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م</div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">رقم الإيصال (اختياري)</label>

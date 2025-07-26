@@ -6,6 +6,7 @@ import {
     updateCost,
     approveCost,
     deleteCost,
+    addCostPayment,
     getCostsSummary,
     getRecurringCosts,
 } from "../controllers/costController.js";
@@ -32,5 +33,6 @@ router
     .delete(authorize("costs", "all"), deleteCost);
 
 router.put("/:id/approve", authorize("costs", "all"), approveCost);
+router.post("/:id/payment", authorize("costs", "all"), addCostPayment);
 
 export default router;

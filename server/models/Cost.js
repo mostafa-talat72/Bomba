@@ -28,6 +28,16 @@ const costSchema = new mongoose.Schema(
             required: [true, "المبلغ مطلوب"],
             min: 0,
         },
+        paidAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        remainingAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         currency: {
             type: String,
             default: "EGP",
@@ -43,7 +53,7 @@ const costSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ["pending", "paid", "overdue", "cancelled"],
+            enum: ["pending", "paid", "partially_paid", "overdue", "cancelled"],
             default: "pending",
         },
         paymentMethod: {
@@ -127,8 +137,22 @@ const costSchema = new mongoose.Schema(
     }
 );
 
-// Update status based on due date
+// Update status and remaining amount based on paid amount
 costSchema.pre("save", function (next) {
+    // Calculate remaining amount
+    this.remainingAmount = Math.max(0, this.amount - this.paidAmount);
+
+    // Update status based on payment
+    if (this.paidAmount >= this.amount) {
+        this.status = "paid";
+        this.remainingAmount = 0;
+    } else if (this.paidAmount > 0) {
+        this.status = "partially_paid";
+    } else {
+        this.status = "pending";
+    }
+
+    // Update status based on due date
     if (
         this.dueDate &&
         this.dueDate < new Date() &&
@@ -138,6 +162,25 @@ costSchema.pre("save", function (next) {
     }
     next();
 });
+
+// Method to add payment
+costSchema.methods.addPayment = function (
+    paymentAmount,
+    paymentMethod = "cash"
+) {
+    this.paidAmount += paymentAmount;
+    this.paymentMethod = paymentMethod;
+
+    if (this.paidAmount >= this.amount) {
+        this.status = "paid";
+        this.remainingAmount = 0;
+    } else {
+        this.status = "partially_paid";
+        this.remainingAmount = this.amount - this.paidAmount;
+    }
+
+    return this.save();
+};
 
 // Calculate next due date for recurring costs
 costSchema.methods.calculateNextDueDate = function () {

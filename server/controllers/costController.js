@@ -317,6 +317,65 @@ export const deleteCost = async (req, res) => {
     }
 };
 
+// @desc    Add payment to cost
+// @route   POST /api/costs/:id/payment
+// @access  Private
+export const addCostPayment = async (req, res) => {
+    try {
+        const { paymentAmount, paymentMethod = "cash", reference } = req.body;
+
+        if (!paymentAmount || paymentAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "المبلغ المدفوع مطلوب ويجب أن يكون أكبر من صفر",
+            });
+        }
+
+        const cost = await Cost.findOne({
+            _id: req.params.id,
+            organization: req.user.organization,
+        });
+
+        if (!cost) {
+            return res.status(404).json({
+                success: false,
+                message: "التكلفة غير موجودة",
+            });
+        }
+
+        // Check if payment amount exceeds remaining amount
+        if (paymentAmount > cost.remainingAmount) {
+            return res.status(400).json({
+                success: false,
+                message: "المبلغ المدفوع أكبر من المبلغ المتبقي",
+            });
+        }
+
+        // Add payment using the method from the model
+        await cost.addPayment(paymentAmount, paymentMethod);
+
+        // Update notes with payment reference if provided
+        if (reference) {
+            cost.notes = cost.notes
+                ? `${cost.notes}\nدفعة: ${reference}`
+                : `دفعة: ${reference}`;
+            await cost.save();
+        }
+
+        res.json({
+            success: true,
+            message: "تم إضافة الدفعة بنجاح",
+            data: cost,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إضافة الدفعة",
+            error: error.message,
+        });
+    }
+};
+
 // @desc    Get costs summary
 // @route   GET /api/costs/summary
 // @access  Private

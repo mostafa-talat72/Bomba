@@ -177,10 +177,12 @@ export interface Cost {
   subcategory?: string;
   description: string;
   amount: number;
+  paidAmount: number;
+  remainingAmount: number;
   currency: string;
   date: Date;
   dueDate?: Date;
-  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
+  status: 'pending' | 'paid' | 'partially_paid' | 'overdue' | 'cancelled';
   paymentMethod: string;
   receipt?: string;
   vendor?: string;
@@ -780,7 +782,7 @@ class ApiClient {
     return response;
   }
 
-  async createInventoryItem(itemData: Partial<InventoryItem>): Promise<ApiResponse<InventoryItem>> {
+  async createInventoryItem(itemData: Partial<InventoryItem> & { costStatus?: string; paidAmount?: number }): Promise<ApiResponse<InventoryItem>> {
     const response = await this.request<InventoryItem>('/inventory', {
       method: 'POST',
       body: JSON.stringify(itemData),
@@ -810,6 +812,8 @@ class ApiClient {
     price?: number;
     supplier?: string;
     date?: string;
+    costStatus?: string;
+    paidAmount?: number;
   }): Promise<ApiResponse<InventoryItem>> {
     const response = await this.request<InventoryItem>(`/inventory/${id}/stock`, {
       method: 'PUT',
@@ -1058,6 +1062,21 @@ class ApiClient {
     return this.request(`/costs/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  async addCostPayment(id: string, paymentData: {
+    paymentAmount: number;
+    paymentMethod?: 'cash' | 'card' | 'transfer';
+    reference?: string;
+  }): Promise<ApiResponse<Cost>> {
+    const response = await this.request<Cost>(`/costs/${id}/payment`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
   }
 
   async getCostsSummary(period?: string): Promise<ApiResponse<any>> {

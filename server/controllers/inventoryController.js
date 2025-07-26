@@ -94,6 +94,8 @@ export const createInventoryItem = async (req, res) => {
             isRawMaterial,
             recipe,
             expiryDate,
+            costStatus = "pending",
+            paidAmount = 0,
         } = req.body;
 
         // دائماً أنشئ المنتج بكمية 0
@@ -133,9 +135,10 @@ export const createInventoryItem = async (req, res) => {
                 subcategory: category,
                 description: `شراء مخزون جديد: ${name}`,
                 amount: price * (currentStock || 1),
+                paidAmount: paidAmount,
                 currency: "EGP",
                 date: new Date(),
-                status: "pending",
+                status: costStatus,
                 paymentMethod: "cash",
                 vendor: supplier || undefined,
                 createdBy: req.user._id,
@@ -244,8 +247,17 @@ export const updateInventoryItem = async (req, res) => {
 // @access  Private
 export const updateStock = async (req, res) => {
     try {
-        const { type, quantity, reason, reference, price, supplier, date } =
-            req.body;
+        const {
+            type,
+            quantity,
+            reason,
+            reference,
+            price,
+            supplier,
+            date,
+            costStatus = "paid",
+            paidAmount = 0,
+        } = req.body;
 
         const item = await InventoryItem.findById(req.params.id);
 
@@ -272,13 +284,14 @@ export const updateStock = async (req, res) => {
                     subcategory: item.category,
                     description: `شراء كمية جديدة: ${item.name}`,
                     amount: price * quantity,
+                    paidAmount: paidAmount,
                     currency: "EGP",
                     date: date || new Date(),
                     vendor: supplier || item.supplier || "",
                     createdBy: req.user._id,
                     organization: req.user.organization,
                     notes: reason || "",
-                    status: "paid",
+                    status: costStatus,
                 });
             } catch (costError) {
                 Logger.error(

@@ -34,6 +34,8 @@ const Inventory = () => {
     minStock: '',
     unit: '',
     date: new Date().toISOString().slice(0, 10),
+    costStatus: 'pending',
+    paidAmount: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -42,6 +44,12 @@ const Inventory = () => {
   // القيم المسموحة للفئة والوحدة
   const categoryOptions = ['مشروبات ساخنة', 'مشروبات باردة', 'طعام', 'حلويات', 'مواد خام', 'أخرى'];
   const unitOptions = ['قطعة', 'كيلو', 'جرام', 'لتر', 'مل', 'علبة', 'كيس', 'زجاجة'];
+  const costStatusOptions = [
+    { value: 'pending', label: 'معلق' },
+    { value: 'paid', label: 'مدفوع' },
+    { value: 'partially_paid', label: 'مدفوع جزئياً' },
+    { value: 'overdue', label: 'متأخر' },
+  ];
 
   // جلب بيانات المخزون عند تحميل الصفحة
   useEffect(() => {
@@ -83,11 +91,47 @@ const Inventory = () => {
     return { status: 'good', color: 'text-green-600', bgColor: 'bg-green-50' };
   };
 
+  // حساب المبلغ المتبقي بناءً على حالة الدفع والمبلغ المدفوع
+  const calculateRemainingAmount = () => {
+    const totalAmount = parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0');
+    const paidAmount = parseFloat(addForm.paidAmount || '0');
+    return Math.max(0, totalAmount - paidAmount);
+  };
+
+  // تحديث حالة الدفع تلقائياً بناءً على المبلغ المدفوع
+  const updatePaymentStatus = () => {
+    const totalAmount = parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0');
+    const paidAmount = parseFloat(addForm.paidAmount || '0');
+
+    if (paidAmount >= totalAmount && totalAmount > 0) {
+      setAddForm(prev => ({ ...prev, costStatus: 'paid' }));
+    } else if (paidAmount > 0 && paidAmount < totalAmount) {
+      setAddForm(prev => ({ ...prev, costStatus: 'partially_paid' }));
+    } else {
+      setAddForm(prev => ({ ...prev, costStatus: 'pending' }));
+    }
+  };
+
+  // مراقبة تغييرات السعر والكمية والمبلغ المدفوع
+  useEffect(() => {
+    updatePaymentStatus();
+  }, [addForm.price, addForm.quantity, addForm.paidAmount]);
+
   // فتح نافذة إضافة مخزون
   const openAddModal = () => {
     setAddType('existing');
     setAddForm({
-      productId: '', name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '', date: new Date().toISOString().slice(0, 10)
+      productId: '',
+      name: '',
+      category: '',
+      quantity: '',
+      price: '',
+      supplier: '',
+      minStock: '',
+      unit: '',
+      date: new Date().toISOString().slice(0, 10),
+      costStatus: 'pending',
+      paidAmount: ''
     });
     setError('');
     setSuccess('');
@@ -107,6 +151,8 @@ const Inventory = () => {
       minStock: String(item.minStock || ''),
       unit: item.unit || '',
       date: new Date().toISOString().slice(0, 10),
+      costStatus: 'pending',
+      paidAmount: '',
     });
     setError('');
     setSuccess('');
@@ -123,7 +169,17 @@ const Inventory = () => {
   const handleAddTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setAddType(e.target.value as 'existing' | 'new');
     setAddForm({
-      productId: '', name: '', category: '', quantity: '', price: '', supplier: '', minStock: '', unit: '', date: new Date().toISOString().slice(0, 10)
+      productId: '',
+      name: '',
+      category: '',
+      quantity: '',
+      price: '',
+      supplier: '',
+      minStock: '',
+      unit: '',
+      date: new Date().toISOString().slice(0, 10),
+      costStatus: 'pending',
+      paidAmount: ''
     });
     setError('');
     setSuccess('');
@@ -154,6 +210,8 @@ const Inventory = () => {
           price: Number(addForm.price),
           supplier: addForm.supplier,
           date: addForm.date,
+          costStatus: addForm.costStatus,
+          paidAmount: Number(addForm.paidAmount) || 0,
         });
         if (res) {
           setSuccess('تمت إضافة الكمية بنجاح!');
@@ -178,6 +236,8 @@ const Inventory = () => {
           unit: addForm.unit,
           price: Number(addForm.price),
           supplier: addForm.supplier,
+          costStatus: addForm.costStatus,
+          paidAmount: Number(addForm.paidAmount) || 0,
         });
         if (res) {
           setSuccess('تمت إضافة المنتج بنجاح!');
@@ -464,6 +524,64 @@ const Inventory = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ الإضافة</label>
                     <input type="date" name="date" value={addForm.date} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">حالة الدفع</label>
+                    <select
+                      name="costStatus"
+                      value={addForm.costStatus}
+                      onChange={handleFormChange}
+                      className="w-full border rounded px-3 py-2"
+                    >
+                      {costStatusOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* إظهار حقول الدفع فقط إذا كانت الحالة ليست "مدفوع" */}
+                  {addForm.costStatus !== 'paid' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          المبلغ المدفوع
+                          {addForm.costStatus === 'partially_paid' && (
+                            <span className="text-xs text-gray-500 mr-2">(جزئي)</span>
+                          )}
+                        </label>
+                        <input
+                          type="number"
+                          name="paidAmount"
+                          value={addForm.paidAmount}
+                          onChange={handleFormChange}
+                          className="w-full border rounded px-3 py-2"
+                          min="0"
+                          max={parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')}
+                          placeholder="0"
+                        />
+                        {addForm.paidAmount && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* إظهار ملخص التكلفة */}
+                  {addForm.price && addForm.quantity && (
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
+                      <div className="text-sm text-gray-600">
+                        <div>إجمالي التكلفة: {(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')).toFixed(2)} ج.م</div>
+                        {addForm.paidAmount && (
+                          <>
+                            <div>المدفوع: {parseFloat(addForm.paidAmount || '0').toFixed(2)} ج.م</div>
+                            <div>المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م</div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -505,6 +623,64 @@ const Inventory = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
                     <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">حالة الدفع</label>
+                    <select
+                      name="costStatus"
+                      value={addForm.costStatus}
+                      onChange={handleFormChange}
+                      className="w-full border rounded px-3 py-2"
+                    >
+                      {costStatusOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* إظهار حقول الدفع فقط إذا كانت الحالة ليست "مدفوع" */}
+                  {addForm.costStatus !== 'paid' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          المبلغ المدفوع
+                          {addForm.costStatus === 'partially_paid' && (
+                            <span className="text-xs text-gray-500 mr-2">(جزئي)</span>
+                          )}
+                        </label>
+                        <input
+                          type="number"
+                          name="paidAmount"
+                          value={addForm.paidAmount}
+                          onChange={handleFormChange}
+                          className="w-full border rounded px-3 py-2"
+                          min="0"
+                          max={parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')}
+                          placeholder="0"
+                        />
+                        {addForm.paidAmount && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* إظهار ملخص التكلفة */}
+                  {addForm.price && addForm.quantity && (
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
+                      <div className="text-sm text-gray-600">
+                        <div>إجمالي التكلفة: {(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')).toFixed(2)} ج.م</div>
+                        {addForm.paidAmount && (
+                          <>
+                            <div>المدفوع: {parseFloat(addForm.paidAmount || '0').toFixed(2)} ج.م</div>
+                            <div>المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م</div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {error && <div className="text-red-600 text-sm">{error}</div>}
