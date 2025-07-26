@@ -356,7 +356,7 @@ const Users = () => {
       setDeleteLoading(true);
       setDeleteError('');
       try {
-        const res = await fetch('/api/auth/verify-password', {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: user?.email, password: deletePassword })

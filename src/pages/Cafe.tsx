@@ -878,7 +878,7 @@ const Cafe: React.FC = () => {
   // دالة لاختبار الاتصال بالخادم
   const testServerConnection = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/orders/pending');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/orders/pending`);
 
       if (response.ok) {
         showNotification('الخادم يعمل بشكل طبيعي', 'success');

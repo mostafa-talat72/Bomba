@@ -241,7 +241,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         setSubscriptionStatus('loading');
         const token = localStorage.getItem('token');
-        const res = await fetch('/api/billing/subscription/status', {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/billing/subscription/status`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         const data = await res.json();
