@@ -12,26 +12,31 @@ const LoginForm: React.FC = () => {
   const [isRegister, setIsRegister] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [localLoading, setLocalLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setLocalLoading(true);
     if (isRegister) {
       // تحقق من الحقول قبل الإرسال
       if (!name.trim() || !businessName.trim() || !email.trim() || !password.trim()) {
         setError('يرجى ملء جميع الحقول المطلوبة.');
+        setLocalLoading(false);
         return;
       }
       // تحقق من صحة البريد الإلكتروني
       const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
       if (!emailRegex.test(email)) {
         setError('يرجى إدخال بريد إلكتروني صحيح.');
+        setLocalLoading(false);
         return;
       }
       // تحقق من قوة كلمة المرور
       if (password.length < 6) {
         setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
+        setLocalLoading(false);
         return;
       }
       // منطق التسجيل
@@ -65,6 +70,7 @@ const LoginForm: React.FC = () => {
       } catch {
         setError('حدث خطأ أثناء التسجيل. حاول مرة أخرى.');
       }
+      setLocalLoading(false);
     } else {
       // منطق تسجيل الدخول
       const response = await login(email, password);
@@ -76,8 +82,10 @@ const LoginForm: React.FC = () => {
         } else {
           setError('حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.');
         }
+        setLocalLoading(false);
       } else {
         navigate('/dashboard', { replace: true });
+        // لا داعي لإيقاف التحميل هنا لأن الصفحة ستتغير
       }
     }
   };
@@ -177,9 +185,9 @@ const LoginForm: React.FC = () => {
         <button
           type="submit"
           className="w-full bg-gradient-to-r from-primary-600 to-indigo-600 text-white py-3 rounded-2xl font-bold text-lg shadow-lg hover:from-primary-700 hover:to-indigo-700 transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary-400 mb-4"
-          disabled={isLoading}
+          disabled={isLoading || localLoading}
         >
-          {isLoading ? (isRegister ? 'جاري التسجيل...' : 'جاري الدخول...') : (isRegister ? 'تسجيل' : 'دخول')}
+          {(isLoading || localLoading) ? (isRegister ? 'جاري التسجيل...' : 'جاري الدخول...') : (isRegister ? 'تسجيل' : 'دخول')}
         </button>
         <div className="text-center mt-2">
           <button
