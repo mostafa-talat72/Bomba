@@ -2,6 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Screen reader only class for accessibility */
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Browser compatibility fixes */
+@supports (-webkit-appearance: none) {
+
+	/* Safari and older Chrome versions */
+	* {
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+}
+
+/* Firefox specific fixes */
+@-moz-document url-prefix() {
+	* {
+		-moz-osx-font-smoothing: grayscale;
+	}
+}
+
+/* Safari specific fixes */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+	* {
+		-webkit-font-smoothing: antialiased;
+	}
+}
+
+/* Fix for older browsers that don't support modern CSS features */
+@supports not (backdrop-filter: blur(10px)) {
+	.bg-white\/95 {
+		background-color: rgba(255, 255, 255, 0.95);
+	}
+}
+
+/* Fallback for browsers that don't support CSS Grid */
+@supports not (display: grid) {
+	.grid-responsive {
+		display: flex;
+		flex-wrap: wrap;
+	}
+
+	.grid-responsive>* {
+		flex: 1 1 250px;
+		margin: 0.5rem;
+	}
+}
+
+/* Fallback for browsers that don't support CSS Custom Properties */
+@supports not (--custom: property) {
+	:root {
+		--blue-600: #2563eb;
+		--purple-600: #9333ea;
+		--indigo-700: #4338ca;
+	}
+}
+
 /* Global responsive fixes */
 * {
 	box-sizing: border-box;
@@ -11,6 +77,9 @@ html,
 body {
 	overflow-x: hidden;
 	width: 100%;
+	-webkit-text-size-adjust: 100%;
+	-ms-text-size-adjust: 100%;
+	text-size-adjust: 100%;
 }
 
 #root {
@@ -76,6 +145,25 @@ body {
 
 	.mobile-text-xs {
 		font-size: 0.75rem;
+	}
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+
+	button,
+	input,
+	select,
+	textarea {
+		min-height: 44px;
+		min-width: 44px;
+	}
+
+	/* Increase touch targets for mobile */
+	.mobile-touch-target {
+		min-height: 44px;
+		min-width: 44px;
+		padding: 12px;
 	}
 }
 

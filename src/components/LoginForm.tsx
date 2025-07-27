@@ -275,43 +275,45 @@ const LoginForm: React.FC = () => {
           {/* Register Fields */}
           {isRegister && (
             <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  اسم المالك
-                </label>
-                                 <input
-                   type="text"
-                   value={formData.name}
-                   onChange={(e) => handleInputChange('name', e.target.value)}
-                   className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
-                     errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                   }`}
-                   placeholder="أدخل اسم المالك"
-                   disabled={isSubmitting}
-                   autoComplete="off"
-                   dir="rtl"
-                 />
+                             <div>
+                 <label htmlFor="owner-name" className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                   اسم المالك
+                 </label>
+                                                  <input
+                  id="owner-name"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                    errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                  }`}
+                  placeholder="أدخل اسم المالك"
+                  disabled={isSubmitting}
+                  autoComplete="new-password"
+                  dir="rtl"
+                />
                 {errors.name && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.name}</p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-                  اسم المنشأة
-                </label>
-                                 <input
-                   type="text"
-                   value={formData.businessName}
-                   onChange={(e) => handleInputChange('businessName', e.target.value)}
-                   className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
-                     errors.businessName ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                   }`}
-                   placeholder="أدخل اسم المنشأة"
-                   disabled={isSubmitting}
-                   autoComplete="off"
-                   dir="rtl"
-                 />
+                             <div>
+                 <label htmlFor="business-name" className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                   اسم المنشأة
+                 </label>
+                                                  <input
+                  id="business-name"
+                  type="text"
+                  value={formData.businessName}
+                  onChange={(e) => handleInputChange('businessName', e.target.value)}
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                    errors.businessName ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                  }`}
+                  placeholder="أدخل اسم المنشأة"
+                  disabled={isSubmitting}
+                  autoComplete="new-password"
+                  dir="rtl"
+                />
                 {errors.businessName && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.businessName}</p>
                 )}
@@ -320,26 +322,26 @@ const LoginForm: React.FC = () => {
           )}
 
           {/* Email Field */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              البريد الإلكتروني
-            </label>
-                         <input
-               key={`email-${isRegister ? 'register' : 'login'}`}
-               ref={emailRef}
-               type="email"
-               value={formData.email}
-               onChange={(e) => handleInputChange('email', e.target.value)}
-               className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
-                 errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-               }`}
-               placeholder="أدخل بريدك الإلكتروني"
-               disabled={isSubmitting}
-               autoComplete={isRegister ? "username" : "email"}
-               name={isRegister ? "register-email" : "login-email"}
-               id={isRegister ? "register-email" : "login-email"}
-               dir="rtl"
-             />
+                     <div>
+             <label htmlFor={isRegister ? "register-email" : "login-email"} className="block text-sm font-medium text-gray-700 mb-2 text-right">
+               البريد الإلكتروني
+             </label>
+                                                    <input
+                key={`email-${isRegister ? 'register' : 'login'}`}
+                ref={emailRef}
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                  errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                }`}
+                placeholder="أدخل بريدك الإلكتروني"
+                disabled={isSubmitting}
+                autoComplete="new-password"
+                name={isRegister ? "register-email" : "login-email"}
+                id={isRegister ? "register-email" : "login-email"}
+                dir="rtl"
+              />
             {errors.email && (
               <>
                 <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
@@ -357,39 +359,41 @@ const LoginForm: React.FC = () => {
           </div>
 
           {/* Password Field */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
-              كلمة المرور
-            </label>
-            <div className="relative">
-                                                                                                                       <input
-                   key={`password-${isRegister ? 'register' : 'login'}`}
-                   ref={passwordRef}
-                   type={showPassword ? "text" : "password"}
-                   value={formData.password}
-                   onChange={(e) => handleInputChange('password', e.target.value)}
-                   className={`w-full px-4 py-3 pr-12 pl-4 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
-                     errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                   }`}
-                   placeholder="أدخل كلمة المرور"
-                   disabled={isSubmitting}
-                   autoComplete={isRegister ? "new-password" : "current-password"}
-                   name={isRegister ? "register-password" : "login-password"}
-                   id={isRegister ? "register-password" : "login-password"}
-                   dir="rtl"
-                 />
+                     <div>
+             <label htmlFor={isRegister ? "register-password" : "login-password"} className="block text-sm font-medium text-gray-700 mb-2 text-right">
+               كلمة المرور
+             </label>
+             <div className="relative">
+                               <input
+                  key={`password-${isRegister ? 'register' : 'login'}`}
+                  ref={passwordRef}
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={(e) => handleInputChange('password', e.target.value)}
+                  className={`w-full px-4 py-3 pr-12 pl-4 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right ${
+                    errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                  }`}
+                  placeholder="أدخل كلمة المرور"
+                  disabled={isSubmitting}
+                  autoComplete="new-password"
+                  name={isRegister ? "register-password" : "login-password"}
+                  id={isRegister ? "register-password" : "login-password"}
+                  dir="rtl"
+                />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700 transition-colors"
                 disabled={isSubmitting}
+                aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
               >
                 {showPassword ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
@@ -460,16 +464,19 @@ const LoginForm: React.FC = () => {
           <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
             <h3 className="text-sm font-medium text-gray-900 mb-3 text-right">إعادة إرسال رابط التفعيل</h3>
             <form onSubmit={handleResendVerification} className="space-y-3">
-              <div>
-                <input
-                  type="email"
-                  value={resendEmail}
-                  onChange={(e) => setResendEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right"
-                  placeholder="أدخل بريدك الإلكتروني"
-                  disabled={isResending}
-                  dir="rtl"
-                />
+                             <div>
+                 <label htmlFor="resend-email" className="sr-only">البريد الإلكتروني لإعادة إرسال التفعيل</label>
+                                   <input
+                    id="resend-email"
+                    type="email"
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right"
+                    placeholder="أدخل بريدك الإلكتروني"
+                    disabled={isResending}
+                    autoComplete="new-password"
+                    dir="rtl"
+                  />
                 {errors.email && !errors.email.includes('غير مفعل') && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
                 )}
@@ -501,16 +508,19 @@ const LoginForm: React.FC = () => {
             <h3 className="text-sm font-medium text-gray-900 mb-3 text-right">نسيت كلمة المرور</h3>
             <p className="text-xs text-gray-600 mb-3 text-right">أدخل بريدك الإلكتروني لإرسال رابط إعادة تعيين كلمة المرور</p>
             <form onSubmit={handleForgotPassword} className="space-y-3">
-              <div>
-                <input
-                  type="email"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right"
-                  placeholder="أدخل بريدك الإلكتروني"
-                  disabled={isForgotSubmitting}
-                  dir="rtl"
-                />
+                             <div>
+                 <label htmlFor="forgot-email" className="sr-only">البريد الإلكتروني لنسيت كلمة المرور</label>
+                                   <input
+                    id="forgot-email"
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right"
+                    placeholder="أدخل بريدك الإلكتروني"
+                    disabled={isForgotSubmitting}
+                    autoComplete="new-password"
+                    dir="rtl"
+                  />
                 {errors.email && !errors.email.includes('غير مفعل') && (
                   <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
                 )}
