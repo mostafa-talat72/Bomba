@@ -170,13 +170,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const checkToken = () => {
       const token = localStorage.getItem('token'); // إصلاح الخطأ: تعريف المتغير
       const path = window.location.pathname;
+      console.log('checkToken - token:', token ? 'exists' : 'not found', 'path:', path);
       // استثناء صفحة التفعيل وصفحة الفاتورة وصفحة إعادة تعيين كلمة المرور وصفحة التسجيل من أي redirect
       const isVerifyEmail = path.startsWith('/verify-email');
       const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(path);
       const isResetPassword = path.startsWith('/reset-password');
       const isRegister = path === '/register';
       const isEmailActions = path.startsWith('/email-actions');
+      const isLogin = path === '/login';
+
+      // إذا كان المستخدم في صفحة تسجيل الدخول، لا تقم بإعادة التوجيه
+      if (isLogin) {
+        return;
+      }
+
       if (!token && !isVerifyEmail && !isBillView && !isResetPassword && !isRegister && !isEmailActions) {
+        console.log('checkToken - No token found, redirecting to login');
         setUser(null);
         setIsAuthenticated(false);
         setSessions([]);
@@ -185,11 +194,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBills([]);
         setCosts([]);
         navigate('/login', { replace: true });
+      } else if (token) {
+        console.log('checkToken - Token exists, user should be authenticated');
       }
     };
-    checkToken();
-    const interval = setInterval(checkToken, 1000);
-    return () => clearInterval(interval);
+
+    // تأخير أول فحص للتوكن لضمان عدم التداخل مع عملية تسجيل الدخول
+    const initialDelay = setTimeout(checkToken, 2000);
+    const interval = setInterval(checkToken, 3000); // تقليل التكرار إلى كل 3 ثوانٍ
+
+    return () => {
+      clearTimeout(initialDelay);
+      clearInterval(interval);
+    };
   }, [navigate]);
 
   // Check authentication on app load
@@ -270,11 +287,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const checkAuth = async () => {
     try {
       const token = localStorage.getItem('token');
+      console.log('checkAuth - token:', token ? 'exists' : 'not found');
       if (token) {
         let response = await api.getMe();
         if (response.success && response.data?.user) {
           setUser(response.data.user);
           setIsAuthenticated(true);
+          console.log('checkAuth - user authenticated');
           await refreshData();
         } else if (response.message && response.message.includes('توكن غير صالح')) {
           // محاولة تجديد التوكن تلقائياً
@@ -301,15 +320,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           // إذا فشل التجديد أو لم يوجد refreshToken
           localStorage.removeItem('token');
           localStorage.removeItem('refreshToken');
+          setUser(null);
+          setIsAuthenticated(false);
           showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
           navigate('/login', { replace: true });
         } else {
           localStorage.removeItem('token');
+          setUser(null);
+          setIsAuthenticated(false);
         }
+      } else {
+        // لا يوجد توكن، تأكد من أن الحالة صحيحة
+        setUser(null);
+        setIsAuthenticated(false);
+        console.log('checkAuth - no token, setting authenticated to false');
       }
     } catch (error) {
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
+      setUser(null);
+      setIsAuthenticated(false);
       showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
       navigate('/login', { replace: true });
     } finally {
@@ -331,7 +361,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Auth methods
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
+      console.log('AppContext login called');
       const response = await api.login(email, password);
+      console.log('AppContext login response:', response);
       const user = response.data?.user;
       const token = response.data?.token;
       if (response.success && user && token) {
@@ -339,6 +371,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         api.setToken(token);
         setUser(user);
         setIsAuthenticated(true);
+        console.log('AppContext: User authenticated, token stored');
         await refreshData();
         // رسالة ترحيب فقط عند تسجيل الدخول وليس عند reload
         if (firstLoginRef.current) {
