@@ -115,16 +115,16 @@ const RouteHandler = () => {
     );
   }
 
-  // إذا كان المستخدم مسجل دخول، اعرض الصفحات المحمية
-  if (isAuthenticated) {
-    return (
-      <Routes>
-        {/* Public routes - متاحة للجميع حتى لو كان مسجل دخول */}
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/bill/:billId" element={<BillView />} />
-        <Route path="/login" element={<LoginForm />} />
-
+  return (
+    <Routes>
+      {/* صفحات عامة متاحة دائماً */}
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/bill/:billId" element={<BillView />} />
+      <Route path="/login" element={<LoginForm />} />
+      <Route path="/" element={<LoginForm />} />
+      {/* صفحات النظام المحمية فقط إذا كان المستخدم مسجل دخول */}
+      {isAuthenticated && (
         <Route path="/" element={<Layout />}>
           <Route index element={<HomeRedirect />} />
           <Route path="dashboard" element={
@@ -189,25 +189,8 @@ const RouteHandler = () => {
           } />
           <Route path="/subscription" element={<Subscription />} />
         </Route>
-      </Routes>
-    );
-  }
-
-  // إذا لم يكن المستخدم مسجل دخول، اعرض الصفحات العامة فقط
-  return (
-    <Routes>
-      {/* Always allow verify-email route for public access */}
-      <Route path="/verify-email" element={<VerifyEmail />} />
-      {/* Public route for reset password - متاح للجميع */}
-      <Route path="/reset-password" element={<ResetPassword />} />
-      {/* Public route for bill viewing - متاح للجميع */}
-      <Route path="/bill/:billId" element={<BillView />} />
-
-      {/* Login route */}
-      <Route path="/login" element={<LoginForm />} />
-      {/* Route للجذر */}
-      <Route path="/" element={<LoginForm />} />
-      {/* Catch-all fallback */}
+      )}
+      {/* fallback */}
       <Route path="*" element={<LoginForm />} />
     </Routes>
   );
