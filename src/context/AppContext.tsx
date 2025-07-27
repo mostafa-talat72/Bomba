@@ -170,11 +170,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const checkToken = () => {
       const token = localStorage.getItem('token'); // إصلاح الخطأ: تعريف المتغير
       const path = window.location.pathname;
-      // استثناء صفحة التفعيل وصفحة الفاتورة وصفحة إعادة تعيين كلمة المرور من أي redirect
+      // استثناء صفحة التفعيل وصفحة الفاتورة وصفحة إعادة تعيين كلمة المرور وصفحة التسجيل من أي redirect
       const isVerifyEmail = path.startsWith('/verify-email');
       const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(path);
       const isResetPassword = path.startsWith('/reset-password');
-      if (!token && !isVerifyEmail && !isBillView && !isResetPassword) {
+      const isRegister = path === '/register';
+      const isEmailActions = path.startsWith('/email-actions');
+      if (!token && !isVerifyEmail && !isBillView && !isResetPassword && !isRegister && !isEmailActions) {
         setUser(null);
         setIsAuthenticated(false);
         setSessions([]);

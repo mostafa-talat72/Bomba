@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
-import LoginForm from './components/LoginForm';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import EmailActions from './pages/EmailActions';
 import HomeRedirect from './components/HomeRedirect';
 
 import Dashboard from './pages/Dashboard';
@@ -121,8 +123,10 @@ const RouteHandler = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/bill/:billId" element={<BillView />} />
-      <Route path="/login" element={<LoginForm />} />
-      <Route path="/" element={<LoginForm />} />
+              <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/email-actions" element={<EmailActions />} />
+        <Route path="/" element={<Login />} />
       {/* صفحات النظام المحمية فقط إذا كان المستخدم مسجل دخول */}
       {isAuthenticated && (
         <Route path="/" element={<Layout />}>
@@ -191,7 +195,7 @@ const RouteHandler = () => {
         </Route>
       )}
       {/* fallback */}
-      <Route path="*" element={<LoginForm />} />
+              <Route path="*" element={<Login />} />
     </Routes>
   );
 };
