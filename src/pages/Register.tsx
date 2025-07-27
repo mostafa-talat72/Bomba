@@ -114,7 +114,6 @@ const Register: React.FC = () => {
       });
 
       const data = await response.json();
-      console.log('Registration response:', data);
 
       if (data.success) {
         setSuccessMessage('تم إرسال رابط التفعيل إلى بريدك الإلكتروني. يرجى تفعيل الحساب قبل تسجيل الدخول.');

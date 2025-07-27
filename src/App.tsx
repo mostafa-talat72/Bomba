@@ -32,7 +32,6 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
   requiredRole?: string;
 }) => {
   const { user, isAuthenticated } = useApp();
-  console.log('ProtectedRoute - isAuthenticated:', isAuthenticated, 'user:', user ? 'exists' : 'null');
 
   // السماح دائماً بصفحة إعادة تعيين كلمة المرور
   if (window.location.pathname.startsWith('/reset-password')) {
@@ -40,7 +39,6 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
   }
 
   if (!isAuthenticated || !user) {
-    console.log('ProtectedRoute - redirecting to login');
     return <Navigate to="/login" replace />;
   }
 

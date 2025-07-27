@@ -84,18 +84,14 @@ const Login: React.FC = () => {
     setErrors({});
 
     try {
-      console.log('Login attempt with email:', formData.email);
       const result = await login(formData.email, formData.password);
-      console.log('Login result:', result);
 
       if (result.success) {
-        console.log('Login successful, navigating to dashboard...');
         clearForm();
         // Navigate to dashboard - AppContext will handle the authentication state
         navigate('/dashboard', { replace: true });
       } else {
         const errorMessage = result.message || '';
-        console.log('Login failed:', errorMessage);
 
         if (errorMessage.includes('غير مفعل') || errorMessage.includes('pending')) {
           setErrors({ email: 'الحساب غير مفعل. يرجى تفعيل بريدك الإلكتروني أولاً.' });
@@ -108,8 +104,7 @@ const Login: React.FC = () => {
           setErrors({ email: errorMessage || 'حدث خطأ أثناء تسجيل الدخول.' });
         }
       }
-    } catch (error) {
-      console.error('Login error:', error);
+    } catch {
       setErrors({
         email: 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.'
       });
