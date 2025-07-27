@@ -10,7 +10,7 @@ interface FormData {
 }
 
 const LoginForm: React.FC = () => {
-  const { login, isLoading } = useApp();
+  const { login, isLoading, resendVerification, forgotPassword } = useApp();
   const navigate = useNavigate();
 
   // State management
@@ -25,6 +25,14 @@ const LoginForm: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showResendForm, setShowResendForm] = useState(false);
+  const [showForgotForm, setShowForgotForm] = useState(false);
+  const [resendEmail, setResendEmail] = useState('');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isResending, setIsResending] = useState(false);
+  const [isForgotSubmitting, setIsForgotSubmitting] = useState(false);
+  // أضف متغير حالة جديد
+  const [showResendActivationLink, setShowResendActivationLink] = useState(false);
 
   // Refs for form stability
   const formRef = useRef<HTMLFormElement>(null);
@@ -41,7 +49,66 @@ const LoginForm: React.FC = () => {
     });
     setErrors({});
     setSuccessMessage(null);
+    setShowResendActivationLink(false);
   }, []);
+
+  // Handle resend verification
+  const handleResendVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resendEmail.trim()) {
+      setErrors({ email: 'البريد الإلكتروني مطلوب' });
+      return;
+    }
+
+    setIsResending(true);
+    setErrors({});
+    setShowResendActivationLink(false); // إخفاء زر إعادة الإرسال
+
+    try {
+      const response = await resendVerification(resendEmail);
+      if (response.success) {
+        setSuccessMessage(response.message || 'تم إرسال رابط التفعيل إلى بريدك الإلكتروني');
+        setShowResendForm(false);
+        setResendEmail('');
+        // إزالة رسالة الخطأ السابقة إذا كانت موجودة
+        setErrors({});
+      } else {
+        setErrors({ email: response.message || 'فشل في إعادة إرسال رابط التفعيل' });
+      }
+    } catch {
+      setErrors({ email: 'حدث خطأ أثناء إعادة إرسال رابط التفعيل' });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  // Handle forgot password
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) {
+      setErrors({ email: 'البريد الإلكتروني مطلوب' });
+      return;
+    }
+
+    setIsForgotSubmitting(true);
+    setErrors({});
+    setShowResendActivationLink(false); // إخفاء زر إعادة الإرسال
+
+    try {
+      const response = await forgotPassword(forgotEmail);
+      if (response.success) {
+        setSuccessMessage(response.message || 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني');
+        setShowForgotForm(false);
+        setForgotEmail('');
+      } else {
+        setErrors({ email: response.message || 'فشل في إرسال رابط إعادة تعيين كلمة المرور' });
+      }
+    } catch {
+      setErrors({ email: 'حدث خطأ أثناء إرسال رابط إعادة تعيين كلمة المرور' });
+    } finally {
+      setIsForgotSubmitting(false);
+    }
+  };
 
   // Handle input changes
   const handleInputChange = useCallback((field: keyof FormData, value: string) => {
@@ -135,7 +202,10 @@ const LoginForm: React.FC = () => {
           const errorMessage = response.message || '';
 
           if (errorMessage.includes('غير مفعل') || errorMessage.includes('pending')) {
+            // عرض رسالة خاصة للحساب غير المفعل مع إمكانية إعادة إرسال التفعيل
             setErrors({ email: 'الحساب غير مفعل. يرجى تفعيل بريدك الإلكتروني أولاً.' });
+            setShowResendActivationLink(true);
+            setResendEmail(formData.email);
           } else if (errorMessage.includes('غير صحيحة') || errorMessage.includes('خطأ')) {
             setErrors({ email: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.' });
           } else if (errorMessage.includes('غير موجود')) {
@@ -271,7 +341,18 @@ const LoginForm: React.FC = () => {
                dir="rtl"
              />
             {errors.email && (
-              <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
+              <>
+                <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
+                {showResendActivationLink && !isRegister && (
+                  <button
+                    type="button"
+                    className="block mt-2 text-xs text-blue-600 hover:underline focus:outline-none"
+                    onClick={() => setShowResendForm(true)}
+                  >
+                    إعادة إرسال رابط التفعيل
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -352,6 +433,108 @@ const LoginForm: React.FC = () => {
             {isRegister ? 'لديك حساب بالفعل؟ تسجيل الدخول' : 'ليس لديك حساب؟ سجل منشأتك الآن'}
           </button>
         </div>
+
+        {/* Additional Options for Login */}
+        {!isRegister && (
+          <div className="mt-4 space-y-2">
+            {/* Forgot Password - يظهر فقط إذا لم تكن النموذج مفتوح */}
+            {!showForgotForm && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotForm(true);
+                  setShowResendForm(false);
+                  setForgotEmail(formData.email);
+                }}
+                disabled={isSubmitting}
+                className="w-full text-center text-xs text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50"
+              >
+                نسيت كلمة المرور؟
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Resend Verification Form */}
+        {showResendForm && !isRegister && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900 mb-3 text-right">إعادة إرسال رابط التفعيل</h3>
+            <form onSubmit={handleResendVerification} className="space-y-3">
+              <div>
+                <input
+                  type="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right"
+                  placeholder="أدخل بريدك الإلكتروني"
+                  disabled={isResending}
+                  dir="rtl"
+                />
+                {errors.email && !errors.email.includes('غير مفعل') && (
+                  <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={isResending}
+                  className="flex-1 py-2 px-3 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {isResending ? 'جاري الإرسال...' : 'إرسال'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowResendForm(false)}
+                  disabled={isResending}
+                  className="px-3 py-2 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Forgot Password Form */}
+        {showForgotForm && !isRegister && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900 mb-3 text-right">نسيت كلمة المرور</h3>
+            <p className="text-xs text-gray-600 mb-3 text-right">أدخل بريدك الإلكتروني لإرسال رابط إعادة تعيين كلمة المرور</p>
+            <form onSubmit={handleForgotPassword} className="space-y-3">
+              <div>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-right"
+                  placeholder="أدخل بريدك الإلكتروني"
+                  disabled={isForgotSubmitting}
+                  dir="rtl"
+                />
+                {errors.email && !errors.email.includes('غير مفعل') && (
+                  <p className="mt-1 text-sm text-red-600 text-right">{errors.email}</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={isForgotSubmitting}
+                  className="flex-1 py-2 px-3 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {isForgotSubmitting ? 'جاري الإرسال...' : 'إرسال'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotForm(false)}
+                  disabled={isForgotSubmitting}
+                  className="px-3 py-2 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );

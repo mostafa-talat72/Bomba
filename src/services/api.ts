@@ -507,6 +507,27 @@ class ApiClient {
     return response;
   }
 
+  async resendVerification(email: string): Promise<ApiResponse> {
+    return this.publicRequest('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async forgotPassword(email: string): Promise<ApiResponse> {
+    return this.publicRequest('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token: string, password: string, email?: string): Promise<ApiResponse> {
+    return this.publicRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password, email }),
+    });
+  }
+
   async logout(): Promise<ApiResponse> {
     // تنظيف البيانات المحلية أولاً
     this.clearToken();

@@ -21,6 +21,7 @@ import Settings from './pages/Settings';
 import NotificationManagement from './pages/NotificationManagement';
 import Subscription from './pages/Subscription';
 import VerifyEmail from './pages/VerifyEmail';
+import ResetPassword from './pages/ResetPassword';
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
@@ -29,6 +30,11 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
   requiredRole?: string;
 }) => {
   const { user, isAuthenticated } = useApp();
+
+  // السماح دائماً بصفحة إعادة تعيين كلمة المرور
+  if (window.location.pathname.startsWith('/reset-password')) {
+    return <>{children}</>;
+  }
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
@@ -113,7 +119,12 @@ const RouteHandler = () => {
   if (isAuthenticated) {
     return (
       <Routes>
+        {/* Public routes - متاحة للجميع حتى لو كان مسجل دخول */}
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/bill/:billId" element={<BillView />} />
+        <Route path="/login" element={<LoginForm />} />
+
         <Route path="/" element={<Layout />}>
           <Route index element={<HomeRedirect />} />
           <Route path="dashboard" element={
@@ -178,9 +189,6 @@ const RouteHandler = () => {
           } />
           <Route path="/subscription" element={<Subscription />} />
         </Route>
-
-        {/* Public route for bill viewing - متاح للجميع */}
-        <Route path="/bill/:billId" element={<BillView />} />
       </Routes>
     );
   }
@@ -190,6 +198,8 @@ const RouteHandler = () => {
     <Routes>
       {/* Always allow verify-email route for public access */}
       <Route path="/verify-email" element={<VerifyEmail />} />
+      {/* Public route for reset password - متاح للجميع */}
+      <Route path="/reset-password" element={<ResetPassword />} />
       {/* Public route for bill viewing - متاح للجميع */}
       <Route path="/bill/:billId" element={<BillView />} />
 

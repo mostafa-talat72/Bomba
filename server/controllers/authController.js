@@ -483,3 +483,238 @@ export const verifyEmail = async (req, res) => {
         });
     }
 };
+
+// @desc    Resend verification email
+// @route   POST /api/auth/resend-verification
+// @access  Public
+export const resendVerification = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const normalizedEmail = normalizeEmail(email);
+
+        const user = await User.findOne({ email: normalizedEmail });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "البريد الإلكتروني غير موجود في النظام",
+            });
+        }
+
+        if (user.status === "active") {
+            return res.status(400).json({
+                success: false,
+                message: "الحساب مفعل بالفعل",
+            });
+        }
+
+        // Generate new verification token
+        const verificationToken = crypto.randomBytes(32).toString("hex");
+        user.verificationToken = verificationToken;
+        await user.save();
+
+        // Send verification email
+        const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: "إعادة إرسال رابط التفعيل - نظام Bomba",
+                html: `<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; color: white; text-align: center;">
+                        <h1 style="margin: 0 0 20px 0; font-size: 24px;">مرحباً ${user.name}</h1>
+                        <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6;">تم إعادة إرسال رابط التفعيل لحسابك في نظام بومبا</p>
+                        <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6;">يرجى تفعيل حسابك عبر الرابط التالي:</p>
+                        <a href="${verificationUrl}" style="display: inline-block; padding: 15px 30px; background: #ffffff; color: #667eea; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; transition: all 0.3s ease;">تفعيل الحساب</a>
+                    </div>
+                    <div style="margin-top: 20px; text-align: center; color: #666; font-size: 14px;">
+                        <p>إذا لم تطلب هذا الحساب، يمكنك تجاهل هذا البريد الإلكتروني.</p>
+                        <p>رابط التفعيل صالح لمدة 24 ساعة فقط.</p>
+                    </div>
+                </div>`,
+            });
+
+            Logger.info("Verification email resent successfully", {
+                userId: user._id,
+                email: user.email,
+            });
+
+            res.json({
+                success: true,
+                message: "تم إرسال رابط التفعيل إلى بريدك الإلكتروني",
+            });
+        } catch (emailError) {
+            Logger.error("Failed to resend verification email", {
+                userId: user._id,
+                email: user.email,
+                error: emailError.message,
+                stack: emailError.stack,
+            });
+
+            return res.status(500).json({
+                success: false,
+                message: "فشل إرسال رسالة التفعيل. يرجى المحاولة لاحقاً.",
+                error: emailError.message,
+            });
+        }
+    } catch (error) {
+        Logger.error("Error in resendVerification", {
+            error: error.message,
+            stack: error.stack,
+        });
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إعادة إرسال رابط التفعيل",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Request password reset
+// @route   POST /api/auth/forgot-password
+// @access  Public
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const normalizedEmail = normalizeEmail(email);
+
+        const user = await User.findOne({ email: normalizedEmail });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "البريد الإلكتروني غير موجود في النظام",
+            });
+        }
+
+        // Allow all users to reset their password
+        // No role restriction needed
+
+        // Generate reset token
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+        await user.save();
+
+        // Send reset email
+        const resetUrl = `${
+            process.env.FRONTEND_URL
+        }/reset-password?token=${resetToken}&email=${encodeURIComponent(
+            user.email
+        )}`;
+
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: "إعادة تعيين كلمة المرور - نظام Bomba",
+                html: `<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; color: white; text-align: center;">
+                        <h1 style="margin: 0 0 20px 0; font-size: 24px;">مرحباً ${user.name}</h1>
+                        <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6;">تم طلب إعادة تعيين كلمة المرور لحسابك في نظام بومبا</p>
+                        <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6;">إذا لم تطلب هذا، يمكنك تجاهل هذا البريد الإلكتروني.</p>
+                        <a href="${resetUrl}" style="display: inline-block; padding: 15px 30px; background: #ffffff; color: #667eea; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; transition: all 0.3s ease;">إعادة تعيين كلمة المرور</a>
+                    </div>
+                    <div style="margin-top: 20px; text-align: center; color: #666; font-size: 14px;">
+                        <p>هذا الرابط صالح لمدة 10 دقائق فقط.</p>
+                        <p>إذا لم تطلب إعادة تعيين كلمة المرور، يمكنك تجاهل هذا البريد الإلكتروني.</p>
+                    </div>
+                </div>`,
+            });
+
+            Logger.info("Password reset email sent successfully", {
+                userId: user._id,
+                email: user.email,
+            });
+
+            res.json({
+                success: true,
+                message:
+                    "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني",
+            });
+        } catch (emailError) {
+            Logger.error("Failed to send password reset email", {
+                userId: user._id,
+                email: user.email,
+                error: emailError.message,
+                stack: emailError.stack,
+            });
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "فشل إرسال رسالة إعادة تعيين كلمة المرور. يرجى المحاولة لاحقاً.",
+                error: emailError.message,
+            });
+        }
+    } catch (error) {
+        Logger.error("Error in forgotPassword", {
+            error: error.message,
+            stack: error.stack,
+        });
+        res.status(500).json({
+            success: false,
+            message: "خطأ في طلب إعادة تعيين كلمة المرور",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Reset password
+// @route   POST /api/auth/reset-password
+// @access  Public
+export const resetPassword = async (req, res) => {
+    try {
+        const { token, password, email } = req.body;
+
+        if (!token || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "الرمز وكلمة المرور الجديدة مطلوبان",
+            });
+        }
+
+        const user = await User.findOne({
+            resetPasswordToken: token,
+            resetPasswordExpire: { $gt: Date.now() },
+        });
+
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                message: "الرمز غير صحيح أو منتهي الصلاحية",
+            });
+        }
+
+        // التحقق من أن البريد الإلكتروني يتطابق مع التوكن
+        if (email && user.email !== email) {
+            return res.status(400).json({
+                success: false,
+                message: "البريد الإلكتروني لا يتطابق مع الرابط المرسل",
+            });
+        }
+
+        // Set new password
+        user.password = password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save();
+
+        Logger.info("Password reset successfully", {
+            userId: user._id,
+            email: user.email,
+        });
+
+        res.json({
+            success: true,
+            message: "تم تغيير كلمة المرور بنجاح",
+        });
+    } catch (error) {
+        Logger.error("Error in resetPassword", {
+            error: error.message,
+            stack: error.stack,
+        });
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إعادة تعيين كلمة المرور",
+            error: error.message,
+        });
+    }
+};

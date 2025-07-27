@@ -50,6 +50,9 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   refreshData: () => Promise<void>;
+  resendVerification: (email: string) => Promise<{ success: boolean; message?: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
+  resetPassword: (token: string, password: string) => Promise<{ success: boolean; message?: string }>;
 
   // Data methods
   fetchSessions: () => Promise<void>;
@@ -346,6 +349,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (error: unknown) {
       const err = error as { message?: string };
       return { success: false, message: err.message || 'فشل في تسجيل الدخول' };
+    }
+  };
+
+  const resendVerification = async (email: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const response = await api.resendVerification(email);
+      return { success: response.success, message: response.message };
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      return { success: false, message: err.message || 'فشل في إعادة إرسال رابط التفعيل' };
+    }
+  };
+
+  const forgotPassword = async (email: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const response = await api.forgotPassword(email);
+      return { success: response.success, message: response.message };
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      return { success: false, message: err.message || 'فشل في طلب إعادة تعيين كلمة المرور' };
+    }
+  };
+
+  const resetPassword = async (token: string, password: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const response = await api.resetPassword(token, password);
+      return { success: response.success, message: response.message };
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      return { success: false, message: err.message || 'فشل في إعادة تعيين كلمة المرور' };
     }
   };
 
@@ -1376,6 +1409,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     login,
     logout,
     refreshData,
+    resendVerification,
+    forgotPassword,
+    resetPassword,
 
     // Data methods
     fetchSessions,

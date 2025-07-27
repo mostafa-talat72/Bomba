@@ -2,32 +2,31 @@ import express from "express";
 import {
     register,
     login,
-    refreshToken,
     logout,
     getMe,
+    refreshToken,
     updatePassword,
     verifyEmail,
+    resendVerification,
+    forgotPassword,
+    resetPassword,
 } from "../controllers/authController.js";
-import { protect, authorize } from "../middleware/auth.js";
-import {
-    validateUserRegistration,
-    validateUserLogin,
-    validateRequest,
-} from "../middleware/validation.js";
+import { authenticateToken } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Registration
+// Public routes
 router.post("/register", register);
-// Email verification
-router.get("/verify-email", verifyEmail);
-// Login
 router.post("/login", login);
-// Refresh token
-router.post("/refresh", refreshToken);
-// Logout
 router.post("/logout", logout);
-// Get current user
-router.get("/me", getMe);
+router.post("/refresh", refreshToken);
+router.get("/verify-email", verifyEmail);
+router.post("/resend-verification", resendVerification);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+
+// Protected routes
+router.get("/me", authenticateToken, getMe);
+router.put("/update-password", authenticateToken, updatePassword);
 
 export default router;
