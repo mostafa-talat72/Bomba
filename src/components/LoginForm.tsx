@@ -131,10 +131,17 @@ const LoginForm: React.FC = () => {
         const response = await login(formData.email, formData.password);
 
         if (!response.success) {
-          if (response.message?.includes('الحساب غير مفعل')) {
+          // تحليل رسالة الخطأ لتحديد نوع المشكلة
+          const errorMessage = response.message || '';
+
+          if (errorMessage.includes('غير مفعل') || errorMessage.includes('pending')) {
             setErrors({ email: 'الحساب غير مفعل. يرجى تفعيل بريدك الإلكتروني أولاً.' });
+          } else if (errorMessage.includes('غير صحيحة') || errorMessage.includes('خطأ')) {
+            setErrors({ email: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.' });
+          } else if (errorMessage.includes('غير موجود')) {
+            setErrors({ email: 'البريد الإلكتروني غير موجود في النظام.' });
           } else {
-            setErrors({ email: response.message || 'حدث خطأ أثناء تسجيل الدخول.' });
+            setErrors({ email: errorMessage || 'حدث خطأ أثناء تسجيل الدخول.' });
           }
         } else {
           clearForm();

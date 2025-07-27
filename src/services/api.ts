@@ -307,6 +307,14 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        // إذا كان طلب تسجيل الدخول وفشل، أعد الرسالة الأصلية من السيرفر
+        if (endpoint === '/auth/login' && response.status === 401) {
+          return {
+            success: false,
+            message: data.message || 'بيانات الدخول غير صحيحة'
+          };
+        }
+
         if (response.status === 401 && retryOn401) {
           // Singleton refresh logic
           const refreshToken = localStorage.getItem('refreshToken');

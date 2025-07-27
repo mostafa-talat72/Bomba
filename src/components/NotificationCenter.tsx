@@ -45,6 +45,7 @@ const NotificationCenter: React.FC = () => {
   const [playSound, setPlaySound] = useState(false);
   const [soundType, setSoundType] = useState<'default' | 'success' | 'warning' | 'error' | 'urgent'>('default');
   const [prevUnreadCount, setPrevUnreadCount] = useState(0);
+  const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
 
   // احسب unreadCount دائماً من notifications في context
   const unreadCount = notifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id)).length;
@@ -84,8 +85,23 @@ const NotificationCenter: React.FC = () => {
   }, [isOpen, filter]);
 
   // Update count when opening panel
-  const handleTogglePanel = () => {
-    setIsOpen(!isOpen);
+  const handleTogglePanel = async () => {
+    const newIsOpen = !isOpen;
+    setIsOpen(newIsOpen);
+
+    // إذا كان يتم فتح النافذة، حدد جميع الإشعارات كمقروءة
+    if (newIsOpen && !isMarkingAllAsRead) {
+      try {
+        setIsMarkingAllAsRead(true);
+        await markAllNotificationsAsRead();
+        await forceRefreshNotifications();
+        await loadStats();
+      } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+      } finally {
+        setIsMarkingAllAsRead(false);
+      }
+    }
   };
 
   // Load notifications and stats on mount
@@ -318,7 +334,22 @@ const NotificationCenter: React.FC = () => {
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black bg-opacity-50 z-[9998]"
-            onClick={() => setIsOpen(false)}
+            onClick={async () => {
+              setIsOpen(false);
+              // تحديد جميع الإشعارات كمقروءة عند إغلاق النافذة
+              if (!isMarkingAllAsRead) {
+                try {
+                  setIsMarkingAllAsRead(true);
+                  await markAllNotificationsAsRead();
+                  await forceRefreshNotifications();
+                  await loadStats();
+                } catch (error) {
+                  console.error('Error marking all notifications as read on close:', error);
+                } finally {
+                  setIsMarkingAllAsRead(false);
+                }
+              }
+            }}
           />
           <div className="notification-panel">
           {/* Header */}
@@ -332,7 +363,22 @@ const NotificationCenter: React.FC = () => {
                 تحديد الكل كمقروء
               </button>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={async () => {
+                  setIsOpen(false);
+                  // تحديد جميع الإشعارات كمقروءة عند إغلاق النافذة
+                  if (!isMarkingAllAsRead) {
+                    try {
+                      setIsMarkingAllAsRead(true);
+                      await markAllNotificationsAsRead();
+                      await forceRefreshNotifications();
+                      await loadStats();
+                    } catch (error) {
+                      console.error('Error marking all notifications as read on close:', error);
+                    } finally {
+                      setIsMarkingAllAsRead(false);
+                    }
+                  }
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -513,7 +559,22 @@ const NotificationCenter: React.FC = () => {
           {/* Footer */}
           <div className="p-3 sm:p-4 border-t border-gray-200">
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={async () => {
+                setIsOpen(false);
+                // تحديد جميع الإشعارات كمقروءة عند إغلاق النافذة
+                if (!isMarkingAllAsRead) {
+                  try {
+                    setIsMarkingAllAsRead(true);
+                    await markAllNotificationsAsRead();
+                    await forceRefreshNotifications();
+                    await loadStats();
+                  } catch (error) {
+                    console.error('Error marking all notifications as read on close:', error);
+                  } finally {
+                    setIsMarkingAllAsRead(false);
+                  }
+                }
+              }}
               className="w-full text-center text-xs sm:text-sm text-gray-600 hover:text-gray-800"
             >
               إغلاق

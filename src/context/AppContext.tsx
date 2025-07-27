@@ -341,12 +341,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         return { success: true };
       }
-      // عرض رسالة الخطأ الحقيقية القادمة من السيرفر
-      showNotification(response.message || 'بيانات الدخول غير صحيحة', 'error');
+      // لا تعرض إشعار للخطأ، فقط أعد الرسالة للعرض في النموذج
       return { success: false, message: response.message || 'بيانات الدخول غير صحيحة' };
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تسجيل الدخول', 'error');
       return { success: false, message: err.message || 'فشل في تسجيل الدخول' };
     }
   };

@@ -30,6 +30,7 @@ const NotificationManagement = () => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterUnread, setFilterUnread] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
 
   const categories = [
     { id: 'all', name: 'جميع الإشعارات', color: 'text-gray-600' },
@@ -63,7 +64,29 @@ const NotificationManagement = () => {
   useEffect(() => {
     loadNotifications();
     loadStats();
+    // تحديد جميع الإشعارات كمقروءة عند فتح الصفحة
+    handleMarkAllAsReadOnPageLoad();
+
+    // تحديد جميع الإشعارات كمقروءة عند مغادرة الصفحة
+    return () => {
+      handleMarkAllAsReadOnPageLoad();
+    };
   }, [filterCategory, filterUnread]);
+
+  const handleMarkAllAsReadOnPageLoad = async () => {
+    if (isMarkingAllAsRead) return; // تجنب الاستدعاءات المتكررة
+
+    try {
+      setIsMarkingAllAsRead(true);
+      await markAllNotificationsAsRead();
+      await loadNotifications();
+      await loadStats();
+    } catch (error) {
+      console.error('Error marking all notifications as read on page load:', error);
+    } finally {
+      setIsMarkingAllAsRead(false);
+    }
+  };
 
   const loadNotifications = async () => {
     try {
@@ -92,9 +115,14 @@ const NotificationManagement = () => {
   const loadStats = async () => {
     try {
       const data = await getNotificationStats();
-      setStats(data);
+      if (data && typeof data === 'object' && 'total' in data && 'unread' in data) {
+        setStats(data as NotificationStats);
+      } else {
+        setStats(null);
+      }
     } catch {
       console.error('Error loading stats');
+      setStats(null);
     }
   };
 
@@ -110,14 +138,18 @@ const NotificationManagement = () => {
   };
 
   const handleMarkAllAsRead = async () => {
+    if (isMarkingAllAsRead) return; // تجنب الاستدعاءات المتكررة
+
     try {
+      setIsMarkingAllAsRead(true);
       await markAllNotificationsAsRead();
       await loadNotifications();
       await loadStats();
       showNotification('تم تحديد جميع الإشعارات كمقروءة', 'success');
-      // احذف أي رسالة alert
     } catch {
       showNotification('خطأ في تحديد الإشعارات كمقروءة', 'error');
+    } finally {
+      setIsMarkingAllAsRead(false);
     }
   };
 
