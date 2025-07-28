@@ -747,7 +747,7 @@ export const emailTemplates = {
               </div>
             </div>
           </div>
-        </div>
+      </div>
       </body>
       </html>
     `,

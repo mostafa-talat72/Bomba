@@ -257,8 +257,12 @@ const Inventory = () => {
           setError('حدث خطأ أثناء إضافة المنتج');
         }
       }
-    } catch {
-      setError('حدث خطأ أثناء العملية');
+    } catch (error: any) {
+      if (error?.message?.includes('موجود بالفعل')) {
+        setError(error.message);
+      } else {
+        setError('حدث خطأ أثناء العملية');
+      }
     }
     setLoading(false);
   };
@@ -293,8 +297,12 @@ const Inventory = () => {
       } else {
         setError('حدث خطأ أثناء التعديل');
       }
-    } catch {
-      setError('حدث خطأ أثناء العملية');
+    } catch (error: any) {
+      if (error?.message?.includes('موجود بالفعل')) {
+        setError(error.message);
+      } else {
+        setError('حدث خطأ أثناء العملية');
+      }
     }
     setLoading(false);
   };
@@ -616,6 +624,24 @@ const Inventory = () => {
                 </>
               ) : (
                 <>
+                  {/* رسالة مفيدة حول قاعدة التسمية */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="mr-3">
+                        <h3 className="text-sm font-medium text-blue-800">ملاحظة مهمة</h3>
+                        <div className="mt-1 text-sm text-blue-700">
+                          <p>• لا يمكن إضافة منتج بنفس الاسم لمنشأة واحدة</p>
+                          <p>• إذا كان المنتج موجود، استخدم "إضافة كمية لمنتج موجود"</p>
+                          <p>• يمكن إضافة منتجات بنفس الاسم في منشآت مختلفة</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">اسم المنتج</label>
                     <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />

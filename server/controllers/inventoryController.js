@@ -207,12 +207,18 @@ export const createInventoryItem = async (req, res) => {
         });
 
         // معالجة خطأ تكرار الاسم
-        if (error.code === 11000 && error.keyPattern && error.keyPattern.name) {
-            return res.status(400).json({
-                success: false,
-                message: "يوجد منتج آخر بنفس الاسم. يرجى استخدام اسم مختلف.",
-                error: "اسم المنتج مكرر",
-            });
+        if (error.code === 11000) {
+            if (
+                error.keyPattern &&
+                (error.keyPattern.name ||
+                    (error.keyPattern.name && error.keyPattern.organization))
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: `المنتج "${name}" موجود بالفعل في هذه المنشأة. يمكنك إضافة كمية جديدة للمنتج الموجود بدلاً من إنشاء منتج جديد.`,
+                    error: "اسم المنتج مكرر في نفس المنشأة",
+                });
+            }
         }
 
         res.status(500).json({
@@ -300,6 +306,26 @@ export const updateInventoryItem = async (req, res) => {
             data: item,
         });
     } catch (error) {
+        Logger.error("خطأ في تحديث المنتج", {
+            error: error.message,
+            stack: error.stack,
+        });
+
+        // معالجة خطأ تكرار الاسم
+        if (error.code === 11000) {
+            if (
+                error.keyPattern &&
+                (error.keyPattern.name ||
+                    (error.keyPattern.name && error.keyPattern.organization))
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: `المنتج "${name}" موجود بالفعل في هذه المنشأة.`,
+                    error: "اسم المنتج مكرر في نفس المنشأة",
+                });
+            }
+        }
+
         res.status(500).json({
             success: false,
             message: "خطأ في تحديث المنتج",
