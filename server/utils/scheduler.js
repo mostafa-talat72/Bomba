@@ -11,27 +11,62 @@ import Cost from "../models/Cost.js";
 import NotificationService from "../services/notificationService.js";
 import Subscription from "../models/Subscription.js";
 import { sendSubscriptionNotification } from "../controllers/notificationController.js";
+import Organization from "../models/Organization.js";
 
 // Check for low stock items and send alerts
 const checkLowStock = async () => {
     try {
-        const lowStockItems = await InventoryItem.find({
-            isActive: true,
-            $expr: { $lte: ["$currentStock", "$minStock"] },
-        });
+        // Get all organizations
+        const organizations = await Organization.find({ isActive: true });
 
-        if (lowStockItems.length > 0) {
-            // Get admin emails
-            const admins = await User.find({
-                role: "admin",
-                status: "active",
-                email: { $exists: true, $ne: "" },
-            }).select("email");
+        for (const organization of organizations) {
+            try {
+                // Get low stock items for this organization
+                const lowStockItems = await InventoryItem.find({
+                    isActive: true,
+                    organization: organization._id,
+                    $expr: { $lte: ["$currentStock", "$minStock"] },
+                });
 
-            const adminEmails = admins.map((admin) => admin.email);
+                if (lowStockItems.length > 0) {
+                    // Get admin emails for this organization
+                    const admins = await User.find({
+                        role: "admin",
+                        status: "active",
+                        organization: organization._id,
+                        email: { $exists: true, $ne: "" },
+                    }).select("email");
 
-            if (adminEmails.length > 0) {
-                await sendLowStockAlert(lowStockItems, adminEmails);
+                    const adminEmails = admins.map((admin) => admin.email);
+
+                    if (adminEmails.length > 0) {
+                        await sendLowStockAlert(lowStockItems, adminEmails);
+                        Logger.info(
+                            `Low stock alert sent for organization: ${organization.name}`,
+                            {
+                                organizationId: organization._id,
+                                itemCount: lowStockItems.length,
+                                adminCount: adminEmails.length,
+                            }
+                        );
+                    } else {
+                        Logger.warn(
+                            `No admin emails found for low stock alert in organization: ${organization.name}`,
+                            {
+                                organizationId: organization._id,
+                                itemCount: lowStockItems.length,
+                            }
+                        );
+                    }
+                }
+            } catch (orgError) {
+                Logger.error(
+                    `Failed to check low stock for organization: ${organization.name}`,
+                    {
+                        organizationId: organization._id,
+                        error: orgError.message,
+                    }
+                );
             }
         }
     } catch (error) {
@@ -54,76 +89,122 @@ const generateDailyReport = async () => {
             today.getDate() + 1
         );
 
-        // Get daily statistics
-        const [bills, orders, sessions, costs] = await Promise.all([
-            Bill.find({
-                createdAt: { $gte: startOfDay, $lt: endOfDay },
-                status: { $in: ["partial", "paid"] },
-            }),
-            Order.find({
-                createdAt: { $gte: startOfDay, $lt: endOfDay },
-            }),
-            Session.find({
-                startTime: { $gte: startOfDay, $lt: endOfDay },
-            }),
-            Cost.find({
-                date: { $gte: startOfDay, $lt: endOfDay },
-            }),
-        ]);
+        // Get all organizations
+        const organizations = await Organization.find({ isActive: true });
 
-        // Calculate totals
-        const totalRevenue = bills.reduce((sum, bill) => sum + bill.paid, 0);
-        const totalCosts = costs.reduce((sum, cost) => sum + cost.amount, 0);
+        for (const organization of organizations) {
+            try {
+                // Get daily statistics for this organization
+                const [bills, orders, sessions, costs] = await Promise.all([
+                    Bill.find({
+                        createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        status: { $in: ["partial", "paid"] },
+                        organization: organization._id,
+                    }),
+                    Order.find({
+                        createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        organization: organization._id,
+                    }),
+                    Session.find({
+                        startTime: { $gte: startOfDay, $lt: endOfDay },
+                        organization: organization._id,
+                    }),
+                    Cost.find({
+                        date: { $gte: startOfDay, $lt: endOfDay },
+                        organization: organization._id,
+                    }),
+                ]);
 
-        // Get top products
-        const topProducts = await Order.aggregate([
-            {
-                $match: {
-                    createdAt: { $gte: startOfDay, $lt: endOfDay },
-                    status: "delivered",
-                },
-            },
-            { $unwind: "$items" },
-            {
-                $group: {
-                    _id: "$items.name",
-                    quantity: { $sum: "$items.quantity" },
-                    revenue: {
-                        $sum: {
-                            $multiply: ["$items.price", "$items.quantity"],
+                // Calculate totals for this organization
+                const totalRevenue = bills.reduce(
+                    (sum, bill) => sum + bill.paid,
+                    0
+                );
+                const totalCosts = costs.reduce(
+                    (sum, cost) => sum + cost.amount,
+                    0
+                );
+
+                // Get top products for this organization
+                const topProducts = await Order.aggregate([
+                    {
+                        $match: {
+                            createdAt: { $gte: startOfDay, $lt: endOfDay },
+                            status: "delivered",
+                            organization: organization._id,
                         },
                     },
-                },
-            },
-            { $sort: { quantity: -1 } },
-            { $limit: 5 },
-        ]);
+                    { $unwind: "$items" },
+                    {
+                        $group: {
+                            _id: "$items.name",
+                            quantity: { $sum: "$items.quantity" },
+                            revenue: {
+                                $sum: {
+                                    $multiply: [
+                                        "$items.price",
+                                        "$items.quantity",
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                    { $sort: { quantity: -1 } },
+                    { $limit: 5 },
+                ]);
 
-        const reportData = {
-            date: today.toLocaleDateString("ar-EG"),
-            totalRevenue,
-            totalCosts,
-            netProfit: totalRevenue - totalCosts,
-            totalBills: bills.length,
-            totalOrders: orders.length,
-            totalSessions: sessions.length,
-            topProducts: topProducts.map((p) => ({
-                name: p._id,
-                quantity: p.quantity,
-            })),
-        };
+                const reportData = {
+                    date: today.toLocaleDateString("ar-EG"),
+                    organizationName: organization.name,
+                    totalRevenue,
+                    totalCosts,
+                    netProfit: totalRevenue - totalCosts,
+                    totalBills: bills.length,
+                    totalOrders: orders.length,
+                    totalSessions: sessions.length,
+                    topProducts: topProducts.map((p) => ({
+                        name: p._id,
+                        quantity: p.quantity,
+                    })),
+                };
 
-        // Get admin emails
-        const admins = await User.find({
-            role: "admin",
-            status: "active",
-            email: { $exists: true, $ne: "" },
-        }).select("email");
+                // Get admin emails for this organization
+                const admins = await User.find({
+                    role: "admin",
+                    status: "active",
+                    organization: organization._id,
+                    email: { $exists: true, $ne: "" },
+                }).select("email");
 
-        const adminEmails = admins.map((admin) => admin.email);
+                const adminEmails = admins.map((admin) => admin.email);
 
-        if (adminEmails.length > 0) {
-            await sendDailyReport(reportData, adminEmails);
+                if (adminEmails.length > 0) {
+                    await sendDailyReport(reportData, adminEmails);
+                    Logger.info(
+                        `Daily report sent for organization: ${organization.name}`,
+                        {
+                            organizationId: organization._id,
+                            adminCount: adminEmails.length,
+                            emails: adminEmails,
+                        }
+                    );
+                } else {
+                    Logger.warn(
+                        `No admin emails found for organization: ${organization.name}`,
+                        {
+                            organizationId: organization._id,
+                        }
+                    );
+                }
+            } catch (orgError) {
+                Logger.error(
+                    `Failed to generate daily report for organization: ${organization.name}`,
+                    {
+                        organizationId: organization._id,
+                        error: orgError.message,
+                    }
+                );
+            }
         }
     } catch (error) {
         Logger.error("Failed to generate daily report", {
@@ -137,25 +218,53 @@ const updateOverdueItems = async () => {
     try {
         const now = new Date();
 
-        // Update overdue bills
-        const overdueBills = await Bill.updateMany(
-            {
-                dueDate: { $lt: now },
-                status: { $in: ["draft", "partial"] },
-            },
-            { status: "overdue" }
-        );
+        // Get all organizations
+        const organizations = await Organization.find({ isActive: true });
 
-        // Update overdue costs
-        const overdueCosts = await Cost.updateMany(
-            {
-                dueDate: { $lt: now },
-                status: "pending",
-            },
-            { status: "overdue" }
-        );
+        for (const organization of organizations) {
+            try {
+                // Update overdue bills for this organization
+                const overdueBills = await Bill.updateMany(
+                    {
+                        dueDate: { $lt: now },
+                        status: { $in: ["draft", "partial"] },
+                        organization: organization._id,
+                    },
+                    { status: "overdue" }
+                );
 
-        if (overdueBills.modifiedCount > 0 || overdueCosts.modifiedCount > 0) {
+                // Update overdue costs for this organization
+                const overdueCosts = await Cost.updateMany(
+                    {
+                        dueDate: { $lt: now },
+                        status: "pending",
+                        organization: organization._id,
+                    },
+                    { status: "overdue" }
+                );
+
+                if (
+                    overdueBills.modifiedCount > 0 ||
+                    overdueCosts.modifiedCount > 0
+                ) {
+                    Logger.info(
+                        `Updated overdue items for organization: ${organization.name}`,
+                        {
+                            organizationId: organization._id,
+                            overdueBills: overdueBills.modifiedCount,
+                            overdueCosts: overdueCosts.modifiedCount,
+                        }
+                    );
+                }
+            } catch (orgError) {
+                Logger.error(
+                    `Failed to update overdue items for organization: ${organization.name}`,
+                    {
+                        organizationId: organization._id,
+                        error: orgError.message,
+                    }
+                );
+            }
         }
     } catch (error) {
         Logger.error("Failed to update overdue items", {
@@ -169,36 +278,63 @@ const createRecurringCosts = async () => {
     try {
         const now = new Date();
 
-        const recurringCosts = await Cost.find({
-            isRecurring: true,
-            nextDueDate: { $lte: now },
-        });
+        // Get all organizations
+        const organizations = await Organization.find({ isActive: true });
 
-        for (const cost of recurringCosts) {
-            // Create new cost entry
-            const newCost = new Cost({
-                category: cost.category,
-                subcategory: cost.subcategory,
-                description: cost.description,
-                amount: cost.amount,
-                currency: cost.currency,
-                date: now,
-                dueDate: cost.nextDueDate,
-                status: "pending",
-                paymentMethod: cost.paymentMethod,
-                vendor: cost.vendor,
-                vendorContact: cost.vendorContact,
-                isRecurring: false, // New entry is not recurring
-                tags: cost.tags,
-                notes: `تكلفة متكررة من: ${cost._id}`,
-                createdBy: cost.createdBy,
-            });
+        for (const organization of organizations) {
+            try {
+                const recurringCosts = await Cost.find({
+                    isRecurring: true,
+                    nextDueDate: { $lte: now },
+                    organization: organization._id,
+                });
 
-            await newCost.save();
+                for (const cost of recurringCosts) {
+                    // Create new cost entry
+                    const newCost = new Cost({
+                        category: cost.category,
+                        subcategory: cost.subcategory,
+                        description: cost.description,
+                        amount: cost.amount,
+                        currency: cost.currency,
+                        date: now,
+                        dueDate: cost.nextDueDate,
+                        status: "pending",
+                        paymentMethod: cost.paymentMethod,
+                        vendor: cost.vendor,
+                        vendorContact: cost.vendorContact,
+                        isRecurring: false, // New entry is not recurring
+                        tags: cost.tags,
+                        notes: `تكلفة متكررة من: ${cost._id}`,
+                        createdBy: cost.createdBy,
+                        organization: organization._id,
+                    });
 
-            // Update next due date for original recurring cost
-            cost.calculateNextDueDate();
-            await cost.save();
+                    await newCost.save();
+
+                    // Update next due date for original recurring cost
+                    cost.calculateNextDueDate();
+                    await cost.save();
+                }
+
+                if (recurringCosts.length > 0) {
+                    Logger.info(
+                        `Created ${recurringCosts.length} recurring costs for organization: ${organization.name}`,
+                        {
+                            organizationId: organization._id,
+                            costCount: recurringCosts.length,
+                        }
+                    );
+                }
+            } catch (orgError) {
+                Logger.error(
+                    `Failed to create recurring costs for organization: ${organization.name}`,
+                    {
+                        organizationId: organization._id,
+                        error: orgError.message,
+                    }
+                );
+            }
         }
     } catch (error) {
         Logger.error("Failed to create recurring costs", {

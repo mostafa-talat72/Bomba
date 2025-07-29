@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MenuItem } from '../services/api';
+import { MenuItem, InventoryItem } from '../services/api';
+import { formatCurrency, formatQuantity } from '../utils/formatters';
 
 const Menu: React.FC = () => {
 	const {
@@ -306,6 +307,10 @@ const Menu: React.FC = () => {
 		}
 	};
 
+  const getIngredientDisplay = (ing: { item: string; quantity: number; unit: string }) => {
+    const ingredientItem = inventoryItems.find(item => item.id === ing.item);
+    return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
+  };
 
 
 	return (
@@ -406,7 +411,7 @@ const Menu: React.FC = () => {
 
 							<div className="space-y-2 mb-4">
 								<div className="flex items-center justify-between">
-									<span className="text-xl font-bold text-green-600">{item.price} ج.م</span>
+									<span className="text-xl font-bold text-green-600">{formatCurrency(item.price)}</span>
 									<div className="flex items-center text-sm text-gray-500">
 										<TrendingUp className="h-4 w-4 ml-1" />
 										{item.orderCount} طلب

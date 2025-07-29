@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingCart, Plus, Edit, Trash2, Clock, CheckCircle, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MenuItem } from '../services/api';
-import { api, cancelOrder } from '../services/api';
+import { MenuItem, Order, Bill } from '../services/api';
+import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
+import { api } from '../services/api';
 
 interface LocalOrderItem {
   menuItem: string;
@@ -17,11 +18,10 @@ interface LocalOrderItem {
 const Cafe: React.FC = () => {
   const {
     menuItems,
-    fetchAvailableMenuItems, // استخدام الدالة الجديدة
+    fetchAvailableMenuItems,
     showNotification,
     user,
     updateOrder,
-    cancelOrder
   } = useApp();
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -666,180 +666,38 @@ const Cafe: React.FC = () => {
   // Function to update item prepared count
   const updateItemPrepared = async (orderId: string, itemIndex: number, preparedCount: number) => {
     try {
-      // تحديث فوري في الواجهة الأمامية أولاً
-      setPendingOrders(prevOrders => {
-        const updatedOrders = prevOrders.map(order => {
-          if (order._id === orderId && order.items && order.items[itemIndex]) {
-            const updatedOrder = { ...order };
-            updatedOrder.items = [...order.items];
-            updatedOrder.items[itemIndex] = {
-              ...order.items[itemIndex],
-              preparedCount: preparedCount
-            };
-            return updatedOrder;
-          }
-          return order;
-        });
+      const order = pendingOrders.find((o: any) => o._id === orderId) || readyOrders.find((o: any) => o._id === orderId);
+      if (!order) {
+        showNotification('الطلب غير موجود', 'error');
+        return;
+      }
 
-        return updatedOrders;
+      const currentItem = order.items[itemIndex];
+      if (!currentItem) {
+        showNotification('العنصر غير موجود', 'error');
+        return;
+      }
+
+      const quantity = currentItem.quantity || 0;
+      if (preparedCount > quantity) {
+        showNotification(`لا يمكن تجاوز الكمية المطلوبة (${quantity})`, 'error');
+        return;
+      }
+
+      const response = await api.updateOrderItemPrepared(orderId, itemIndex, {
+        preparedCount: preparedCount,
       });
 
-      // تحديث فوري في selectedOrder إذا كان مفتوحاً
-      if (selectedOrder && selectedOrder._id === orderId) {
-        setSelectedOrder(prevOrder => {
-          if (prevOrder && prevOrder.items && prevOrder.items[itemIndex]) {
-            const updatedOrder = { ...prevOrder };
-            updatedOrder.items = [...prevOrder.items];
-            updatedOrder.items[itemIndex] = {
-              ...prevOrder.items[itemIndex],
-              preparedCount: preparedCount
-            };
-            return updatedOrder;
-          }
-          return prevOrder;
-        });
-      }
-
-      // إرسال التحديث إلى الخادم
-      const response = await api.updateOrderItemPrepared(orderId, itemIndex, { preparedCount });
       if (response.success) {
-        // التحقق من حالة الطلب بعد التحديث
-        const updatedOrder = response.data;
-        if (!updatedOrder) {
-          showNotification('خطأ في تحديث حالة التجهيز', 'error');
-          return;
-        }
-
-        const allItemsFullyPrepared = updatedOrder.items?.every(item =>
-          (item.preparedCount || 0) >= (item.quantity || 0)
-        );
-        const anyItemsPrepared = updatedOrder.items?.some(item =>
-          (item.preparedCount || 0) > 0
-        );
-
-        // إذا تم تجهيز جميع الأصناف بالكامل، إزالة الطلب من غير المكتملة
-        if (allItemsFullyPrepared) {
-          // إزالة الطلب من المعلقة
-          setPendingOrders(prev => prev.filter(o => o._id !== orderId));
-
-          // إضافة الطلب إلى الجاهزة
-          setReadyOrders(prev => {
-            const readyOrder: Order = {
-              ...updatedOrder,
-              status: 'ready' as const,
-              _id: updatedOrder._id || orderId,
-              id: updatedOrder.id || orderId
-            };
-
-            // التحقق من وجود الطلب في القائمة الجاهزة
-            const existingIndex = prev.findIndex(o => o._id === orderId);
-            if (existingIndex >= 0) {
-              // تحديث الطلب الموجود
-              const newReadyOrders = [...prev];
-              newReadyOrders[existingIndex] = readyOrder;
-              return newReadyOrders;
-            } else {
-              // إضافة طلب جديد
-              return [...prev, readyOrder];
-            }
-          });
-
-          // تحديث selectedOrder إذا كان مفتوحاً
-          if (selectedOrder && selectedOrder._id === orderId) {
-            setSelectedOrder({
-              ...updatedOrder,
-              status: 'ready' as const,
-              _id: updatedOrder._id || orderId,
-              id: updatedOrder.id || orderId
-            } as Order);
-          }
-
-            showNotification('تم تجهيز الطلب بالكامل وتم نقله إلى الجاهزة', 'success');
-        }
-        // إذا كان هناك أصناف مجهزة ولكن لم تكتمل جميعها
-        else if (anyItemsPrepared) {
-          // تحديث الطلب في المعلقة
-          setPendingOrders(prev => {
-            const updatedOrders = prev.map(o => {
-              if (o._id === orderId) {
-                return {
-                  ...updatedOrder,
-                  status: 'pending' as const,
-                  _id: updatedOrder._id || orderId,
-                  id: updatedOrder.id || orderId
-                } as Order;
-              }
-              return o;
-            });
-            return updatedOrders;
-          });
-
-          // تحديث selectedOrder إذا كان مفتوحاً
-          if (selectedOrder && selectedOrder._id === orderId) {
-            setSelectedOrder({
-              ...updatedOrder,
-              status: 'pending' as const,
-              _id: updatedOrder._id || orderId,
-              id: updatedOrder.id || orderId
-            } as Order);
-          }
-
-          showNotification('تم تحديث عدد التجهيز', 'success');
-        }
-        // إذا لم تكن هناك أي أصناف مجهزة
-        else {
-          // تحديث الطلب في المعلقة
-          setPendingOrders(prev => {
-            const updatedOrders = prev.map(o => {
-              if (o._id === orderId) {
-                return {
-              ...updatedOrder,
-              status: 'pending' as const,
-              _id: updatedOrder._id || orderId,
-              id: updatedOrder.id || orderId
-                } as Order;
-              }
-              return o;
-            });
-            return updatedOrders;
-          });
-
-          // إزالة الطلب من الجاهزة إذا كان موجوداً هناك
-          setReadyOrders(prev => prev.filter(o => o._id !== orderId));
-
-          // تحديث selectedOrder إذا كان مفتوحاً
-          if (selectedOrder && selectedOrder._id === orderId) {
-            setSelectedOrder({
-              ...updatedOrder,
-              status: 'pending' as const,
-              _id: updatedOrder._id || orderId,
-              id: updatedOrder.id || orderId
-            } as Order);
-          }
-
-          showNotification('تم إزالة جميع الأصناف المجهزة', 'info');
-        }
-
-        // تحديث الفواتير لتعكس التغييرات
-        fetchOpenBills();
-
-        // إعادة تحميل البيانات للتأكد من التحديث
-        setTimeout(() => {
-          fetchPendingOrders();
-          fetchReadyOrders();
-        }, 500);
+        showNotification('تم تحديث حالة التجهيز بنجاح', 'success');
+        await fetchPendingOrders();
+        await fetchReadyOrders();
       } else {
-        showNotification('خطأ في تحديث حالة التجهيز', 'error');
-
-        // إعادة تحميل البيانات من الخادم في حالة الفشل
-        fetchPendingOrders();
-        fetchReadyOrders();
+        showNotification('فشل في تحديث حالة التجهيز', 'error');
       }
     } catch (error) {
+      console.error('Error updating item prepared:', error);
       showNotification('خطأ في تحديث حالة التجهيز', 'error');
-
-      // إعادة تحميل البيانات من الخادم في حالة الفشل
-      fetchPendingOrders();
     }
   };
 
@@ -1189,7 +1047,7 @@ const Cafe: React.FC = () => {
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">إجمالي المبيعات اليوم</p>
               <p className="text-2xl font-bold text-purple-600">
-                {todayStats.totalSales.toFixed(0)} ج.م
+                {formatCurrency(todayStats.totalSales)}
               </p>
             </div>
           </div>
@@ -1287,7 +1145,7 @@ const Cafe: React.FC = () => {
                             <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
                               <div className="flex justify-between items-center">
                                 <span className="truncate">{item.name}</span>
-                                <span className="font-medium text-gray-900">{item.quantity} قطعة</span>
+                                <span className="font-medium text-gray-900">{formatQuantity(item.quantity, 'قطعة')}</span>
                               </div>
                               {/* ملاحظة لهذا المشروب: غير متوفرة */}
                             </div>
@@ -1403,7 +1261,7 @@ const Cafe: React.FC = () => {
                             <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
                               <div className="flex justify-between items-center">
                                 <span className="truncate">{item.name}</span>
-                                <span className="text-green-600 font-medium">{item.quantity} × {item.price} ج.م</span>
+                                <span className="text-green-600 font-medium">{formatQuantity(item.quantity, 'قطعة')} × {formatCurrency(item.price)}</span>
                               </div>
                               {/* ملاحظة لهذا المشروب: غير متوفرة */}
                             </div>
@@ -1612,7 +1470,7 @@ const Cafe: React.FC = () => {
                             >
                               -
                             </button>
-                            <span className="w-8 text-center">{item.quantity}</span>
+                            <span className="w-8 text-center">{formatDecimal(item.quantity)}</span>
                             <button
                               onClick={() => updateQuantity(item.menuItem, item.quantity + 1)}
                               className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
@@ -1642,9 +1500,9 @@ const Cafe: React.FC = () => {
                     {currentOrder.length > 0 && (
                       <div className="border-t pt-3">
                         <div className="flex justify-between items-center font-bold text-lg">
-                          <span>الإجمالي:</span>
+                          <span className="text-lg font-semibold text-gray-900">إجمالي الطلب: {formatCurrency(calculateTotal())}</span>
                           <span className="text-green-600">
-                            {calculateTotal().toFixed(2)} ج.م
+                            {formatCurrency(calculateTotal())}
                           </span>
                         </div>
                       </div>
@@ -2029,7 +1887,7 @@ const Cafe: React.FC = () => {
                             >
                               -
                             </button>
-                            <span className="w-8 text-center">{item.quantity}</span>
+                            <span className="w-8 text-center">{formatDecimal(item.quantity)}</span>
                             <button
                               onClick={() => {
                                 const items = [...editOrderData.items];
@@ -2064,7 +1922,7 @@ const Cafe: React.FC = () => {
                         <div className="flex justify-between items-center font-bold text-lg">
                           <span>الإجمالي:</span>
                           <span className="text-green-600">
-                            {editOrderData.items.reduce((total, item) => total + (item.price * item.quantity), 0).toFixed(2)} ج.م
+                            {formatCurrency(calculateTotal())}
                           </span>
                         </div>
                       </div>

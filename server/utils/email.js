@@ -173,16 +173,18 @@ export const emailTemplates = {
 
     // Daily report
     dailyReport: (data) => ({
-        subject: `📊 التقرير اليومي - ${new Date().toLocaleDateString(
-            "ar-EG"
-        )}`,
+        subject: `📊 التقرير اليومي - ${
+            data.organizationName || "منشأتك"
+        } - ${new Date().toLocaleDateString("ar-EG")}`,
         html: `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>التقرير اليومي - نظام Bomba</title>
+        <title>التقرير اليومي - ${
+            data.organizationName || "منشأتك"
+        } - نظام Bomba</title>
         <style>
           * {
             margin: 0;
@@ -290,6 +292,17 @@ export const emailTemplates = {
             opacity: 0.9;
             position: relative;
             z-index: 1;
+          }
+
+          .organization-name {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #fff;
+            background: rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
           }
 
           .date-badge {
@@ -626,6 +639,9 @@ export const emailTemplates = {
             <div class="header-content">
               <h1>📊 التقرير اليومي</h1>
               <p>ملخص شامل لأداء منشأتك اليوم</p>
+              <div class="organization-name">${
+                  data.organizationName || "منشأتك"
+              }</div>
               <div class="date-badge">
                 ${new Date().toLocaleDateString("ar-EG", {
                     weekday: "long",

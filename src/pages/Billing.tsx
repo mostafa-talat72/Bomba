@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem } from '../services/api';
+import { formatCurrency as formatCurrencyUtil } from '../utils/formatters';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -158,10 +159,7 @@ const Billing = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-EG', {
-      style: 'currency',
-      currency: 'EGP'
-    }).format(amount);
+    return formatCurrencyUtil(amount);
   };
 
   const getCustomerDisplay = (bill: Bill) => {

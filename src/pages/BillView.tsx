@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
+import { formatCurrency as formatCurrencyUtil } from '../utils/formatters';
 
 interface OrderItem {
 	name: string;
@@ -223,10 +224,7 @@ const BillView = () => {
 	useEffect(() => {	}, [bill]);
 
 	const formatCurrency = (amount: number) => {
-		return new Intl.NumberFormat('ar-EG', {
-			style: 'currency',
-			currency: 'EGP'
-		}).format(amount);
+		return formatCurrencyUtil(amount);
 	};
 
 	const formatDate = (dateString: string) => {

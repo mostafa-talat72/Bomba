@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { InventoryItem } from '../services/api';
 import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { formatCurrency, formatDecimal, formatQuantity } from '../utils/formatters';
 
 const Inventory = () => {
   const {
@@ -464,7 +465,7 @@ const Inventory = () => {
               <div key={item.id || item._id} className="bg-white rounded-lg p-3 border border-red-200">
                 <p className="font-medium text-gray-900">{item.name}</p>
                 <p className="text-sm text-red-600">
-                  متبقي: {item.currentStock} {item.unit} (الحد الأدنى: {item.minStock})
+                  متبقي: {formatQuantity(item.currentStock, item.unit)} (الحد الأدنى: {formatQuantity(item.minStock, item.unit)})
                 </p>
               </div>
             ))}
@@ -513,13 +514,13 @@ const Inventory = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.category}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stockStatus.bgColor} ${stockStatus.color}`}>
-                        {item.currentStock} {item.unit}
+                        {formatQuantity(item.currentStock, item.unit)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.minStock} {item.unit}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatQuantity(item.minStock, item.unit)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.unit}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.price} ج.م</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.currentStock * item.price} ج.م</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(item.price)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency(item.currentStock * item.price)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.supplier}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 space-x-reverse">
                       <button className="text-blue-600 hover:text-blue-800" onClick={() => openEditModal(item)}>
@@ -630,7 +631,7 @@ const Inventory = () => {
                         />
                         {addForm.paidAmount && (
                           <div className="text-xs text-gray-500 mt-1">
-                            المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م
+                            المتبقي: {formatCurrency(calculateRemainingAmount())}
                           </div>
                         )}
                       </div>
@@ -642,11 +643,11 @@ const Inventory = () => {
                     <div className="bg-gray-50 p-3 rounded-lg">
                       <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
                       <div className="text-sm text-gray-600">
-                        <div>إجمالي التكلفة: {(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')).toFixed(2)} ج.م</div>
+                        <div>إجمالي التكلفة: {formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
                         {addForm.paidAmount && (
                           <>
-                            <div>المدفوع: {parseFloat(addForm.paidAmount || '0').toFixed(2)} ج.م</div>
-                            <div>المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م</div>
+                            <div>المدفوع: {formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
+                            <div>المتبقي: {formatCurrency(calculateRemainingAmount())}</div>
                           </>
                         )}
                       </div>
@@ -760,7 +761,7 @@ const Inventory = () => {
                         />
                         {addForm.paidAmount && (
                           <div className="text-xs text-gray-500 mt-1">
-                            المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م
+                            المتبقي: {formatCurrency(calculateRemainingAmount())}
                           </div>
                         )}
                       </div>
@@ -772,11 +773,11 @@ const Inventory = () => {
                     <div className="bg-gray-50 p-3 rounded-lg">
                       <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
                       <div className="text-sm text-gray-600">
-                        <div>إجمالي التكلفة: {(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')).toFixed(2)} ج.م</div>
+                        <div>إجمالي التكلفة: {formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
                         {addForm.paidAmount && (
                           <>
-                            <div>المدفوع: {parseFloat(addForm.paidAmount || '0').toFixed(2)} ج.م</div>
-                            <div>المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م</div>
+                            <div>المدفوع: {formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
+                            <div>المتبقي: {formatCurrency(calculateRemainingAmount())}</div>
                           </>
                         )}
                       </div>

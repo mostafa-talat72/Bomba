@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, TrendingUp, TrendingDown, Calendar, Receipt, Filter, Edit, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Cost } from '../services/api';
+import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
 const Costs = () => {
   const { costs, fetchCosts, createCost, updateCost, deleteCost, showNotification } = useApp();
@@ -379,10 +380,7 @@ const Costs = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-EG', {
-      style: 'currency',
-      currency: 'EGP'
-    }).format(amount);
+    return formatCurrencyUtil(amount);
   };
 
   const formatDate = (date: string | Date) => {
@@ -536,7 +534,7 @@ const Costs = () => {
               <p className="text-sm font-medium text-gray-600">المدفوع</p>
               <p className="text-2xl font-bold text-green-600">{formatCurrency(stats.paidAmount)}</p>
               <p className="text-xs text-gray-500">
-                {stats.totalAmount > 0 ? ((stats.paidAmount / stats.totalAmount) * 100).toFixed(1) : 0}% من الإجمالي
+                {stats.totalAmount > 0 ? formatDecimal((stats.paidAmount / stats.totalAmount) * 100) : '٠'}% من الإجمالي
               </p>
             </div>
           </div>
@@ -551,7 +549,7 @@ const Costs = () => {
               <p className="text-sm font-medium text-gray-600">معلق</p>
               <p className="text-2xl font-bold text-yellow-600">{formatCurrency(stats.pendingAmount)}</p>
               <p className="text-xs text-gray-500">
-                {stats.totalAmount > 0 ? ((stats.pendingAmount / stats.totalAmount) * 100).toFixed(1) : 0}% من الإجمالي
+                {stats.totalAmount > 0 ? formatDecimal((stats.pendingAmount / stats.totalAmount) * 100) : '٠'}% من الإجمالي
               </p>
             </div>
           </div>
@@ -588,7 +586,7 @@ const Costs = () => {
                       <span className="text-2xl mr-2">{category.icon}</span>
                       <span className="font-medium text-gray-900">{category.name}</span>
                     </div>
-                    <span className="text-sm text-gray-500">{category.percentage.toFixed(1)}%</span>
+                    <span className="text-sm text-gray-500">{formatDecimal(category.percentage)}%</span>
                   </div>
                   <div className="mb-2">
                     <div className="w-full bg-gray-200 rounded-full h-2">
@@ -861,7 +859,7 @@ const Costs = () => {
                   />
                   {formData.paidAmount && (
                     <div className="text-xs text-gray-500 mt-1">
-                      المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م
+                      المتبقي: {formatDecimal(calculateRemainingAmount())} ج.م
                     </div>
                   )}
                 </div>
@@ -872,11 +870,11 @@ const Costs = () => {
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
                   <div className="text-sm text-gray-600">
-                    <div>إجمالي التكلفة: {parseFloat(formData.amount || '0').toFixed(2)} ج.م</div>
+                    <div>إجمالي التكلفة: {formatDecimal(parseFloat(formData.amount || '0'))} ج.م</div>
                     {formData.paidAmount && (
                       <>
-                        <div>المدفوع: {parseFloat(formData.paidAmount || '0').toFixed(2)} ج.م</div>
-                        <div>المتبقي: {calculateRemainingAmount().toFixed(2)} ج.م</div>
+                        <div>المدفوع: {formatDecimal(parseFloat(formData.paidAmount || '0'))} ج.م</div>
+                        <div>المتبقي: {formatDecimal(calculateRemainingAmount())} ج.م</div>
                       </>
                     )}
                   </div>

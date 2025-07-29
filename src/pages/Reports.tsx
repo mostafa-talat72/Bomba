@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Calendar, DollarSign, ShoppingCart, Gamepad2, Monitor, Download, RefreshCw, Users, Clock, Target } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, Calendar, Filter, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
 const Reports = () => {
   const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, showNotification } = useApp();
@@ -71,18 +72,18 @@ const Reports = () => {
 
   // تنسيق الأرقام
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('ar-EG').format(num);
+    return formatDecimal(num);
   };
 
   // تنسيق العملة
   const formatCurrency = (amount: number) => {
-    return `${formatNumber(amount)} ج.م`;
+    return formatCurrencyUtil(amount);
   };
 
   // تنسيق النسبة المئوية
   const formatPercentage = (value: number, total: number) => {
-    if (total === 0) return '0%';
-    return `${((value / total) * 100).toFixed(1)}%`;
+    if (total === 0) return '٠%';
+    return `${formatDecimal((value / total) * 100)}%`;
   };
 
   const basicStats = calculateBasicStats();
