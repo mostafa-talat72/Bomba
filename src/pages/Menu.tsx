@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MenuItem, InventoryItem } from '../services/api';
-import { formatCurrency, formatQuantity } from '../utils/formatters';
+import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
 
 const Menu: React.FC = () => {
 	const {
@@ -399,7 +399,7 @@ const Menu: React.FC = () => {
 										<div className="text-xs text-blue-600 mb-2">
 											الخامات: {item.ingredients.map(ing => {
 												const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
-												return ingredientItem ? `${ingredientItem.name} (${ing.quantity} ${ing.unit})` : `${ing.quantity} ${ing.unit}`;
+												return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
 											}).join(', ')}
 										</div>
 									)}
@@ -414,12 +414,12 @@ const Menu: React.FC = () => {
 									<span className="text-xl font-bold text-green-600">{formatCurrency(item.price)}</span>
 									<div className="flex items-center text-sm text-gray-500">
 										<TrendingUp className="h-4 w-4 ml-1" />
-										{item.orderCount} طلب
+										{formatDecimal(item.orderCount)} طلب
 									</div>
 								</div>
 								<div className="flex items-center text-sm text-gray-500">
 									<Clock className="h-4 w-4 ml-1" />
-									{item.preparationTime} دقيقة للتحضير
+									{formatDecimal(item.preparationTime)} دقيقة للتحضير
 								</div>
 							</div>
 
@@ -567,7 +567,7 @@ const Menu: React.FC = () => {
 												const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
 												const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
 												const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
-												return `${availableItems.length} من ${availableRawMaterials.length} خامة متاحة`;
+												return `${formatDecimal(availableItems.length)} من ${formatDecimal(availableRawMaterials.length)} خامة متاحة`;
 											})()})
 										</span>
 										{inventoryItems.length === 0 && (

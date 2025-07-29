@@ -1009,7 +1009,7 @@ const Cafe: React.FC = () => {
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">طلبات قيد التجهيز</p>
               <p className="text-2xl font-bold text-yellow-600">
-                {incompleteOrders.length}
+                {formatDecimal(incompleteOrders.length)}
               </p>
             </div>
           </div>
@@ -1022,7 +1022,7 @@ const Cafe: React.FC = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">جاهز للتسليم</p>
-              <p className="text-2xl font-bold text-green-600">{readyForDeliveryOrders.length}</p>
+              <p className="text-2xl font-bold text-green-600">{formatDecimal(readyForDeliveryOrders.length)}</p>
             </div>
           </div>
         </div>
@@ -1034,7 +1034,7 @@ const Cafe: React.FC = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">أصناف مجهزة</p>
-              <p className="text-2xl font-bold text-blue-600">{preparedItems.length}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatDecimal(preparedItems.length)}</p>
             </div>
           </div>
         </div>
@@ -1045,7 +1045,7 @@ const Cafe: React.FC = () => {
               <ShoppingCart className="h-6 w-6 text-purple-600" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">إجمالي المبيعات اليوم</p>
+              <p className="text-sm font-medium text-gray-600"> المبيعات اليوم</p>
               <p className="text-2xl font-bold text-purple-600">
                 {formatCurrency(todayStats.totalSales)}
               </p>
@@ -1271,7 +1271,7 @@ const Cafe: React.FC = () => {
 
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600">إجمالي الطلب:</span>
-                        <span className="font-semibold text-gray-900">{order.finalAmount || order.totalAmount} ج.م</span>
+                        <span className="font-semibold text-gray-900">{formatCurrency(order.finalAmount || order.totalAmount)}</span>
                       </div>
 
                       {order.bill && (
@@ -1354,7 +1354,7 @@ const Cafe: React.FC = () => {
                                   className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
                                 >
                                   <span className="text-gray-900">{item.name}</span>
-                                  <span className="text-gray-600">{item.price} ج.م</span>
+                                  <span className="text-gray-600">{formatCurrency(item.price)}</span>
                                 </button>
                               ))}
                             </div>
@@ -1439,7 +1439,7 @@ const Cafe: React.FC = () => {
                               >
                                 <div className="font-medium">{bill.customerName || 'بدون اسم'}</div>
                                 <div className="text-gray-600 text-xs">فاتورة رقم: {bill.billNumber}</div>
-                                <div className="text-gray-600 text-xs">المجموع: {bill.total} ج.م</div>
+                                <div className="text-gray-600 text-xs">المجموع: {formatCurrency(bill.total)}</div>
                               </div>
                             ))}
                         </div>
@@ -1465,7 +1465,7 @@ const Cafe: React.FC = () => {
                           </div>
                           <div className="flex items-center space-x-2 space-x-reverse mb-2">
                             <button
-                              onClick={() => updateQuantity(item.menuItem, item.quantity - 1)}
+                              onClick={() => updateQuantity(item.menuItem, Math.max(0, item.quantity - 1))}
                               className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
                             >
                               -
@@ -1477,7 +1477,7 @@ const Cafe: React.FC = () => {
                             >
                               +
                             </button>
-                            <span className="text-gray-600">{item.price} ج.م</span>
+                            <span className="text-gray-600">{formatCurrency(item.price)}</span>
                           </div>
                           <div className="mb-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات هذا المشروب:</label>
@@ -1500,7 +1500,7 @@ const Cafe: React.FC = () => {
                     {currentOrder.length > 0 && (
                       <div className="border-t pt-3">
                         <div className="flex justify-between items-center font-bold text-lg">
-                          <span className="text-lg font-semibold text-gray-900">إجمالي الطلب: {formatCurrency(calculateTotal())}</span>
+                          <span className="text-lg font-semibold text-gray-900">إجمالي الطلب: </span>
                           <span className="text-green-600">
                             {formatCurrency(calculateTotal())}
                           </span>
@@ -1636,7 +1636,7 @@ const Cafe: React.FC = () => {
                         <div>
                           <h5 className="font-medium text-gray-900">{item.name}</h5>
                           <p className="text-sm text-gray-600">
-                            {item.price} ج.م × {quantity} = {item.price * quantity} ج.م
+                            {formatCurrency(item.price)} × {formatDecimal(quantity)} = {formatCurrency(item.price * quantity)}
                           </p>
                         </div>
                         <div className="text-right">
@@ -1836,7 +1836,7 @@ const Cafe: React.FC = () => {
                                   className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
                                 >
                                   <span className="text-gray-900">{item.name}</span>
-                                  <span className="text-gray-600">{item.price} ج.م</span>
+                                  <span className="text-gray-600">{formatCurrency(item.price)}</span>
                                 </button>
                               ))}
                             </div>
@@ -1898,7 +1898,7 @@ const Cafe: React.FC = () => {
                             >
                               +
                             </button>
-                            <span className="text-gray-600">{item.price} ج.م</span>
+                            <span className="text-gray-600">{formatCurrency(item.price)}</span>
                           </div>
                           <div className="mb-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات هذا المشروب:</label>

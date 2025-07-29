@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
-import { formatCurrency as formatCurrencyUtil } from '../utils/formatters';
+import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
 interface OrderItem {
 	name: string;
@@ -409,9 +409,9 @@ const BillView = () => {
 											return (
 												<tr key={`${item.name}-${item.price}-${idx}`} className={`border-b last:border-b-0 ${colorClass} ${item.remainingQuantity === 0 ? 'bg-green-100' : ''}`}>
 													<td className="py-2 px-2 font-medium text-gray-900">{item.name}</td>
-													<td className="py-2 px-2">{item.totalQuantity}</td>
-													<td className="py-2 px-2">{item.paidQuantity}</td>
-													<td className="py-2 px-2">{item.remainingQuantity}</td>
+													<td className="py-2 px-2">{formatDecimal(item.totalQuantity)}</td>
+													<td className="py-2 px-2">{formatDecimal(item.paidQuantity)}</td>
+													<td className="py-2 px-2">{formatDecimal(item.remainingQuantity)}</td>
 													<td className="py-2 px-2">{formatCurrency(item.price)}</td>
 													<td className="py-2 px-2">{formatCurrency(totalPrice)}</td>
 												</tr>
@@ -488,7 +488,7 @@ const BillView = () => {
 													<tbody>
 														{session.controllersHistoryBreakdown.map((period, idx) => (
 															<tr key={`${period.from}-${period.to}-${period.controllers}-${idx}`}>
-																<td className="py-1 px-2">{(period.hours > 0 ? `${period.hours} ساعة` : '') + (period.minutes > 0 ? ` ${period.minutes} دقيقة` : '')}</td>
+																<td className="py-1 px-2">{(period.hours > 0 ? `${formatDecimal(period.hours)} ساعة` : '') + (period.minutes > 0 ? ` ${formatDecimal(period.minutes)} دقيقة` : '')}</td>
 																<td className="py-1 px-2">{formatCurrency(period.hourlyRate)}</td>
 																<td className="py-1 px-2">{formatCurrency(period.cost)}</td>
 															</tr>
@@ -515,8 +515,8 @@ const BillView = () => {
 													<tbody>
 														{session.controllersHistoryBreakdown.map((period, idx) => (
 															<tr key={`${period.from}-${period.to}-${period.controllers}-${idx}`}>
-																<td className="py-1 px-2">{period.controllers}</td>
-																<td className="py-1 px-2">{(period.hours > 0 ? `${period.hours} ساعة` : '') + (period.minutes > 0 ? ` ${period.minutes} دقيقة` : '')}</td>
+																<td className="py-1 px-2">{formatDecimal(period.controllers)}</td>
+																<td className="py-1 px-2">{(period.hours > 0 ? `${formatDecimal(period.hours)} ساعة` : '') + (period.minutes > 0 ? ` ${formatDecimal(period.minutes)} دقيقة` : '')}</td>
 																<td className="py-1 px-2">{formatCurrency(period.hourlyRate)}</td>
 																<td className="py-1 px-2">{formatCurrency(period.cost)}</td>
 															</tr>
@@ -610,7 +610,7 @@ const BillView = () => {
 										<ul className="list-disc pr-4 mt-1">
 											{order.items?.map((item, idx) => (
 												<li key={`${item.name}-${item.price}-${idx}`} className="text-xs text-gray-700">
-													{item.name} × {item.quantity} - {formatCurrency(item.price)}
+													{item.name} × {formatDecimal(item.quantity)} - {formatCurrency(item.price)}
 												</li>
 											))}
 										</ul>

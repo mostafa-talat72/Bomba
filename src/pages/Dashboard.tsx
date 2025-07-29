@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Gamepad2, Monitor, ShoppingCart, Receipt, TrendingUp, Clock, Users, DollarSign, BarChart3, Calendar, Coffee } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import api from '../services/api';
+import { formatCurrency, formatDecimal } from '../utils/formatters';
 
 interface RecentActivity {
   id: string;
@@ -159,7 +160,7 @@ const Dashboard = () => {
   const stats = [
     {
       name: 'الجلسات النشطة',
-      value: realTimeActiveSessions,
+      value: formatDecimal(realTimeActiveSessions),
       icon: Clock,
       color: 'bg-blue-500',
       bgColor: 'bg-blue-50',
@@ -168,25 +169,25 @@ const Dashboard = () => {
     },
     {
       name: 'الطلبات المعلقة',
-      value: realTimePendingOrders,
+      value: formatDecimal(realTimePendingOrders),
       icon: ShoppingCart,
       color: 'bg-orange-500',
       bgColor: 'bg-orange-50',
       textColor: 'text-orange-700',
-      description: `طلبات في انتظار التحضير أو جاهزة للتسليم (${ordersAnalysis.pending || 0} في الانتظار، ${ordersAnalysis.preparing || 0} قيد التحضير، ${ordersAnalysis.ready || 0} جاهزة) - إجمالي: ${actualPendingOrders.length}`
+      description: `طلبات في انتظار التحضير أو جاهزة للتسليم (${formatDecimal(ordersAnalysis.pending || 0)} في الانتظار، ${formatDecimal(ordersAnalysis.preparing || 0)} قيد التحضير، ${formatDecimal(ordersAnalysis.ready || 0)} جاهزة) - إجمالي: ${formatDecimal(actualPendingOrders.length)}`
     },
     {
       name: 'مبيعات اليوم',
-      value: `${todayRevenue.toLocaleString()} ج.م`,
+      value: formatCurrency(todayRevenue),
       icon: DollarSign,
       color: 'bg-green-500',
       bgColor: 'bg-green-50',
       textColor: 'text-green-700',
-      description: 'إجمالي المبيعات اليوم'
+      description: 'إجمالى المبيعات اليوم'
     },
     {
       name: 'فواتير اليوم',
-      value: todayOrders,
+      value: formatDecimal(todayOrders),
       icon: Receipt,
       color: 'bg-purple-500',
       bgColor: 'bg-purple-50',
@@ -198,7 +199,7 @@ const Dashboard = () => {
   // Calculate current cost for active sessions
   const calculateCurrentCost = (session: any) => {
     if (session.status !== 'active') {
-      return session.totalCost;
+      return formatCurrency(session.totalCost);
     }
 
     const now = new Date();
@@ -215,15 +216,15 @@ const Dashboard = () => {
 
       const minuteRate = hourlyRate / 60;
       const cost = Math.round(minutes * minuteRate);
-      return Math.max(cost, 1); // Minimum 1 pound
+      return formatCurrency(Math.max(cost, 1)); // Minimum 1 pound
     } else if (session.deviceType === 'computer') {
       const hourlyRate = 15;
       const minuteRate = hourlyRate / 60;
       const cost = Math.round(minutes * minuteRate);
-      return Math.max(cost, 1); // Minimum 1 pound
+      return formatCurrency(Math.max(cost, 1)); // Minimum 1 pound
     }
 
-    return session.totalCost;
+    return formatCurrency(session.totalCost);
   };
 
   // Get icon component based on activity type
@@ -335,7 +336,7 @@ const Dashboard = () => {
               <Clock className="h-5 w-5 ml-2 text-blue-500" />
               الجلسات النشطة
               <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full mr-2">
-                {activeSessions.length}
+                {formatDecimal(activeSessions.length)}
               </span>
             </h3>
           </div>
@@ -374,15 +375,15 @@ const Dashboard = () => {
                             بدأت: {startTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                           </p>
                           <p className="text-xs text-blue-600 font-medium">
-                            المدة: {hours > 0 ? `${hours}س ${minutes}د` : `${minutes}د`}
+                            المدة: {hours > 0 ? `${formatDecimal(hours)}س ${formatDecimal(minutes)}د` : `${formatDecimal(minutes)}د`}
                             {session.deviceType === 'playstation' && session.controllers && (
-                              <span className="mr-2">• {session.controllers} دراع</span>
+                              <span className="mr-2">• {formatDecimal(session.controllers)} دراع</span>
                             )}
                           </p>
                         </div>
                       </div>
                       <div className="text-left">
-                        <p className="font-bold text-green-600 text-lg">{currentCost} ج.م</p>
+                        <p className="font-bold text-green-600 text-lg">{currentCost}</p>
                         <p className="text-xs text-gray-500">التكلفة الحالية</p>
                       </div>
                     </div>
@@ -400,7 +401,7 @@ const Dashboard = () => {
               <TrendingUp className="h-5 w-5 ml-2 text-green-500" />
               النشاط الأخير
               <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full mr-2">
-                {Math.min(recentActivity.length, 5)}
+                {formatDecimal(Math.min(recentActivity.length, 5))}
               </span>
             </h3>
           </div>
@@ -459,7 +460,7 @@ const Dashboard = () => {
               </div>
               <h4 className="font-semibold text-blue-800 mb-1">المستخدمون النشطون</h4>
               <p className="text-sm text-blue-600">
-                {realTimeActiveSessions > 0 ? `${realTimeActiveSessions} جلسة نشطة` : 'لا توجد جلسات نشطة'}
+                {realTimeActiveSessions > 0 ? `${formatDecimal(realTimeActiveSessions)} جلسة نشطة` : 'لا توجد جلسات نشطة'}
               </p>
             </div>
             <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
@@ -470,14 +471,14 @@ const Dashboard = () => {
               <p className="text-sm text-orange-600">
                 {realTimePendingOrders > 0 ? (
                   <>
-                    {realTimePendingOrders} طلب في الانتظار أو جاهز
+                    {formatDecimal(realTimePendingOrders)} طلب في الانتظار أو جاهز
                     <br />
                     <span className="text-xs">
-                      {ordersAnalysis.pending || 0} في الانتظار • {ordersAnalysis.preparing || 0} قيد التحضير • {ordersAnalysis.ready || 0} جاهزة
+                      {formatDecimal(ordersAnalysis.pending || 0)} في الانتظار • {formatDecimal(ordersAnalysis.preparing || 0)} قيد التحضير • {formatDecimal(ordersAnalysis.ready || 0)} جاهزة
                     </span>
                     <br />
                     <span className="text-xs text-gray-500">
-                      إجمالي محسوب: {actualPendingOrders.length}
+                      إجمالي محسوب: {formatDecimal(actualPendingOrders.length)}
                     </span>
                   </>
                 ) : (

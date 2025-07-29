@@ -329,7 +329,7 @@ const Reports = () => {
               </div>
               <div className="text-center p-4 bg-purple-50 rounded-lg">
                 <div className="text-2xl font-bold text-purple-600">
-                  {formatPercentage((reports.financial as any)?.profitMargin || 0, 100)}%
+                  {formatPercentage((reports.financial as any)?.profitMargin || 0, 100)}
                 </div>
                 <div className="text-sm text-gray-600">هامش الربح</div>
               </div>

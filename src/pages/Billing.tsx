@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem } from '../services/api';
-import { formatCurrency as formatCurrencyUtil } from '../utils/formatters';
+import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -441,7 +441,7 @@ const Billing = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">إجمالي الفواتير</p>
-              <p className="text-2xl font-bold text-blue-600">{bills.length}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatDecimal(bills.length)}</p>
             </div>
           </div>
         </div>
@@ -454,7 +454,7 @@ const Billing = () => {
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">المبلغ المحصل</p>
               <p className="text-2xl font-bold text-green-600">
-                {bills.reduce((sum, bill) => sum + (bill.paid || 0), 0)} ج.م
+                {formatCurrency(bills.reduce((sum, bill) => sum + (bill.paid || 0), 0))}
               </p>
             </div>
           </div>
@@ -467,8 +467,8 @@ const Billing = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">المبلغ المتبقي</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {bills.reduce((sum, bill) => sum + (bill.remaining || 0), 0)} ج.م
+              <p className="text-2xl font-bold text-red-600">
+                {formatCurrency(bills.reduce((sum, bill) => sum + (bill.remaining || 0), 0))}
               </p>
             </div>
           </div>
@@ -482,7 +482,7 @@ const Billing = () => {
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">فواتير جزئية</p>
               <p className="text-2xl font-bold text-purple-600">
-                {bills.filter(b => b.status === 'partial').length}
+                {formatDecimal(bills.filter(b => b.status === 'partial').length)}
               </p>
             </div>
           </div>
@@ -737,7 +737,7 @@ const Billing = () => {
                           });
                           return Array.from(itemMap.values()).map((agg) => (
                             <div key={agg.itemName + agg.price} className="flex justify-between text-sm bg-white p-3 rounded-lg border border-blue-100 mb-1">
-                              <span className="text-blue-800">{agg.itemName} × {agg.totalQuantity}</span>
+                              <span className="text-blue-800">{agg.itemName} × {formatDecimal(agg.totalQuantity)}</span>
                               <span className="text-blue-700 font-medium">{formatCurrency(agg.totalAmount)}</span>
                             </div>
                           ));
@@ -961,12 +961,12 @@ const Billing = () => {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600">عدد الطلبات:</span>
-                        <span className="font-medium">{selectedBill?.orders?.length || 0}</span>
+                        <span className="font-medium">{formatDecimal(selectedBill?.orders?.length || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">عدد الجلسات:</span>
                         <span className="font-medium flex items-center gap-1">
-                          {selectedBill?.sessions?.length || 0}
+                          {formatDecimal(selectedBill?.sessions?.length || 0)}
                           {selectedBill && hasActiveSession(selectedBill) && (
                             <>
                               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
@@ -1175,9 +1175,9 @@ const Billing = () => {
                         <div className="text-xs text-gray-500">{formatCurrency(item.price)}</div>
                       </div>
                       <div className="flex gap-4 text-sm">
-                        <div>الكمية: <span className="font-bold">{item.totalQuantity}</span></div>
-                        <div>المدفوع: <span className="text-green-700 font-bold">{item.paidQuantity}</span></div>
-                        <div>المتبقي: <span className="text-yellow-700 font-bold">{item.remainingQuantity}</span></div>
+                        <div>الكمية: <span className="font-bold">{formatDecimal(item.totalQuantity)}</span></div>
+                        <div>المدفوع: <span className="text-green-700 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
+                        <div>المتبقي: <span className="text-yellow-700 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>
                       </div>
                       {/* اختيار الكمية للدفع */}
                       {/* تم نقل أزرار التحكم بجانب اسم الصنف في الأعلى ولن تتكرر هنا */}
@@ -1195,9 +1195,9 @@ const Billing = () => {
                                 <div className="flex items-center gap-2 text-sm text-yellow-800">
                                   <span>↳ إضافة: {addon.name}</span>
                                   <span>({formatCurrency(addon.price)})</span>
-                                  <span>الكمية: <b>{addon.totalQuantity}</b></span>
-                                  <span>المدفوع: <b className="text-green-700">{addon.paidQuantity}</b></span>
-                                  <span>المتبقي: <b className="text-yellow-700">{addon.remainingQuantity}</b></span>
+                                  <span>الكمية: <b>{formatDecimal(addon.totalQuantity)}</b></span>
+                                  <span>المدفوع: <b className="text-green-700">{formatDecimal(addon.paidQuantity)}</b></span>
+                                  <span>المتبقي: <b className="text-yellow-700">{formatDecimal(addon.remainingQuantity)}</b></span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <input
@@ -1324,7 +1324,7 @@ const Billing = () => {
                                   إضافات
                                 </span>
                               )}
-                              {' '}× {quantity}
+                              {' '}× {formatDecimal(quantity)}
                             </span>
                             <span className="font-bold text-blue-900 mt-1">
                               المجموع: {formatCurrency(item.price * quantity)}
