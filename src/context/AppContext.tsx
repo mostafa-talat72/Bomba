@@ -61,6 +61,7 @@ interface AppContextType {
   fetchBills: () => Promise<void>;
   fetchCosts: () => Promise<void>;
   fetchMenuItems: () => Promise<void>;
+  fetchAvailableMenuItems: () => Promise<void>; // دالة جديدة لجلب العناصر المتوفرة فقط
   fetchDevices: () => Promise<void>;
   fetchInventoryItems: () => Promise<void>;
   fetchUsers: () => Promise<void>;
@@ -489,12 +490,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const fetchMenuItems = async (): Promise<void> => {
     try {
+      // لا نستخدم checkStock في صفحة إدارة المنيو لنعرض جميع العناصر
       const response = await api.getMenuItems();
       if (response.success && response.data) {
         setMenuItems(response.data);
       }
     } catch (error) {
       console.error('Failed to fetch menu items:', error);
+    }
+  };
+
+  // دالة جديدة لجلب عناصر القائمة مع التحقق من توفر المخزون للطلبات
+  const fetchAvailableMenuItems = async (): Promise<void> => {
+    try {
+      // استخدام checkStock للتحقق من توفر المخزون في قائمة الطلبات
+      const response = await api.getMenuItems({ checkStock: true });
+      if (response.success && response.data) {
+        setMenuItems(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch available menu items:', error);
     }
   };
 
@@ -1447,6 +1462,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchBills,
     fetchCosts,
     fetchMenuItems,
+    fetchAvailableMenuItems,
     fetchDevices,
     fetchInventoryItems,
     fetchUsers,

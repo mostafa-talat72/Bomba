@@ -17,7 +17,7 @@ interface LocalOrderItem {
 const Cafe: React.FC = () => {
   const {
     menuItems,
-    fetchMenuItems,
+    fetchAvailableMenuItems, // استخدام الدالة الجديدة
     showNotification,
     user,
     updateOrder,
@@ -182,7 +182,7 @@ const Cafe: React.FC = () => {
 
   // Fetch menu items when component mounts
   useEffect(() => {
-    fetchMenuItems();
+    fetchAvailableMenuItems();
   }, []);
 
   // Update categories when menu items are loaded
@@ -377,6 +377,7 @@ const Cafe: React.FC = () => {
       const orderData = {
         customerName: customerName.trim(),
         items: currentOrder.map(item => ({
+          menuItem: item.menuItem, // إضافة menuItem
           name: item.name,
           price: item.price,
           quantity: item.quantity,

@@ -28,8 +28,6 @@ const Menu: React.FC = () => {
 		description: '',
 		isAvailable: true,
 		preparationTime: '5',
-		calories: '',
-		allergens: [] as string[],
 		isPopular: false,
 		ingredients: [] as { item: string; quantity: number; unit: string }[]
 	});
@@ -42,10 +40,6 @@ const Menu: React.FC = () => {
 		'وجبات سريعة',
 		'عصائر طبيعية',
 		'منتجات أخرى'
-	];
-
-	const allergenOptions = [
-		'حليب', 'بيض', 'فول سوداني', 'مكسرات', 'سمك', 'محار', 'قمح', 'صويا'
 	];
 
 	const unitOptions = ['جرام', 'كيلو', 'مل', 'لتر', 'قطعة', 'ملعقة', 'كوب'];
@@ -95,8 +89,6 @@ const Menu: React.FC = () => {
 			description: '',
 			isAvailable: true,
 			preparationTime: '5',
-			calories: '',
-			allergens: [],
 			isPopular: false,
 			ingredients: []
 		});
@@ -112,8 +104,6 @@ const Menu: React.FC = () => {
 			description: item.description || '',
 			isAvailable: item.isAvailable,
 			preparationTime: item.preparationTime.toString(),
-			calories: item.calories?.toString() || '',
-			allergens: item.allergens || [],
 			isPopular: item.isPopular,
 			ingredients: item.ingredients || []
 		});
@@ -141,6 +131,20 @@ const Menu: React.FC = () => {
 			return;
 		}
 
+		// التحقق من وجود خامة واحدة على الأقل
+		const validIngredients = formData.ingredients.filter(ing => ing.item !== '' && ing.quantity > 0);
+		if (validIngredients.length === 0) {
+			showNotification('يجب إضافة خامة واحدة على الأقل للعنصر', 'error');
+			return;
+		}
+
+		// التحقق من أن جميع الخامات المضافة صحيحة
+		const invalidIngredients = formData.ingredients.filter(ing => ing.item !== '' && (ing.quantity <= 0 || ing.quantity === undefined));
+		if (invalidIngredients.length > 0) {
+			showNotification('يرجى التأكد من إدخال كمية صحيحة لجميع الخامات', 'error');
+			return;
+		}
+
 		const itemData = {
 			name: formData.name.trim(),
 			price: price,
@@ -148,8 +152,6 @@ const Menu: React.FC = () => {
 			description: formData.description.trim(),
 			isAvailable: formData.isAvailable,
 			preparationTime: parseInt(formData.preparationTime),
-			calories: formData.calories ? parseFloat(formData.calories) : undefined,
-			allergens: formData.allergens,
 			isPopular: formData.isPopular,
 			ingredients: formData.ingredients
 		};
@@ -183,15 +185,6 @@ const Menu: React.FC = () => {
 
 	const getStatusText = (isAvailable: boolean) => {
 		return isAvailable ? 'متاح' : 'غير متاح';
-	};
-
-	const toggleAllergen = (allergen: string) => {
-		setFormData(prev => ({
-			...prev,
-			allergens: prev.allergens.includes(allergen)
-				? prev.allergens.filter(a => a !== allergen)
-				: [...prev.allergens, allergen]
-		}));
 	};
 
 	const addIngredient = () => {
@@ -274,7 +267,10 @@ const Menu: React.FC = () => {
 		setFormData(prev => ({
 			...prev,
 			ingredients: prev.ingredients.map((ingredient, i) =>
-				i === index ? { ...ingredient, [field]: value } : ingredient
+				i === index ? {
+					...ingredient,
+					[field]: field === 'item' ? value as string : value
+				} : ingredient
 			)
 		}));
 
@@ -287,7 +283,7 @@ const Menu: React.FC = () => {
 					ingredients: prev.ingredients.map((ingredient, i) =>
 						i === index ? {
 							...ingredient,
-							item: value,
+							item: value as string,
 							unit: selectedInventoryItem.unit // تحديث الوحدة تلقائياً
 						} : ingredient
 					)
@@ -420,16 +416,6 @@ const Menu: React.FC = () => {
 									<Clock className="h-4 w-4 ml-1" />
 									{item.preparationTime} دقيقة للتحضير
 								</div>
-								{item.calories && (
-									<div className="text-sm text-gray-500">
-										{item.calories} سعرة حرارية
-									</div>
-								)}
-								{item.allergens && item.allergens.length > 0 && (
-									<div className="text-xs text-red-600">
-										يحتوي على: {item.allergens.join(', ')}
-									</div>
-								)}
 							</div>
 
 							<div className="flex items-center justify-end space-x-2 space-x-reverse">
@@ -486,66 +472,55 @@ const Menu: React.FC = () => {
 						</div>
 						<div className="p-6">
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-2">اسم العنصر *</label>
-									<input
-										type="text"
-										value={formData.name}
-										onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-										className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-										placeholder="مثال: قهوة تركية"
-									/>
-								</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-2">اسم العنصر *</label>
+								<input
+									type="text"
+									value={formData.name}
+									onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									placeholder="مثال: قهوة تركية"
+								/>
+							</div>
 
-								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-2">السعر (ج.م) *</label>
-									<input
-										type="number"
-										value={formData.price}
-										onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-										className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-										placeholder="0.00"
-										min="0"
-										step="0.01"
-									/>
-								</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-2">السعر (ج.م) *</label>
+								<input
+									type="number"
+									value={formData.price}
+									onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									placeholder="0.00"
+									min="0"
+									step="0.01"
+								/>
+							</div>
 
-								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-2">الفئة *</label>
-									<select
-										value={formData.category}
-										onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-										className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-									>
-										<option value="">اختر الفئة</option>
-										{categories.map(category => (
-											<option key={category} value={category}>{category}</option>
-										))}
-									</select>
-								</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-2">الفئة *</label>
+								<select
+									value={formData.category}
+									onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+								>
+									<option value="">اختر الفئة</option>
+									{categories.map(category => (
+										<option key={category} value={category}>{category}</option>
+									))}
+								</select>
+							</div>
 
-								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-2">وقت التحضير (دقيقة)</label>
-									<input
-										type="number"
-										value={formData.preparationTime}
-										onChange={(e) => setFormData({ ...formData, preparationTime: e.target.value })}
-										className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-										min="1"
-										max="60"
-									/>
-								</div>
-
-								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-2">السعرات الحرارية</label>
-									<input
-										type="number"
-										value={formData.calories}
-										onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
-										className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-										min="0"
-									/>
-								</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-2">وقت التحضير (دقيقة)</label>
+								<input
+									type="number"
+									value={formData.preparationTime}
+									onChange={(e) => setFormData({ ...formData, preparationTime: e.target.value })}
+									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									min="1"
+									max="60"
+								/>
+							</div>
 
 								<div className="flex items-center space-x-4 space-x-reverse">
 									<label className="flex items-center">
@@ -558,7 +533,7 @@ const Menu: React.FC = () => {
 										<span className="mr-2 text-sm text-gray-700">متاح للطلب</span>
 									</label>
 									<label className="flex items-center">
-										<input
+								<input
 											type="checkbox"
 											checked={formData.isPopular}
 											onChange={(e) => setFormData({ ...formData, isPopular: e.target.checked })}
@@ -566,37 +541,20 @@ const Menu: React.FC = () => {
 										/>
 										<span className="mr-2 text-sm text-gray-700">شائع</span>
 									</label>
-								</div>
+							</div>
 
-								<div className="md:col-span-2">
-									<label className="block text-sm font-medium text-gray-700 mb-2">الوصف</label>
-									<textarea
-										value={formData.description}
-										onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-										className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-										rows={3}
-										placeholder="وصف مختصر للعنصر..."
-									/>
-								</div>
+							<div className="md:col-span-2">
+								<label className="block text-sm font-medium text-gray-700 mb-2">الوصف</label>
+								<textarea
+									value={formData.description}
+									onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									rows={3}
+									placeholder="وصف مختصر للعنصر..."
+								/>
+							</div>
 
-								<div className="md:col-span-2">
-									<label className="block text-sm font-medium text-gray-700 mb-3">الحساسية</label>
-									<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-										{allergenOptions.map(allergen => (
-											<label key={allergen} className="flex items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200">
-												<input
-													type="checkbox"
-													checked={formData.allergens.includes(allergen)}
-													onChange={() => toggleAllergen(allergen)}
-													className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-												/>
-												<span className="mr-2 text-sm text-gray-700">{allergen}</span>
-											</label>
-										))}
-									</div>
-								</div>
-
-								<div className="md:col-span-2">
+							<div className="md:col-span-2">
 									<label className="block text-sm font-medium text-gray-700 mb-3">
 										الخامات المرتبطة
 										<span className="text-xs text-gray-500 mr-2 font-normal">
@@ -617,61 +575,74 @@ const Menu: React.FC = () => {
 											</button>
 										)}
 									</label>
+
+									{/* تحذير إذا لم تكن هناك خامات مضافة */}
+									{formData.ingredients.length === 0 && (
+										<div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+											<div className="flex items-center">
+												<svg className="h-4 w-4 text-red-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+												</svg>
+												<span className="text-red-800 text-sm font-medium">يجب إضافة خامة واحدة على الأقل</span>
+											</div>
+										</div>
+									)}
+
 									<div className="space-y-3 max-h-60 overflow-y-auto">
-										{formData.ingredients.map((ingredient, index) => (
+									{formData.ingredients.map((ingredient, index) => (
 											<div key={index} className="flex items-center gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-												<div className="flex-1">
+											<div className="flex-1">
 													<label className="block text-xs text-gray-600 mb-1">الخامة</label>
-													<select
-														value={ingredient.item}
-														onChange={(e) => updateIngredient(index, 'item', e.target.value)}
+												<select
+													value={ingredient.item}
+													onChange={(e) => updateIngredient(index, 'item', e.target.value)}
 														className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-													>
-														<option value="">اختر الخامة</option>
-														{inventoryItems && inventoryItems.length > 0 ? (
-															inventoryItems.filter(item => item.isRawMaterial).length > 0 ? (
-																(() => {
-																	const availableItems = inventoryItems
-																		.filter(item => item.isRawMaterial)
-																		.filter(item => {
-																			// لا تظهر الخامة إذا كانت مختارة في صف آخر
-																			const isSelectedInOtherRows = formData.ingredients.some((ing, ingIndex) =>
-																				ingIndex !== index && ing.item === item.id
-																			);
-																			return !isSelectedInOtherRows;
-																		});
+												>
+													<option value="">اختر الخامة</option>
+													{inventoryItems && inventoryItems.length > 0 ? (
+														inventoryItems.filter(item => item.isRawMaterial).length > 0 ? (
+															(() => {
+																const availableItems = inventoryItems
+																	.filter(item => item.isRawMaterial)
+																	.filter(item => {
+																		// لا تظهر الخامة إذا كانت مختارة في صف آخر
+																		const isSelectedInOtherRows = formData.ingredients.some((ing, ingIndex) =>
+																			ingIndex !== index && ing.item === item.id
+																		);
+																		return !isSelectedInOtherRows;
+																	});
 
-																	if (availableItems.length === 0) {
-																		return <option value="" disabled>جميع الخامات مختارة بالفعل</option>;
-																	}
+																if (availableItems.length === 0) {
+																	return <option value="" disabled>جميع الخامات مختارة بالفعل</option>;
+																}
 
-																	return availableItems.map(item => (
+																return availableItems.map(item => (
 																		<option key={item.id} value={item.id}>
 																			{item.name}
 																		</option>
-																	));
-																})()
-															) : (
-																<option value="" disabled>لا توجد خامات في المخزون</option>
-															)
+																));
+															})()
 														) : (
-															<option value="" disabled>جاري تحميل الخامات...</option>
-														)}
-													</select>
-												</div>
-												<div className="w-24">
+															<option value="" disabled>لا توجد خامات في المخزون</option>
+														)
+													) : (
+														<option value="" disabled>جاري تحميل الخامات...</option>
+													)}
+												</select>
+											</div>
+											<div className="w-24">
 													<label className="block text-xs text-gray-600 mb-1">الكمية</label>
-													<input
-														type="number"
-														value={ingredient.quantity}
-														onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
+												<input
+													type="number"
+													value={ingredient.quantity}
+													onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
 														className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
 														placeholder="0"
-														min="0"
-														step="0.1"
-													/>
-												</div>
-												<div className="w-24">
+													min="0"
+													step="0.1"
+												/>
+											</div>
+											<div className="w-24">
 													<label className="block text-xs text-gray-600 mb-1">
 														الوحدة
 														{(() => {
@@ -681,9 +652,9 @@ const Menu: React.FC = () => {
 															) : '';
 														})()}
 													</label>
-													<select
-														value={ingredient.unit}
-														onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
+												<select
+													value={ingredient.unit}
+													onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
 														className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
 													>
 														{(() => {
@@ -695,25 +666,25 @@ const Menu: React.FC = () => {
 																));
 															}
 															return unitOptions.map(unit => (
-																<option key={unit} value={unit}>{unit}</option>
+														<option key={unit} value={unit}>{unit}</option>
 															));
 														})()}
-													</select>
-												</div>
-												<button
-													type="button"
-													onClick={() => removeIngredient(index)}
-													className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200 self-end"
-												>
-													<Trash2 className="h-4 w-4" />
-												</button>
+												</select>
 											</div>
-										))}
+											<button
+												type="button"
+												onClick={() => removeIngredient(index)}
+													className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200 self-end"
+											>
+												<Trash2 className="h-4 w-4" />
+											</button>
+										</div>
+									))}
 
-										{(() => {
-											const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
-											const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
-											const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
+									{(() => {
+										const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
+										const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
+										const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
 
 											if (availableItems.length === 0 && availableRawMaterials.length > 0) {
 												return (
@@ -740,34 +711,34 @@ const Menu: React.FC = () => {
 													</div>
 												);
 											} else {
-												return (
-													<button
-														type="button"
-														onClick={addIngredient}
+										return (
+											<button
+												type="button"
+												onClick={addIngredient}
 														className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-500 hover:text-primary-600 transition-colors duration-200 flex items-center justify-center"
 													>
 														<Plus className="h-4 w-4 ml-2" />
 														إضافة خامة
-													</button>
-												);
+											</button>
+										);
 											}
-										})()}
-									</div>
-								</div>
+									})()}
 							</div>
+						</div>
+					</div>
 
-							<div className="mt-6 flex justify-end space-x-3 space-x-reverse">
-								<button
+					<div className="mt-6 flex justify-end space-x-3 space-x-reverse">
+							<button
 									type="button"
-									onClick={() => setShowAddModal(false)}
-									className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
-								>
-									إلغاء
-								</button>
-								<button
+								onClick={() => setShowAddModal(false)}
+								className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+							>
+								إلغاء
+							</button>
+							<button
 									type="button"
-									onClick={handleSaveItem}
-									disabled={loading}
+								onClick={handleSaveItem}
+								disabled={loading}
 									className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
 								>
 									{loading ? (
@@ -781,7 +752,7 @@ const Menu: React.FC = () => {
 											{editingItem ? 'تحديث العنصر' : 'إضافة العنصر'}
 										</>
 									)}
-								</button>
+							</button>
 							</div>
 						</div>
 					</div>

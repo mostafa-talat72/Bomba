@@ -1377,6 +1377,7 @@ class ApiClient {
     sortOrder?: string;
     page?: number;
     limit?: number;
+    checkStock?: boolean; // معامل جديد للتحقق من توفر المخزون
   }): Promise<ApiResponse<MenuItem[]>> {
     const searchParams = new URLSearchParams();
     if (params) {

@@ -15,6 +15,7 @@ export const getAllMenuItems = async (req, res) => {
             sortOrder = "asc",
             page = 1,
             limit = 50,
+            checkStock, // معامل جديد للتحقق من توفر المخزون
         } = req.query;
 
         // تحقق من وجود المستخدم والمنشأة
@@ -59,22 +60,107 @@ export const getAllMenuItems = async (req, res) => {
         // Get total count for pagination
         const total = await MenuItem.countDocuments(filter);
 
-        res.json({
-            success: true,
-            data: menuItems,
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
+        // التحقق من توفر المخزون فقط إذا كان معامل checkStock موجود
+        if (checkStock === "true") {
+            // دالة للتحقق من توفر المخزون لعنصر القائمة
+            const checkMenuItemStockAvailability = async (menuItem) => {
+                if (
+                    !menuItem.ingredients ||
+                    menuItem.ingredients.length === 0
+                ) {
+                    return true; // إذا لم تكن هناك خامات، يعتبر متاح
+                }
+
+                const InventoryItem = (
+                    await import("../models/InventoryItem.js")
+                ).default;
+
+                // دالة لتحويل الوحدات
+                const convertQuantity = (quantity, fromUnit, toUnit) => {
+                    const conversions = {
+                        // تحويلات الحجم
+                        لتر: { مل: 1000, لتر: 1 },
+                        مل: { لتر: 0.001, مل: 1 },
+                        // تحويلات الوزن
+                        كيلو: { جرام: 1000, كيلو: 1 },
+                        جرام: { كيلو: 0.001, جرام: 1 },
+                        // الوحدات الأخرى
+                        قطعة: { قطعة: 1 },
+                        علبة: { علبة: 1 },
+                        كيس: { كيس: 1 },
+                        زجاجة: { زجاجة: 1 },
+                    };
+
+                    const conversionRate = conversions[fromUnit]?.[toUnit];
+                    return conversionRate
+                        ? quantity * conversionRate
+                        : quantity;
+                };
+
+                for (const ingredient of menuItem.ingredients) {
+                    const inventoryItem = await InventoryItem.findById(
+                        ingredient.item
+                    );
+                    if (!inventoryItem) {
+                        return false; // إذا لم توجد الخامة، غير متاح
+                    }
+
+                    // تحويل الكمية المطلوبة إلى وحدة المخزون
+                    const requiredQuantityInStockUnit = convertQuantity(
+                        ingredient.quantity,
+                        ingredient.unit,
+                        inventoryItem.unit
+                    );
+
+                    // التحقق من توفر المخزون بعد التحويل
+                    if (
+                        inventoryItem.currentStock < requiredQuantityInStockUnit
+                    ) {
+                        return false; // المخزون غير كافي
+                    }
+                }
+
+                return true; // جميع الخامات متوفرة
+            };
+
+            // التحقق من توفر المخزون لكل عنصر
+            const availableMenuItems = [];
+            for (const menuItem of menuItems) {
+                const isStockAvailable = await checkMenuItemStockAvailability(
+                    menuItem
+                );
+                if (isStockAvailable) {
+                    availableMenuItems.push(menuItem);
+                }
+            }
+
+            res.json({
+                success: true,
+                count: availableMenuItems.length,
+                total: availableMenuItems.length,
+                data: availableMenuItems,
+            });
+        } else {
+            // إرجاع جميع العناصر بدون التحقق من المخزون
+            res.json({
+                success: true,
+                count: menuItems.length,
                 total,
-                pages: Math.ceil(total / parseInt(limit)),
-            },
-        });
-    } catch (err) {
-        console.error("getMenuItems error:", err);
+                data: menuItems,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total,
+                    pages: Math.ceil(total / parseInt(limit)),
+                },
+            });
+        }
+    } catch (error) {
+        console.error("❌ Error getting menu items:", error);
         res.status(500).json({
             success: false,
-            message: "خطأ في جلب عناصر المنيو",
-            error: err.message,
+            message: "خطأ في جلب عناصر القائمة",
+            error: error.message,
         });
     }
 };
