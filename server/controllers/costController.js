@@ -172,6 +172,8 @@ export const updateCost = async (req, res) => {
             subcategory,
             description,
             amount,
+            paidAmount,
+            remainingAmount,
             currency,
             date,
             dueDate,
@@ -203,10 +205,21 @@ export const updateCost = async (req, res) => {
         if (subcategory !== undefined) cost.subcategory = subcategory;
         if (description) cost.description = description;
         if (amount !== undefined) cost.amount = amount;
+        if (paidAmount !== undefined) {
+            // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
+            if (paidAmount > cost.amount) {
+                paidAmount = cost.amount;
+            }
+            cost.paidAmount = paidAmount;
+        }
+        if (remainingAmount !== undefined)
+            cost.remainingAmount = remainingAmount;
         if (currency) cost.currency = currency;
         if (date) cost.date = date;
         if (dueDate !== undefined) cost.dueDate = dueDate;
-        if (status) cost.status = status;
+        if (status !== undefined) {
+            cost.status = status; // Allow manual status updates
+        }
         if (paymentMethod) cost.paymentMethod = paymentMethod;
         if (receipt !== undefined) cost.receipt = receipt;
         if (vendor !== undefined) cost.vendor = vendor;
@@ -222,7 +235,10 @@ export const updateCost = async (req, res) => {
             cost.calculateNextDueDate();
         }
 
+        // حفظ التكلفة لضمان تشغيل pre-save hook
         await cost.save();
+
+        // إعادة تحميل البيانات مع العلاقات
         await cost.populate(["createdBy", "approvedBy"], "name");
 
         res.json({

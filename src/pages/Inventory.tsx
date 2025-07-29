@@ -195,7 +195,38 @@ const Inventory = () => {
 
   // تغيير الحقول
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setAddForm({ ...addForm, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    if (name === 'paidAmount') {
+      // حساب المبلغ الكلي (الكمية × السعر)
+      const quantity = parseFloat(addForm.quantity) || 0;
+      const price = parseFloat(addForm.price) || 0;
+      const totalCost = quantity * price;
+
+      // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
+      let paidAmount = parseFloat(value) || 0;
+      if (paidAmount > totalCost) {
+        paidAmount = totalCost;
+      }
+
+      setAddForm({
+        ...addForm,
+        [name]: paidAmount.toString()
+      });
+    } else if (name === 'costStatus' && value === 'paid') {
+      // إذا تم اختيار الحالة كـ "مدفوع"، تحديث المبلغ المدفوع تلقائياً
+      const quantity = parseFloat(addForm.quantity) || 0;
+      const price = parseFloat(addForm.price) || 0;
+      const totalCost = quantity * price;
+
+      setAddForm({
+        ...addForm,
+        [name]: value,
+        paidAmount: totalCost.toString()
+      });
+    } else {
+      setAddForm({ ...addForm, [name]: value });
+    }
   };
 
   // إضافة كمية جديدة أو منتج جديد

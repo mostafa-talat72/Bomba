@@ -162,12 +162,16 @@ export const createInventoryItem = async (req, res) => {
 
         // إضافة سجل تكلفة تلقائي عند إضافة منتج جديد
         try {
+            const totalCost = price * (currentStock || 1);
+            // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
+            const validatedPaidAmount = Math.min(paidAmount, totalCost);
+
             await Cost.create({
                 category: "inventory",
                 subcategory: category,
                 description: `شراء مخزون جديد: ${name}`,
-                amount: price * (currentStock || 1),
-                paidAmount: paidAmount,
+                amount: totalCost,
+                paidAmount: validatedPaidAmount,
                 currency: "EGP",
                 date: new Date(),
                 status: costStatus,
@@ -379,12 +383,16 @@ export const updateStock = async (req, res) => {
         // تسجيل تكلفة الشراء إذا كانت إضافة للمخزون (شراء)
         if (type === "in" && quantity > 0 && price) {
             try {
+                const totalCost = price * quantity;
+                // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
+                const validatedPaidAmount = Math.min(paidAmount, totalCost);
+
                 await Cost.create({
                     category: "inventory",
                     subcategory: item.category,
                     description: `شراء كمية جديدة: ${item.name}`,
-                    amount: price * quantity,
-                    paidAmount: paidAmount,
+                    amount: totalCost,
+                    paidAmount: validatedPaidAmount,
                     currency: "EGP",
                     date: date || new Date(),
                     vendor: supplier || item.supplier || "",

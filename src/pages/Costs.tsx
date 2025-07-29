@@ -25,7 +25,8 @@ const Costs = () => {
     vendor: '',
     vendorContact: '',
     notes: '',
-    paidAmount: ''
+    paidAmount: '',
+    remainingAmount: ''
   });
 
   const costCategories = [
@@ -220,10 +221,39 @@ const Costs = () => {
   // معالجة النماذج
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+
+    if (name === 'status' && value === 'paid') {
+      // إذا تم اختيار الحالة كـ "مدفوع"، تحديث المبلغ المدفوع والمتبقي تلقائياً
+      const amount = parseFloat(formData.amount) || 0;
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+        paidAmount: amount.toString(),
+        remainingAmount: '0'
+      }));
+    } else if (name === 'amount' || name === 'paidAmount') {
+      // حساب المتبقي تلقائياً عند تغيير المبلغ أو المبلغ المدفوع
+      const currentAmount = name === 'amount' ? parseFloat(value) || 0 : parseFloat(formData.amount) || 0;
+      let currentPaidAmount = name === 'paidAmount' ? parseFloat(value) || 0 : parseFloat(formData.paidAmount) || 0;
+
+      // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
+      if (name === 'paidAmount' && currentPaidAmount > currentAmount) {
+        currentPaidAmount = currentAmount;
+      }
+
+      const remainingAmount = Math.max(0, currentAmount - currentPaidAmount);
+
+      setFormData(prev => ({
+        ...prev,
+        [name]: name === 'paidAmount' ? currentPaidAmount.toString() : value,
+        remainingAmount: remainingAmount.toString()
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const resetForm = () => {
@@ -238,7 +268,8 @@ const Costs = () => {
       vendor: '',
       vendorContact: '',
       notes: '',
-      paidAmount: ''
+      paidAmount: '',
+      remainingAmount: ''
     });
   };
 
@@ -252,22 +283,29 @@ const Costs = () => {
         ...formData,
         amount: parseFloat(formData.amount),
         paidAmount: parseFloat(formData.paidAmount || '0'),
+        remainingAmount: parseFloat(formData.remainingAmount || '0'),
         date: new Date(formData.date)
       };
 
       if (showEditCost && selectedCost) {
-        await updateCost(selectedCost.id, costData);
-        showNotification('تم تحديث التكلفة بنجاح', 'success');
-        setShowEditCost(false);
+        const updatedCost = await updateCost(selectedCost.id, costData);
+        if (updatedCost) {
+          showNotification('تم تحديث التكلفة بنجاح', 'success');
+          setShowEditCost(false);
+          // إعادة تحميل البيانات للتأكد من التحديث
+          await loadCosts();
+        }
       } else {
         await createCost(costData);
         showNotification('تم إضافة التكلفة بنجاح', 'success');
         setShowAddCost(false);
+        // إعادة تحميل البيانات للتأكد من التحديث
+        await loadCosts();
       }
 
       resetForm();
       setSelectedCost(null);
-      await loadCosts();
+      // await loadCosts(); // This line is removed as per the edit hint
 
     } catch (error) {
       console.error('Error saving cost:', error);
@@ -290,7 +328,8 @@ const Costs = () => {
       vendor: cost.vendor || '',
       vendorContact: cost.vendorContact || '',
       notes: cost.notes || '',
-      paidAmount: cost.paidAmount?.toString() || '0'
+      paidAmount: cost.paidAmount?.toString() || '0',
+      remainingAmount: cost.remainingAmount?.toString() || '0'
     });
     setShowEditCost(true);
   };

@@ -139,24 +139,40 @@ const costSchema = new mongoose.Schema(
 
 // Update status and remaining amount based on paid amount
 costSchema.pre("save", function (next) {
-    // Calculate remaining amount
-    this.remainingAmount = Math.max(0, this.amount - this.paidAmount);
-
-    // Update status based on payment
-    if (this.paidAmount >= this.amount) {
-        this.status = "paid";
-        this.remainingAmount = 0;
-    } else if (this.paidAmount > 0) {
-        this.status = "partially_paid";
-    } else {
-        this.status = "pending";
+    // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
+    if (this.paidAmount > this.amount) {
+        this.paidAmount = this.amount;
     }
 
-    // Update status based on due date
+    // If status is manually set to "paid", automatically set paidAmount to amount
+    if (this.status === "paid") {
+        this.paidAmount = this.amount;
+        this.remainingAmount = 0;
+    } else {
+        // Calculate remaining amount
+        this.remainingAmount = Math.max(0, this.amount - this.paidAmount);
+
+        // Only auto-calculate status if it's not manually set to "paid"
+        // This allows manual status updates to take precedence
+        if (this.status !== "paid") {
+            // Update status based on payment
+            if (this.paidAmount >= this.amount) {
+                this.status = "paid";
+                this.remainingAmount = 0;
+            } else if (this.paidAmount > 0) {
+                this.status = "partially_paid";
+            } else if (this.status !== "overdue") {
+                this.status = "pending";
+            }
+        }
+    }
+
+    // Update status based on due date (only if not manually set to paid)
     if (
         this.dueDate &&
         this.dueDate < new Date() &&
-        this.status === "pending"
+        this.status === "pending" &&
+        this.status !== "paid"
     ) {
         this.status = "overdue";
     }

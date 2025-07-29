@@ -924,6 +924,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await api.updateCost(id, updates);
       if (response.success && response.data) {
+        // تحديث البيانات المحلية مباشرة
         setCosts(prev => prev.map(cost =>
           cost.id === id ? response.data! : cost
         ));
