@@ -92,16 +92,16 @@ const Layout = () => {
       {/* Sidebar Overlay (Mobile) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black bg-opacity-50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
       {/* Sidebar */}
       <div
         className={`
-          fixed inset-y-0 right-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out
+          fixed inset-y-0 right-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
-          lg:translate-x-0 lg:static lg:inset-0 lg:w-64
+          lg:translate-x-0 lg:static lg:inset-0 lg:w-64 lg:z-10
         `}
         style={{ direction: 'rtl' }}
       >
@@ -251,7 +251,7 @@ const Layout = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top Bar */}
-        <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
+        <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0 fixed top-0 left-0 right-0 z-50 lg:static lg:z-auto">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6">
             <div className="flex items-center min-w-0">
               <button
@@ -283,7 +283,7 @@ const Layout = () => {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto min-w-0 container-responsive">
+        <main className="flex-1 overflow-auto min-w-0 container-responsive lg:pt-0 pt-16">
           <div className="p-4 sm:p-6 w-full">
             <Outlet />
           </div>
