@@ -172,20 +172,20 @@ const Billing = () => {
   const filteredBills = bills.filter(bill => {
     // فلترة حسب الحالة
     const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
-    
+
     // فلترة حسب التاريخ
     let dateMatch = true;
     if (dateFilter) {
       const billDate = new Date(bill.createdAt);
       const filterDate = new Date(dateFilter);
-      
+
       // مقارنة التاريخ فقط (بدون الوقت)
       const billDateOnly = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
       const filterDateOnly = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate());
-      
+
       dateMatch = billDateOnly.getTime() === filterDateOnly.getTime();
     }
-    
+
     return statusMatch && dateMatch;
   });
 
@@ -451,64 +451,64 @@ const Billing = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Receipt className="h-8 w-8 text-primary-600 ml-3" />
+          <Receipt className="h-6 w-6 sm:h-8 sm:w-8 text-primary-600 ml-2 sm:ml-3" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">إدارة الفواتير</h1>
-            <p className="text-gray-600">إنشاء وإدارة فواتير العملاء</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">إدارة الفواتير</h1>
+            <p className="text-sm sm:text-base text-gray-600">إنشاء وإدارة فواتير العملاء</p>
           </div>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Receipt className="h-6 w-6 text-blue-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">إجمالي الفواتير</p>
-              <p className="text-2xl font-bold text-blue-600">{formatDecimal(bills.length)}</p>
+            <div className="mr-3 sm:mr-4">
+              <p className="text-xs sm:text-sm font-medium text-gray-600">إجمالي الفواتير</p>
+              <p className="text-xl sm:text-2xl font-bold text-blue-600">{formatDecimal(bills.length)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-green-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">المبلغ المحصل</p>
-              <p className="text-2xl font-bold text-green-600">
+            <div className="mr-3 sm:mr-4">
+              <p className="text-xs sm:text-sm font-medium text-gray-600">المبلغ المحصل</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-600">
                 {formatCurrency(bills.reduce((sum, bill) => sum + (bill.paid || 0), 0))}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-yellow-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">المبلغ المتبقي</p>
-              <p className="text-2xl font-bold text-red-600">
+            <div className="mr-3 sm:mr-4">
+              <p className="text-xs sm:text-sm font-medium text-gray-600">المبلغ المتبقي</p>
+              <p className="text-xl sm:text-2xl font-bold text-red-600">
                 {formatCurrency(bills.reduce((sum, bill) => sum + (bill.remaining || 0), 0))}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Receipt className="h-6 w-6 text-purple-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">فواتير جزئية</p>
-              <p className="text-2xl font-bold text-purple-600">
+            <div className="mr-3 sm:mr-4">
+              <p className="text-xs sm:text-sm font-medium text-gray-600">فواتير جزئية</p>
+              <p className="text-xl sm:text-2xl font-bold text-purple-600">
                 {formatDecimal(bills.filter(b => b.status === 'partial').length)}
               </p>
             </div>
@@ -518,8 +518,8 @@ const Billing = () => {
 
       {/* Filter */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4 space-x-reverse">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
             <h3 className="text-lg font-semibold text-gray-900">الفواتير الحالية</h3>
             <div className="text-sm text-gray-600">
               {filteredBills.length} من {bills.length} فاتورة
@@ -530,30 +530,32 @@ const Billing = () => {
               )}
             </div>
           </div>
-          <div className="flex items-center space-x-4 space-x-reverse">
-            <div className="flex items-center space-x-2 space-x-reverse">
-              <label className="text-sm font-medium text-gray-700">التاريخ:</label>
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-              {dateFilter && (
-                <button
-                  onClick={() => setDateFilter('')}
-                  className="text-xs text-red-600 hover:text-red-800"
-                >
-                  مسح التاريخ
-                </button>
-              )}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">التاريخ:</label>
+              <div className="flex items-center space-x-2 space-x-reverse w-full sm:w-auto">
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto"
+                />
+                {dateFilter && (
+                  <button
+                    onClick={() => setDateFilter('')}
+                    className="text-xs text-red-600 hover:text-red-800 whitespace-nowrap px-2 py-1 rounded hover:bg-red-50"
+                  >
+                    مسح التاريخ
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center space-x-2 space-x-reverse">
-              <label className="text-sm font-medium text-gray-700">فلترة حسب الحالة:</label>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">فلترة حسب الحالة:</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto"
               >
                 <option value="all">جميع الفواتير</option>
                 <option value="draft">مسودة</option>
@@ -568,7 +570,7 @@ const Billing = () => {
       </div>
 
       {/* Bills Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         {filteredBills.map((bill: Bill) => (
           <div
             key={bill.id || bill._id}
@@ -582,10 +584,10 @@ const Billing = () => {
               </span>
             )}
             {/* Header */}
-            <div className="p-4 border-b border-gray-100">
+            <div className="p-3 sm:p-4 border-b border-gray-100">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center">
-                  <span className="text-2xl mr-2">{getStatusIcon(bill.status)}</span>
+                  <span className="text-xl sm:text-2xl mr-2">{getStatusIcon(bill.status)}</span>
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(bill.status)}`}>
                     {getStatusText(bill.status)}
                   </span>
@@ -593,33 +595,33 @@ const Billing = () => {
                 <span className="text-xs text-gray-500">#{safe(bill.billNumber, bill.id || bill._id)}</span>
               </div>
 
-              <div className="flex items-center text-sm text-gray-600 mb-1">
-                <User className="h-4 w-4 mr-1" />
+              <div className="flex items-center text-xs sm:text-sm text-gray-600 mb-1">
+                <User className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                 <span className="truncate">{(getCustomerDisplay(bill as Bill) || 'عميل') as string}</span>
               </div>
 
-              <div className="flex items-center text-sm text-gray-600">
-                <Calendar className="h-4 w-4 mr-1" />
+              <div className="flex items-center text-xs sm:text-sm text-gray-600">
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                 <span>{bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('ar-EG') : '-'}</span>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-4">
-              <div className="space-y-3">
+            <div className="p-3 sm:p-4">
+              <div className="space-y-2 sm:space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">المبلغ الكلي:</span>
-                  <span className="font-semibold text-gray-900">{formatCurrency(bill.total || 0)}</span>
+                  <span className="text-xs sm:text-sm text-gray-600">المبلغ الكلي:</span>
+                  <span className="font-semibold text-gray-900 text-sm sm:text-base">{formatCurrency(bill.total || 0)}</span>
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">المدفوع:</span>
-                  <span className="font-semibold text-green-600">{formatCurrency(bill.paid || 0)}</span>
+                  <span className="text-xs sm:text-sm text-gray-600">المدفوع:</span>
+                  <span className="font-semibold text-green-600 text-sm sm:text-base">{formatCurrency(bill.paid || 0)}</span>
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">المتبقي:</span>
-                  <span className={`font-semibold ${(bill.remaining || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  <span className="text-xs sm:text-sm text-gray-600">المتبقي:</span>
+                  <span className={`font-semibold text-sm sm:text-base ${(bill.remaining || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {formatCurrency(bill.remaining || 0)}
                   </span>
                 </div>
@@ -640,18 +642,18 @@ const Billing = () => {
             </div>
 
             {/* Footer */}
-            <div className={`p-4 border-t border-gray-100 rounded-b-lg ${bill.status === 'paid' ? 'bg-green-50' : 'bg-gray-50'
+            <div className={`p-3 sm:p-4 border-t border-gray-100 rounded-b-lg ${bill.status === 'paid' ? 'bg-green-50' : 'bg-gray-50'
               }`}>
-              <div className={`flex items-center justify-center text-sm font-medium ${bill.status === 'paid' ? 'text-green-600' : 'text-primary-600'
+              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600' : 'text-primary-600'
                 }`}>
                 {bill.status === 'paid' ? (
                   <>
-                    <CheckCircle className="h-4 w-4 mr-1" />
+                    <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     مدفوع بالكامل
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-4 w-4 mr-1" />
+                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     انقر لإدارة الفاتورة
                   </>
                 )}
