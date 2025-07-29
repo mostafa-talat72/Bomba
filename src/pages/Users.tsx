@@ -3,6 +3,7 @@ import { Users as UsersIcon, Plus, Shield, User, Crown, Search, Filter, Lock, Un
 import { useApp } from '../context/AppContext';
 import { User as UserType } from '../services/api';
 import UserCard from '../components/UserCard';
+import { formatDecimal } from '../utils/formatters';
 
 const Users = () => {
   const { users, fetchUsers, createUser, updateUser, deleteUser, showNotification, user } = useApp();
@@ -434,7 +435,6 @@ const Users = () => {
   };
 
 
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -477,7 +477,7 @@ const Users = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">إجمالي المستخدمين</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.totalUsers}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatDecimal(stats.totalUsers)}</p>
             </div>
           </div>
         </div>
@@ -489,7 +489,7 @@ const Users = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">نشط</p>
-              <p className="text-2xl font-bold text-green-600">{stats.activeUsers}</p>
+              <p className="text-2xl font-bold text-green-600">{formatDecimal(stats.activeUsers)}</p>
             </div>
           </div>
         </div>
@@ -501,7 +501,7 @@ const Users = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">غير نشط</p>
-              <p className="text-2xl font-bold text-red-600">{stats.inactiveUsers}</p>
+              <p className="text-2xl font-bold text-red-600">{formatDecimal(stats.inactiveUsers)}</p>
             </div>
           </div>
         </div>
@@ -513,7 +513,7 @@ const Users = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">معلق</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.suspendedUsers}</p>
+              <p className="text-2xl font-bold text-yellow-600">{formatDecimal(stats.suspendedUsers)}</p>
             </div>
           </div>
         </div>
@@ -526,7 +526,7 @@ const Users = () => {
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">المديرون</p>
               <p className="text-2xl font-bold text-purple-600">
-                {stats.roleStats.find(r => r.id === 'admin')?.count || 0}
+                {formatDecimal(stats.roleStats.find(r => r.id === 'admin')?.count || 0)}
               </p>
             </div>
           </div>
@@ -842,7 +842,7 @@ const Users = () => {
                       <div className="flex items-center">
                         <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
                         <span className="text-xs text-blue-700">
-                          الصلاحيات المحددة: {formData.permissions.length} من {permissions.length}
+                          الصلاحيات المحددة: {formatDecimal(formData.permissions.length)} من {formatDecimal(permissions.length)}
                         </span>
                       </div>
                       {formData.permissions.includes('all') && (

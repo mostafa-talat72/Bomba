@@ -403,7 +403,7 @@ const Inventory = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">إجمالي المنتجات</p>
-              <p className="text-2xl font-bold text-blue-600">{inventoryItems.length}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatDecimal(inventoryItems.length)}</p>
             </div>
           </div>
         </div>
@@ -414,7 +414,7 @@ const Inventory = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">منتجات منخفضة</p>
-              <p className="text-2xl font-bold text-red-600">{lowStockItems.length}</p>
+              <p className="text-2xl font-bold text-red-600">{formatDecimal(lowStockItems.length)}</p>
             </div>
           </div>
         </div>
@@ -425,7 +425,7 @@ const Inventory = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">قيمة المخزون</p>
-              <p className="text-2xl font-bold text-green-600">{totalValue} ج.م</p>
+              <p className="text-2xl font-bold text-green-600">{formatCurrency(totalValue)}</p>
             </div>
           </div>
         </div>
@@ -436,7 +436,7 @@ const Inventory = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">الفئات</p>
-              <p className="text-2xl font-bold text-purple-600">{categoriesCount}</p>
+              <p className="text-2xl font-bold text-purple-600">{formatDecimal(categoriesCount)}</p>
             </div>
           </div>
         </div>
@@ -447,7 +447,7 @@ const Inventory = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">الخامات</p>
-              <p className="text-2xl font-bold text-orange-600">{rawMaterialsCount}</p>
+              <p className="text-2xl font-bold text-orange-600">{formatDecimal(rawMaterialsCount)}</p>
             </div>
           </div>
         </div>

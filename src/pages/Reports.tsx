@@ -276,7 +276,7 @@ const Reports = () => {
                     <span className="text-sm font-medium text-gray-700">متوسط مدة الجلسة</span>
                   </div>
                   <span className="font-bold text-blue-600">
-                    {(reports.sessions as any)?.avgSessionDuration || 0} ساعة
+                    {formatDecimal((reports.sessions as any)?.avgSessionDuration || 0)} ساعة
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
@@ -294,7 +294,7 @@ const Reports = () => {
                     <span className="text-sm font-medium text-gray-700">معدل الاستخدام</span>
                   </div>
                   <span className="font-bold text-purple-600">
-                    {(reports.sessions as any)?.usageRate || 0}%
+                    {formatDecimal((reports.sessions as any)?.usageRate || 0)}%
                   </span>
                 </div>
               </>

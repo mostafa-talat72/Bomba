@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Filter, Search, Eye, Trash2, X, AlertCircle, Info, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import PermissionGuard from '../components/PermissionGuard';
+import { formatDecimal } from '../utils/formatters';
 
 interface Notification {
   _id: string;
@@ -221,7 +222,7 @@ const NotificationManagement = () => {
               <Bell className="h-8 w-8 text-primary-600" />
               <div className="mr-3">
                 <p className="text-sm text-gray-600">إجمالي الإشعارات</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total || 0}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatDecimal(stats.total)}</p>
               </div>
             </div>
           </div>
@@ -230,7 +231,7 @@ const NotificationManagement = () => {
               <Eye className="h-8 w-8 text-orange-600" />
               <div className="mr-3">
                 <p className="text-sm text-gray-600">غير مقروءة</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.unread || 0}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatDecimal(stats.unread)}</p>
               </div>
             </div>
           </div>
@@ -239,7 +240,7 @@ const NotificationManagement = () => {
               <CheckCircle className="h-8 w-8 text-green-600" />
               <div className="mr-3">
                 <p className="text-sm text-gray-600">مقروءة</p>
-                <p className="text-2xl font-bold text-gray-900">{(stats.total || 0) - (stats.unread || 0)}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatDecimal((stats.total || 0) - (stats.unread || 0))}</p>
               </div>
             </div>
           </div>
@@ -248,7 +249,7 @@ const NotificationManagement = () => {
               <Filter className="h-8 w-8 text-purple-600" />
               <div className="mr-3">
                 <p className="text-sm text-gray-600">الفئات</p>
-                <p className="text-2xl font-bold text-gray-900">{Object.keys(stats.byCategory || {}).length}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatDecimal(Object.keys(stats.byCategory || {}).length)}</p>
               </div>
             </div>
           </div>

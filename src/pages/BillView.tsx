@@ -472,6 +472,21 @@ const BillView = () => {
 													<span className="font-medium ml-1">{formatDate(session.endTime)}</span>
 												</div>
 											)}
+											{session.status === 'active' && (
+												<div>
+													<span className="text-gray-600">المدة الحالية:</span>
+													<span className="font-medium text-green-600 ml-1 animate-pulse">
+														{(() => {
+															const now = new Date();
+															const start = new Date(session.startTime);
+															const diffMs = now.getTime() - start.getTime();
+															const hours = Math.floor(diffMs / (1000 * 60 * 60));
+															const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+															return `${formatDecimal(hours)}س ${formatDecimal(minutes)}د`;
+														})()}
+													</span>
+												</div>
+											)}
 										</div>
 										{/* تفاصيل الكمبيوتر */}
 										{session.deviceType === 'computer' && Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0 ? (
@@ -525,7 +540,101 @@ const BillView = () => {
 												</table>
 											</div>
 										) : session.deviceType === 'playstation' ? (
-											<div className="mb-2 text-xs text-gray-500">لا يوجد تفاصيل للساعات حالياً.</div>
+											<div className="mb-2">
+												<h4 className="font-medium text-blue-900 mb-2">تفاصيل الأذرع:</h4>
+
+												{/* جدول تفاصيل الأذرع */}
+												<div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+													<table className="min-w-full text-sm">
+														<thead className="bg-gray-50">
+															<tr>
+																<th className="py-2 px-3 text-right font-medium text-gray-700">عدد الأذرع</th>
+																<th className="py-2 px-3 text-right font-medium text-gray-700">المدة</th>
+																<th className="py-2 px-3 text-right font-medium text-gray-700">سعر الساعة</th>
+																<th className="py-2 px-3 text-right font-medium text-gray-700">التكلفة</th>
+															</tr>
+														</thead>
+														<tbody>
+															{/* الجلسة النشطة الحالية */}
+															{session.status === 'active' && session.controllers && (
+																<tr className="bg-green-50 border-b border-green-200">
+																	<td className="py-3 px-3 text-right">
+																		<span className="font-bold text-green-700">{formatDecimal(session.controllers)}</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="font-medium text-green-700 animate-pulse">
+																			{(() => {
+																				const now = new Date();
+																				const start = new Date(session.startTime);
+																				const diffMs = now.getTime() - start.getTime();
+																				const hours = Math.floor(diffMs / (1000 * 60 * 60));
+																				const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+																				return `${formatDecimal(hours)}س ${formatDecimal(minutes)}د`;
+																			})()}
+																		</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="font-medium text-green-700">{formatCurrency(session.hourlyRate)}</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="font-bold text-green-600 animate-pulse">{formatCurrency(session.totalCost)}</span>
+																	</td>
+																</tr>
+															)}
+
+															{/* تفاصيل الأذرع السابقة من قاعدة البيانات */}
+															{Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.map((period, idx) => (
+																<tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+																	<td className="py-3 px-3 text-right">
+																		<span className="font-medium text-gray-700">{formatDecimal(period.controllers)}</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="text-gray-600">
+																			{(period.hours > 0 ? `${formatDecimal(period.hours)} ساعة` : '') +
+																			 (period.minutes > 0 ? ` ${formatDecimal(period.minutes)} دقيقة` : '')}
+																		</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="text-gray-600">{formatCurrency(period.hourlyRate * period.controllers)}</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="font-medium text-gray-700">{formatCurrency(period.cost)}</span>
+																	</td>
+																</tr>
+															))}
+
+															{/* إذا لم توجد تفاصيل من قاعدة البيانات، اعرض التاريخ البسيط */}
+															{(!Array.isArray(session.controllersHistoryBreakdown) || session.controllersHistoryBreakdown.length === 0) &&
+															 session.controllersHistory && session.controllersHistory.length > 0 &&
+															 session.controllersHistory.map((history, idx) => (
+																<tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+																	<td className="py-3 px-3 text-right">
+																		<span className="font-medium text-gray-700">{formatDecimal(history.controllers)}</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="text-gray-500 text-xs">مدة غير محددة</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="text-gray-500 text-xs">غير محدد</span>
+																	</td>
+																	<td className="py-3 px-3 text-right">
+																		<span className="text-gray-500 text-xs">غير محدد</span>
+																	</td>
+																</tr>
+															))}
+														</tbody>
+													</table>
+
+													{/* إذا لم توجد أي تفاصيل */}
+													{(!Array.isArray(session.controllersHistoryBreakdown) || session.controllersHistoryBreakdown.length === 0) &&
+													 (!session.controllersHistory || session.controllersHistory.length === 0) &&
+													 session.status !== 'active' && (
+														<div className="py-4 px-3 text-center text-gray-500 text-sm">
+															لا توجد تفاصيل للأذرع حالياً.
+														</div>
+													)}
+												</div>
+											</div>
 										) : null}
 										{/* في إجمالي تكلفة الجلسة: */}
 										<div className="flex justify-between items-center mt-2">
@@ -536,6 +645,19 @@ const BillView = () => {
 													: formatCurrency(session.finalCost)}
 											</span>
 										</div>
+										{/* عرض التكلفة الحالية للجلسات النشطة */}
+										{session.status === 'active' && (
+											<div className="flex justify-between items-center mt-1">
+												<span className="text-gray-600 text-sm">التكلفة الحالية:</span>
+												<div className="flex items-center gap-2">
+													<span className="text-sm font-medium text-green-600 animate-pulse">
+														{formatCurrency(session.totalCost)}
+													</span>
+													<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+													<span className="text-xs text-green-600">تحدث لحظياً</span>
+												</div>
+											</div>
+										)}
 									</div>
 								))}
 							</div>

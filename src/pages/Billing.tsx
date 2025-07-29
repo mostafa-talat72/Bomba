@@ -569,9 +569,9 @@ const Billing = () => {
                 </div>
 
                 <div className="flex justify-between items-center text-xs text-gray-500">
-                  <span>الطلبات: {bill.orders?.length || 0}</span>
+                  <span>الطلبات: {formatDecimal(bill.orders?.length || 0)}</span>
                   <span className="flex items-center gap-1">
-                    الجلسات: {bill.sessions?.length || 0}
+                    الجلسات: {formatDecimal(bill.sessions?.length || 0)}
                     {hasActiveSession(bill) && (
                       <div className="flex items-center gap-1">
                         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>

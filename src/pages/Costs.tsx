@@ -562,7 +562,7 @@ const Costs = () => {
             </div>
             <div className="mr-4">
               <p className="text-sm font-medium text-gray-600">عدد المعاملات</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.totalCount}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatDecimal(stats.totalCount)}</p>
               <p className="text-xs text-gray-500">متوسط: {formatCurrency(stats.totalCount > 0 ? stats.totalAmount / stats.totalCount : 0)}</p>
             </div>
           </div>
@@ -597,7 +597,7 @@ const Costs = () => {
                     </div>
                   </div>
                   <p className="text-lg font-bold text-gray-900">{formatCurrency(category.total)}</p>
-                  <p className="text-sm text-gray-500">{category.count} معاملة</p>
+                  <p className="text-sm text-gray-500">{formatDecimal(category.count)} معاملة</p>
                 </div>
               ))}
           </div>
@@ -616,7 +616,7 @@ const Costs = () => {
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs text-gray-600 mb-1">{month.month}</p>
                   <p className="text-sm font-bold text-gray-900">{formatCurrency(month.total)}</p>
-                  <p className="text-xs text-gray-500">{month.count} معاملة</p>
+                  <p className="text-xs text-gray-500">{formatDecimal(month.count)} معاملة</p>
                 </div>
               </div>
             ))}
@@ -630,7 +630,7 @@ const Costs = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">سجل التكاليف</h3>
             <div className="text-sm text-gray-500">
-              {filteredCosts.length} من {costs?.length || 0} معاملة
+              {formatDecimal(filteredCosts.length)} من {formatDecimal(costs?.length || 0)} معاملة
             </div>
           </div>
         </div>

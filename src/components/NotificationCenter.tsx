@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import NotificationSound from './NotificationSound';
+import { formatDecimal } from '../utils/formatters';
 
 interface Notification {
   _id: string;
@@ -390,10 +391,10 @@ const NotificationCenter: React.FC = () => {
           {stats && (
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-600 space-y-1 sm:space-y-0">
-                <span>المجموع: {stats.total}</span>
+                <span>المجموع: {formatDecimal(stats.total)}</span>
                 <div className="flex flex-wrap space-x-2 sm:space-x-4 space-x-reverse">
-                  <span className="text-blue-600 font-medium">غير مقروء: {stats.unread}</span>
-                  <span className="text-green-600 font-medium">مقروء: {stats.total - stats.unread}</span>
+                  <span className="text-blue-600 font-medium">غير مقروء: {formatDecimal(stats.unread)}</span>
+                  <span className="text-green-600 font-medium">مقروء: {formatDecimal(stats.total - stats.unread)}</span>
                 </div>
               </div>
             </div>
