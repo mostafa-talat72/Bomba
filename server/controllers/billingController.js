@@ -18,7 +18,7 @@ export const getBills = async (req, res) => {
             status,
             tableNumber,
             page = 1,
-            limit = 10,
+            limit = 1000, // زيادة الحد ليعرض جميع الفواتير
             date,
             customerName,
         } = req.query;

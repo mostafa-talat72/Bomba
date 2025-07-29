@@ -196,6 +196,7 @@ const PlayStation: React.FC = () => {
       if (billOption === 'new') {
         // إنشاء جلسة جديدة مع فاتورة جديدة (كما كان سابقاً)
         apiResponse = await createSession({
+          deviceId: selectedDevice._id, // أضف هذا السطر
           deviceType: 'playstation',
           deviceNumber: selectedDevice.number,
           deviceName: selectedDevice.name,
@@ -207,6 +208,7 @@ const PlayStation: React.FC = () => {
       } else if (billOption === 'existing' && selectedBillId) {
         // إنشاء جلسة جديدة وربطها بفاتورة موجودة
         const sessionData = {
+          deviceId: selectedDevice._id, // أضف هذا السطر
           deviceType: 'playstation',
           deviceNumber: selectedDevice.number,
           deviceName: selectedDevice.name,

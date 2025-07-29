@@ -30,6 +30,7 @@ export interface Session {
   deviceType: string;
   deviceNumber: number;
   deviceName: string;
+  deviceId?: string; // إضافة معرف الجهاز
   customerName?: string;
   startTime: Date;
   endTime?: Date;
@@ -45,6 +46,7 @@ export interface Session {
   discount: number;
   finalCost: number;
   notes?: string;
+  organization?: string; // إضافة حقل المنظمة
   createdBy: User;
   updatedBy?: User;
   createdAt: Date;
@@ -158,6 +160,7 @@ export interface Bill {
   qrCodeUrl?: string;
   notes?: string;
   dueDate?: Date;
+  organization?: string; // إضافة حقل المنظمة
   createdBy: User;
   createdAt: Date;
 }
@@ -204,6 +207,7 @@ export interface Device {
   type: string;
   status: string;
   controllers: number;
+  organization?: string; // إضافة حقل المنظمة
   createdAt: Date;
   // إضافة خاصية أسعار البلايستيشن
   playstationRates?: { [controllers: number]: number };

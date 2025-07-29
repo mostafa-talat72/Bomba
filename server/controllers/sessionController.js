@@ -79,15 +79,16 @@ const sessionController = {
                 deviceNumber,
                 deviceName,
                 deviceType,
+                deviceId,
                 customerName,
                 controllers,
             } = req.body;
 
             // Validate required fields
-            if (!deviceNumber || !deviceName || !deviceType) {
+            if (!deviceNumber || !deviceName || !deviceType || !deviceId) {
                 return res.status(400).json({
                     success: false,
-                    message: "رقم الجهاز واسمه ونوعه مطلوبان",
+                    message: "رقم الجهاز واسمه ونوعه ومعرف الجهاز مطلوبان",
                     error: "الحقول المطلوبة ناقصة",
                 });
             }
@@ -111,6 +112,7 @@ const sessionController = {
             const session = new Session({
                 deviceNumber,
                 deviceName,
+                deviceId,
                 deviceType,
                 customerName: `عميل (${deviceName})`,
                 controllers: controllers || 1,
@@ -188,7 +190,7 @@ const sessionController = {
 
             // Update device status to active
             await Device.findOneAndUpdate(
-                { number: deviceNumber },
+                { _id: deviceId },
                 { status: "active" }
             );
 
@@ -399,7 +401,7 @@ const sessionController = {
 
             // Update device status to available
             await Device.findOneAndUpdate(
-                { number: session.deviceNumber },
+                { _id: session.deviceId },
                 { status: "available" }
             );
 
@@ -505,16 +507,24 @@ const sessionController = {
                 deviceNumber,
                 deviceName,
                 deviceType,
+                deviceId,
                 customerName,
                 controllers,
                 billId,
             } = req.body;
 
             // Validate required fields
-            if (!deviceNumber || !deviceName || !deviceType || !billId) {
+            if (
+                !deviceNumber ||
+                !deviceName ||
+                !deviceType ||
+                !deviceId ||
+                !billId
+            ) {
                 return res.status(400).json({
                     success: false,
-                    message: "رقم الجهاز واسمه ونوعه ومعرف الفاتورة مطلوبان",
+                    message:
+                        "رقم الجهاز واسمه ونوعه ومعرف الجهاز ومعرف الفاتورة مطلوبان",
                     error: "الحقول المطلوبة ناقصة",
                 });
             }
@@ -572,6 +582,7 @@ const sessionController = {
             const session = new Session({
                 deviceNumber,
                 deviceName,
+                deviceId,
                 deviceType,
                 customerName: customerName ? customerName.trim() : "",
                 controllers: controllers || 1,
@@ -605,7 +616,7 @@ const sessionController = {
 
             // Update device status to active
             await Device.findOneAndUpdate(
-                { number: deviceNumber },
+                { _id: deviceId },
                 { status: "active" }
             );
 

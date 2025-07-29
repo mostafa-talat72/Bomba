@@ -12,12 +12,15 @@ const Billing = () => {
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showPartialPaymentModal, setShowPartialPaymentModal] = useState(false);
+  const [showSessionEndModal, setShowSessionEndModal] = useState(false);
+  const [sessionToEnd, setSessionToEnd] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: boolean }>({});
   const [itemQuantities, setItemQuantities] = useState<{ [key: string]: number }>({});
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState<string>('');
   const [paymentReference, setPaymentReference] = useState('');
 
   useEffect(() => {
@@ -166,7 +169,25 @@ const Billing = () => {
       return bill.customerName || 'عميل';
   };
 
-  const filteredBills = bills.filter(bill => statusFilter === 'all' || bill.status === statusFilter);
+  const filteredBills = bills.filter(bill => {
+    // فلترة حسب الحالة
+    const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
+    
+    // فلترة حسب التاريخ
+    let dateMatch = true;
+    if (dateFilter) {
+      const billDate = new Date(bill.createdAt);
+      const filterDate = new Date(dateFilter);
+      
+      // مقارنة التاريخ فقط (بدون الوقت)
+      const billDateOnly = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
+      const filterDateOnly = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate());
+      
+      dateMatch = billDateOnly.getTime() === filterDateOnly.getTime();
+    }
+    
+    return statusMatch && dateMatch;
+  });
 
   // Helper: Check if bill has any unprepared items
   const hasUnpreparedItems = (bill: Bill) => {
@@ -324,12 +345,15 @@ const Billing = () => {
 
     // دالة إنهاء الجلسة
   const handleEndSession = async (sessionId: string) => {
-    if (!confirm('هل أنت متأكد من إنهاء هذه الجلسة؟')) {
-      return;
-    }
+    setSessionToEnd(sessionId);
+    setShowSessionEndModal(true);
+  };
+
+  const confirmSessionEnd = async () => {
+    if (!sessionToEnd) return;
 
     try {
-      const result = await api.endSession(sessionId);
+      const result = await api.endSession(sessionToEnd);
       if (result && result.success) {
         showNotification('تم إنهاء الجلسة بنجاح!');
 
@@ -353,6 +377,9 @@ const Billing = () => {
     } catch (error) {
       console.error('Failed to end session:', error);
       showNotification('حدث خطأ في إنهاء الجلسة');
+    } finally {
+      setSessionToEnd(null);
+      setShowSessionEndModal(false);
     }
   };
 
@@ -492,21 +519,50 @@ const Billing = () => {
       {/* Filter */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">الفواتير الحالية</h3>
           <div className="flex items-center space-x-4 space-x-reverse">
-            <label className="text-sm font-medium text-gray-700">فلترة حسب الحالة:</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="all">جميع الفواتير</option>
-              <option value="draft">مسودة</option>
-              <option value="partial">مدفوع جزئياً</option>
-              <option value="paid">مدفوع بالكامل</option>
-              <option value="overdue">متأخر</option>
-              <option value="cancelled">ملغية</option>
-            </select>
+            <h3 className="text-lg font-semibold text-gray-900">الفواتير الحالية</h3>
+            <div className="text-sm text-gray-600">
+              {filteredBills.length} من {bills.length} فاتورة
+              {dateFilter && (
+                <span className="mr-2 text-blue-600">
+                  • التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center space-x-4 space-x-reverse">
+            <div className="flex items-center space-x-2 space-x-reverse">
+              <label className="text-sm font-medium text-gray-700">التاريخ:</label>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              {dateFilter && (
+                <button
+                  onClick={() => setDateFilter('')}
+                  className="text-xs text-red-600 hover:text-red-800"
+                >
+                  مسح التاريخ
+                </button>
+              )}
+            </div>
+            <div className="flex items-center space-x-2 space-x-reverse">
+              <label className="text-sm font-medium text-gray-700">فلترة حسب الحالة:</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="all">جميع الفواتير</option>
+                <option value="draft">مسودة</option>
+                <option value="partial">مدفوع جزئياً</option>
+                <option value="paid">مدفوع بالكامل</option>
+                <option value="overdue">متأخر</option>
+                <option value="cancelled">ملغية</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -611,10 +667,19 @@ const Billing = () => {
           <Receipt className="h-16 w-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">لا توجد فواتير</h3>
           <p className="text-gray-600">
-            {statusFilter === 'all'
-              ? 'لم يتم إنشاء أي فواتير بعد'
-              : `لا توجد فواتير بحالة "${getStatusText(statusFilter)}"`
-            }
+            {(() => {
+              let message = '';
+              if (statusFilter === 'all' && !dateFilter) {
+                message = 'لم يتم إنشاء أي فواتير بعد';
+              } else if (statusFilter !== 'all' && !dateFilter) {
+                message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}"`;
+              } else if (statusFilter === 'all' && dateFilter) {
+                message = `لا توجد فواتير بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
+              } else {
+                message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}" بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
+              }
+              return message;
+            })()}
           </p>
         </div>
       )}
@@ -1386,6 +1451,35 @@ const Billing = () => {
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
               >
                 تأكيد الدفع الجزئي
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Session End Confirmation Modal */}
+      {showSessionEndModal && sessionToEnd && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-md max-h-[80vh] overflow-y-auto p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">تأكيد إنهاء الجلسة</h3>
+            <p className="text-sm text-gray-700 mb-4">
+              هل أنت متأكد من إنهاء هذه الجلسة؟ سيتم حساب التكلفة النهائية وإغلاق الجلسة.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowSessionEndModal(false);
+                  setSessionToEnd(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={confirmSessionEnd}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200"
+              >
+                تأكيد الإنهاء
               </button>
             </div>
           </div>

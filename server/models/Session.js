@@ -11,6 +11,11 @@ const sessionSchema = new mongoose.Schema(
             type: String,
             required: [true, "اسم الجهاز مطلوب"],
         },
+        deviceId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Device",
+            required: [true, "معرف الجهاز مطلوب"],
+        },
         deviceType: {
             type: String,
             enum: ["playstation", "computer"],
@@ -119,7 +124,7 @@ sessionSchema.pre("save", function (next) {
 // Helper function to round cost to nearest pound
 const roundToNearestPound = (cost) => {
     if (cost <= 0) return 0;
-    return Math.ceil(cost); // تقريب لأعلى لأقرب جنيه صحيح
+    return Math.round(cost); // تقريب لأقرب جنيه صحيح
 };
 
 // دالة لحساب سعر الساعة للبلايستيشن
@@ -132,8 +137,8 @@ function getPlayStationHourlyRate(controllers) {
 
 // تعديل دالة حساب التكلفة لتستخدم الأسعار من بيانات الجهاز
 sessionSchema.methods.calculateCost = async function () {
-    // جلب بيانات الجهاز من قاعدة البيانات
-    const device = await Device.findOne({ number: this.deviceNumber });
+    // جلب بيانات الجهاز من قاعدة البيانات باستخدام deviceId
+    const device = await Device.findById(this.deviceId);
     if (!device) {
         throw new Error("لم يتم العثور على بيانات الجهاز لحساب التكلفة");
     }
@@ -154,7 +159,7 @@ sessionSchema.methods.calculateCost = async function () {
             const hourlyRate = getRate(this.controllers);
             const minuteRate = hourlyRate / 60;
             const rawCost = minutes * minuteRate;
-            this.totalCost = roundToNearestPound(rawCost);
+            this.totalCost = Math.round(rawCost); // التقريب فقط عند حساب التكلفة النهائية
         } else {
             this.totalCost = 0;
         }
@@ -176,8 +181,8 @@ sessionSchema.methods.calculateCost = async function () {
                 const hourlyRate = getRate(period.controllers);
                 const minuteRate = hourlyRate / 60;
                 const rawPeriodCost = minutes * minuteRate;
-                const periodCost = roundToNearestPound(rawPeriodCost);
-                total += periodCost;
+                // لا نقرب هنا، نجمع التكلفة الخام
+                total += rawPeriodCost;
             }
         }
     }
@@ -188,7 +193,7 @@ sessionSchema.methods.calculateCost = async function () {
         const hourlyRate = getRate(this.controllers);
         const minuteRate = hourlyRate / 60;
         const rawCost = minutes * minuteRate;
-        total = roundToNearestPound(rawCost);
+        total = rawCost; // لا نقرب هنا أيضاً
     }
     // Ensure minimum cost for very short sessions (less than 1 minute)
     if (total === 0 && this.startTime && this.endTime) {
@@ -198,11 +203,12 @@ sessionSchema.methods.calculateCost = async function () {
             const hourlyRate = getRate(this.controllers);
             const minuteRate = hourlyRate / 60;
             const rawCost = minutes * minuteRate;
-            total = roundToNearestPound(rawCost);
+            total = rawCost; // لا نقرب هنا أيضاً
         }
     }
-    this.totalCost = total;
-    this.finalCost = total - this.discount;
+    // التقريب فقط عند حساب التكلفة النهائية
+    this.totalCost = Math.round(total);
+    this.finalCost = this.totalCost - this.discount;
     return this.finalCost;
 };
 
@@ -288,12 +294,12 @@ sessionSchema.methods.calculateCurrentCost = function () {
             const hourlyRate = getPlayStationHourlyRate(this.controllers);
             const minuteRate = hourlyRate / 60;
             const rawCost = minutes * minuteRate;
-            total = roundToNearestPound(rawCost);
+            total = rawCost; // لا نقرب هنا
         } else if (this.deviceType === "computer") {
             const hourlyRate = 15;
             const minuteRate = hourlyRate / 60;
             const rawCost = minutes * minuteRate;
-            total = roundToNearestPound(rawCost);
+            total = rawCost; // لا نقرب هنا
         }
     } else {
         // Calculate based on controllersHistory
@@ -314,21 +320,20 @@ sessionSchema.methods.calculateCurrentCost = function () {
                         );
                         const minuteRate = hourlyRate / 60;
                         const rawPeriodCost = minutes * minuteRate;
-                        const periodCost = roundToNearestPound(rawPeriodCost);
-                        total += periodCost;
+                        total += rawPeriodCost; // لا نقرب هنا
                     } else if (this.deviceType === "computer") {
                         const hourlyRate = 15;
                         const minuteRate = hourlyRate / 60;
                         const rawPeriodCost = minutes * minuteRate;
-                        const periodCost = roundToNearestPound(rawPeriodCost);
-                        total += periodCost;
+                        total += rawPeriodCost; // لا نقرب هنا
                     }
                 }
             }
         }
     }
 
-    return total;
+    // التقريب فقط عند إرجاع التكلفة النهائية
+    return Math.round(total);
 };
 
 // Get detailed cost breakdown for PlayStation sessions
@@ -359,16 +364,14 @@ sessionSchema.methods.getCostBreakdown = function () {
                     const hourlyRate = getPlayStationHourlyRate(
                         period.controllers
                     );
-                    const periodCost = roundToNearestPound(
-                        (minutes * hourlyRate) / 60
-                    );
+                    const periodCost = (minutes * hourlyRate) / 60; // لا نقرب هنا
 
                     breakdown.push({
                         controllers: period.controllers,
                         hours: Math.floor(hours),
                         minutes: Math.floor(minutes % 60),
                         hourlyRate,
-                        cost: periodCost,
+                        cost: periodCost, // التكلفة الخام بدون تقريب
                         from: period.from,
                         to: periodEnd,
                     });
@@ -385,16 +388,14 @@ sessionSchema.methods.getCostBreakdown = function () {
 
             if (hours > 0) {
                 const hourlyRate = getPlayStationHourlyRate(this.controllers);
-                const periodCost = roundToNearestPound(
-                    (minutes * hourlyRate) / 60
-                );
+                const periodCost = (minutes * hourlyRate) / 60; // لا نقرب هنا
 
                 breakdown.push({
                     controllers: this.controllers,
                     hours: Math.floor(hours),
                     minutes: Math.floor(minutes % 60),
                     hourlyRate,
-                    cost: periodCost,
+                    cost: periodCost, // التكلفة الخام بدون تقريب
                     from: this.startTime,
                     to: endTime,
                 });
@@ -411,7 +412,7 @@ sessionSchema.methods.getCostBreakdown = function () {
 // دالة async لحساب breakdown بناءً على أسعار الجهاز من الداتا بيز
 sessionSchema.methods.getCostBreakdownAsync = async function () {
     const Device = mongoose.model("Device");
-    const device = await Device.findOne({ number: this.deviceNumber });
+    const device = await Device.findById(this.deviceId);
     // دالة لجلب سعر الساعة حسب نوع الجهاز
     const getRate = (controllers) => {
         if (
@@ -439,13 +440,13 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
                 const minutes = durationMs / (1000 * 60);
                 if (hours > 0) {
                     const hourlyRate = getRate(period.controllers);
-                    const periodCost = Math.ceil((minutes * hourlyRate) / 60);
+                    const periodCost = (minutes * hourlyRate) / 60; // لا نقرب هنا
                     breakdown.push({
                         controllers: period.controllers,
                         hours: Math.floor(hours),
                         minutes: Math.floor(minutes % 60),
                         hourlyRate,
-                        cost: periodCost,
+                        cost: periodCost, // التكلفة الخام بدون تقريب
                         from: period.from,
                         to: periodEnd,
                     });
@@ -461,25 +462,23 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
             const minutes = durationMs / (1000 * 60);
             if (hours > 0) {
                 const hourlyRate = getRate(this.controllers);
-                const periodCost = Math.ceil((minutes * hourlyRate) / 60);
+                const periodCost = (minutes * hourlyRate) / 60; // لا نقرب هنا
                 breakdown.push({
                     controllers: this.controllers,
                     hours: Math.floor(hours),
                     minutes: Math.floor(minutes % 60),
                     hourlyRate,
-                    cost: periodCost,
+                    cost: periodCost, // التكلفة الخام بدون تقريب
                     from: this.startTime,
                     to: endTime,
                 });
             }
         }
     }
+
     const total = breakdown.reduce((sum, item) => sum + item.cost, 0);
-    // تحديث التكلفة النهائية والتكلفة الكلية لتتوافق مع breakdown
-    this.totalCost = total;
-    this.finalCost = total - (this.discount || 0);
     return {
-        totalCost: total,
+        totalCost: Math.round(total), // التقريب فقط عند حساب التكلفة النهائية
         breakdown,
     };
 };

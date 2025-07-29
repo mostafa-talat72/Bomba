@@ -47,6 +47,7 @@ interface Session {
 	deviceType: string;
 	deviceNumber: number;
 	deviceName: string;
+	deviceId?: string; // إضافة معرف الجهاز
 	customerName?: string;
 	startTime: string;
 	endTime?: string;
@@ -160,6 +161,70 @@ const BillView = () => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [showOrdersModal, setShowOrdersModal] = useState(false);
+	const [devices, setDevices] = useState<any[]>([]);
+
+	// جلب الأجهزة عند تحميل الصفحة
+	useEffect(() => {
+		async function fetchDevices() {
+			console.log('🔄 جاري تحميل الأجهزة...');
+			const res = await api.getDevices({});
+			if (res.success && res.data) {
+				console.log('✅ تم تحميل الأجهزة:', res.data);
+				setDevices(res.data);
+			} else {
+				console.error('❌ فشل في تحميل الأجهزة:', res.message);
+			}
+		}
+		fetchDevices();
+	}, []);
+
+	// دالة لجلب الجهاز المناسب
+	function getDeviceForSession(session: any) {
+		// إذا كان هناك معرف الجهاز، استخدمه للمطابقة
+		if (session.deviceId) {
+			const device = devices.find(d => d._id === session.deviceId);
+			console.log(`🔍 البحث عن الجهاز: deviceId=${session.deviceId}`);
+			console.log(`📱 الجهاز المطابق:`, device);
+			return device;
+		}
+
+		// إذا كان هناك منظمة مرتبطة بالجهاز (fallback)
+		if (session.organization) {
+			const device = devices.find(
+				d => d.deviceNumber === session.deviceNumber && d.organization === session.organization
+			);
+			console.log(`🔍 البحث عن الجهاز: deviceNumber=${session.deviceNumber}, organization=${session.organization}`);
+			console.log(`📱 الجهاز المطابق:`, device);
+			return device;
+		}
+
+		// بدون منظمة (fallback)
+		const device = devices.find(d => d.deviceNumber === session.deviceNumber);
+		console.log(`🔍 البحث عن الجهاز: deviceNumber=${session.deviceNumber} (بدون منظمة)`);
+		console.log(`📱 الجهاز المطابق:`, device);
+		return device;
+	}
+
+	// دالة لجلب سعر الساعة الصحيح
+	function getHourlyRateFromDevice(session: any, controllers: number) {
+		const device = getDeviceForSession(session);
+		if (!device) {
+			console.log(`❌ لم يتم العثور على الجهاز للجلسة: deviceNumber=${session.deviceNumber}`);
+			return 0;
+		}
+
+		let hourlyRate = 0;
+		if (session.deviceType === 'playstation' && device.playstationRates) {
+			hourlyRate = device.playstationRates[controllers] || 0;
+			console.log(`🎮 سعر البلايستيشن: controllers=${controllers}, rate=${hourlyRate}`);
+		} else {
+			hourlyRate = device.hourlyRate || 0;
+			console.log(`💻 سعر الكمبيوتر: rate=${hourlyRate}`);
+		}
+
+		console.log(`💰 السعر النهائي: ${hourlyRate}`);
+		return hourlyRate;
+	}
 
 	const fetchBill = async (showLoading = true) => {
 
@@ -180,12 +245,12 @@ const BillView = () => {
 		try {
 			if (showLoading) setLoading(true);
 
-
+			console.log('🔄 جاري تحميل الفاتورة...');
 			const response = await api.getBill(billId);
 
-
 			if (response.success && response.data) {
-
+				console.log('✅ تم تحميل الفاتورة:', response.data);
+				console.log('📋 الجلسات في الفاتورة:', response.data.sessions);
 				setBill(normalizeBillDates(response.data));
 			} else {
 				console.error('❌ BillView: API Error:', response.message);
@@ -489,35 +554,9 @@ const BillView = () => {
 											)}
 										</div>
 										{/* تفاصيل الكمبيوتر */}
-										{session.deviceType === 'computer' && Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0 ? (
-											<div className="mb-2">
-												<h4 className="font-medium text-blue-900 mb-2">تفاصيل الساعات:</h4>
-												<table className="min-w-full text-xs text-right bg-blue-50 rounded">
-													<thead>
-														<tr>
-															<th className="py-1 px-2 font-medium text-blue-900">المدة</th>
-															<th className="py-1 px-2 font-medium text-blue-900">سعر الساعة</th>
-															<th className="py-1 px-2 font-medium text-blue-900">التكلفة</th>
-														</tr>
-													</thead>
-													<tbody>
-														{session.controllersHistoryBreakdown.map((period, idx) => (
-															<tr key={`${period.from}-${period.to}-${period.controllers}-${idx}`}>
-																<td className="py-1 px-2">{(period.hours > 0 ? `${formatDecimal(period.hours)} ساعة` : '') + (period.minutes > 0 ? ` ${formatDecimal(period.minutes)} دقيقة` : '')}</td>
-																<td className="py-1 px-2">{formatCurrency(period.hourlyRate)}</td>
-																<td className="py-1 px-2">{formatCurrency(period.cost)}</td>
-															</tr>
-														))}
-													</tbody>
-												</table>
-											</div>
-										) : session.deviceType === 'computer' ? (
-											<div className="mb-2 text-xs text-gray-500">لا يوجد تفاصيل للساعات حالياً.</div>
-										) : null}
-
 										{session.deviceType === 'playstation' && Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0 ? (
 											<div className="mb-2">
-												<h4 className="font-medium text-blue-900 mb-2">تفاصيل الساعات حسب عدد الدراعات:</h4>
+												<h4 className="font-medium text-blue-900 mb-2">التفاصيل:</h4>
 												<table className="min-w-full text-xs text-right bg-blue-50 rounded">
 													<thead>
 														<tr>
@@ -539,16 +578,18 @@ const BillView = () => {
 													</tbody>
 												</table>
 											</div>
-										) : session.deviceType === 'playstation' ? (
+										) : (session.deviceType === 'playstation' || session.deviceType === 'computer') ? (
 											<div className="mb-2">
-												<h4 className="font-medium text-blue-900 mb-2">تفاصيل الأذرع:</h4>
+												<h4 className="font-medium text-blue-900 mb-2">التفاصيل:</h4>
 
-												{/* جدول تفاصيل الأذرع */}
+												{/* جدول تفاصيل الجلسة */}
 												<div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
 													<table className="min-w-full text-sm">
 														<thead className="bg-gray-50">
 															<tr>
-																<th className="py-2 px-3 text-right font-medium text-gray-700">عدد الأذرع</th>
+																{session.deviceType === 'playstation' && (
+																	<th className="py-2 px-3 text-right font-medium text-gray-700">عدد الأذرع</th>
+																)}
 																<th className="py-2 px-3 text-right font-medium text-gray-700">المدة</th>
 																<th className="py-2 px-3 text-right font-medium text-gray-700">سعر الساعة</th>
 																<th className="py-2 px-3 text-right font-medium text-gray-700">التكلفة</th>
@@ -556,17 +597,29 @@ const BillView = () => {
 														</thead>
 														<tbody>
 															{/* الجلسة النشطة الحالية */}
-															{session.status === 'active' && session.controllers && (
+															{session.status === 'active' && (
 																<tr className="bg-green-50 border-b border-green-200">
-																	<td className="py-3 px-3 text-right">
-																		<span className="font-bold text-green-700">{formatDecimal(session.controllers)}</span>
-																	</td>
+																	{session.deviceType === 'playstation' && (
+																		<td className="py-3 px-3 text-right">
+																			<span className="font-bold text-green-700">{formatDecimal(session.controllers || 1)}</span>
+																		</td>
+																	)}
 																	<td className="py-3 px-3 text-right">
 																		<span className="font-medium text-green-700 animate-pulse">
 																			{(() => {
+																				// حساب مدة الفترة الحالية فقط، وليس المدة الكاملة
 																				const now = new Date();
-																				const start = new Date(session.startTime);
-																				const diffMs = now.getTime() - start.getTime();
+																				let periodStart = new Date(session.startTime);
+
+																				// إذا كان هناك controllersHistory، استخدم وقت بداية آخر فترة
+																				if (session.controllersHistory && session.controllersHistory.length > 0) {
+																					const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
+																					if (lastPeriod.from) {
+																						periodStart = new Date(lastPeriod.from);
+																					}
+																				}
+
+																				const diffMs = now.getTime() - periodStart.getTime();
 																				const hours = Math.floor(diffMs / (1000 * 60 * 60));
 																				const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 																				return `${formatDecimal(hours)}س ${formatDecimal(minutes)}د`;
@@ -574,90 +627,176 @@ const BillView = () => {
 																		</span>
 																	</td>
 																	<td className="py-3 px-3 text-right">
-																		<span className="font-medium text-green-700">{formatCurrency(session.hourlyRate)}</span>
-																	</td>
-																	<td className="py-3 px-3 text-right">
-																		<span className="font-bold text-green-600 animate-pulse">{formatCurrency(session.totalCost)}</span>
-																	</td>
-																</tr>
-															)}
-
-															{/* تفاصيل الأذرع السابقة من قاعدة البيانات */}
-															{Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.map((period, idx) => (
-																<tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-																	<td className="py-3 px-3 text-right">
-																		<span className="font-medium text-gray-700">{formatDecimal(period.controllers)}</span>
-																	</td>
-																	<td className="py-3 px-3 text-right">
-																		<span className="text-gray-600">
-																			{(period.hours > 0 ? `${formatDecimal(period.hours)} ساعة` : '') +
-																			 (period.minutes > 0 ? ` ${formatDecimal(period.minutes)} دقيقة` : '')}
+																		<span className="font-medium text-green-700">
+																			{formatCurrency(getHourlyRateFromDevice(session, session.controllers || 1))}
 																		</span>
 																	</td>
 																	<td className="py-3 px-3 text-right">
-																		<span className="text-gray-600">{formatCurrency(period.hourlyRate * period.controllers)}</span>
-																	</td>
-																	<td className="py-3 px-3 text-right">
-																		<span className="font-medium text-gray-700">{formatCurrency(period.cost)}</span>
-																	</td>
-																</tr>
-															))}
+																		<span className="font-bold text-green-600 animate-pulse">
+																			{(() => {
+																				// حساب تكلفة الفترة الحالية فقط
+																				const now = new Date();
+																				let periodStart = new Date(session.startTime);
 
-															{/* إذا لم توجد تفاصيل من قاعدة البيانات، اعرض التاريخ البسيط */}
-															{(!Array.isArray(session.controllersHistoryBreakdown) || session.controllersHistoryBreakdown.length === 0) &&
-															 session.controllersHistory && session.controllersHistory.length > 0 &&
-															 session.controllersHistory.map((history, idx) => (
-																<tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-																	<td className="py-3 px-3 text-right">
-																		<span className="font-medium text-gray-700">{formatDecimal(history.controllers)}</span>
-																	</td>
-																	<td className="py-3 px-3 text-right">
-																		<span className="text-gray-500 text-xs">مدة غير محددة</span>
-																	</td>
-																	<td className="py-3 px-3 text-right">
-																		<span className="text-gray-500 text-xs">غير محدد</span>
-																	</td>
-																	<td className="py-3 px-3 text-right">
-																		<span className="text-gray-500 text-xs">غير محدد</span>
+																				// إذا كان هناك controllersHistory، استخدم وقت بداية آخر فترة
+																				if (session.controllersHistory && session.controllersHistory.length > 0) {
+																					const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
+																					if (lastPeriod.from) {
+																						periodStart = new Date(lastPeriod.from);
+																					}
+																				}
+
+																				const diffMs = now.getTime() - periodStart.getTime();
+																				const minutes = diffMs / (1000 * 60);
+																				const hourlyRate = getHourlyRateFromDevice(session, session.controllers || 1);
+																				const minuteRate = hourlyRate / 60;
+																				const currentPeriodCost = minutes * minuteRate;
+
+																				return formatCurrency(currentPeriodCost);
+																			})()}
+																		</span>
 																	</td>
 																</tr>
-															))}
+															)}
+															{/* البيانات التاريخية */}
+															{session.controllersHistory && session.controllersHistory.length > 0 && session.controllersHistory
+																.filter((history, idx) => {
+																	// إخفاء آخر فترة إذا كانت الجلسة نشطة وليس لها to
+																	if (session.status === 'active' && idx === session.controllersHistory.length - 1 && !history.to) {
+																		return false;
+																	}
+																	return true;
+																})
+																.map((history, idx) => {
+																	// حساب المدة والتكلفة للفترة التاريخية
+																	let duration = "مدة غير محددة";
+																	let cost = 0;
+																	let hourlyRate = 0;
+
+																	if (history.from && history.to) {
+																		const from = new Date(history.from);
+																		const to = new Date(history.to);
+																		const diffMs = to.getTime() - from.getTime();
+																		const hours = Math.floor(diffMs / (1000 * 60 * 60));
+																		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+																		if (hours > 0 || minutes > 0) {
+																			duration = `${formatDecimal(hours)}س ${formatDecimal(minutes)}د`;
+																		}
+
+																		hourlyRate = getHourlyRateFromDevice(session, history.controllers);
+																		const minuteRate = hourlyRate / 60;
+																		cost = (hours * 60 + minutes) * minuteRate;
+																	}
+
+																	return (
+																		<tr key={`history-${idx}`} className="border-b border-gray-100">
+																			{session.deviceType === 'playstation' && (
+																				<td className="py-2 px-3 text-right text-gray-700">
+																					{formatDecimal(history.controllers)}
+																				</td>
+																			)}
+																			<td className="py-2 px-3 text-right text-gray-700">{duration}</td>
+																			<td className="py-2 px-3 text-right text-gray-700">{formatCurrency(hourlyRate)}</td>
+																			<td className="py-2 px-3 text-right text-gray-700">{formatCurrency(cost)}</td>
+																		</tr>
+																	);
+																})}
 														</tbody>
 													</table>
-
-													{/* إذا لم توجد أي تفاصيل */}
-													{(!Array.isArray(session.controllersHistoryBreakdown) || session.controllersHistoryBreakdown.length === 0) &&
-													 (!session.controllersHistory || session.controllersHistory.length === 0) &&
-													 session.status !== 'active' && (
-														<div className="py-4 px-3 text-center text-gray-500 text-sm">
-															لا توجد تفاصيل للأذرع حالياً.
-														</div>
-													)}
 												</div>
 											</div>
 										) : null}
-										{/* في إجمالي تكلفة الجلسة: */}
-										<div className="flex justify-between items-center mt-2">
-											<span className="text-gray-700 font-medium">إجمالي تكلفة الجلسة:</span>
-											<span className="font-bold text-primary-700">
-												{session.deviceType === 'computer' && Array.isArray(session.controllersHistoryBreakdown)
-													? formatCurrency(session.controllersHistoryBreakdown.reduce((sum, p) => sum + p.cost, 0))
-													: formatCurrency(session.finalCost)}
-											</span>
-										</div>
-										{/* عرض التكلفة الحالية للجلسات النشطة */}
-										{session.status === 'active' && (
-											<div className="flex justify-between items-center mt-1">
-												<span className="text-gray-600 text-sm">التكلفة الحالية:</span>
-												<div className="flex items-center gap-2">
-													<span className="text-sm font-medium text-green-600 animate-pulse">
-														{formatCurrency(session.totalCost)}
-													</span>
-													<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-													<span className="text-xs text-green-600">تحدث لحظياً</span>
-												</div>
+										{/* إجمالي تكلفة الجلسة - تظهر فقط بعد انتهاء الجلسة */}
+										{session.status !== 'active' && (
+											<div className="flex justify-between items-center mt-2">
+												<span className="text-gray-700 font-medium">إجمالي تكلفة الجلسة:</span>
+												<span className="font-bold text-primary-700">
+													{(() => {
+														// حساب التكلفة الإجمالية من البيانات التفصيلية
+														let totalCost = 0;
+
+														// إذا كان هناك controllersHistoryBreakdown، استخدمه
+														if (Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0) {
+															totalCost = session.controllersHistoryBreakdown.reduce((sum, period) => sum + period.cost, 0);
+														}
+														// وإلا استخدم controllersHistory لحساب التكلفة
+														else if (session.controllersHistory && session.controllersHistory.length > 0) {
+															totalCost = session.controllersHistory.reduce((sum, period) => {
+																if (period.from && period.to) {
+																	const from = new Date(period.from);
+																	const to = new Date(period.to);
+																	const diffMs = to.getTime() - from.getTime();
+																	const minutes = diffMs / (1000 * 60);
+																	const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
+																	const minuteRate = hourlyRate / 60;
+																	return sum + (minutes * minuteRate);
+																}
+																return sum;
+															}, 0);
+														}
+														// وإلا استخدم session.finalCost
+														else {
+															totalCost = session.finalCost || 0;
+														}
+
+														return formatCurrency(totalCost);
+													})()}
+												</span>
 											</div>
 										)}
+										{/* عرض التكلفة الحالية للجلسات النشطة */}
+										{session.status === 'active' && (() => {
+											// حساب التكلفة الحالية للجلسة النشطة
+											const now = new Date();
+											let totalCurrentCost = 0;
+
+											// إضافة تكلفة الفترات المكتملة
+											if (session.controllersHistory && session.controllersHistory.length > 0) {
+												totalCurrentCost = session.controllersHistory.reduce((sum, period) => {
+													if (period.from && period.to) {
+														const from = new Date(period.from);
+														const to = new Date(period.to);
+														const diffMs = to.getTime() - from.getTime();
+														const minutes = diffMs / (1000 * 60);
+														const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
+														const minuteRate = hourlyRate / 60;
+														return sum + (minutes * minuteRate);
+													}
+													return sum;
+												}, 0);
+											}
+
+											// إضافة تكلفة الفترة الحالية
+											let periodStart = new Date(session.startTime);
+											if (session.controllersHistory && session.controllersHistory.length > 0) {
+												const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
+												if (lastPeriod.from) {
+													periodStart = new Date(lastPeriod.from);
+												}
+											}
+
+											const diffMs = now.getTime() - periodStart.getTime();
+											const minutes = diffMs / (1000 * 60);
+											const hourlyRate = getHourlyRateFromDevice(session, session.controllers || 1);
+											const minuteRate = hourlyRate / 60;
+											const currentPeriodCost = minutes * minuteRate;
+
+											const finalCurrentCost = totalCurrentCost + currentPeriodCost;
+
+											// تظهر فقط إذا كانت التكلفة أكبر من 0
+											return finalCurrentCost > 0 ? (
+												<div className="flex justify-between items-center mt-2">
+													<span className="text-gray-600 text-sm">التكلفة الحالية:</span>
+													<div className="flex items-center gap-2">
+														<span className="text-sm font-medium text-green-600 animate-pulse">
+															{formatCurrency(finalCurrentCost)}
+														</span>
+														<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+													</div>
+												</div>
+											) : null;
+										})()}
 									</div>
 								))}
 							</div>

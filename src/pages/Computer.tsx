@@ -213,6 +213,7 @@ const Computer: React.FC = () => {
       if (billOption === 'existing' && selectedBillId) {
         // إنشاء جلسة مرتبطة بفاتورة موجودة
         apiResponse = await api.createSessionWithExistingBill({
+          deviceId: selectedDevice._id, // أضف هذا السطر
           deviceType: 'computer',
           deviceNumber: selectedDevice.number,
           deviceName: selectedDevice.name,
@@ -230,6 +231,7 @@ const Computer: React.FC = () => {
       } else {
         // إنشاء جلسة جديدة مع فاتورة جديدة
         apiResponse = await createSession({
+          deviceId: selectedDevice._id, // أضف هذا السطر
           deviceType: 'computer',
           deviceNumber: selectedDevice.number,
           deviceName: selectedDevice.name,
