@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   Home,
@@ -22,6 +22,7 @@ import {
 import { useApp } from '../context/AppContext';
 import NotificationCenter from './NotificationCenter';
 import PermissionGuard from './PermissionGuard';
+import ScrollButtons from './ScrollButtons';
 
 // عرف نوع read بشكل صحيح
 interface NotificationRead {
@@ -33,6 +34,7 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { user, logout, sessions, orders, notifications } = useApp();
+  const mainContentRef = useRef<HTMLElement>(null);
 
   // حساب عدد الجلسات النشطة لكل نوع
   const activePlaystationSessions = sessions.filter(s => s.status === 'active' && s.deviceType === 'playstation').length;
@@ -337,6 +339,7 @@ const Layout = () => {
 
         {/* Page Content */}
         <main
+          ref={mainContentRef}
           className="flex-1 overflow-auto min-w-0 container-responsive lg:pt-0 pt-16"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
@@ -347,6 +350,7 @@ const Layout = () => {
           </div>
         </main>
       </div>
+      <ScrollButtons mainContentRef={mainContentRef} />
     </div>
   );
 };
