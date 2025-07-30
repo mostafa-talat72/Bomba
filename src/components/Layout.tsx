@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   Home,
@@ -43,6 +43,52 @@ const Layout = () => {
   const preparingOrders = orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
   // عدد الطلبات الجاهزة للتسليم (ready)
   const readyOrders = orders.filter(o => o.status === 'ready').length;
+
+  // متغيرات للسحب
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [showSwipeIndicator, setShowSwipeIndicator] = useState(true);
+
+  // الحد الأدنى للمسافة المطلوبة للسحب
+  const minSwipeDistance = 50;
+
+  // إخفاء الإشارة البصرية بعد 5 ثوانٍ
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSwipeIndicator(false);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    // التحقق من أن الشاشة صغيرة (mobile)
+    const isMobile = window.innerWidth < 1024; // lg breakpoint
+
+    // إذا كان السحب من اليمين إلى اليسار (فتح الـ sidebar) - فقط على الشاشات الصغيرة
+    if (isLeftSwipe && !sidebarOpen && isMobile) {
+      setSidebarOpen(true);
+    }
+    // إذا كان السحب من اليسار إلى اليمين (إغلاق الـ sidebar) - فقط على الشاشات الصغيرة
+    else if (isRightSwipe && sidebarOpen && isMobile) {
+      setSidebarOpen(false);
+    }
+  };
 
   const navigation = [
     { name: 'لوحة التحكم', href: '/dashboard', icon: Home, permissions: ['dashboard'] },
@@ -264,6 +310,13 @@ const Layout = () => {
                 {filteredNavigation.find(item => isActive(item.href))?.name ||
                  (filteredNavigation.length === 0 ? 'لا توجد صفحات متاحة' : 'لوحة التحكم')}
               </h2>
+              {/* إشارة بصرية للسحب على الشاشات الصغيرة */}
+              {showSwipeIndicator && (
+                <div className="lg:hidden flex items-center mr-2 text-xs text-gray-500">
+                  <span className="mr-1">← اسحب لفتح القائمة</span>
+                  <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse"></div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-4 space-x-reverse flex-shrink-0">
@@ -283,7 +336,12 @@ const Layout = () => {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto min-w-0 container-responsive lg:pt-0 pt-16">
+        <main
+          className="flex-1 overflow-auto min-w-0 container-responsive lg:pt-0 pt-16"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
           <div className="p-4 sm:p-6 w-full">
             <Outlet />
           </div>
