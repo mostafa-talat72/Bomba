@@ -930,7 +930,9 @@ export const exportReportToExcel = async (req, res) => {
         );
         res.setHeader(
             "Content-Disposition",
-            `attachment; filename="${filename}"`
+            `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(
+                filename
+            )}`
         );
         res.send(buffer);
     } catch (error) {
@@ -986,15 +988,18 @@ export const exportReportToPDF = async (req, res) => {
                 });
         }
 
-        const blob = await exportToPDF(reportData, reportType, period);
+        const arrayBuffer = await exportToPDF(reportData, reportType, period);
+        const buffer = Buffer.from(arrayBuffer);
         const filename = generateFilename(reportType, period, "pdf");
 
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
             "Content-Disposition",
-            `attachment; filename="${filename}"`
+            `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(
+                filename
+            )}`
         );
-        res.send(blob);
+        res.send(buffer);
     } catch (error) {
         res.status(500).json({
             success: false,

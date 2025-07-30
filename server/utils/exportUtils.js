@@ -247,7 +247,7 @@ export const exportToPDF = async (data, reportType, period) => {
                 yPosition = addGeneralDataToPDF(doc, data, yPosition);
         }
 
-        return doc.output("blob");
+        return doc.output("arraybuffer");
     } catch (error) {
         Logger.error("Failed to export to PDF", { error: error.message });
         throw error;
@@ -383,13 +383,13 @@ const addGeneralDataToPDF = (doc, data, startY) => {
 // Generate filename
 export const generateFilename = (reportType, period, format) => {
     const date = new Date().toISOString().split("T")[0];
-    const reportTypeAr =
+    const reportTypeEn =
         {
-            sales: "المبيعات",
-            financial: "المالي",
-            inventory: "المخزون",
-            sessions: "الجلسات",
+            sales: "sales",
+            financial: "financial",
+            inventory: "inventory",
+            sessions: "sessions",
         }[reportType] || reportType;
 
-    return `تقرير_${reportTypeAr}_${period}_${date}.${format}`;
+    return `report_${reportTypeEn}_${period}_${date}.${format}`;
 };

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // Types
 export interface ApiResponse<T = any> {
@@ -1161,7 +1161,7 @@ class ApiClient {
   }
 
   async exportReportToExcel(reportType: string, period: string = 'today'): Promise<Blob> {
-    const response = await fetch(`${this.baseURL}/api/reports/export/excel?reportType=${reportType}&period=${period}`, {
+    const response = await fetch(`${this.baseURL}/reports/export/excel?reportType=${reportType}&period=${period}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${this.getToken()}`,
@@ -1177,7 +1177,7 @@ class ApiClient {
   }
 
   async exportReportToPDF(reportType: string, period: string = 'today'): Promise<Blob> {
-    const response = await fetch(`${this.baseURL}/api/reports/export/pdf?reportType=${reportType}&period=${period}`, {
+    const response = await fetch(`${this.baseURL}/reports/export/pdf?reportType=${reportType}&period=${period}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${this.getToken()}`,
