@@ -954,7 +954,6 @@ const Cafe: React.FC = () => {
         setReadyOrders(prev => prev.filter(o => o._id !== orderToCancel._id));
       }
     } catch (err) {
-      console.log("CANCEL ERROR:", err); // طباعة الخطأ
       showNotification('حدث خطأ أثناء إلغاء الطلب', 'error');
     }
   };

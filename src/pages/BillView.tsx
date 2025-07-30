@@ -166,10 +166,8 @@ const BillView = () => {
 	// جلب الأجهزة عند تحميل الصفحة
 	useEffect(() => {
 		async function fetchDevices() {
-			console.log('🔄 جاري تحميل الأجهزة...');
 			const res = await api.getDevices({});
 			if (res.success && res.data) {
-				console.log('✅ تم تحميل الأجهزة:', res.data);
 				setDevices(res.data);
 			} else {
 				console.error('❌ فشل في تحميل الأجهزة:', res.message);
@@ -183,8 +181,6 @@ const BillView = () => {
 		// إذا كان هناك معرف الجهاز، استخدمه للمطابقة
 		if (session.deviceId) {
 			const device = devices.find(d => d._id === session.deviceId);
-			console.log(`🔍 البحث عن الجهاز: deviceId=${session.deviceId}`);
-			console.log(`📱 الجهاز المطابق:`, device);
 			return device;
 		}
 
@@ -193,15 +189,11 @@ const BillView = () => {
 			const device = devices.find(
 				d => d.deviceNumber === session.deviceNumber && d.organization === session.organization
 			);
-			console.log(`🔍 البحث عن الجهاز: deviceNumber=${session.deviceNumber}, organization=${session.organization}`);
-			console.log(`📱 الجهاز المطابق:`, device);
 			return device;
 		}
 
 		// بدون منظمة (fallback)
 		const device = devices.find(d => d.deviceNumber === session.deviceNumber);
-		console.log(`🔍 البحث عن الجهاز: deviceNumber=${session.deviceNumber} (بدون منظمة)`);
-		console.log(`📱 الجهاز المطابق:`, device);
 		return device;
 	}
 
@@ -209,20 +201,16 @@ const BillView = () => {
 	function getHourlyRateFromDevice(session: any, controllers: number) {
 		const device = getDeviceForSession(session);
 		if (!device) {
-			console.log(`❌ لم يتم العثور على الجهاز للجلسة: deviceNumber=${session.deviceNumber}`);
 			return 0;
 		}
 
 		let hourlyRate = 0;
 		if (session.deviceType === 'playstation' && device.playstationRates) {
 			hourlyRate = device.playstationRates[controllers] || 0;
-			console.log(`🎮 سعر البلايستيشن: controllers=${controllers}, rate=${hourlyRate}`);
 		} else {
 			hourlyRate = device.hourlyRate || 0;
-			console.log(`💻 سعر الكمبيوتر: rate=${hourlyRate}`);
 		}
 
-		console.log(`💰 السعر النهائي: ${hourlyRate}`);
 		return hourlyRate;
 	}
 
@@ -245,12 +233,9 @@ const BillView = () => {
 		try {
 			if (showLoading) setLoading(true);
 
-			console.log('🔄 جاري تحميل الفاتورة...');
 			const response = await api.getBill(billId);
 
 			if (response.success && response.data) {
-				console.log('✅ تم تحميل الفاتورة:', response.data);
-				console.log('📋 الجلسات في الفاتورة:', response.data.sessions);
 				setBill(normalizeBillDates(response.data));
 			} else {
 				console.error('❌ BillView: API Error:', response.message);
