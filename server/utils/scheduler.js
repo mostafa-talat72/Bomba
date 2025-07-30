@@ -1,7 +1,11 @@
 import cron from "node-cron";
 import Logger from "../middleware/logger.js";
 import { createDatabaseBackup } from "./backup.js";
-import { sendDailyReport, sendLowStockAlert } from "./email.js";
+import {
+    sendDailyReport,
+    sendLowStockAlert,
+    sendMonthlyReport,
+} from "./email.js";
 import InventoryItem from "../models/InventoryItem.js";
 import User from "../models/User.js";
 import Bill from "../models/Bill.js";
@@ -213,6 +217,227 @@ const generateDailyReport = async () => {
     }
 };
 
+// Generate and send monthly report
+const generateMonthlyReport = async () => {
+    try {
+        const now = new Date();
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDayOfMonth = new Date(
+            now.getFullYear(),
+            now.getMonth() + 1,
+            0
+        );
+
+        // Get all organizations
+        const organizations = await Organization.find({ isActive: true });
+
+        for (const organization of organizations) {
+            try {
+                // Get monthly statistics for this organization
+                const [bills, orders, sessions, costs] = await Promise.all([
+                    Bill.find({
+                        createdAt: {
+                            $gte: firstDayOfMonth,
+                            $lte: lastDayOfMonth,
+                        },
+                        status: { $in: ["partial", "paid"] },
+                        organization: organization._id,
+                    }),
+                    Order.find({
+                        createdAt: {
+                            $gte: firstDayOfMonth,
+                            $lte: lastDayOfMonth,
+                        },
+                        organization: organization._id,
+                    }),
+                    Session.find({
+                        startTime: {
+                            $gte: firstDayOfMonth,
+                            $lte: lastDayOfMonth,
+                        },
+                        organization: organization._id,
+                    }),
+                    Cost.find({
+                        date: { $gte: firstDayOfMonth, $lte: lastDayOfMonth },
+                        organization: organization._id,
+                    }),
+                ]);
+
+                // Calculate totals for this organization
+                const totalRevenue = bills.reduce(
+                    (sum, bill) => sum + bill.paid,
+                    0
+                );
+                const totalCosts = costs.reduce(
+                    (sum, cost) => sum + cost.amount,
+                    0
+                );
+
+                // Get top products for this month
+                const topProducts = await Order.aggregate([
+                    {
+                        $match: {
+                            createdAt: {
+                                $gte: firstDayOfMonth,
+                                $lte: lastDayOfMonth,
+                            },
+                            status: "delivered",
+                            organization: organization._id,
+                        },
+                    },
+                    { $unwind: "$items" },
+                    {
+                        $group: {
+                            _id: "$items.name",
+                            quantity: { $sum: "$items.quantity" },
+                            revenue: {
+                                $sum: {
+                                    $multiply: [
+                                        "$items.price",
+                                        "$items.quantity",
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                    { $sort: { quantity: -1 } },
+                    { $limit: 10 },
+                ]);
+
+                // Get daily revenue breakdown
+                const dailyRevenue = await Bill.aggregate([
+                    {
+                        $match: {
+                            createdAt: {
+                                $gte: firstDayOfMonth,
+                                $lte: lastDayOfMonth,
+                            },
+                            status: { $in: ["partial", "paid"] },
+                            organization: organization._id,
+                        },
+                    },
+                    {
+                        $group: {
+                            _id: {
+                                $dateToString: {
+                                    format: "%Y-%m-%d",
+                                    date: "$createdAt",
+                                },
+                            },
+                            revenue: { $sum: "$paid" },
+                            bills: { $sum: 1 },
+                        },
+                    },
+                    { $sort: { _id: 1 } },
+                ]);
+
+                // Get device usage statistics
+                const deviceStats = await Session.aggregate([
+                    {
+                        $match: {
+                            startTime: {
+                                $gte: firstDayOfMonth,
+                                $lte: lastDayOfMonth,
+                            },
+                            organization: organization._id,
+                        },
+                    },
+                    {
+                        $group: {
+                            _id: "$deviceType",
+                            totalSessions: { $sum: 1 },
+                            totalRevenue: { $sum: "$finalCost" },
+                            avgDuration: {
+                                $avg: { $subtract: ["$endTime", "$startTime"] },
+                            },
+                        },
+                    },
+                ]);
+
+                const reportData = {
+                    month: now.toLocaleDateString("ar-EG", {
+                        month: "long",
+                        year: "numeric",
+                    }),
+                    organizationName: organization.name,
+                    totalRevenue,
+                    totalCosts,
+                    netProfit: totalRevenue - totalCosts,
+                    profitMargin:
+                        totalRevenue > 0
+                            ? ((totalRevenue - totalCosts) / totalRevenue) * 100
+                            : 0,
+                    totalBills: bills.length,
+                    totalOrders: orders.length,
+                    totalSessions: sessions.length,
+                    topProducts: topProducts.map((p) => ({
+                        name: p._id,
+                        quantity: p.quantity,
+                        revenue: p.revenue,
+                    })),
+                    dailyRevenue,
+                    deviceStats,
+                    avgDailyRevenue:
+                        dailyRevenue.length > 0
+                            ? totalRevenue / dailyRevenue.length
+                            : 0,
+                    bestDay:
+                        dailyRevenue.length > 0
+                            ? dailyRevenue.reduce((best, current) =>
+                                  current.revenue > best.revenue
+                                      ? current
+                                      : best
+                              )
+                            : null,
+                };
+
+                // Get admin emails for this organization
+                const admins = await User.find({
+                    role: "admin",
+                    status: "active",
+                    organization: organization._id,
+                    email: { $exists: true, $ne: "" },
+                }).select("email");
+
+                const adminEmails = admins.map((admin) => admin.email);
+
+                if (adminEmails.length > 0) {
+                    await sendMonthlyReport(reportData, adminEmails);
+                    Logger.info(
+                        `Monthly report sent for organization: ${organization.name}`,
+                        {
+                            organizationId: organization._id,
+                            adminCount: adminEmails.length,
+                            emails: adminEmails,
+                            month: reportData.month,
+                        }
+                    );
+                } else {
+                    Logger.warn(
+                        `No admin emails found for organization: ${organization.name}`,
+                        {
+                            organizationId: organization._id,
+                            month: reportData.month,
+                        }
+                    );
+                }
+            } catch (orgError) {
+                Logger.error(
+                    `Failed to generate monthly report for organization: ${organization.name}`,
+                    {
+                        organizationId: organization._id,
+                        error: orgError.message,
+                    }
+                );
+            }
+        }
+    } catch (error) {
+        Logger.error("Failed to generate monthly report", {
+            error: error.message,
+        });
+    }
+};
+
 // Update overdue bills and costs
 const updateOverdueItems = async () => {
     try {
@@ -375,6 +600,15 @@ export const initializeScheduler = () => {
     // Generate daily report at 11:59 PM
     cron.schedule("59 23 * * *", generateDailyReport);
 
+    // Generate monthly report at 11:59 PM on the last day of the month
+    cron.schedule("59 23 28-31 * *", () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        if (tomorrow.getDate() === 1) {
+            generateMonthlyReport();
+        }
+    });
+
     // Update overdue items every 6 hours
     cron.schedule("0 */6 * * *", updateOverdueItems);
 
@@ -411,6 +645,9 @@ export const runTask = async (taskName) => {
             break;
         case "dailyReport":
             await generateDailyReport();
+            break;
+        case "monthlyReport":
+            await generateMonthlyReport();
             break;
         case "updateOverdue":
             await updateOverdueItems();

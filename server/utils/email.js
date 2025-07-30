@@ -769,6 +769,187 @@ export const emailTemplates = {
     `,
     }),
 
+    // Monthly report
+    monthlyReport: (data) => ({
+        subject: `📊 التقرير الشهري - ${data.organizationName || "منشأتك"} - ${
+            data.month
+        }`,
+        html: `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>التقرير الشهري - ${data.organizationName || "منشأتك"}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+          .header h1 { margin: 0; font-size: 24px; }
+          .header .subtitle { margin-top: 10px; opacity: 0.9; }
+          .content { padding: 30px; }
+          .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+          .stat-card { background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center; border-left: 4px solid #667eea; }
+          .stat-value { font-size: 28px; font-weight: bold; color: #667eea; margin-bottom: 5px; }
+          .stat-label { color: #6c757d; font-size: 14px; }
+          .section { margin-bottom: 30px; }
+          .section-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 15px; border-bottom: 2px solid #667eea; padding-bottom: 5px; }
+          .product-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+          .product-name { font-weight: bold; }
+          .product-stats { color: #6c757d; font-size: 14px; }
+          .device-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+          .device-card { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; }
+          .device-name { font-weight: bold; color: #333; margin-bottom: 5px; }
+          .device-value { color: #667eea; font-size: 16px; }
+          .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; }
+          .footer-logo { font-weight: bold; color: #667eea; margin-bottom: 10px; }
+          .footer-text { font-size: 12px; line-height: 1.5; }
+          .highlight { background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0; }
+          .highlight-title { font-weight: bold; color: #856404; margin-bottom: 10px; }
+          .highlight-content { color: #856404; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>📊 التقرير الشهري</h1>
+            <div class="subtitle">${data.organizationName || "منشأتك"} - ${
+            data.month
+        }</div>
+          </div>
+
+          <div class="content">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value">${data.totalRevenue.toLocaleString(
+                    "ar-EG"
+                )} ج.م</div>
+                <div class="stat-label">إجمالي الإيرادات</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${data.totalCosts.toLocaleString(
+                    "ar-EG"
+                )} ج.م</div>
+                <div class="stat-label">إجمالي التكاليف</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${data.netProfit.toLocaleString(
+                    "ar-EG"
+                )} ج.م</div>
+                <div class="stat-label">صافي الربح</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${data.profitMargin.toFixed(1)}%</div>
+                <div class="stat-label">هامش الربح</div>
+              </div>
+            </div>
+
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value">${data.totalBills}</div>
+                <div class="stat-label">عدد الفواتير</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${data.totalOrders}</div>
+                <div class="stat-label">عدد الطلبات</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${data.totalSessions}</div>
+                <div class="stat-label">عدد الجلسات</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${data.avgDailyRevenue.toLocaleString(
+                    "ar-EG"
+                )} ج.م</div>
+                <div class="stat-label">متوسط الإيرادات اليومية</div>
+              </div>
+            </div>
+
+            ${
+                data.bestDay
+                    ? `
+            <div class="highlight">
+              <div class="highlight-title">🏆 أفضل يوم في الشهر</div>
+              <div class="highlight-content">
+                التاريخ: ${new Date(data.bestDay._id).toLocaleDateString(
+                    "ar-EG"
+                )}<br>
+                الإيرادات: ${data.bestDay.revenue.toLocaleString(
+                    "ar-EG"
+                )} ج.م<br>
+                عدد الفواتير: ${data.bestDay.bills}
+              </div>
+            </div>
+            `
+                    : ""
+            }
+
+            <div class="section">
+              <div class="section-title">📈 إحصائيات الأجهزة</div>
+              <div class="device-stats">
+                ${data.deviceStats
+                    .map(
+                        (device) => `
+                  <div class="device-card">
+                    <div class="device-name">${
+                        device._id === "playstation"
+                            ? "البلايستيشن"
+                            : device._id === "computer"
+                            ? "الكمبيوتر"
+                            : device._id
+                    }</div>
+                    <div class="device-value">${device.totalSessions} جلسة</div>
+                    <div class="device-value">${device.totalRevenue.toLocaleString(
+                        "ar-EG"
+                    )} ج.م</div>
+                    <div class="device-value">${Math.round(
+                        device.avgDuration / (1000 * 60)
+                    )} دقيقة متوسط</div>
+                  </div>
+                `
+                    )
+                    .join("")}
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">🏆 أفضل المنتجات مبيعاً</div>
+              ${
+                  data.topProducts.length > 0
+                      ? data.topProducts
+                            .map(
+                                (product, index) => `
+                  <div class="product-item">
+                    <div class="product-name">${index + 1}. ${
+                                    product.name
+                                }</div>
+                    <div class="product-stats">
+                      ${
+                          product.quantity
+                      } قطعة - ${product.revenue.toLocaleString("ar-EG")} ج.م
+                    </div>
+                  </div>
+                `
+                            )
+                            .join("")
+                      : '<div style="text-align: center; color: #6c757d; padding: 20px;">لا توجد مبيعات هذا الشهر</div>'
+              }
+            </div>
+          </div>
+
+          <div class="footer">
+            <div class="footer-logo">🎮 Bomba System</div>
+            <div class="footer-text">
+              تقرير شهري تلقائي من نظام إدارة المنشآت<br>
+              تم إنشاؤه في ${new Date().toLocaleTimeString("ar-EG")}
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    }),
+
     // User account created
     userCreated: (user, password) => ({
         subject: "تم إنشاء حسابك في نظام Bomba",
@@ -828,6 +1009,27 @@ export const sendDailyReport = async (reportData, adminEmails) => {
             });
         } catch (error) {
             Logger.error("Failed to send daily report", {
+                email,
+                error: error.message,
+            });
+        }
+    }
+};
+
+// Send monthly report
+export const sendMonthlyReport = async (reportData, adminEmails) => {
+    if (!adminEmails || adminEmails.length === 0) return;
+
+    const template = emailTemplates.monthlyReport(reportData);
+
+    for (const email of adminEmails) {
+        try {
+            await sendEmail({
+                to: email,
+                ...template,
+            });
+        } catch (error) {
+            Logger.error("Failed to send monthly report", {
                 email,
                 error: error.message,
             });
