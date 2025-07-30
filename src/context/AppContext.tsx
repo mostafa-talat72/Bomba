@@ -136,6 +136,10 @@ interface AppContextType {
   sendNotificationToPermission: (permission: string, notificationData: any) => Promise<any>;
   broadcastNotification: (notificationData: any) => Promise<any>;
   forceRefreshNotifications: () => Promise<void>;
+
+  // Export functions
+  exportReportToExcel: (reportType: string, period?: string) => Promise<void>;
+  exportReportToPDF: (reportType: string, period?: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1425,6 +1429,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const exportReportToExcel = async (reportType: string, period: string = 'today') => {
+    try {
+      const blob = await api.exportReportToExcel(reportType, period);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `تقرير_${reportType}_${period}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showNotification('تم تصدير التقرير بنجاح', 'success');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تصدير التقرير', 'error');
+    }
+  };
+
+  const exportReportToPDF = async (reportType: string, period: string = 'today') => {
+    try {
+      const blob = await api.exportReportToPDF(reportType, period);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `تقرير_${reportType}_${period}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showNotification('تم تصدير التقرير بنجاح', 'success');
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'فشل في تصدير التقرير', 'error');
+    }
+  };
+
   const value: AppContextType = {
     // Auth state
     user,
@@ -1525,6 +1565,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     sendNotificationToPermission,
     broadcastNotification,
     forceRefreshNotifications,
+
+    // Export functions
+    exportReportToExcel,
+    exportReportToPDF,
   };
 
   return (

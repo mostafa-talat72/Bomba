@@ -6,6 +6,8 @@ import {
     getFinancialReport,
     getSessionsReport,
     getRecentActivity,
+    exportReportToExcel,
+    exportReportToPDF,
 } from "../controllers/reportController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import Bill from "../models/Bill.js";
@@ -22,8 +24,12 @@ router.use(protect);
 // All routes require reports permission
 router.use(authorize("reports", "all"));
 
+// Dashboard stats
 router.get("/dashboard", getDashboardStats);
-router.get("/recent-activity", getRecentActivity);
+
+// Export routes
+router.get("/export/excel", exportReportToExcel);
+router.get("/export/pdf", exportReportToPDF);
 
 // Helper function to get date range
 const getDateRange = (period) => {

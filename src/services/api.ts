@@ -1156,12 +1156,40 @@ class ApiClient {
   }
 
   async getFinancialReport(period?: string): Promise<ApiResponse<any>> {
-    const searchParams = new URLSearchParams();
-    if (period) {
-      searchParams.append('period', period);
+    const response = await this.request<any>(`/reports/financial?period=${period || 'today'}`);
+    return response;
+  }
+
+  async exportReportToExcel(reportType: string, period: string = 'today'): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/api/reports/export/excel?reportType=${reportType}&period=${period}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export report');
     }
 
-    return this.request(`/reports/financial?${searchParams.toString()}`);
+    return response.blob();
+  }
+
+  async exportReportToPDF(reportType: string, period: string = 'today'): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/api/reports/export/pdf?reportType=${reportType}&period=${period}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export report');
+    }
+
+    return response.blob();
   }
 
   async getSessionsReport(period?: string, device?: string): Promise<ApiResponse<any>> {

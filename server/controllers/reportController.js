@@ -4,6 +4,11 @@ import Bill from "../models/Bill.js";
 import Cost from "../models/Cost.js";
 import InventoryItem from "../models/InventoryItem.js";
 import { getDateRange } from "../utils/helpers.js";
+import {
+    exportToExcel,
+    exportToPDF,
+    generateFilename,
+} from "../utils/exportUtils.js";
 
 // @desc    Get dashboard statistics
 // @route   GET /api/reports/dashboard
@@ -870,4 +875,322 @@ export const getRecentActivity = async (req, res) => {
             error: error.message,
         });
     }
+};
+
+// @desc    Export report to Excel
+// @route   GET /api/reports/export/excel
+// @access  Private
+export const exportReportToExcel = async (req, res) => {
+    try {
+        const { reportType, period = "today" } = req.query;
+        const { startDate, endDate } = getDateRange(period);
+
+        let reportData;
+
+        switch (reportType) {
+            case "sales":
+                reportData = await getSalesReportData(
+                    req.user.organization,
+                    startDate,
+                    endDate
+                );
+                break;
+            case "financial":
+                reportData = await getFinancialReportData(
+                    req.user.organization,
+                    startDate,
+                    endDate
+                );
+                break;
+            case "inventory":
+                reportData = await getInventoryReportData(
+                    req.user.organization
+                );
+                break;
+            case "sessions":
+                reportData = await getSessionsReportData(
+                    req.user.organization,
+                    startDate,
+                    endDate
+                );
+                break;
+            default:
+                return res.status(400).json({
+                    success: false,
+                    message: "نوع التقرير غير صحيح",
+                });
+        }
+
+        const buffer = await exportToExcel(reportData, reportType, period);
+        const filename = generateFilename(reportType, period, "xlsx");
+
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${filename}"`
+        );
+        res.send(buffer);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تصدير التقرير",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Export report to PDF
+// @route   GET /api/reports/export/pdf
+// @access  Private
+export const exportReportToPDF = async (req, res) => {
+    try {
+        const { reportType, period = "today" } = req.query;
+        const { startDate, endDate } = getDateRange(period);
+
+        let reportData;
+
+        switch (reportType) {
+            case "sales":
+                reportData = await getSalesReportData(
+                    req.user.organization,
+                    startDate,
+                    endDate
+                );
+                break;
+            case "financial":
+                reportData = await getFinancialReportData(
+                    req.user.organization,
+                    startDate,
+                    endDate
+                );
+                break;
+            case "inventory":
+                reportData = await getInventoryReportData(
+                    req.user.organization
+                );
+                break;
+            case "sessions":
+                reportData = await getSessionsReportData(
+                    req.user.organization,
+                    startDate,
+                    endDate
+                );
+                break;
+            default:
+                return res.status(400).json({
+                    success: false,
+                    message: "نوع التقرير غير صحيح",
+                });
+        }
+
+        const blob = await exportToPDF(reportData, reportType, period);
+        const filename = generateFilename(reportType, period, "pdf");
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${filename}"`
+        );
+        res.send(blob);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تصدير التقرير",
+            error: error.message,
+        });
+    }
+};
+
+// Helper functions to get report data
+const getSalesReportData = async (organization, startDate, endDate) => {
+    const bills = await Bill.find({
+        createdAt: { $gte: startDate, $lte: endDate },
+        organization,
+    }).populate("orders");
+
+    const paidBills = bills.filter((bill) =>
+        ["paid", "partial"].includes(bill.status)
+    );
+
+    const totalRevenue = paidBills.reduce((sum, bill) => sum + bill.total, 0);
+    const totalOrders = bills.reduce(
+        (sum, bill) => sum + bill.orders.length,
+        0
+    );
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    const revenueBreakdown = {
+        playstation: 0,
+        computer: 0,
+        cafe: 0,
+    };
+
+    paidBills.forEach((bill) => {
+        if (bill.billType === "playstation") {
+            revenueBreakdown.playstation += bill.total;
+        } else if (bill.billType === "computer") {
+            revenueBreakdown.computer += bill.total;
+        } else if (bill.billType === "cafe") {
+            revenueBreakdown.cafe += bill.total;
+        }
+    });
+
+    // Top products
+    const productSales = {};
+    bills.forEach((bill) => {
+        bill.orders.forEach((order) => {
+            if (!productSales[order.itemName]) {
+                productSales[order.itemName] = { quantity: 0, revenue: 0 };
+            }
+            productSales[order.itemName].quantity += order.quantity;
+            productSales[order.itemName].revenue += order.totalPrice;
+        });
+    });
+
+    const topProducts = Object.entries(productSales)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+
+    return {
+        totalRevenue,
+        totalOrders,
+        avgOrderValue,
+        revenueBreakdown,
+        topProducts,
+    };
+};
+
+const getFinancialReportData = async (organization, startDate, endDate) => {
+    const bills = await Bill.find({
+        createdAt: { $gte: startDate, $lte: endDate },
+        status: { $in: ["paid", "partial"] },
+        organization,
+    });
+
+    const costs = await Cost.find({
+        date: { $gte: startDate, $lte: endDate },
+        organization,
+    });
+
+    const totalRevenue = bills.reduce((sum, bill) => sum + bill.total, 0);
+    const totalCosts = costs.reduce((sum, cost) => sum + cost.amount, 0);
+    const netProfit = totalRevenue - totalCosts;
+    const profitMargin =
+        totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+    // Costs by category
+    const costsByCategory = {};
+    costs.forEach((cost) => {
+        if (!costsByCategory[cost.category]) {
+            costsByCategory[cost.category] = { amount: 0, count: 0 };
+        }
+        costsByCategory[cost.category].amount += cost.amount;
+        costsByCategory[cost.category].count += 1;
+    });
+
+    const costsBreakdown = Object.entries(costsByCategory).map(
+        ([category, data]) => ({
+            category,
+            amount: data.amount,
+            percentage: totalCosts > 0 ? (data.amount / totalCosts) * 100 : 0,
+        })
+    );
+
+    return {
+        totalRevenue,
+        totalCosts,
+        netProfit,
+        profitMargin,
+        costsByCategory: costsBreakdown,
+    };
+};
+
+const getInventoryReportData = async (organization) => {
+    const items = await InventoryItem.find({ organization });
+
+    const totalItems = items.length;
+    const totalValue = items.reduce(
+        (sum, item) => sum + item.currentStock * item.price,
+        0
+    );
+    const lowStockItems = items.filter(
+        (item) => item.currentStock <= item.minStock
+    ).length;
+
+    return {
+        totalItems,
+        totalValue,
+        lowStockItems,
+        items: items.map((item) => ({
+            name: item.name,
+            category: item.category,
+            currentStock: item.currentStock,
+            minStock: item.minStock,
+            price: item.price,
+        })),
+    };
+};
+
+const getSessionsReportData = async (organization, startDate, endDate) => {
+    const sessions = await Session.find({
+        startTime: { $gte: startDate, $lte: endDate },
+        organization,
+    });
+
+    const totalSessions = sessions.length;
+    const totalRevenue = sessions.reduce(
+        (sum, session) => sum + session.finalCost,
+        0
+    );
+
+    let totalDuration = 0;
+    sessions.forEach((session) => {
+        if (session.startTime && session.endTime) {
+            const duration =
+                new Date(session.endTime) - new Date(session.startTime);
+            totalDuration += duration / (1000 * 60 * 60); // Convert to hours
+        }
+    });
+
+    const avgSessionDuration =
+        totalSessions > 0 ? totalDuration / totalSessions : 0;
+
+    // Device statistics
+    const deviceStats = {};
+    sessions.forEach((session) => {
+        const deviceType = session.deviceType || "unknown";
+        if (!deviceStats[deviceType]) {
+            deviceStats[deviceType] = {
+                sessions: 0,
+                revenue: 0,
+                totalDuration: 0,
+            };
+        }
+        deviceStats[deviceType].sessions += 1;
+        deviceStats[deviceType].revenue += session.finalCost;
+        if (session.startTime && session.endTime) {
+            const duration =
+                new Date(session.endTime) - new Date(session.startTime);
+            deviceStats[deviceType].totalDuration +=
+                duration / (1000 * 60 * 60);
+        }
+    });
+
+    // Calculate average duration for each device
+    Object.keys(deviceStats).forEach((device) => {
+        const stats = deviceStats[device];
+        stats.avgDuration =
+            stats.sessions > 0 ? stats.totalDuration / stats.sessions : 0;
+    });
+
+    return {
+        totalSessions,
+        totalRevenue,
+        avgSessionDuration,
+        deviceStats,
+    };
 };

@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
 const Reports = () => {
-  const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, showNotification } = useApp();
+  const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, exportReportToExcel, exportReportToPDF, showNotification } = useApp();
   const [selectedPeriod, setSelectedPeriod] = useState('today');
   const [loading, setLoading] = useState(false);
   const [reports, setReports] = useState<{
@@ -90,101 +90,108 @@ const Reports = () => {
   const revenueBreakdown = calculateRevenueBreakdown();
   const totalRevenue = basicStats.revenue || 0;
 
+  // Export functions
+  const handleExportExcel = async (reportType: string) => {
+    try {
+      await exportReportToExcel(reportType, selectedPeriod);
+    } catch (error) {
+      showNotification('فشل في تصدير التقرير', 'error');
+    }
+  };
+
+  const handleExportPDF = async (reportType: string) => {
+    try {
+      await exportReportToPDF(reportType, selectedPeriod);
+    } catch (error) {
+      showNotification('فشل في تصدير التقرير', 'error');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <BarChart3 className="h-8 w-8 text-primary-600 ml-3" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">التقارير والإحصائيات</h1>
-            <p className="text-gray-600">تحليل الأداء والمبيعات</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">التقارير والإحصائيات</h1>
+          <p className="text-gray-600">مراقبة أداء الأعمال والإحصائيات</p>
         </div>
         <div className="flex items-center space-x-3 space-x-reverse">
-          <button
-            onClick={loadReports}
-            disabled={loading}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center transition-colors duration-200 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-5 w-5 ml-2 ${loading ? 'animate-spin' : ''}`} />
-            تحديث
-          </button>
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           >
             <option value="today">اليوم</option>
-            <option value="week">هذا الأسبوع</option>
-            <option value="month">هذا الشهر</option>
-            <option value="quarter">هذا الربع</option>
-            <option value="year">هذا العام</option>
+            <option value="week">الأسبوع</option>
+            <option value="month">الشهر</option>
+            <option value="year">السنة</option>
           </select>
+          <button
+            onClick={loadReports}
+            className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
+          >
+            <RefreshCw className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-          <RefreshCw className="h-8 w-8 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">جاري تحميل التقارير...</p>
-        </div>
-      )}
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Basic Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-green-600" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">إجمالي الإيرادات</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(basicStats.revenue)}</p>
-            </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <DollarSign className="h-5 w-5 ml-2 text-green-500" />
+            إجمالي الإيرادات
+          </h3>
+          <div className="text-center">
+            <p className="text-3xl font-bold text-green-600">{formatCurrency(basicStats.revenue)}</p>
+            <p className="text-sm text-gray-500">إجمالي المبيعات</p>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <ShoppingCart className="h-6 w-6 text-blue-600" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">عدد الطلبات</p>
-              <p className="text-2xl font-bold text-blue-600">{formatNumber(basicStats.orders)}</p>
-            </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <ShoppingCart className="h-5 w-5 ml-2 text-blue-500" />
+            عدد الطلبات
+          </h3>
+          <div className="text-center">
+            <p className="text-3xl font-bold text-blue-600">{formatNumber(basicStats.orders)}</p>
+            <p className="text-sm text-gray-500">إجمالي الطلبات</p>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-purple-600" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">متوسط الطلب</p>
-              <p className="text-2xl font-bold text-purple-600">{formatCurrency(basicStats.avgOrderValue)}</p>
-            </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <TrendingUp className="h-5 w-5 ml-2 text-purple-500" />
+            متوسط الطلب
+          </h3>
+          <div className="text-center">
+            <p className="text-3xl font-bold text-purple-600">{formatCurrency(basicStats.avgOrderValue)}</p>
+            <p className="text-sm text-gray-500">متوسط قيمة الطلب</p>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <Gamepad2 className="h-6 w-6 text-orange-600" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">عدد الجلسات</p>
-              <p className="text-2xl font-bold text-orange-600">{formatNumber(basicStats.sessions)}</p>
-            </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Users className="h-5 w-5 ml-2 text-orange-500" />
+            عدد الجلسات
+          </h3>
+          <div className="text-center">
+            <p className="text-3xl font-bold text-orange-600">{formatNumber(basicStats.sessions)}</p>
+            <p className="text-sm text-gray-500">إجمالي الجلسات</p>
           </div>
         </div>
       </div>
 
       {/* Revenue Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <Gamepad2 className="h-5 w-5 ml-2 text-blue-500" />
@@ -231,31 +238,39 @@ const Reports = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">أكثر المنتجات مبيعاً</h3>
-            <button className="text-primary-600 hover:text-primary-700 text-sm">
-              <Download className="h-4 w-4" />
-            </button>
+            <div className="flex space-x-2 space-x-reverse">
+              <button
+                onClick={() => handleExportExcel('sales')}
+                className="text-primary-600 hover:text-primary-700 text-sm p-1"
+                title="تصدير Excel"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => handleExportPDF('sales')}
+                className="text-blue-600 hover:text-blue-700 text-sm p-1"
+                title="تصدير PDF"
+              >
+                <Printer className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="space-y-4">
-            {(reports.sales as any)?.topProducts?.slice(0, 5).map((product: any, index: number) => (
-              <div key={product.name} className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-sm font-medium text-primary-600">
-                    {index + 1}
+            {reports.sales && (reports.sales as any)?.topProducts ? (
+              (reports.sales as any).topProducts.slice(0, 5).map((product: any, index: number) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-gray-700">{product.name}</span>
                   </div>
-                  <div className="mr-3">
-                    <p className="font-medium text-gray-900">{product.name}</p>
-                    <p className="text-sm text-gray-500">{formatNumber(product.quantity)} قطعة</p>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-gray-900">{formatNumber(product.quantity)} قطعة</p>
+                    <p className="text-xs text-gray-500">{formatCurrency(product.revenue)}</p>
                   </div>
                 </div>
-                <div className="text-left">
-                  <p className="font-bold text-gray-900">{formatCurrency(product.revenue)}</p>
-                </div>
-              </div>
-            )) || (
-                <div className="text-center text-gray-500 py-8">
-                  لا توجد بيانات متاحة
-                </div>
-              )}
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-4">لا توجد بيانات متاحة</p>
+            )}
           </div>
         </div>
 
@@ -263,9 +278,22 @@ const Reports = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">تحليل الجلسات</h3>
-            <button className="text-primary-600 hover:text-primary-700 text-sm">
-              <Download className="h-4 w-4" />
-            </button>
+            <div className="flex space-x-2 space-x-reverse">
+              <button
+                onClick={() => handleExportExcel('sessions')}
+                className="text-primary-600 hover:text-primary-700 text-sm p-1"
+                title="تصدير Excel"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => handleExportPDF('sessions')}
+                className="text-blue-600 hover:text-blue-700 text-sm p-1"
+                title="تصدير PDF"
+              >
+                <Printer className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="space-y-4">
             {reports.sessions ? (
@@ -299,72 +327,116 @@ const Reports = () => {
                 </div>
               </>
             ) : (
-              <div className="text-center text-gray-500 py-8">
-                لا توجد بيانات متاحة
-              </div>
+              <p className="text-gray-500 text-center py-4">لا توجد بيانات متاحة</p>
             )}
           </div>
         </div>
       </div>
 
       {/* Financial Summary */}
-      {reports.financial && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">الملخص المالي</h3>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">الملخص المالي</h3>
+          <div className="flex space-x-2 space-x-reverse">
+            <button
+              onClick={() => handleExportExcel('financial')}
+              className="text-primary-600 hover:text-primary-700 text-sm p-1"
+              title="تصدير Excel"
+            >
+              <Download className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => handleExportPDF('financial')}
+              className="text-blue-600 hover:text-blue-700 text-sm p-1"
+              title="تصدير PDF"
+            >
+              <Printer className="h-4 w-4" />
+            </button>
           </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="text-center p-4 bg-green-50 rounded-lg">
-                <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency((reports.financial as any)?.grossProfit || 0)}
-                </div>
-                <div className="text-sm text-gray-600">إجمالي الربح</div>
+        </div>
+        {reports.financial && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">
+                {formatCurrency((reports.financial as any)?.grossProfit || 0)}
               </div>
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">
-                  {formatCurrency((reports.financial as any)?.totalCosts || 0)}
-                </div>
-                <div className="text-sm text-gray-600">إجمالي التكاليف</div>
+              <div className="text-sm text-gray-600">إجمالي الربح</div>
+            </div>
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">
+                {formatCurrency((reports.financial as any)?.totalCosts || 0)}
               </div>
-              <div className="text-center p-4 bg-purple-50 rounded-lg">
-                <div className="text-2xl font-bold text-purple-600">
-                  {formatPercentage((reports.financial as any)?.profitMargin || 0, 100)}
-                </div>
-                <div className="text-sm text-gray-600">هامش الربح</div>
+              <div className="text-sm text-gray-600">إجمالي التكاليف</div>
+            </div>
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">
+                {formatPercentage((reports.financial as any)?.profitMargin || 0, 100)}
               </div>
-              <div className="text-center p-4 bg-orange-50 rounded-lg">
-                <div className="text-2xl font-bold text-orange-600">
-                  {formatNumber((reports.financial as any)?.totalTransactions || 0)}
-                </div>
-                <div className="text-sm text-gray-600">عدد المعاملات</div>
+              <div className="text-sm text-gray-600">هامش الربح</div>
+            </div>
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <div className="text-2xl font-bold text-orange-600">
+                {formatNumber((reports.financial as any)?.totalTransactions || 0)}
               </div>
+              <div className="text-sm text-gray-600">عدد المعاملات</div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Export Section */}
+      {/* Inventory Summary */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">تصدير التقارير</h3>
-            <p className="text-sm text-gray-600">تحميل التقارير بصيغ مختلفة</p>
-          </div>
-          <div className="flex space-x-3 space-x-reverse">
-            <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center transition-colors duration-200">
-              <Download className="h-4 w-4 ml-2" />
-              تصدير Excel
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">ملخص المخزون</h3>
+          <div className="flex space-x-2 space-x-reverse">
+            <button
+              onClick={() => handleExportExcel('inventory')}
+              className="text-primary-600 hover:text-primary-700 text-sm p-1"
+              title="تصدير Excel"
+            >
+              <Download className="h-4 w-4" />
             </button>
-            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center transition-colors duration-200">
-              <Download className="h-4 w-4 ml-2" />
-              تصدير PDF
+            <button
+              onClick={() => handleExportPDF('inventory')}
+              className="text-blue-600 hover:text-blue-700 text-sm p-1"
+              title="تصدير PDF"
+            >
+              <Printer className="h-4 w-4" />
             </button>
           </div>
         </div>
+        {reports.inventory && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">
+                {formatNumber((reports.inventory as any)?.totalItems || 0)}
+              </div>
+              <div className="text-sm text-gray-600">إجمالي المنتجات</div>
+            </div>
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">
+                {formatNumber((reports.inventory as any)?.totalQuantity || 0)}
+              </div>
+              <div className="text-sm text-gray-600">إجمالي الكمية</div>
+            </div>
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">
+                {formatCurrency((reports.inventory as any)?.totalValue || 0)}
+              </div>
+              <div className="text-sm text-gray-600">إجمالي القيمة</div>
+            </div>
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <div className="text-2xl font-bold text-orange-600">
+                {formatNumber((reports.inventory as any)?.lowStockItems || 0)}
+              </div>
+              <div className="text-sm text-gray-600">عناصر المخزون المنخفض</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default Reports;
+
