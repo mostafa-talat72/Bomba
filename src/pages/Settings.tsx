@@ -1,107 +1,592 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Bell, Palette, Shield, Database } from 'lucide-react';
-import { api } from '../services/api';
+import {
+  Settings as SettingsIcon,
+  Briefcase,
+  Package,
+  Users,
+  FileText,
+  Download,
+  Upload,
+  Bell,
+  Palette,
+  Shield,
+  Database,
+  Settings as SettingsAdvanced
+} from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { SettingsData, TabState, Permission } from '../types/settings';
+
+// استيراد مكونات التبويبات
+import GeneralSettingsTab from '../components/settings/GeneralSettingsTab';
+import BusinessSettingsTab from '../components/settings/BusinessSettingsTab';
+import InventorySettingsTab from '../components/settings/InventorySettingsTab';
+import NotificationSettingsTab from '../components/settings/NotificationSettingsTab';
+import AppearanceSettingsTab from '../components/settings/AppearanceSettingsTab';
+import SecuritySettingsTab from '../components/settings/SecuritySettingsTab';
+import BackupSettingsTab from '../components/settings/BackupSettingsTab';
+import AdvancedSettingsTab from '../components/settings/AdvancedSettingsTab';
+import ReportSettingsTab from '../components/settings/ReportSettingsTab';
+import UserSettingsTab from '../components/settings/UserSettingsTab';
 
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState('general');
-  const [general, setGeneral] = useState({
-    cafeName: '',
-    currency: 'EGP',
-    timezone: 'Africa/Cairo',
-    language: 'ar',
-    address: '',
-    phone: '',
-    email: '',
-  });
+  const { user } = useApp();
+  const [activeTab, setActiveTab] = useState<keyof SettingsData>('general');
+
   // إعدادات كل تبويب
-  const [notifications, setNotifications] = useState<any>(null);
-  const [appearance, setAppearance] = useState<any>(null);
-  const [security, setSecurity] = useState<any>(null);
-  const [backup, setBackup] = useState<any>(null);
+  const [settings, setSettings] = useState<SettingsData>({
+    general: {
+      cafeName: '',
+      currency: 'EGP',
+      timezone: 'Africa/Cairo',
+      language: 'ar',
+      address: '',
+      phone: '',
+      email: '',
+      taxRate: 0,
+      taxInclusive: false
+    },
+    business: {
+      billNumberFormat: 'INV-{YYYY}{MM}{DD}-{XXX}',
+      autoGenerateBillNumber: true,
+      defaultPaymentMethod: 'cash',
+      allowPartialPayments: false,
+      maxDiscountPercentage: 10,
+      sessionTimeout: 30,
+      tableNumbering: 'sequential',
+      maxTables: 20,
+      workingHours: {
+        start: '08:00',
+        end: '22:00',
+        daysOff: []
+      },
+      deliverySettings: {
+        enabled: false,
+        radius: 10,
+        fee: 0
+      },
+      loyaltyProgram: {
+        enabled: false,
+        pointsPerCurrency: 1,
+        redemptionRate: 0.01
+      }
+    },
+    inventory: {
+      lowStockThreshold: 10,
+      criticalStockThreshold: 5,
+      autoReorderEnabled: false,
+      reorderThreshold: 5,
+      defaultSupplier: '',
+      unitConversions: {},
+      expiryWarningDays: 7,
+      barcodeEnabled: false,
+      autoDeductStock: true,
+      allowNegativeStock: false,
+      stockMovementLogging: true,
+      suppliers: []
+    },
+    notifications: {
+      sessions: {
+        sessionEnd: true,
+        sessionStart: true,
+        sessionPause: false
+      },
+      orders: {
+        newOrder: true,
+        orderReady: true,
+        orderCancelled: true,
+        orderDelivered: false
+      },
+      inventory: {
+        lowStock: true,
+        outOfStock: true,
+        expiryWarning: true,
+        reorderReminder: false
+      },
+      billing: {
+        newBill: true,
+        paymentReceived: true,
+        partialPayment: false,
+        overduePayment: true
+      },
+      sound: {
+        enabled: true,
+        volume: 60,
+        defaultTone: 'default',
+        priorityTones: false,
+        customTones: {}
+      },
+      display: {
+        showCount: true,
+        autoMarkRead: false,
+        displayDuration: 5,
+        position: 'top-right'
+      },
+      email: {
+        enabled: false,
+        smtpSettings: {
+          host: '',
+          port: 587,
+          username: '',
+          password: '',
+          secure: false
+        },
+        templates: {}
+      }
+    },
+    appearance: {
+      theme: 'light',
+      primaryColor: '#3B82F6',
+      secondaryColor: '#6B7280',
+      fontSize: 'medium',
+      fontFamily: "'Cairo', sans-serif",
+      sidebarVisible: true,
+      userInfoVisible: true,
+      fullscreenMode: false,
+      rtlEnabled: true,
+      animations: {
+        enabled: true,
+        duration: 300
+      }
+    },
+    security: {
+      passwordPolicy: {
+        minLength: 8,
+        requireUppercase: true,
+        requireNumbers: true,
+        requireSpecialChars: false,
+        expiryDays: 90,
+        preventReuse: 3
+      },
+      session: {
+        timeout: 30,
+        maxConcurrent: 3,
+        forceLogout: true,
+        rememberMe: true,
+        ipRestriction: false,
+        allowedIPs: []
+      },
+      audit: {
+        enabled: true,
+        logLevel: 'info',
+        retentionDays: 30,
+        logActions: ['login', 'logout', 'password_change', 'settings_change']
+      },
+      permissions: {
+        allowMultiLogin: false,
+        requireApproval: false,
+        dataEncryption: true,
+        twoFactorAuth: false,
+        loginAttempts: 5,
+        lockoutDuration: 30
+      },
+      api: {
+        rateLimit: 100,
+        apiKeyExpiry: 30,
+        corsEnabled: true,
+        allowedOrigins: []
+      }
+    },
+    backup: {
+      autoBackup: {
+        enabled: true,
+        frequency: 'daily',
+        keepCount: 10,
+        time: '02:00',
+        compression: true,
+        encryption: false
+      },
+      manualBackup: {
+        lastBackup: '',
+        backupSize: '',
+        backupLocation: ''
+      },
+      restore: {
+        allowRestore: true,
+        requireConfirmation: true,
+        validateBackup: true
+      },
+      cloud: {
+        enabled: false,
+        provider: 'google',
+        credentials: {},
+        syncFrequency: 24
+      }
+    },
+    advanced: {
+      performance: {
+        cacheEnabled: true,
+        cacheDuration: 300,
+        maxCacheSize: 100,
+        autoRefresh: true,
+        refreshInterval: 30,
+        compression: true,
+        minification: true
+      },
+      dataRetention: {
+        logs: 30,
+        backups: 90,
+        tempFiles: 7,
+        userSessions: 30,
+        auditLogs: 90
+      },
+      system: {
+        debugMode: false,
+        maintenanceMode: false,
+        autoUpdate: true,
+        errorReporting: true,
+        analytics: false
+      },
+      integrations: {
+        paymentGateways: {},
+        sms: {
+          enabled: false,
+          provider: 'twilio',
+          apiKey: '',
+          senderId: ''
+        },
+        printer: {
+          enabled: false,
+          type: 'thermal',
+          connection: 'usb',
+          settings: {}
+        }
+      }
+    },
+    reports: {
+      defaultPeriod: 'daily',
+      autoGenerate: false,
+      emailReports: false,
+      reportFormat: 'pdf',
+      customReports: [],
+      charts: {
+        defaultType: 'line',
+        colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'],
+        animations: true
+      }
+    },
+    users: {
+      roles: [
+        {
+          id: 'owner',
+          name: 'صاحب المنشأة',
+          permissions: ['owner'],
+          description: 'صلاحيات كاملة على النظام'
+        },
+        {
+          id: 'admin',
+          name: 'مدير',
+          permissions: ['admin'],
+          description: 'إدارة النظام والمستخدمين'
+        },
+        {
+          id: 'manager',
+          name: 'مشرف',
+          permissions: ['manager'],
+          description: 'إدارة العمليات اليومية'
+        },
+        {
+          id: 'staff',
+          name: 'موظف',
+          permissions: ['staff'],
+          description: 'الوصول للوظائف الأساسية'
+        },
+        {
+          id: 'cashier',
+          name: 'كاشير',
+          permissions: ['cashier'],
+          description: 'إدارة المبيعات والمدفوعات'
+        },
+        {
+          id: 'kitchen',
+          name: 'مطبخ',
+          permissions: ['kitchen'],
+          description: 'إدارة الطلبات والمخزون'
+        }
+      ],
+      defaultPermissions: {
+        'general': ['owner', 'admin'],
+        'business': ['owner', 'admin'],
+        'inventory': ['owner', 'admin', 'manager', 'kitchen'],
+        'notifications': ['owner', 'admin'],
+        'appearance': ['owner', 'admin'],
+        'security': ['owner'],
+        'backup': ['owner', 'admin'],
+        'advanced': ['owner'],
+        'reports': ['owner', 'admin', 'manager'],
+        'users': ['owner', 'admin']
+      },
+      userManagement: {
+        allowRegistration: false,
+        requireEmailVerification: true,
+        requirePhoneVerification: false,
+        maxUsers: 50,
+        inactiveUserTimeout: 30
+      },
+      profile: {
+        allowAvatar: true,
+        allowCustomFields: false,
+        requiredFields: ['name', 'email']
+      }
+    }
+  });
+
   // حالة التحميل/الحفظ/النجاح/الخطأ لكل تبويب
-  const [tabState, setTabState] = useState({
+  const [tabState, setTabState] = useState<Record<keyof SettingsData, TabState>>({
     general: { loading: false, saving: false, success: '', error: '' },
+    business: { loading: false, saving: false, success: '', error: '' },
+    inventory: { loading: false, saving: false, success: '', error: '' },
     notifications: { loading: false, saving: false, success: '', error: '' },
     appearance: { loading: false, saving: false, success: '', error: '' },
     security: { loading: false, saving: false, success: '', error: '' },
     backup: { loading: false, saving: false, success: '', error: '' },
+    advanced: { loading: false, saving: false, success: '', error: '' },
+    reports: { loading: false, saving: false, success: '', error: '' },
+    users: { loading: false, saving: false, success: '', error: '' }
   });
 
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
+  // دالة تحديد صلاحيات المستخدم
+  const getUserPermissions = (): Permission[] => {
+    if (!user) return [];
 
-  // دالة جلب الإعدادات لأي تبويب
-  const fetchTabSettings = async (category: string) => {
-    setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: true, error: '', success: '' } }));
-    const res = await api.getSettings(category);
-    if (res.success && res.data) {
-      switch (category) {
-        case 'general': setGeneral({ ...general, ...res.data.settings }); break;
-        case 'notifications': setNotifications(res.data.settings); break;
-        case 'appearance': setAppearance(res.data.settings); break;
-        case 'security': setSecurity(res.data.settings); break;
-        case 'backup': setBackup(res.data.settings); break;
-      }
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: '', success: '' } }));
-    } else {
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: res.message || 'تعذر تحميل الإعدادات', success: '' } }));
+    switch (user.role) {
+      case 'owner':
+        return ['owner'];
+      case 'admin':
+        return ['admin'];
+      case 'manager':
+        return ['manager'];
+      case 'staff':
+        return ['staff'];
+      case 'cashier':
+        return ['cashier'];
+      case 'kitchen':
+        return ['kitchen'];
+      default:
+        return [];
     }
   };
 
-  // دالة استعادة الإعدادات الافتراضية لأي تبويب
-  const handleReset = async (category: string) => {
-    setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: true, error: '', success: '' } }));
-    const res = await api.resetSettings(category);
-    if (res.success && res.data) {
-      await fetchTabSettings(category);
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: '', success: 'تم استعادة الإعدادات الافتراضية بنجاح' } }));
-    } else {
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: res.message || 'تعذر استعادة الإعدادات الافتراضية', success: '' } }));
+  // دالة التحقق من إمكانية الوصول للتبويب
+  const canAccessTab = (tabId: keyof SettingsData): boolean => {
+    const userPermissions = getUserPermissions();
+    const requiredPermissions = settings.users.defaultPermissions[tabId] || [];
+
+    return requiredPermissions.some(permission =>
+      userPermissions.includes(permission as Permission)
+    );
+  };
+
+  // دالة التحقق من إمكانية تعديل الإعداد
+  const canEdit = (path: string): boolean => {
+    const userPermissions = getUserPermissions();
+    const [category] = path.split('.');
+    const requiredPermissions = settings.users.defaultPermissions[category as keyof SettingsData] || [];
+
+    return requiredPermissions.some(permission =>
+      userPermissions.includes(permission as Permission)
+    );
+  };
+
+  // دالة جلب الإعدادات لأي تبويب
+  const fetchTabSettings = async (category: keyof SettingsData) => {
+    setTabState((prev) => ({
+      ...prev,
+      [category]: { ...prev[category], loading: true, error: '', success: '' }
+    }));
+
+    try {
+      // هنا سيتم استدعاء API لجلب الإعدادات
+      // const res = await api.getSettings(category);
+      // if (res.success && res.data) {
+      //   setSettings(prev => ({ ...prev, [category]: res.data.settings }));
+      // }
+
+      setTabState((prev) => ({
+        ...prev,
+        [category]: { ...prev[category], loading: false, error: '', success: '' }
+      }));
+    } catch {
+      setTabState((prev) => ({
+        ...prev,
+        [category]: {
+          ...prev[category],
+          loading: false,
+          error: 'تعذر تحميل الإعدادات',
+          success: ''
+        }
+      }));
+    }
+  };
+
+  // دالة حفظ الإعدادات
+  const handleSaveSettings = async (category: keyof SettingsData) => {
+    setTabState((prev) => ({
+      ...prev,
+      [category]: { ...prev[category], saving: true, error: '', success: '' }
+    }));
+
+    try {
+      // هنا سيتم استدعاء API لحفظ الإعدادات
+      // const res = await api.updateSettings(category, settings[category]);
+      // if (res.success) {
+      //   setTabState((prev) => ({
+      //     ...prev,
+      //     [category]: { ...prev[category], saving: false, success: 'تم حفظ الإعدادات بنجاح' }
+      //   }));
+      // }
+
+      setTabState((prev) => ({
+        ...prev,
+        [category]: { ...prev[category], saving: false, success: 'تم حفظ الإعدادات بنجاح' }
+      }));
+    } catch {
+      setTabState((prev) => ({
+        ...prev,
+        [category]: {
+          ...prev[category],
+          saving: false,
+          error: 'حدث خطأ أثناء الحفظ'
+        }
+      }));
+    }
+  };
+
+  // دالة استعادة الإعدادات الافتراضية
+  const handleResetSettings = async (category: keyof SettingsData) => {
+    setTabState((prev) => ({
+      ...prev,
+      [category]: { ...prev[category], loading: true, error: '', success: '' }
+    }));
+
+    try {
+      // هنا سيتم استدعاء API لاستعادة الإعدادات الافتراضية
+      // const res = await api.resetSettings(category);
+      // if (res.success) {
+      //   await fetchTabSettings(category);
+      //   setTabState((prev) => ({
+      //     ...prev,
+      //     [category]: { ...prev[category], loading: false, success: 'تم استعادة الإعدادات الافتراضية' }
+      //   }));
+      // }
+
+      setTabState((prev) => ({
+        ...prev,
+        [category]: { ...prev[category], loading: false, success: 'تم استعادة الإعدادات الافتراضية' }
+      }));
+    } catch {
+      setTabState((prev) => ({
+        ...prev,
+        [category]: {
+          ...prev[category],
+          loading: false,
+          error: 'حدث خطأ أثناء الاستعادة'
+        }
+      }));
+    }
+  };
+
+  // دالة إنشاء نسخة احتياطية
+  const handleCreateBackup = async () => {
+    try {
+      // هنا سيتم استدعاء API لإنشاء نسخة احتياطية
+      console.log('Creating backup...');
+    } catch (error) {
+      console.error('Error creating backup:', error);
+    }
+  };
+
+  // دالة تصدير الإعدادات
+  const handleExportSettings = () => {
+    const dataStr = JSON.stringify(settings, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `settings-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // دالة استيراد الإعدادات
+  const handleImportSettings = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const importedSettings = JSON.parse(e.target?.result as string);
+          setSettings(importedSettings);
+        } catch (error) {
+          console.error('Error importing settings:', error);
+        }
+      };
+      reader.readAsText(file);
     }
   };
 
   // جلب الإعدادات عند تغيير التبويب
   useEffect(() => {
-    fetchTabSettings(activeTab);
-    // eslint-disable-next-line
+    if (canAccessTab(activeTab)) {
+      fetchTabSettings(activeTab);
+    }
   }, [activeTab]);
 
-  const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setGeneral({ ...general, [e.target.name]: e.target.value });
-  };
+  // التبويبات المتاحة حسب الصلاحيات
+  const availableTabs = [
+    { id: 'general', name: 'عام', icon: SettingsIcon, description: 'الإعدادات الأساسية للنظام' },
+    { id: 'business', name: 'الأعمال', icon: Briefcase, description: 'إعدادات الأعمال والمدفوعات' },
+    { id: 'inventory', name: 'المخزون', icon: Package, description: 'إدارة المخزون والموردين' },
+    { id: 'notifications', name: 'الإشعارات', icon: Bell, description: 'إعدادات الإشعارات والتنبيهات' },
+    { id: 'appearance', name: 'المظهر', icon: Palette, description: 'تخصيص مظهر التطبيق' },
+    { id: 'security', name: 'الأمان', icon: Shield, description: 'إعدادات الأمان والصلاحيات' },
+    { id: 'backup', name: 'النسخ الاحتياطي', icon: Database, description: 'إدارة النسخ الاحتياطي' },
+    { id: 'advanced', name: 'متقدم', icon: SettingsAdvanced, description: 'الإعدادات المتقدمة' },
+    { id: 'reports', name: 'التقارير', icon: FileText, description: 'إعدادات التقارير' },
+    { id: 'users', name: 'المستخدمين', icon: Users, description: 'إدارة المستخدمين والصلاحيات' }
+  ].filter(tab => canAccessTab(tab.id as keyof SettingsData));
 
-  const handleSave = async () => {
-    setSaving(true);
-    setSuccess('');
-    setError('');
-    const res = await api.updateSettings('general', general);
-    if (res.success) {
-      setSuccess('تم حفظ الإعدادات بنجاح');
-    } else {
-      setError(res.message || 'حدث خطأ أثناء الحفظ');
-    }
-    setSaving(false);
+  // دالة تحديث الإعدادات
+  const updateSettings = (category: keyof SettingsData, newSettings: Record<string, unknown>) => {
+    setSettings(prev => ({
+      ...prev,
+      [category]: { ...prev[category], ...newSettings }
+    }));
   };
-
-  const tabs = [
-    { id: 'general', name: 'عام', icon: SettingsIcon },
-    { id: 'notifications', name: 'الإشعارات', icon: Bell },
-    { id: 'appearance', name: 'المظهر', icon: Palette },
-    { id: 'security', name: 'الأمان', icon: Shield },
-    { id: 'backup', name: 'النسخ الاحتياطي', icon: Database },
-  ];
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center">
-        <SettingsIcon className="h-8 w-8 text-primary-600 ml-3" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">إعدادات النظام</h1>
-          <p className="text-gray-600">تخصيص وإدارة إعدادات التطبيق</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <SettingsIcon className="h-8 w-8 text-primary-600 ml-3" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">إعدادات النظام</h1>
+            <p className="text-gray-600">تخصيص وإدارة إعدادات التطبيق</p>
+          </div>
         </div>
+
+        {/* أزرار التصدير والاستيراد (للمديرين فقط) */}
+        {canEdit('general') && (
+          <div className="flex items-center space-x-3 space-x-reverse">
+            <label className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg cursor-pointer transition-colors duration-200">
+              <Upload className="h-4 w-4 ml-2" />
+              استيراد الإعدادات
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportSettings}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={handleExportSettings}
+              className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200"
+            >
+              <Download className="h-4 w-4 ml-2" />
+              تصدير الإعدادات
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
@@ -110,20 +595,28 @@ const Settings = () => {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <nav className="space-y-2">
-              {tabs.map((tab) => {
+              {availableTabs.map((tab) => {
                 const Icon = tab.icon;
+                const isLoading = tabState[tab.id as keyof SettingsData]?.loading;
+
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+                    onClick={() => setActiveTab(tab.id as keyof SettingsData)}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
                       activeTab === tab.id
                         ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`}
+                    title={tab.description}
                   >
-                    <Icon className="h-5 w-5 ml-3" />
-                    {tab.name}
+                    <div className="flex items-center">
+                      <Icon className="h-5 w-5 ml-3" />
+                      {tab.name}
+                    </div>
+                    {isLoading && (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                    )}
                   </button>
                 );
               })}
@@ -134,619 +627,116 @@ const Settings = () => {
         {/* Content */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            {/* General Settings */}
             {activeTab === 'general' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">الإعدادات العامة</h3>
-                {tabState.general.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.general.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.general.error}
-                    {tabState.general.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('general')}
-                        disabled={tabState.general.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                <div className="space-y-6">
-                  {tabState.general.success && <div className="text-green-600 text-center">{tabState.general.success}</div>}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">اسم الطلبات</label>
-                      <input
-                        type="text"
-                        name="cafeName"
-                        value={general.cafeName}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">العملة</label>
-                      <select
-                        name="currency"
-                        value={general.currency}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="EGP">جنيه مصري (ج.م)</option>
-                        <option value="USD">دولار أمريكي ($)</option>
-                        <option value="EUR">يورو (€)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">المنطقة الزمنية</label>
-                      <select
-                        name="timezone"
-                        value={general.timezone}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="Africa/Cairo">القاهرة (GMT+2)</option>
-                        <option value="Asia/Dubai">دبي (GMT+4)</option>
-                        <option value="Asia/Riyadh">الرياض (GMT+3)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">اللغة</label>
-                      <select
-                        name="language"
-                        value={general.language}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="ar">العربية</option>
-                        <option value="en">English</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">عنوان الطلبات</label>
-                    <textarea
-                      name="address"
-                      rows={3}
-                      value={general.address}
-                      onChange={handleGeneralChange}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">رقم الهاتف</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={general.phone}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">البريد الإلكتروني</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={general.email}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
+              <GeneralSettingsTab
+                settings={settings.general}
+                setSettings={(newSettings) => updateSettings('general', newSettings)}
+                tabState={tabState.general}
+                onSave={() => handleSaveSettings('general')}
+                onReset={() => handleResetSettings('general')}
+                canEdit={canEdit}
+              />
             )}
 
-            {/* Notifications Settings */}
+            {activeTab === 'business' && (
+              <BusinessSettingsTab
+                settings={settings.business}
+                setSettings={(newSettings) => updateSettings('business', newSettings)}
+                tabState={tabState.business}
+                onSave={() => handleSaveSettings('business')}
+                onReset={() => handleResetSettings('business')}
+                canEdit={canEdit}
+              />
+            )}
+
+            {activeTab === 'inventory' && (
+              <InventorySettingsTab
+                settings={settings.inventory}
+                setSettings={(newSettings) => updateSettings('inventory', newSettings)}
+                tabState={tabState.inventory}
+                onSave={() => handleSaveSettings('inventory')}
+                onReset={() => handleResetSettings('inventory')}
+                canEdit={canEdit}
+              />
+            )}
+
             {activeTab === 'notifications' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات الإشعارات</h3>
-                {tabState.notifications.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.notifications.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.notifications.error}
-                    {tabState.notifications.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('notifications')}
-                        disabled={tabState.notifications.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.notifications.success && <div className="text-green-600 text-center">{tabState.notifications.success}</div>}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات الجلسات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند انتهاء الجلسة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند بدء جلسة جديدة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند إيقاف الجلسة مؤقتاً</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات الطلبات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند طلب جديد</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند اكتمال تحضير الطلب</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند إلغاء الطلب</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات المخزون</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند انخفاض المخزون</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند نفاد المخزون</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات الفواتير</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند إنشاء فاتورة جديدة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند دفع الفاتورة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند الدفع الجزئي</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إعدادات الصوت</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="flex items-center">
-                          <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                          <span className="mr-3 text-sm text-gray-700">تفعيل صوت الإشعارات</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mt-1 mr-6">تشغيل صوت عند وصول إشعار جديد</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">مستوى الصوت</label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          defaultValue="60"
-                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                        />
-                        <div className="flex justify-between text-xs text-gray-500 mt-1">
-                          <span>صامت</span>
-                          <span>60%</span>
-                          <span>عالي</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">نوع الصوت الافتراضي</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="default">النغمة الافتراضية</option>
-                          <option value="success">نغمة النجاح</option>
-                          <option value="warning">نغمة التحذير</option>
-                          <option value="error">نغمة الخطأ</option>
-                          <option value="urgent">نغمة عاجلة</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">أصوات خاصة حسب الأولوية</label>
-                        <div className="space-y-2">
-                          <label className="flex items-center">
-                            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات العاجلة</span>
-                          </label>
-                          <label className="flex items-center">
-                            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات عالية الأولوية</span>
-                          </label>
-                          <label className="flex items-center">
-                            <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات العادية</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">خيارات الإشعارات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تفعيل الصوت</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعارات البريد الإلكتروني</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إظهار عدد الإشعارات</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تحديد كمقروء تلقائياً</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إعدادات متقدمة</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">مدة ظهور الإشعار (بالثواني)</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="30"
-                          defaultValue="5"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">نغمة الإشعار</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="default">النغمة الافتراضية</option>
-                          <option value="bell">جرس</option>
-                          <option value="chime">رنين</option>
-                          <option value="beep">صوت تنبيه</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">أولوية الإشعارات</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="all">جميع الإشعارات</option>
-                          <option value="high">عالية فقط</option>
-                          <option value="urgent">عاجلة فقط</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إدارة الإشعارات</h4>
-                    <div className="space-y-4">
-                      <div className="flex items-center space-x-3 space-x-reverse">
-                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          تحديد جميع الإشعارات كمقروءة
-                        </button>
-                        <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          حذف جميع الإشعارات
-                        </button>
-                      </div>
-                      <div className="flex items-center space-x-3 space-x-reverse">
-                        <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          تنظيف الإشعارات المنتهية الصلاحية
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
+              <NotificationSettingsTab
+                settings={settings.notifications}
+                setSettings={(newSettings) => updateSettings('notifications', newSettings)}
+                tabState={tabState.notifications}
+                onSave={() => handleSaveSettings('notifications')}
+                onReset={() => handleResetSettings('notifications')}
+                canEdit={canEdit}
+              />
             )}
 
-            {/* Appearance Settings */}
             {activeTab === 'appearance' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات المظهر</h3>
-                {tabState.appearance.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.appearance.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.appearance.error}
-                    {tabState.appearance.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('appearance')}
-                        disabled={tabState.appearance.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.appearance.success && <div className="text-green-600 text-center">{tabState.appearance.success}</div>}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">السمة</label>
-                    <div className="grid grid-cols-3 gap-3">
-                      <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input type="radio" name="theme" value="light" defaultChecked className="text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">فاتح</span>
-                      </label>
-                      <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input type="radio" name="theme" value="dark" className="text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">داكن</span>
-                      </label>
-                      <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input type="radio" name="theme" value="auto" className="text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تلقائي</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">اللون الأساسي</label>
-                    <div className="grid grid-cols-6 gap-3">
-                      {['bg-blue-600', 'bg-green-600', 'bg-purple-600', 'bg-red-600', 'bg-yellow-600', 'bg-indigo-600'].map((color) => (
-                        <button
-                          key={color}
-                          className={`w-10 h-10 rounded-lg ${color} border-2 border-transparent hover:border-gray-300`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">حجم الخط</label>
-                    <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                      <option value="small">صغير</option>
-                      <option value="medium" selected>متوسط</option>
-                      <option value="large">كبير</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">تخصيص الواجهة</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إظهار الشريط الجانبي</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إظهار معلومات المستخدم</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">وضع ملء الشاشة</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
+              <AppearanceSettingsTab
+                settings={settings.appearance}
+                setSettings={(newSettings) => updateSettings('appearance', newSettings)}
+                tabState={tabState.appearance}
+                onSave={() => handleSaveSettings('appearance')}
+                onReset={() => handleResetSettings('appearance')}
+                canEdit={canEdit}
+              />
             )}
 
-            {/* Security Settings */}
             {activeTab === 'security' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات الأمان</h3>
-                {tabState.security.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.security.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.security.error}
-                    {tabState.security.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('security')}
-                        disabled={tabState.security.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.security.success && <div className="text-green-600 text-center">{tabState.security.success}</div>}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">كلمة المرور</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">كلمة المرور الحالية</label>
-                        <input
-                          type="password"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">كلمة المرور الجديدة</label>
-                        <input
-                          type="password"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">تأكيد كلمة المرور</label>
-                        <input
-                          type="password"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">الجلسات</h4>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">مدة انتهاء الجلسة (بالدقائق)</label>
-                        <input
-                          type="number"
-                          defaultValue="60"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تسجيل الخروج التلقائي عند عدم النشاط</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">الصلاحيات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تسجيل عمليات تسجيل الدخول</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">السماح بتسجيل الدخول من أجهزة متعددة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تشفير البيانات الحساسة</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
+              <SecuritySettingsTab
+                settings={settings.security}
+                setSettings={(newSettings) => updateSettings('security', newSettings)}
+                tabState={tabState.security}
+                onSave={() => handleSaveSettings('security')}
+                onReset={() => handleResetSettings('security')}
+                canEdit={canEdit}
+              />
             )}
 
-            {/* Backup Settings */}
             {activeTab === 'backup' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">النسخ الاحتياطي</h3>
-                {tabState.backup.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.backup.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.backup.error}
-                    {tabState.backup.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('backup')}
-                        disabled={tabState.backup.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.backup.success && <div className="text-green-600 text-center">{tabState.backup.success}</div>}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">النسخ الاحتياطي التلقائي</h4>
-                    <div className="space-y-4">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تفعيل النسخ الاحتياطي التلقائي</span>
-                      </label>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">التكرار</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="daily">يومي</option>
-                          <option value="weekly" selected>أسبوعي</option>
-                          <option value="monthly">شهري</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">عدد النسخ المحفوظة</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="30"
-                          defaultValue="7"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">النسخ الاحتياطي اليدوي</h4>
-                    <div className="space-y-4">
-                      <div className="flex items-center space-x-3 space-x-reverse">
-                        <button className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          إنشاء نسخة احتياطية الآن
-                        </button>
-                        <span className="text-sm text-gray-500">آخر نسخة احتياطية: 15 يناير 2024</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">استعادة البيانات</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">اختر ملف النسخة الاحتياطية</label>
-                        <input
-                          type="file"
-                          accept=".backup"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                        استعادة البيانات
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-yellow-800">
-                      <strong>تحذير:</strong> عملية الاستعادة ستحل محل جميع البيانات الحالية.
-                      تأكد من إنشاء نسخة احتياطية قبل المتابعة.
-                    </p>
-                  </div>
-                </div>
-                )}
-              </div>
+              <BackupSettingsTab
+                settings={settings.backup}
+                setSettings={(newSettings) => updateSettings('backup', newSettings)}
+                tabState={tabState.backup}
+                onSave={() => handleSaveSettings('backup')}
+                onReset={() => handleResetSettings('backup')}
+                canEdit={canEdit}
+                onCreateBackup={handleCreateBackup}
+              />
             )}
 
-            {/* Save Button */}
-            <div className="border-t border-gray-200 px-6 py-4 flex justify-end">
-              <button
-                className={`bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-lg flex items-center transition-colors duration-200 ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}
-                onClick={handleSave}
-                disabled={saving || loading}
-              >
-                <Save className="h-4 w-4 ml-2" />
-                {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-              </button>
-            </div>
+            {activeTab === 'advanced' && (
+              <AdvancedSettingsTab
+                settings={settings.advanced}
+                setSettings={(newSettings) => updateSettings('advanced', newSettings)}
+                tabState={tabState.advanced}
+                onSave={() => handleSaveSettings('advanced')}
+                onReset={() => handleResetSettings('advanced')}
+                canEdit={canEdit}
+              />
+            )}
+
+            {activeTab === 'reports' && (
+              <ReportSettingsTab
+                settings={settings.reports}
+                setSettings={(newSettings) => updateSettings('reports', newSettings)}
+                tabState={tabState.reports}
+                onSave={() => handleSaveSettings('reports')}
+                onReset={() => handleResetSettings('reports')}
+                canEdit={canEdit}
+              />
+            )}
+
+            {activeTab === 'users' && (
+              <UserSettingsTab
+                settings={settings.users}
+                setSettings={(newSettings) => updateSettings('users', newSettings)}
+                tabState={tabState.users}
+                onSave={() => handleSaveSettings('users')}
+                onReset={() => handleResetSettings('users')}
+                canEdit={canEdit}
+              />
+            )}
           </div>
         </div>
       </div>

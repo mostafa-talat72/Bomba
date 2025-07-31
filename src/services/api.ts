@@ -14,7 +14,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'staff' | 'cashier' | 'kitchen';
+  role: 'owner' | 'admin' | 'manager' | 'staff' | 'cashier' | 'kitchen';
   permissions: string[];
   status: 'active' | 'inactive' | 'suspended';
   lastLogin?: Date;
