@@ -888,7 +888,7 @@ export const emailTemplates = {
               <div class="section-title">📈 إحصائيات الأجهزة</div>
               <div class="device-stats">
                 ${data.deviceStats
-                    .map(
+              .map(
                         (device) => `
                   <div class="device-card">
                     <div class="device-name">${
@@ -906,9 +906,9 @@ export const emailTemplates = {
                         device.avgDuration / (1000 * 60)
                     )} دقيقة متوسط</div>
                   </div>
-                `
-                    )
-                    .join("")}
+          `
+              )
+              .join("")}
               </div>
             </div>
 
@@ -944,7 +944,7 @@ export const emailTemplates = {
               تم إنشاؤه في ${new Date().toLocaleTimeString("ar-EG")}
             </div>
           </div>
-        </div>
+      </div>
       </body>
       </html>
     `,

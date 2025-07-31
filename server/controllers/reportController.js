@@ -30,7 +30,7 @@ export const getDashboardStats = async (req, res) => {
             {
                 $group: {
                     _id: null,
-                    totalRevenue: { $sum: "$paid" },
+                    totalRevenue: { $sum: "$total" }, // تغيير من paid إلى total
                     totalBills: { $sum: 1 },
                     avgBillValue: { $avg: "$total" },
                 },
@@ -262,7 +262,7 @@ export const getSalesReport = async (req, res) => {
             {
                 $group: {
                     _id: groupFormat,
-                    totalSales: { $sum: "$paid" },
+                    totalSales: { $sum: "$total" }, // تغيير من paid إلى total
                     billCount: { $sum: 1 },
                     avgBillValue: { $avg: "$total" },
                 },
@@ -489,7 +489,7 @@ export const getFinancialReport = async (req, res) => {
         const { period = "month" } = req.query;
         const { startDate, endDate } = getDateRange(period);
 
-        // Revenue
+        // Revenue - استخدام total بدلاً من paid للحصول على الإيرادات الفعلية
         const revenue = await Bill.aggregate([
             {
                 $match: {
@@ -501,18 +501,19 @@ export const getFinancialReport = async (req, res) => {
             {
                 $group: {
                     _id: null,
-                    totalRevenue: { $sum: "$paid" },
+                    totalRevenue: { $sum: "$total" }, // تغيير من paid إلى total
                     totalBills: { $sum: 1 },
+                    totalPaid: { $sum: "$paid" }, // إضافة المدفوع فعلياً
                 },
             },
         ]);
 
-        // Costs
+        // Costs - إضافة جميع التكاليف المدفوعة والمعلقة
         const costs = await Cost.aggregate([
             {
                 $match: {
                     date: { $gte: startDate, $lte: endDate },
-                    status: "paid",
+                    status: { $in: ["paid", "partially_paid", "pending"] }, // إضافة فلتر للحالة
                     organization: req.user.organization,
                 },
             },
@@ -520,19 +521,32 @@ export const getFinancialReport = async (req, res) => {
                 $group: {
                     _id: "$category",
                     totalAmount: { $sum: "$amount" },
+                    paidAmount: { $sum: "$paidAmount" }, // إضافة المدفوع فعلياً
                     count: { $sum: 1 },
                 },
             },
         ]);
 
-        const totalCosts = costs.reduce(
-            (sum, cost) => sum + cost.totalAmount,
+        // حساب التكاليف الإجمالية (المدفوعة فقط)
+        const totalCostsAmount = costs.reduce(
+            (sum, cost) => sum + cost.paidAmount,
             0
         );
+
+        // حساب التكاليف المعلقة
+        const pendingCosts = costs.reduce(
+            (sum, cost) => sum + (cost.totalAmount - cost.paidAmount),
+            0
+        );
+
         const totalRevenue = revenue[0]?.totalRevenue || 0;
-        const netProfit = totalRevenue - totalCosts;
+        const totalPaid = revenue[0]?.totalPaid || 0;
+        const netProfit = totalPaid - totalCostsAmount; // استخدام المدفوع فعلياً
+
+        // حساب هامش الربح بناءً على الإيرادات الفعلية
+        const actualRevenue = totalPaid > 0 ? totalPaid : totalRevenue;
         const profitMargin =
-            totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+            actualRevenue > 0 ? (netProfit / actualRevenue) * 100 : 0;
 
         // Monthly comparison
         const previousPeriod = getDateRange(period);
@@ -555,37 +569,63 @@ export const getFinancialReport = async (req, res) => {
             {
                 $group: {
                     _id: null,
-                    totalRevenue: { $sum: "$paid" },
+                    totalRevenue: { $sum: "$total" }, // تغيير من paid إلى total
+                    totalPaid: { $sum: "$paid" },
                 },
             },
         ]);
 
         const revenueGrowth =
-            previousRevenue[0]?.totalRevenue > 0
-                ? ((totalRevenue - previousRevenue[0].totalRevenue) /
-                      previousRevenue[0].totalRevenue) *
+            previousRevenue[0]?.totalPaid > 0
+                ? ((totalPaid - previousRevenue[0].totalPaid) /
+                      previousRevenue[0].totalPaid) *
                   100
                 : 0;
 
+        // حساب عدد المعاملات من مصادر متعددة
+        const totalBills = revenue[0]?.totalBills || 0;
+
+        // حساب عدد الطلبات المكتملة (المرتبطة بالفواتير أو المكتملة)
+        const totalOrders = await Order.countDocuments({
+            createdAt: { $gte: startDate, $lte: endDate },
+            organization: req.user.organization,
+            $or: [
+                { bill: { $exists: true, $ne: null } }, // الطلبات المرتبطة بالفواتير
+                { status: { $in: ["delivered", "ready"] } }, // الطلبات المكتملة
+            ],
+        });
+
+        // إجمالي المعاملات = الفواتير + الطلبات المكتملة
+        const totalTransactions = totalBills + totalOrders;
+
+        const responseData = {
+            period,
+            summary: {
+                totalRevenue,
+                totalPaid,
+                totalCosts: totalCostsAmount,
+                pendingCosts,
+                netProfit,
+                profitMargin,
+                revenueGrowth,
+                totalTransactions, // إضافة عدد المعاملات
+            },
+            revenue: revenue[0] || {
+                totalRevenue: 0,
+                totalPaid: 0,
+                totalBills: 0,
+            },
+            costs,
+            comparison: {
+                currentPeriod: totalPaid,
+                previousPeriod: previousRevenue[0]?.totalPaid || 0,
+                growth: revenueGrowth,
+            },
+        };
+
         res.json({
             success: true,
-            data: {
-                period,
-                summary: {
-                    totalRevenue,
-                    totalCosts,
-                    netProfit,
-                    profitMargin,
-                    revenueGrowth,
-                },
-                revenue: revenue[0] || { totalRevenue: 0, totalBills: 0 },
-                costs,
-                comparison: {
-                    currentPeriod: totalRevenue,
-                    previousPeriod: previousRevenue[0]?.totalRevenue || 0,
-                    growth: revenueGrowth,
-                },
-            },
+            data: responseData,
         });
     } catch (error) {
         res.status(500).json({
@@ -1078,22 +1118,32 @@ const getFinancialReportData = async (organization, startDate, endDate) => {
 
     const costs = await Cost.find({
         date: { $gte: startDate, $lte: endDate },
+        status: { $in: ["paid", "partially_paid", "pending"] }, // إضافة فلتر للحالة
         organization,
     });
 
     const totalRevenue = bills.reduce((sum, bill) => sum + bill.total, 0);
-    const totalCosts = costs.reduce((sum, cost) => sum + cost.amount, 0);
-    const netProfit = totalRevenue - totalCosts;
-    const profitMargin =
-        totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    const totalPaid = bills.reduce((sum, bill) => sum + bill.paid, 0);
+    const totalCosts = costs.reduce((sum, cost) => sum + cost.paidAmount, 0);
+    const pendingCosts = costs.reduce(
+        (sum, cost) => sum + (cost.amount - cost.paidAmount),
+        0
+    );
+    const netProfit = totalPaid - totalCosts; // استخدام المدفوع فعلياً
+    const profitMargin = totalPaid > 0 ? (netProfit / totalPaid) * 100 : 0;
 
     // Costs by category
     const costsByCategory = {};
     costs.forEach((cost) => {
         if (!costsByCategory[cost.category]) {
-            costsByCategory[cost.category] = { amount: 0, count: 0 };
+            costsByCategory[cost.category] = {
+                amount: 0,
+                paidAmount: 0,
+                count: 0,
+            };
         }
         costsByCategory[cost.category].amount += cost.amount;
+        costsByCategory[cost.category].paidAmount += cost.paidAmount;
         costsByCategory[cost.category].count += 1;
     });
 
@@ -1101,16 +1151,55 @@ const getFinancialReportData = async (organization, startDate, endDate) => {
         ([category, data]) => ({
             category,
             amount: data.amount,
-            percentage: totalCosts > 0 ? (data.amount / totalCosts) * 100 : 0,
+            paidAmount: data.paidAmount,
+            percentage:
+                totalCosts > 0 ? (data.paidAmount / totalCosts) * 100 : 0,
         })
     );
 
+    // Monthly comparison (re-adding this logic)
+    const previousPeriod = getDateRange(
+        getPreviousPeriodString(startDate, endDate)
+    ); // Helper to get previous period dates
+    const previousRevenueData = await Bill.aggregate([
+        {
+            $match: {
+                createdAt: {
+                    $gte: previousPeriod.startDate,
+                    $lte: previousPeriod.endDate,
+                },
+                status: { $in: ["partial", "paid"] },
+                organization,
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                totalRevenue: { $sum: "$total" }, // تغيير من paid إلى total
+                totalPaid: { $sum: "$paid" },
+            },
+        },
+    ]);
+    const previousRevenue = previousRevenueData[0]?.totalPaid || 0;
+
+    const revenueGrowth =
+        previousRevenue > 0
+            ? ((totalPaid - previousRevenue) / previousRevenue) * 100
+            : 0;
+
     return {
         totalRevenue,
+        totalPaid,
         totalCosts,
+        pendingCosts,
         netProfit,
         profitMargin,
         costsByCategory: costsBreakdown,
+        comparison: {
+            currentPeriodRevenue: totalPaid,
+            previousPeriodRevenue: previousRevenue,
+            revenueGrowth: revenueGrowth,
+        },
     };
 };
 
@@ -1198,4 +1287,17 @@ const getSessionsReportData = async (organization, startDate, endDate) => {
         avgSessionDuration,
         deviceStats,
     };
+};
+
+// Helper to determine previous period string for getDateRange
+const getPreviousPeriodString = (startDate, endDate) => {
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 1) return "today"; // If period is today
+    if (diffDays <= 7) return "week"; // If period is week
+    if (diffDays <= 30) return "month"; // If period is month
+    if (diffDays <= 90) return "quarter"; // If period is quarter
+    if (diffDays <= 365) return "year"; // If period is year
+    return "month"; // Default to month if unknown
 };

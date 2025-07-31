@@ -694,9 +694,9 @@ const BillView = () => {
 										) : null}
 										{/* إجمالي تكلفة الجلسة - تظهر فقط بعد انتهاء الجلسة */}
 										{session.status !== 'active' && (
-											<div className="flex justify-between items-center mt-2">
-												<span className="text-gray-700 font-medium">إجمالي تكلفة الجلسة:</span>
-												<span className="font-bold text-primary-700">
+										<div className="flex justify-between items-center mt-2">
+											<span className="text-gray-700 font-medium">إجمالي تكلفة الجلسة:</span>
+											<span className="font-bold text-primary-700">
 													{(() => {
 														// حساب التكلفة الإجمالية من البيانات التفصيلية
 														let totalCost = 0;
@@ -727,8 +727,8 @@ const BillView = () => {
 
 														return formatCurrency(totalCost);
 													})()}
-												</span>
-											</div>
+											</span>
+										</div>
 										)}
 										{/* عرض التكلفة الحالية للجلسات النشطة */}
 										{session.status === 'active' && (() => {

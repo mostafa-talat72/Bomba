@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, Calendar, Filter, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target } from 'lucide-react';
+import { TrendingUp, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
+
+interface ReportData {
+  sales: Record<string, unknown> | null;
+  sessions: Record<string, unknown> | null;
+  inventory: Record<string, unknown> | null;
+  financial: Record<string, unknown> | null;
+}
 
 const Reports = () => {
   const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, exportReportToExcel, exportReportToPDF, showNotification } = useApp();
   const [selectedPeriod, setSelectedPeriod] = useState('today');
   const [loading, setLoading] = useState(false);
-  const [reports, setReports] = useState<{
-    sales: any;
-    sessions: any;
-    inventory: any;
-    financial: any;
-  }>({
+  const [reports, setReports] = useState<ReportData>({
     sales: null,
     sessions: null,
     inventory: null,
@@ -40,7 +42,7 @@ const Reports = () => {
         inventory: inventoryReport,
         financial: financialReport
       });
-    } catch (error) {
+    } catch {
       showNotification('خطأ في تحميل التقارير', 'error');
     } finally {
       setLoading(false);
@@ -70,6 +72,77 @@ const Reports = () => {
     };
   };
 
+  // حساب الأرباح الإجمالية
+  const calculateNetProfit = () => {
+    if (!reports.financial) return 0;
+
+    const financial = reports.financial as any;
+    // التعامل مع الهيكل الحالي للبيانات
+    return financial?.profit || financial?.summary?.netProfit || 0;
+  };
+
+  // حساب هامش الربح
+  const calculateProfitMargin = () => {
+    if (!reports.financial) return 0;
+
+    const financial = reports.financial as any;
+
+    // الحصول على البيانات
+    const revenue = financial?.totalRevenue || financial?.summary?.totalRevenue || 0;
+    const paid = financial?.totalPaid || financial?.summary?.totalPaid || 0;
+    const profit = financial?.profit || financial?.summary?.netProfit || 0;
+
+    // حساب هامش الربح بناءً على الإيرادات الفعلية
+    const actualRevenue = paid > 0 ? paid : revenue;
+
+    if (actualRevenue === 0) return 0;
+
+    // هامش الربح = (صافي الربح / الإيرادات) × 100
+    return (profit / actualRevenue) * 100;
+  };
+
+  // حساب عدد المعاملات
+  const calculateTotalTransactions = () => {
+    if (!reports.financial) return 0;
+
+    const financial = reports.financial as any;
+
+    // الحصول على عدد المعاملات من البيانات المالية
+    let totalTransactions = financial?.summary?.totalTransactions ||
+                           financial?.revenue?.totalBills ||
+                           financial?.totalTransactions || 0;
+
+    // إذا لم تكن متوفرة في البيانات المالية، نحسب من البيانات الأخرى
+    if (totalTransactions === 0) {
+      // حساب من بيانات المبيعات
+      const salesData = reports.sales as any;
+      if (salesData?.totalOrders) {
+        totalTransactions = salesData.totalOrders;
+      } else if (salesData?.totalBills) {
+        totalTransactions = salesData.totalBills;
+      }
+    }
+
+    return totalTransactions;
+  };
+
+  // حساب عدد الفواتير فقط
+  const calculateTotalBills = () => {
+    if (!reports.financial) return 0;
+
+    const financial = reports.financial as any;
+
+    return financial?.revenue?.totalBills || 0;
+  };
+
+  // حساب عدد الطلبات فقط
+  const calculateTotalOrders = () => {
+    const totalTransactions = calculateTotalTransactions();
+    const totalBills = calculateTotalBills();
+
+    return Math.max(0, totalTransactions - totalBills);
+  };
+
   // تنسيق الأرقام
   const formatNumber = (num: number) => {
     return formatDecimal(num);
@@ -94,7 +167,7 @@ const Reports = () => {
   const handleExportExcel = async (reportType: string) => {
     try {
       await exportReportToExcel(reportType, selectedPeriod);
-    } catch (error) {
+    } catch {
       showNotification('فشل في تصدير التقرير', 'error');
     }
   };
@@ -102,7 +175,7 @@ const Reports = () => {
   const handleExportPDF = async (reportType: string) => {
     try {
       await exportReportToPDF(reportType, selectedPeriod);
-    } catch (error) {
+    } catch {
       showNotification('فشل في تصدير التقرير', 'error');
     }
   };
@@ -358,25 +431,25 @@ const Reports = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <div className="text-2xl font-bold text-green-600">
-                {formatCurrency((reports.financial as any)?.grossProfit || 0)}
+                {formatCurrency(calculateNetProfit())}
               </div>
               <div className="text-sm text-gray-600">إجمالي الربح</div>
             </div>
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <div className="text-2xl font-bold text-blue-600">
-                {formatCurrency((reports.financial as any)?.totalCosts || 0)}
+                {formatCurrency((reports.financial as any)?.totalCosts || (reports.financial as any)?.summary?.totalCosts || 0)}
               </div>
               <div className="text-sm text-gray-600">إجمالي التكاليف</div>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
               <div className="text-2xl font-bold text-purple-600">
-                {formatPercentage((reports.financial as any)?.profitMargin || 0, 100)}
+                {formatDecimal(calculateProfitMargin())}%
               </div>
               <div className="text-sm text-gray-600">هامش الربح</div>
             </div>
             <div className="text-center p-4 bg-orange-50 rounded-lg">
               <div className="text-2xl font-bold text-orange-600">
-                {formatNumber((reports.financial as any)?.totalTransactions || 0)}
+                {formatNumber(calculateTotalTransactions())}
               </div>
               <div className="text-sm text-gray-600">عدد المعاملات</div>
             </div>
