@@ -289,7 +289,6 @@ class ApiClient {
           Authorization: `Bearer ${this.getToken()}`,
         };
       }
-
       const response = await fetch(url, config);
 
       if (!response.ok && response.status === 0) {
@@ -303,7 +302,8 @@ class ApiClient {
       try {
         const text = await response.text();
         data = text ? JSON.parse(text) : {};
-      } catch {
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
         return {
           success: false,
           message: 'خطأ في تحليل البيانات المستلمة من الخادم'
@@ -359,23 +359,27 @@ class ApiClient {
             };
           }
         }
+
+        // إعادة رسالة الخطأ من الخادم إذا كانت موجودة
         return {
           success: false,
           message: data.message || `خطأ ${response.status}: ${response.statusText}`
         };
       }
 
-      return data;
-    } catch (error: unknown) {
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        return {
-          success: false,
-          message: 'خطأ في الاتصال بالخادم، تأكد من اتصالك بالإنترنت'
-        };
-      }
+
+      return {
+        success: true,
+        data: data.data || data,
+        message: data.message,
+        count: data.count,
+        total: data.total
+      };
+    } catch (error) {
+      console.error('Error in request:', error);
       return {
         success: false,
-        message: error instanceof Error ? error.message : 'خطأ في الاتصال بالخادم'
+        message: 'حدث خطأ في الاتصال بالخادم'
       };
     }
   }
@@ -750,9 +754,18 @@ class ApiClient {
         method: 'PATCH',
         body: JSON.stringify(updates)
       });
+
+      if (response.success && response.data) {
+        response.data = this.normalizeData(response.data);
+      }
+
       return response;
-    } catch (error: unknown) {
-      throw new Error(error instanceof Error ? error.message : 'فشل في تحديث الطلب');
+    } catch (error) {
+      console.error('Error in updateOrder:', error);
+      return {
+        success: false,
+        message: 'حدث خطأ أثناء تحديث الطلب'
+      };
     }
   }
 
@@ -935,14 +948,22 @@ class ApiClient {
   }
 
   async updateBill(id: string, updates: Partial<Bill>): Promise<ApiResponse<Bill>> {
-    const response = await this.request<Bill>(`/billing/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    });
-    if (response.success && response.data) {
-      response.data = this.normalizeData(response.data);
+    try {
+      const response = await this.request<Bill>(`/billing/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      if (response.success && response.data) {
+        response.data = this.normalizeData(response.data);
+      }
+      return response;
+    } catch (error) {
+      console.error('Error in updateBill:', error);
+      return {
+        success: false,
+        message: 'حدث خطأ أثناء تحديث الفاتورة'
+      };
     }
-    return response;
   }
 
   async addPayment(id: string, paymentData: {

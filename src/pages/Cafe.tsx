@@ -429,6 +429,14 @@ const Cafe: React.FC = () => {
     }, 0);
   };
 
+  // دالة لحساب الإجمالي في نافذة التعديل
+  const calculateEditTotal = () => {
+    if (!editOrderData) return 0;
+    return editOrderData.items.reduce((total, item) => {
+      return total + (item.price * item.quantity);
+    }, 0);
+  };
+
   const handleCreateOrder = async () => {
     if (currentOrder.length === 0) {
       showNotification('يرجى إضافة عناصر للطلب', 'error');
@@ -2070,7 +2078,7 @@ const Cafe: React.FC = () => {
                         <div className="flex justify-between items-center font-bold text-lg">
                           <span>الإجمالي:</span>
                           <span className="text-green-600">
-                            {formatCurrency(calculateTotal())}
+                            {formatCurrency(calculateEditTotal())}
                           </span>
                         </div>
                       </div>
@@ -2086,25 +2094,25 @@ const Cafe: React.FC = () => {
               >إلغاء</button>
               <button
                 onClick={async () => {
-                  try {
-                    const updatedOrder = {
-                      customerName: editOrderData.customerName,
-                      notes: editOrderData.notes,
-                      items: editOrderData.items.map(item => ({
-                        menuItem: item.menuItem,
-                        name: item.name,
-                        price: item.price,
-                        quantity: item.quantity,
-                        notes: item.notes || ''
-                      }))
-                    };
-                    await updateOrder(editOrderData._id, updatedOrder);
+                  const updatedOrder = {
+                    customerName: editOrderData.customerName,
+                    notes: editOrderData.notes,
+                    items: editOrderData.items.map(item => ({
+                      menuItem: item.menuItem,
+                      name: item.name,
+                      price: item.price,
+                      quantity: item.quantity,
+                      notes: item.notes || ''
+                    }))
+                  };
+
+                  const response = await updateOrder(editOrderData._id, updatedOrder);
+
+                  if (response) {
                     setShowEditOrder(false);
                     setEditOrderData(null);
                     fetchPendingOrders();
                     fetchReadyOrders();
-                  } catch (err) {
-                    showNotification('حدث خطأ أثناء تحديث الطلب', 'error');
                   }
                 }}
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200"

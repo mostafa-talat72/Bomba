@@ -686,8 +686,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ));
         showNotification('تم تحديث الطلب بنجاح', 'success');
         return response.data;
+      } else {
+        // عرض رسالة الخطأ من الخادم
+        showNotification(response.message || 'فشل في تحديث الطلب', 'error');
+        return null;
       }
-      return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
       showNotification(err.message || 'فشل في تحديث الطلب', 'error');
