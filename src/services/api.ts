@@ -1583,6 +1583,33 @@ class ApiClient {
   async getAvailableBillsForSession(type: 'playstation' | 'computer'): Promise<ApiResponse<Bill[]>> {
     return this.request<Bill[]>(`/bills/available-for-session?type=${type}`);
   }
+
+  // دالة للتحقق من توفر المخزون
+  async checkInventoryAvailability(menuItemId: string, quantity: number): Promise<ApiResponse<any>> {
+    return this.request<any>('/orders/check-inventory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        menuItemId,
+        quantity
+      })
+    });
+  }
+
+  // دالة للتحقق من إجمالي المخزون للطلب
+  async checkTotalInventoryForOrder(items: Array<{ menuItem: string; quantity: number }>): Promise<ApiResponse<any>> {
+    return this.request<any>('/orders/check-total-inventory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        items
+      })
+    });
+  }
 }
 
 // Create and export API client instance

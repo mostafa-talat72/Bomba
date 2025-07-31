@@ -13,6 +13,8 @@ import {
     deliverItem,
     updateOrder,
     deleteOrder,
+    checkInventoryForMenuItem,
+    checkTotalInventoryForOrderItems,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
 import { validateOrder, validateRequest } from "../middleware/validation.js";
@@ -38,6 +40,20 @@ router.delete("/:id", authorize("cafe", "menu", "all"), deleteOrder);
 
 // إضافة مسار تحديث الطلبات
 router.patch("/:id", authorize("cafe", "menu", "all"), updateOrder);
+
+// Check inventory availability (cafe and menu permissions)
+router.post(
+    "/check-inventory",
+    authorize("cafe", "menu", "all"),
+    checkInventoryForMenuItem
+);
+
+// Check total inventory for order items (cafe and menu permissions)
+router.post(
+    "/check-total-inventory",
+    authorize("cafe", "menu", "all"),
+    checkTotalInventoryForOrderItems
+);
 
 // Create order (cafe and menu permissions)
 router.post(

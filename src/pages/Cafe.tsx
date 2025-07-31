@@ -58,6 +58,9 @@ const Cafe: React.FC = () => {
   // إضافة state لإدارة حالة التجهيز لكل طلب
   const [preparingOrders, setPreparingOrders] = useState<{ [key: string]: boolean }>({});
 
+  // إضافة state لإدارة رسائل الخطأ في الطلب
+  const [orderErrors, setOrderErrors] = useState<{ [key: string]: string }>({});
+
   // دالة لإدارة حالة التجهيز
   const togglePreparing = (orderId: string) => {
     setPreparingOrders(prev => ({
@@ -307,27 +310,65 @@ const Cafe: React.FC = () => {
   );
 
   const addToOrder = (item: MenuItem) => {
-    if (!item || !item._id || !item.name) {
-      showNotification('عنصر القائمة غير موجود أو غير معرف', 'error');
-      return;
-    }
-    const existingItem = currentOrder.find(orderItem => orderItem.menuItem === item._id);
+    const existingIndex = currentOrder.findIndex(
+      (orderItem) => orderItem.menuItem === item._id
+    );
 
-    if (existingItem) {
-      setCurrentOrder(currentOrder.map(orderItem =>
-        orderItem.menuItem === item._id
-          ? { ...orderItem, quantity: orderItem.quantity + 1 }
-          : orderItem
-      ));
+    if (existingIndex !== -1) {
+      // زيادة الكمية إذا كان الصنف موجود بالفعل
+      const updatedOrder = [...currentOrder];
+      updatedOrder[existingIndex].quantity += 1;
+      setCurrentOrder(updatedOrder);
     } else {
-      setCurrentOrder([...currentOrder, {
+      // إضافة صنف جديد
+      const newItem: LocalOrderItem = {
         menuItem: item._id,
         name: item.name,
+        arabicName: item.arabicName,
         price: item.price,
         quantity: 1,
-        preparedCount: 0,
-        notes: item.notes
-      }]);
+        notes: '',
+      };
+      setCurrentOrder([...currentOrder, newItem]);
+    }
+  };
+
+  // دالة للتحقق من توفر المخزون قبل إضافة الصنف
+  const checkInventoryBeforeAdd = async (item: MenuItem) => {
+    try {
+      // التحقق من توفر المخزون للصنف
+      const response = await api.checkInventoryAvailability(item._id, 1);
+
+      if (!response.success) {
+        showNotification(response.message || 'المخزون غير كافي لهذا الصنف', 'error');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error checking inventory:', error);
+      showNotification('خطأ في التحقق من المخزون', 'error');
+      return false;
+    }
+  };
+
+  // دالة محسنة لإضافة الأصناف مع التحقق من المخزون
+  const addToOrderWithInventoryCheck = async (item: MenuItem) => {
+    const inventoryAvailable = await checkInventoryBeforeAdd(item);
+
+    if (inventoryAvailable) {
+      addToOrder(item);
+      // إزالة أي خطأ سابق لهذا الصنف
+      setOrderErrors(prev => {
+        const { [item._id]: removed, ...rest } = prev;
+        return rest;
+      });
+    } else {
+      // إضافة رسالة الخطأ للصنف
+      setOrderErrors(prev => ({
+        ...prev,
+        [item._id]: 'المخزون غير كافي لهذا الصنف'
+      }));
     }
   };
 
@@ -336,15 +377,50 @@ const Cafe: React.FC = () => {
   };
 
   const updateQuantity = (menuItemId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromOrder(menuItemId);
-    } else {
-      setCurrentOrder(currentOrder.map(item =>
-        item.menuItem === menuItemId
-          ? { ...item, quantity }
-          : item
-      ));
+    setCurrentOrder(currentOrder.map(item =>
+      item.menuItem === menuItemId
+        ? { ...item, quantity: Math.max(1, quantity) }
+        : item
+    ));
+  };
+
+  // دالة محسنة لتحديث الكمية مع التحقق من المخزون
+  const updateQuantityWithInventoryCheck = async (menuItemId: string, newQuantity: number) => {
+    const currentItem = currentOrder.find(item => item.menuItem === menuItemId);
+    if (!currentItem) return;
+
+    const quantityDifference = newQuantity - currentItem.quantity;
+
+    if (quantityDifference > 0) {
+      // التحقق من توفر المخزون للكمية الإضافية
+      try {
+        const response = await api.checkInventoryAvailability(menuItemId, quantityDifference);
+
+        if (!response.success) {
+          // إضافة رسالة الخطأ للصنف
+          setOrderErrors(prev => ({
+            ...prev,
+            [menuItemId]: response.message || 'المخزون غير كافي لزيادة الكمية'
+          }));
+          return;
+        } else {
+          // إزالة رسالة الخطأ إذا كان المخزون متوفر
+          setOrderErrors(prev => {
+            const { [menuItemId]: removed, ...rest } = prev;
+            return rest;
+          });
+        }
+      } catch (error) {
+        console.error('Error checking inventory for quantity update:', error);
+        setOrderErrors(prev => ({
+          ...prev,
+          [menuItemId]: 'خطأ في التحقق من المخزون'
+        }));
+        return;
+      }
     }
+
+    updateQuantity(menuItemId, newQuantity);
   };
 
   const calculateTotal = () => {
@@ -370,6 +446,39 @@ const Cafe: React.FC = () => {
       return;
     }
 
+    // التحقق من توفر المخزون لجميع الأصناف قبل إنشاء الطلب
+    try {
+
+      // التحقق من إجمالي المخزون لجميع الأصناف معاً
+      const totalInventoryResponse = await api.checkTotalInventoryForOrder(
+        currentOrder.map(item => ({
+          menuItem: item.menuItem,
+          quantity: item.quantity
+        }))
+      );
+
+      if (!totalInventoryResponse.success) {
+        showNotification(`لا يمكن إنشاء الطلب: ${totalInventoryResponse.message}`, 'error');
+        setLoading(false);
+        return;
+      }
+
+      for (const item of currentOrder) {
+        const response = await api.checkInventoryAvailability(item.menuItem, item.quantity);
+
+        if (!response.success) {
+          showNotification(`لا يمكن إنشاء الطلب: ${response.message}`, 'error');
+          setLoading(false);
+          return;
+        }
+      }
+
+    } catch (error) {
+      console.error('Error checking inventory before creating order:', error);
+      showNotification('خطأ في التحقق من المخزون قبل إنشاء الطلب', 'error');
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
 
@@ -961,6 +1070,36 @@ const Cafe: React.FC = () => {
   const [showEditOrder, setShowEditOrder] = useState(false);
   const [editOrderData, setEditOrderData] = useState<any>(null);
 
+  // دالة للتحقق من المخزون لصنف معين
+  const checkItemInventory = async (menuItemId: string, quantity: number) => {
+    try {
+      const response = await api.checkInventoryAvailability(menuItemId, quantity);
+
+      if (!response.success) {
+        setOrderErrors(prev => ({
+          ...prev,
+          [menuItemId]: response.message
+        }));
+        return false;
+      } else {
+        // إزالة رسالة الخطأ إذا كان المخزون متوفر
+        setOrderErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors[menuItemId];
+          return newErrors;
+        });
+        return true;
+      }
+    } catch (error) {
+      console.error('Error checking inventory:', error);
+      setOrderErrors(prev => ({
+        ...prev,
+        [menuItemId]: 'خطأ في التحقق من المخزون'
+      }));
+      return false;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1349,7 +1488,7 @@ const Cafe: React.FC = () => {
                               {(menuItemsByCategory[category] || []).filter(item => item.isAvailable).map(item => (
                                 <button
                                   key={item.id}
-                                  onClick={() => addToOrder(item)}
+                                  onClick={() => addToOrderWithInventoryCheck(item)}
                                   className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
                                 >
                                   <span className="text-gray-900">{item.name}</span>
@@ -1462,6 +1601,14 @@ const Cafe: React.FC = () => {
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
+
+                          {/* عرض رسالة الخطأ إذا وجدت */}
+                          {orderErrors[item.menuItem] && (
+                            <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                              ⚠️ {orderErrors[item.menuItem]}
+                            </div>
+                          )}
+
                           <div className="flex items-center space-x-2 space-x-reverse mb-2">
                             <button
                               onClick={() => updateQuantity(item.menuItem, Math.max(0, item.quantity - 1))}
@@ -1471,7 +1618,7 @@ const Cafe: React.FC = () => {
                             </button>
                             <span className="w-8 text-center">{formatDecimal(item.quantity)}</span>
                             <button
-                              onClick={() => updateQuantity(item.menuItem, item.quantity + 1)}
+                              onClick={() => updateQuantityWithInventoryCheck(item.menuItem, item.quantity + 1)}
                               className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
                             >
                               +
@@ -1520,6 +1667,8 @@ const Cafe: React.FC = () => {
                   setSelectedBillId('');
                   setSelectedBill(null);
                   setSearchBill('');
+                  setCurrentOrder([]);
+                  setOrderErrors({}); // مسح جميع رسائل الخطأ
                 }}
                 className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
               >

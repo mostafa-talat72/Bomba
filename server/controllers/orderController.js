@@ -6,6 +6,210 @@ import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import mongoose from "mongoose";
 
+// دالة موحدة لتحويل الوحدات
+const convertQuantity = (quantity, fromUnit, toUnit) => {
+    const conversions = {
+        // تحويلات الحجم
+        لتر: { مل: 1000, لتر: 1 },
+        مل: { لتر: 0.001, مل: 1 },
+        // تحويلات الوزن
+        كيلو: { جرام: 1000, كيلو: 1 },
+        جرام: { كيلو: 0.001, جرام: 1 },
+        كيلوجرام: { جرام: 1000, كيلو: 1, كيلوجرام: 1 },
+        كيلوجرامات: { جرام: 1000, كيلو: 1, كيلوجرام: 1 },
+        // الوحدات الأخرى
+        قطعة: { قطعة: 1 },
+        علبة: { علبة: 1 },
+        كيس: { كيس: 1 },
+        زجاجة: { زجاجة: 1 },
+        حبة: { حبة: 1 },
+        حبات: { حبة: 1 },
+    };
+
+    const conversionRate = conversions[fromUnit]?.[toUnit];
+    const convertedQuantity = conversionRate
+        ? quantity * conversionRate
+        : quantity;
+
+    return convertedQuantity;
+};
+
+// دالة مساعدة للتحقق من توفر المخزون
+const checkInventoryAvailability = async (
+    menuItemId,
+    quantity,
+    organization
+) => {
+    const menuItem = await MenuItem.findById(menuItemId);
+    if (
+        !menuItem ||
+        !menuItem.ingredients ||
+        menuItem.ingredients.length === 0
+    ) {
+        return { available: true, message: null };
+    }
+
+    const insufficientItems = [];
+
+    for (const ingredient of menuItem.ingredients) {
+        const inventoryItem = await InventoryItem.findOne({
+            _id: ingredient.item,
+            organization: organization,
+        });
+
+        if (!inventoryItem) {
+            return {
+                available: false,
+                message: `الخامة ${ingredient.item} غير موجودة في المخزون`,
+            };
+        }
+
+        // حساب الكمية المطلوبة للطلب مع التحويل
+        const requiredQuantityForOrder =
+            convertQuantity(
+                ingredient.quantity,
+                ingredient.unit,
+                inventoryItem.unit
+            ) * quantity;
+
+        // التحقق من توفر المخزون
+        if (inventoryItem.currentStock < requiredQuantityForOrder) {
+            insufficientItems.push({
+                name: inventoryItem.name,
+                required: requiredQuantityForOrder,
+                available: inventoryItem.currentStock,
+                unit: inventoryItem.unit,
+            });
+        }
+    }
+
+    if (insufficientItems.length > 0) {
+        const message = insufficientItems
+            .map(
+                (item) =>
+                    `${item.name}: المطلوب ${item.required} ${item.unit}، المتوفر ${item.available} ${item.unit}`
+            )
+            .join(" | ");
+
+        return {
+            available: false,
+            message: `المخزون غير كافي: ${message}`,
+        };
+    }
+
+    return { available: true, message: null };
+};
+
+// دالة للتحقق من إجمالي استهلاك المكونات المشتركة في الطلب
+const checkTotalInventoryForOrder = async (items, organization) => {
+    // تجميع جميع المكونات المطلوبة من جميع الأصناف
+    const totalIngredientsNeeded = {};
+
+    for (const item of items) {
+        if (!item.menuItem) continue;
+
+        const menuItem = await MenuItem.findById(item.menuItem);
+        if (
+            !menuItem ||
+            !menuItem.ingredients ||
+            menuItem.ingredients.length === 0
+        ) {
+            continue;
+        }
+
+        for (const ingredient of menuItem.ingredients) {
+            const ingredientKey = ingredient.item.toString();
+
+            if (!totalIngredientsNeeded[ingredientKey]) {
+                totalIngredientsNeeded[ingredientKey] = {
+                    itemId: ingredient.item,
+                    quantity: 0,
+                    unit: null, // سنحدد الوحدة من المخزون
+                    menuItems: [],
+                };
+            }
+
+            // الحصول على معلومات المخزون لتحديد الوحدة
+            const inventoryItem = await InventoryItem.findOne({
+                _id: ingredient.item,
+                organization: organization,
+            });
+
+            if (!inventoryItem) {
+                return {
+                    available: false,
+                    message: `الخامة ${ingredient.item} غير موجودة في المخزون`,
+                };
+            }
+
+            // تحديد الوحدة من المخزون إذا لم تكن محددة
+            if (!totalIngredientsNeeded[ingredientKey].unit) {
+                totalIngredientsNeeded[ingredientKey].unit = inventoryItem.unit;
+            }
+
+            // حساب الكمية المطلوبة لهذا الصنف مع التحويل
+            const quantityForThisItem =
+                convertQuantity(
+                    ingredient.quantity,
+                    ingredient.unit,
+                    totalIngredientsNeeded[ingredientKey].unit
+                ) * item.quantity;
+
+            totalIngredientsNeeded[ingredientKey].quantity +=
+                quantityForThisItem;
+            totalIngredientsNeeded[ingredientKey].menuItems.push({
+                name: menuItem.name,
+                quantity: item.quantity,
+                ingredientQuantity: quantityForThisItem,
+            });
+        }
+    }
+
+    // التحقق من توفر المخزون لكل مكون
+    const insufficientItems = [];
+
+    for (const [ingredientKey, ingredientData] of Object.entries(
+        totalIngredientsNeeded
+    )) {
+        const inventoryItem = await InventoryItem.findOne({
+            _id: ingredientData.itemId,
+            organization: organization,
+        });
+
+        if (!inventoryItem) {
+            return {
+                available: false,
+                message: `الخامة ${ingredientData.itemId} غير موجودة في المخزون`,
+            };
+        }
+
+        if (inventoryItem.currentStock < ingredientData.quantity) {
+            insufficientItems.push({
+                name: inventoryItem.name,
+                required: ingredientData.quantity,
+                available: inventoryItem.currentStock,
+                unit: inventoryItem.unit,
+            });
+        }
+    }
+
+    if (insufficientItems.length > 0) {
+        const message = insufficientItems
+            .map(
+                (item) =>
+                    `${item.name}: المطلوب ${item.required} ${item.unit}، المتوفر ${item.available} ${item.unit}`
+            )
+            .join(" | ");
+
+        return {
+            available: false,
+            message: `المخزون غير كافي: ${message}`,
+        };
+    }
+
+    return { available: true, message: null };
+};
+
 // @desc    Get all orders
 // @route   GET /api/orders
 // @access  Private
@@ -106,6 +310,18 @@ export const createOrder = async (req, res) => {
             });
         }
 
+        // التحقق من إجمالي المخزون لجميع الأصناف معاً
+        const totalInventoryCheck = await checkTotalInventoryForOrder(
+            items,
+            req.user.organization
+        );
+        if (!totalInventoryCheck.available) {
+            return res.status(400).json({
+                success: false,
+                message: totalInventoryCheck.message,
+            });
+        }
+
         // Process items and calculate totals
         const processedItems = [];
         let subtotal = 0;
@@ -128,61 +344,17 @@ export const createOrder = async (req, res) => {
 
                 // التحقق من توفر المخزون للعنصر
                 if (menuItem.ingredients && menuItem.ingredients.length > 0) {
-                    const InventoryItem = (
-                        await import("../models/InventoryItem.js")
-                    ).default;
+                    const inventoryCheck = await checkInventoryAvailability(
+                        menuItem._id,
+                        item.quantity,
+                        req.user.organization
+                    );
 
-                    // دالة لتحويل الوحدات
-                    const convertQuantity = (quantity, fromUnit, toUnit) => {
-                        const conversions = {
-                            // تحويلات الحجم
-                            لتر: { مل: 1000, لتر: 1 },
-                            مل: { لتر: 0.001, مل: 1 },
-                            // تحويلات الوزن
-                            كيلو: { جرام: 1000, كيلو: 1 },
-                            جرام: { كيلو: 0.001, جرام: 1 },
-                            // الوحدات الأخرى
-                            قطعة: { قطعة: 1 },
-                            علبة: { علبة: 1 },
-                            كيس: { كيس: 1 },
-                            زجاجة: { زجاجة: 1 },
-                        };
-
-                        const conversionRate = conversions[fromUnit]?.[toUnit];
-                        return conversionRate
-                            ? quantity * conversionRate
-                            : quantity;
-                    };
-
-                    for (const ingredient of menuItem.ingredients) {
-                        const inventoryItem = await InventoryItem.findById(
-                            ingredient.item
-                        );
-                        if (!inventoryItem) {
-                            return res.status(400).json({
-                                success: false,
-                                message: `الخامة ${ingredient.item} غير موجودة في المخزون`,
-                            });
-                        }
-
-                        // حساب الكمية المطلوبة للطلب مع التحويل
-                        const requiredQuantityForOrder =
-                            convertQuantity(
-                                ingredient.quantity,
-                                ingredient.unit,
-                                inventoryItem.unit
-                            ) * item.quantity;
-
-                        // التحقق من توفر المخزون
-                        if (
-                            inventoryItem.currentStock <
-                            requiredQuantityForOrder
-                        ) {
-                            return res.status(400).json({
-                                success: false,
-                                message: `المخزون غير كافي لـ ${inventoryItem.name}. المطلوب: ${requiredQuantityForOrder} ${inventoryItem.unit}، المتوفر: ${inventoryItem.currentStock} ${inventoryItem.unit}`,
-                            });
-                        }
+                    if (!inventoryCheck.available) {
+                        return res.status(400).json({
+                            success: false,
+                            message: inventoryCheck.message,
+                        });
                     }
                 }
 
@@ -346,6 +518,18 @@ export const updateOrder = async (req, res) => {
 
         // تحديث أصناف الطلب بالكامل (إضافة/تعديل/حذف)
         if (Array.isArray(items)) {
+            // التحقق من إجمالي المخزون لجميع الأصناف معاً
+            const totalInventoryCheck = await checkTotalInventoryForOrder(
+                items,
+                req.user.organization
+            );
+            if (!totalInventoryCheck.available) {
+                return res.status(400).json({
+                    success: false,
+                    message: totalInventoryCheck.message,
+                });
+            }
+
             // 1. تحديث أو إضافة الأصناف
             for (let i = 0; i < items.length; i++) {
                 const updatedItem = items[i];
@@ -367,6 +551,28 @@ export const updateOrder = async (req, res) => {
                         updatedItem.quantity,
                         orderItem.preparedCount || 0
                     );
+
+                    // التحقق من توفر المخزون إذا زادت الكمية
+                    if (
+                        newQuantity > orderItem.quantity &&
+                        orderItem.menuItem
+                    ) {
+                        const additionalQuantity =
+                            newQuantity - orderItem.quantity;
+                        const inventoryCheck = await checkInventoryAvailability(
+                            orderItem.menuItem,
+                            additionalQuantity,
+                            req.user.organization
+                        );
+
+                        if (!inventoryCheck.available) {
+                            return res.status(400).json({
+                                success: false,
+                                message: `لا يمكن زيادة الكمية: ${inventoryCheck.message}`,
+                            });
+                        }
+                    }
+
                     orderItem.quantity = newQuantity;
                     orderItem.notes =
                         updatedItem.notes !== undefined
@@ -380,39 +586,21 @@ export const updateOrder = async (req, res) => {
                 } else {
                     // إضافة صنف جديد - التحقق من توفر المخزون
                     if (updatedItem.menuItem) {
+                        const inventoryCheck = await checkInventoryAvailability(
+                            updatedItem.menuItem,
+                            updatedItem.quantity,
+                            req.user.organization
+                        );
+
+                        if (!inventoryCheck.available) {
+                            return res.status(400).json({
+                                success: false,
+                                message: inventoryCheck.message,
+                            });
+                        }
+
                         const MenuItem = (await import("../models/MenuItem.js"))
                             .default;
-                        const InventoryItem = (
-                            await import("../models/InventoryItem.js")
-                        ).default;
-
-                        // دالة لتحويل الوحدات
-                        const convertQuantity = (
-                            quantity,
-                            fromUnit,
-                            toUnit
-                        ) => {
-                            const conversions = {
-                                // تحويلات الحجم
-                                لتر: { مل: 1000, لتر: 1 },
-                                مل: { لتر: 0.001, مل: 1 },
-                                // تحويلات الوزن
-                                كيلو: { جرام: 1000, كيلو: 1 },
-                                جرام: { كيلو: 0.001, جرام: 1 },
-                                // الوحدات الأخرى
-                                قطعة: { قطعة: 1 },
-                                علبة: { علبة: 1 },
-                                كيس: { كيس: 1 },
-                                زجاجة: { زجاجة: 1 },
-                            };
-
-                            const conversionRate =
-                                conversions[fromUnit]?.[toUnit];
-                            return conversionRate
-                                ? quantity * conversionRate
-                                : quantity;
-                        };
-
                         const menuItem = await MenuItem.findById(
                             updatedItem.menuItem
                         );
@@ -1404,6 +1592,96 @@ export const deliverItem = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في تسليم الصنف",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Check inventory availability for menu item
+// @route   POST /api/orders/check-inventory
+// @access  Private
+export const checkInventoryForMenuItem = async (req, res) => {
+    try {
+        const { menuItemId, quantity } = req.body;
+
+        if (!menuItemId || !quantity) {
+            return res.status(400).json({
+                success: false,
+                message: "معرف الصنف والكمية مطلوبان",
+            });
+        }
+
+        const inventoryCheck = await checkInventoryAvailability(
+            menuItemId,
+            quantity,
+            req.user.organization
+        );
+
+        if (!inventoryCheck.available) {
+            return res.status(400).json({
+                success: false,
+                message: inventoryCheck.message,
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "المخزون متوفر",
+            data: {
+                available: true,
+                menuItemId,
+                quantity,
+            },
+        });
+    } catch (error) {
+        console.error("Error in checkInventoryForMenuItem:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في التحقق من المخزون",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Check total inventory for order items
+// @route   POST /api/orders/check-total-inventory
+// @access  Private
+export const checkTotalInventoryForOrderItems = async (req, res) => {
+    try {
+        const { items } = req.body;
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب إرسال قائمة الأصناف",
+            });
+        }
+
+        const totalInventoryCheck = await checkTotalInventoryForOrder(
+            items,
+            req.user.organization
+        );
+
+        if (!totalInventoryCheck.available) {
+            return res.status(400).json({
+                success: false,
+                message: totalInventoryCheck.message,
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "المخزون الإجمالي متوفر",
+            data: {
+                available: true,
+                itemsCount: items.length,
+            },
+        });
+    } catch (error) {
+        console.error("Error in checkTotalInventoryForOrderItems:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في التحقق من المخزون الإجمالي",
             error: error.message,
         });
     }
