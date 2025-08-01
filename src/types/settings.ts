@@ -1,5 +1,23 @@
 // أنواع الصلاحيات
-export type Permission = 'owner' | 'admin' | 'manager' | 'staff' | 'cashier' | 'kitchen';
+export type Permission =
+  | 'owner'
+  | 'admin'
+  | 'manager'
+  | 'staff'
+  | 'cashier'
+  | 'kitchen'
+  | 'all'
+  | 'settings'
+  | 'dashboard'
+  | 'playstation'
+  | 'computer'
+  | 'cafe'
+  | 'menu'
+  | 'billing'
+  | 'reports'
+  | 'inventory'
+  | 'users'
+  | 'costs';
 
 // واجهة الإعدادات العامة
 export interface GeneralSettings {
