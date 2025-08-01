@@ -1336,6 +1336,17 @@ class ApiClient {
     });
   }
 
+  async validateSettings(category: string, settings: any): Promise<ApiResponse<any>> {
+    return this.request(`/settings/${category}/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ settings }),
+    });
+  }
+
+  async getSettingsSummary(): Promise<ApiResponse<any>> {
+    return this.request('/settings/summary');
+  }
+
   // Device endpoints
   async getDevices(params?: {
     type?: string;

@@ -46,6 +46,9 @@ interface AppContextType {
   notifications: any[];
   subscriptionStatus: 'active' | 'expired' | 'pending' | 'loading';
 
+  // API instance
+  api: typeof api;
+
   // Auth methods
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
@@ -1489,6 +1492,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     users,
     notifications,
     subscriptionStatus,
+
+    // API instance
+    api,
 
     // Auth methods
     login,

@@ -9,6 +9,7 @@ import {
     exportToPDF,
     generateFilename,
 } from "../utils/exportUtils.js";
+import Logger from "../middleware/logger.js";
 
 // @desc    Get dashboard statistics
 // @route   GET /api/reports/dashboard
@@ -739,6 +740,24 @@ export const getRecentActivity = async (req, res) => {
     try {
         const { limit = 10 } = req.query;
 
+        Logger.info("getRecentActivity called", {
+            userId: req.user._id,
+            userOrganization: req.user.organization,
+            limit: limit,
+        });
+
+        // Check if user has organization
+        if (!req.user.organization) {
+            Logger.warn("User has no organization", {
+                userId: req.user._id,
+                userEmail: req.user.email,
+            });
+            return res.status(400).json({
+                success: false,
+                message: "المستخدم لا ينتمي لأي منظمة",
+            });
+        }
+
         // Get recent sessions
         const recentSessions = await Session.find({
             organization: req.user.organization,
@@ -909,6 +928,12 @@ export const getRecentActivity = async (req, res) => {
             data: limitedActivities,
         });
     } catch (error) {
+        Logger.error("Error in getRecentActivity", {
+            error: error.message,
+            stack: error.stack,
+            userId: req.user?._id,
+            userOrganization: req.user?.organization,
+        });
         res.status(500).json({
             success: false,
             message: "خطأ في جلب النشاط الأخير",
