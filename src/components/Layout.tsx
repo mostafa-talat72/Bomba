@@ -263,8 +263,8 @@ const Layout = () => {
                     showIfNoPermission={false}
                   >
                     <Link
-                      to={item.href || '#'}
-                      className={`${isActive(item.href || '')
+                      to={item.href}
+                      className={`${isActive(item.href)
                         ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600'
                         : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                         } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
@@ -294,19 +294,6 @@ const Layout = () => {
             )}
           </div>
         </nav>
-
-        {/* User Actions */}
-        <div className="mt-auto p-3 sm:p-4 border-t border-gray-200">
-          <div className="space-y-2">
-            <button
-              onClick={handleLogout}
-              className="group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-red-600 hover:bg-red-50 hover:text-red-700"
-            >
-              <LogOut className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="truncate">تسجيل الخروج</span>
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Main Content */}
@@ -322,7 +309,7 @@ const Layout = () => {
                 <Menu className="h-6 w-6" />
               </button>
               <h2 className="mr-2 sm:mr-4 text-lg sm:text-xl font-semibold text-gray-900 truncate">
-                {filteredNavigation.find(item => item.href && isActive(item.href))?.name ||
+                {filteredNavigation.find(item => isActive(item.href))?.name ||
                  (filteredNavigation.length === 0 ? 'لا توجد صفحات متاحة' : 'لوحة التحكم')}
               </h2>
               {/* إشارة بصرية للسحب على الشاشات الصغيرة */}
