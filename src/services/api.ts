@@ -561,6 +561,19 @@ class ApiClient {
     return response;
   }
 
+  async updatePassword(currentPassword: string, newPassword: string): Promise<ApiResponse> {
+    return this.request('/auth/update-password', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        currentPassword,
+        newPassword,
+      }),
+    });
+  }
+
   async refreshToken(refreshToken: string): Promise<ApiResponse<{ token: string; refreshToken: string }>> {
     return this.request('/auth/refresh', {
       method: 'POST',

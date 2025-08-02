@@ -12,14 +12,7 @@ const checkSettingsPermission = (user, category) => {
     const categoryPermissions = {
         general: ["settings"],
         business: ["settings"],
-        inventory: ["settings", "inventory"],
         notifications: ["settings"],
-        appearance: ["settings"],
-        security: ["settings"],
-        backup: ["settings"],
-        advanced: ["settings"],
-        reports: ["settings", "reports"],
-        users: ["settings", "users"],
     };
 
     const requiredPermissions = categoryPermissions[category] || ["settings"];
@@ -29,7 +22,7 @@ const checkSettingsPermission = (user, category) => {
 };
 
 // Helper function to auto-create missing settings
-const ensureSettingsExist = async (organization, category) => {
+const ensureSettingsExist = async (organization, category, userId = null) => {
     try {
         let settings = await Settings.findOne({
             category,
@@ -42,12 +35,14 @@ const ensureSettingsExist = async (organization, category) => {
                 category,
                 settings: defaultSettings,
                 organization,
-                updatedBy: organization, // Will be updated when user saves
+                createdBy: userId || organization,
+                updatedBy: userId || organization,
                 isDefault: true,
             });
             await settings.save();
             Logger.info(`Auto-created settings for category: ${category}`, {
                 organization: organization.toString(),
+                createdBy: userId || organization.toString(),
             });
         }
 
@@ -69,6 +64,14 @@ export const getSettings = async (req, res) => {
     try {
         const { category } = req.params;
 
+        // Check if user has organization
+        if (!req.user.organization) {
+            return res.status(400).json({
+                success: false,
+                message: "المستخدم غير مرتبط بأي منشأة",
+            });
+        }
+
         // Check permissions
         if (!checkSettingsPermission(req.user, category)) {
             return res.status(403).json({
@@ -80,7 +83,8 @@ export const getSettings = async (req, res) => {
         // Ensure settings exist
         const settings = await ensureSettingsExist(
             req.user.organization,
-            category
+            category,
+            req.user._id
         );
 
         // Validate settings
@@ -94,7 +98,7 @@ export const getSettings = async (req, res) => {
             data: {
                 ...settings.toObject(),
                 isValid,
-                validationErrors: settings.validationErrors,
+                validationErrors: settings.validationErrors || [],
             },
         });
     } catch (error) {
@@ -102,6 +106,7 @@ export const getSettings = async (req, res) => {
             error: error.message,
             category: req.params.category,
             userId: req.user._id,
+            organization: req.user.organization,
         });
         res.status(500).json({
             success: false,
@@ -118,6 +123,14 @@ export const updateSettings = async (req, res) => {
     try {
         const { category } = req.params;
         const { settings: newSettings } = req.body;
+
+        // Check if user has organization
+        if (!req.user.organization) {
+            return res.status(400).json({
+                success: false,
+                message: "المستخدم غير مرتبط بأي منشأة",
+            });
+        }
 
         // Check permissions
         if (!checkSettingsPermission(req.user, category)) {
@@ -138,9 +151,11 @@ export const updateSettings = async (req, res) => {
                 category,
                 settings: Settings.getDefaultSettings(category),
                 organization: req.user.organization,
+                createdBy: req.user._id,
                 updatedBy: req.user._id,
                 isDefault: false,
             });
+            await existingSettings.save();
         }
 
         // Merge settings (preserve existing settings not in the update)
@@ -153,17 +168,11 @@ export const updateSettings = async (req, res) => {
         existingSettings.settings = mergedSettings;
         existingSettings.updatedBy = req.user._id;
         existingSettings.isDefault = false;
-        existingSettings.version += 1;
 
         // Validate settings
         const isValid = existingSettings.validateSettings();
 
-        if (
-            !isValid &&
-            existingSettings.validationErrors.some(
-                (err) => err.severity === "error"
-            )
-        ) {
+        if (!isValid && existingSettings.validationErrors.length > 0) {
             return res.status(400).json({
                 success: false,
                 message: "الإعدادات تحتوي على أخطاء",
@@ -180,9 +189,6 @@ export const updateSettings = async (req, res) => {
             category,
             userId: req.user._id,
             organization: req.user.organization.toString(),
-            hasWarnings: existingSettings.validationErrors.some(
-                (err) => err.severity === "warning"
-            ),
         });
 
         res.json({
@@ -191,7 +197,7 @@ export const updateSettings = async (req, res) => {
             data: {
                 ...existingSettings.toObject(),
                 isValid,
-                validationErrors: existingSettings.validationErrors,
+                validationErrors: existingSettings.validationErrors || [],
             },
         });
     } catch (error) {
@@ -213,6 +219,14 @@ export const updateSettings = async (req, res) => {
 // @access  Private
 export const getAllSettings = async (req, res) => {
     try {
+        // Check if user has organization
+        if (!req.user.organization) {
+            return res.status(400).json({
+                success: false,
+                message: "المستخدم غير مرتبط بأي منشأة",
+            });
+        }
+
         // Check permissions
         if (!checkSettingsPermission(req.user, "general")) {
             return res.status(403).json({
@@ -228,18 +242,7 @@ export const getAllSettings = async (req, res) => {
             .sort({ category: 1 });
 
         // Get all categories and ensure they exist
-        const categories = [
-            "general",
-            "business",
-            "inventory",
-            "notifications",
-            "appearance",
-            "security",
-            "backup",
-            "advanced",
-            "reports",
-            "users",
-        ];
+        const categories = ["general", "business", "notifications"];
 
         const allSettings = [];
         for (const category of categories) {
@@ -251,7 +254,8 @@ export const getAllSettings = async (req, res) => {
                 // Auto-create missing settings
                 categorySettings = await ensureSettingsExist(
                     req.user.organization,
-                    category
+                    category,
+                    req.user._id
                 );
                 await categorySettings.populate("updatedBy", "name");
             }
@@ -262,7 +266,7 @@ export const getAllSettings = async (req, res) => {
             allSettings.push({
                 ...categorySettings.toObject(),
                 isValid,
-                validationErrors: categorySettings.validationErrors,
+                validationErrors: categorySettings.validationErrors || [],
             });
         }
 
@@ -291,6 +295,14 @@ export const resetSettings = async (req, res) => {
     try {
         const { category } = req.params;
 
+        // Check if user has organization
+        if (!req.user.organization) {
+            return res.status(400).json({
+                success: false,
+                message: "المستخدم غير مرتبط بأي منشأة",
+            });
+        }
+
         // Check permissions
         if (!checkSettingsPermission(req.user, category)) {
             return res.status(403).json({
@@ -307,8 +319,6 @@ export const resetSettings = async (req, res) => {
                 settings: defaultSettings,
                 updatedBy: req.user._id,
                 isDefault: true,
-                version: 1,
-                validationErrors: [],
             },
             {
                 new: true,
@@ -577,12 +587,6 @@ export const getSettingsSummary = async (req, res) => {
                 settings.length > 0
                     ? Math.max(...settings.map((s) => s.updatedAt))
                     : null,
-            categoriesWithErrors: settings.filter(
-                (s) => s.validationErrors.length > 0
-            ).length,
-            categoriesWithWarnings: settings.filter((s) =>
-                s.validationErrors.some((err) => err.severity === "warning")
-            ).length,
         };
 
         res.json({
