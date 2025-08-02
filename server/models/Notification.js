@@ -400,6 +400,12 @@ notificationSchema.statics.getForUser = function (userId, user, options = {}) {
         ],
     };
 
+    // Filter out notifications created before the user was created
+    // This prevents new users from receiving previous notifications
+    if (user.createdAt) {
+        query.createdAt = { $gte: user.createdAt };
+    }
+
     if (options.category) {
         query.category = options.category;
     }

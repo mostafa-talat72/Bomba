@@ -27,6 +27,9 @@ router.use(authorize("reports", "all"));
 // Dashboard stats
 router.get("/dashboard", getDashboardStats);
 
+// Recent activity
+router.get("/recent-activity", getRecentActivity);
+
 // Export routes
 router.get("/export/excel", exportReportToExcel);
 router.get("/export/pdf", exportReportToPDF);

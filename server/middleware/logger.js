@@ -89,27 +89,10 @@ class Logger {
 export const requestLogger = (req, res, next) => {
     const start = Date.now();
 
-    // Log request
-    Logger.info("Request received", {
-        method: req.method,
-        url: req.url,
-        ip: req.ip,
-        userAgent: req.get("User-Agent"),
-        userId: req.user?._id,
-    });
-
     // Override res.end to log response
     const originalEnd = res.end;
     res.end = function (chunk, encoding) {
         const duration = Date.now() - start;
-
-        Logger.info("Request completed", {
-            method: req.method,
-            url: req.url,
-            statusCode: res.statusCode,
-            duration: `${duration}ms`,
-            userId: req.user?._id,
-        });
 
         originalEnd.call(this, chunk, encoding);
     };

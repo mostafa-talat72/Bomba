@@ -909,6 +909,7 @@ export const getRecentActivity = async (req, res) => {
             data: limitedActivities,
         });
     } catch (error) {
+        console.error("Error in getRecentActivity:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب النشاط الأخير",
@@ -976,10 +977,15 @@ export const exportReportToExcel = async (req, res) => {
         );
         res.send(buffer);
     } catch (error) {
+        console.error("Error in exportReportToExcel:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في تصدير التقرير",
             error: error.message,
+            stack:
+                process.env.NODE_ENV === "development"
+                    ? error.stack
+                    : undefined,
         });
     }
 };
@@ -1087,11 +1093,13 @@ const getSalesReportData = async (organization, startDate, endDate) => {
     const productSales = {};
     bills.forEach((bill) => {
         bill.orders.forEach((order) => {
-            if (!productSales[order.itemName]) {
-                productSales[order.itemName] = { quantity: 0, revenue: 0 };
-            }
-            productSales[order.itemName].quantity += order.quantity;
-            productSales[order.itemName].revenue += order.totalPrice;
+            order.items.forEach((item) => {
+                if (!productSales[item.name]) {
+                    productSales[item.name] = { quantity: 0, revenue: 0 };
+                }
+                productSales[item.name].quantity += item.quantity;
+                productSales[item.name].revenue += item.itemTotal;
+            });
         });
     });
 

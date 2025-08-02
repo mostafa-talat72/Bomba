@@ -1,6 +1,7 @@
 import NotificationService from "../services/notificationService.js";
 import Logger from "../middleware/logger.js";
 import Notification from "../models/Notification.js";
+import User from "../models/User.js";
 
 // @desc    Get user notifications
 // @route   GET /api/notifications
@@ -14,10 +15,16 @@ export const getUserNotifications = async (req, res) => {
             limit: limit ? parseInt(limit) : 50,
         };
 
+        // Ensure user object includes createdAt field for notification filtering
+        const userWithCreatedAt = await User.findById(req.user._id).select(
+            "+createdAt"
+        );
+        const user = userWithCreatedAt || req.user;
+
         const notifications =
             await NotificationService.getUserNotificationsWithPermissionFilter(
                 req.user._id,
-                req.user,
+                user,
                 options
             );
 
@@ -41,10 +48,16 @@ export const getUserNotifications = async (req, res) => {
 // @access  Private
 export const getNotificationStats = async (req, res) => {
     try {
+        // Ensure user object includes createdAt field for notification filtering
+        const userWithCreatedAt = await User.findById(req.user._id).select(
+            "+createdAt"
+        );
+        const user = userWithCreatedAt || req.user;
+
         const stats =
             await NotificationService.getNotificationStatsWithPermissions(
                 req.user._id,
-                req.user
+                user
             );
 
         res.json({

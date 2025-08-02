@@ -116,7 +116,7 @@ class NotificationService {
     // الحصول على عدد الإشعارات غير المقروءة
     static async getUnreadCount(userId, user) {
         try {
-            const count = await Notification.countDocuments({
+            const query = {
                 isActive: true,
                 organization: user.organization,
                 "readBy.user": { $ne: userId },
@@ -126,7 +126,15 @@ class NotificationService {
                     { targetRoles: user.role },
                     { targetPermissions: { $in: user.permissions } },
                 ],
-            });
+            };
+
+            // Filter out notifications created before the user was created
+            // This prevents new users from receiving previous notifications
+            if (user.createdAt) {
+                query.createdAt = { $gte: user.createdAt };
+            }
+
+            const count = await Notification.countDocuments(query);
             return count;
         } catch (error) {
             Logger.error("Error getting unread count:", error);
@@ -162,6 +170,12 @@ class NotificationService {
                         targetPermissions: { $in: user.permissions },
                     });
                 }
+            }
+
+            // Filter out notifications created before the user was created
+            // This prevents new users from receiving previous notifications
+            if (user.createdAt) {
+                baseQuery.createdAt = { $gte: user.createdAt };
             }
 
             // إضافة تصفية الفئة إذا تم تحديدها
@@ -350,6 +364,12 @@ class NotificationService {
                 baseQuery.$or.push({
                     targetPermissions: { $in: user.permissions },
                 });
+            }
+
+            // Filter out notifications created before the user was created
+            // This prevents new users from receiving previous notifications
+            if (user.createdAt) {
+                baseQuery.createdAt = { $gte: user.createdAt };
             }
 
             const [total, unread, byCategory, byPriority] = await Promise.all([
