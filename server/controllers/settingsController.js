@@ -1,25 +1,9 @@
 import Settings from "../models/Settings.js";
 import Logger from "../middleware/logger.js";
-
-// Helper function to check permissions
-const checkSettingsPermission = (user, category) => {
-    // Owner has all permissions
-    if (user.role === "owner" || user.permissions.includes("all")) {
-        return true;
-    }
-
-    // Check specific permissions
-    const categoryPermissions = {
-        general: ["settings"],
-        business: ["settings"],
-        notifications: ["settings"],
-    };
-
-    const requiredPermissions = categoryPermissions[category] || ["settings"];
-    return requiredPermissions.some((permission) =>
-        user.permissions.includes(permission)
-    );
-};
+import {
+    checkSettingsPermission,
+    checkSettingsFieldPermission,
+} from "../utils/permissions.js";
 
 // Helper function to auto-create missing settings
 const ensureSettingsExist = async (organization, category, userId = null) => {
@@ -63,6 +47,7 @@ const ensureSettingsExist = async (organization, category, userId = null) => {
 export const getSettings = async (req, res) => {
     try {
         const { category } = req.params;
+        const { userSpecific = false } = req.query;
 
         // Check if user has organization
         if (!req.user.organization) {
@@ -71,6 +56,10 @@ export const getSettings = async (req, res) => {
                 message: "المستخدم غير مرتبط بأي منشأة",
             });
         }
+
+        // إعدادات الإشعارات تكون خاصة بالمستخدم دائماً
+        const isUserSpecific =
+            category === "notifications" ? true : userSpecific === "true";
 
         // Check permissions
         if (!checkSettingsPermission(req.user, category)) {
@@ -84,8 +73,16 @@ export const getSettings = async (req, res) => {
         const settings = await ensureSettingsExist(
             req.user.organization,
             category,
-            req.user._id
+            req.user._id,
+            isUserSpecific
         );
+
+        Logger.info(`Retrieved settings for category: ${category}`, {
+            organization: req.user.organization.toString(),
+            userId: req.user._id.toString(),
+            isUserSpecific,
+            settingsData: settings.settings,
+        });
 
         // Validate settings
         const isValid = settings.validateSettings();
@@ -122,7 +119,7 @@ export const getSettings = async (req, res) => {
 export const updateSettings = async (req, res) => {
     try {
         const { category } = req.params;
-        const { settings: newSettings } = req.body;
+        const { settings: newSettings, userSpecific = false } = req.body;
 
         // Check if user has organization
         if (!req.user.organization) {
@@ -132,6 +129,10 @@ export const updateSettings = async (req, res) => {
             });
         }
 
+        // إعدادات الإشعارات تكون خاصة بالمستخدم دائماً
+        const isUserSpecific =
+            category === "notifications" ? true : userSpecific;
+
         // Check permissions
         if (!checkSettingsPermission(req.user, category)) {
             return res.status(403).json({
@@ -140,22 +141,67 @@ export const updateSettings = async (req, res) => {
             });
         }
 
+        // Check field-specific permissions for protected fields
+        const protectedFields = {
+            general: ["systemName", "language", "timezone", "currency"],
+            business: [
+                "businessName",
+                "businessType",
+                "taxRate",
+                "serviceCharge",
+            ],
+            notifications: [
+                "emailNotifications",
+                "smsNotifications",
+                "pushNotifications",
+            ],
+        };
+
+        const categoryProtectedFields = protectedFields[category] || [];
+        for (const field of categoryProtectedFields) {
+            if (newSettings.hasOwnProperty(field)) {
+                if (!checkSettingsFieldPermission(req.user, category, field)) {
+                    return res.status(403).json({
+                        success: false,
+                        message: `ليس لديك صلاحية لتعديل حقل "${field}"`,
+                    });
+                }
+            }
+        }
+
         // Get existing settings or create new ones
-        let existingSettings = await Settings.findOne({
+        const query = {
             category,
             organization: req.user.organization,
-        });
+        };
+
+        // إذا كانت إعدادات خاصة بالمستخدم، أضف معرف المستخدم للاستعلام
+        if (isUserSpecific) {
+            query.user = req.user._id;
+        } else {
+            query.user = { $exists: false };
+        }
+
+        let existingSettings = await Settings.findOne(query);
 
         if (!existingSettings) {
             existingSettings = new Settings({
                 category,
+                user: isUserSpecific ? req.user._id : null,
                 settings: Settings.getDefaultSettings(category),
                 organization: req.user.organization,
                 createdBy: req.user._id,
                 updatedBy: req.user._id,
                 isDefault: false,
+                isUserSpecific: isUserSpecific,
             });
             await existingSettings.save();
+        } else {
+            // Ensure createdBy exists for existing settings
+            if (!existingSettings.createdBy) {
+                existingSettings.createdBy = req.user._id;
+                await existingSettings.save();
+            }
         }
 
         // Merge settings (preserve existing settings not in the update)
@@ -185,10 +231,12 @@ export const updateSettings = async (req, res) => {
         // Populate updatedBy
         await existingSettings.populate("updatedBy", "name");
 
-        Logger.info("Settings updated", {
+        Logger.info("Settings updated successfully", {
             category,
-            userId: req.user._id,
+            userId: req.user._id.toString(),
             organization: req.user.organization.toString(),
+            isUserSpecific,
+            updatedSettings: mergedSettings,
         });
 
         res.json({
@@ -219,6 +267,8 @@ export const updateSettings = async (req, res) => {
 // @access  Private
 export const getAllSettings = async (req, res) => {
     try {
+        const { userSpecific = false } = req.query;
+
         // Check if user has organization
         if (!req.user.organization) {
             return res.status(400).json({
@@ -235,9 +285,42 @@ export const getAllSettings = async (req, res) => {
             });
         }
 
-        const settings = await Settings.find({
+        // بناء استعلام البحث
+        const query = {
             organization: req.user.organization,
-        })
+        };
+
+        // إذا كانت إعدادات خاصة بالمستخدم، أضف معرف المستخدم للاستعلام
+        if (userSpecific === "true") {
+            query.user = req.user._id;
+        } else {
+            query.user = { $exists: false };
+        }
+
+        // إعدادات الإشعارات تكون خاصة بالمستخدم دائماً
+        if (userSpecific === "false") {
+            // إضافة إعدادات الإشعارات الخاصة بالمستخدم
+            const notificationsQuery = {
+                organization: req.user.organization,
+                category: "notifications",
+                user: req.user._id,
+            };
+
+            const notificationsSettings = await Settings.findOne(
+                notificationsQuery
+            );
+            if (!notificationsSettings) {
+                // إنشاء إعدادات الإشعارات الخاصة بالمستخدم إذا لم تكن موجودة
+                await ensureSettingsExist(
+                    req.user.organization,
+                    "notifications",
+                    req.user._id,
+                    true
+                );
+            }
+        }
+
+        const settings = await Settings.find(query)
             .populate("updatedBy", "name")
             .sort({ category: 1 });
 
@@ -255,7 +338,8 @@ export const getAllSettings = async (req, res) => {
                 categorySettings = await ensureSettingsExist(
                     req.user.organization,
                     category,
-                    req.user._id
+                    req.user._id,
+                    userSpecific === "true"
                 );
                 await categorySettings.populate("updatedBy", "name");
             }

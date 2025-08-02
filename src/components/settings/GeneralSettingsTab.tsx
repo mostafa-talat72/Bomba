@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { TabProps, GeneralSettings } from "../../types/settings";
 
 const GeneralSettingsTab: React.FC<TabProps> = ({
@@ -10,7 +10,24 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
     error,
     success,
 }) => {
+    // الحقول المحمية التي تحتاج صلاحيات خاصة
+    const protectedFields = ["systemName", "language", "timezone", "currency"];
+
+    // دالة للتحقق من صلاحيات تعديل حقل محدد
+    const canEditField = (field: string): boolean => {
+        // يمكن إضافة منطق أكثر تعقيداً هنا للتحقق من صلاحيات المستخدم
+        // حالياً نستخدم canEdit العام
+        return canEdit;
+    };
     const [localSettings, setLocalSettings] = useState<GeneralSettings>(settings as GeneralSettings);
+
+    // Update local settings when props change
+    useEffect(() => {
+        if (settings) {
+            console.log("GeneralSettingsTab received settings:", settings);
+            setLocalSettings(settings as GeneralSettings);
+        }
+    }, [settings]);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
     const handleInputChange = (field: keyof GeneralSettings, value: string) => {
@@ -76,7 +93,9 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
                 <p className="text-sm text-gray-600 mt-1">
                     إعدادات النظام الأساسية مثل الاسم واللغة والعملة
                 </p>
-      </div>
+            </div>
+
+
 
             {/* Error/Success Messages */}
             {error && (
@@ -96,6 +115,9 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                         اسم النظام
+                        {!canEditField("systemName") && (
+                            <span className="text-red-500 text-xs mr-2">(محظور)</span>
+                        )}
                 </label>
                 <input
                   type="text"
@@ -103,11 +125,14 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
                         onChange={(e) => handleInputChange("systemName", e.target.value)}
                         className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                             validationErrors.systemName ? "border-red-500" : "border-gray-300"
-                        }`}
-                        disabled={loading || saving}
+                        } ${!canEditField("systemName") ? "bg-gray-100 cursor-not-allowed" : ""}`}
+                        disabled={loading || saving || !canEditField("systemName")}
                     />
                     {validationErrors.systemName && (
                         <p className="text-red-500 text-sm mt-1">{validationErrors.systemName}</p>
+                    )}
+                    {!canEditField("systemName") && (
+                        <p className="text-orange-500 text-sm mt-1">لا يمكن تعديل اسم النظام - صلاحيات غير كافية</p>
                     )}
               </div>
 
@@ -115,14 +140,17 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                         اللغة
+                        {!canEditField("language") && (
+                            <span className="text-red-500 text-xs mr-2">(محظور)</span>
+                        )}
                 </label>
                 <select
                         value={localSettings.language}
                         onChange={(e) => handleInputChange("language", e.target.value)}
                         className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                             validationErrors.language ? "border-red-500" : "border-gray-300"
-                        }`}
-                        disabled={loading || saving}
+                        } ${!canEditField("language") ? "bg-gray-100 cursor-not-allowed" : ""}`}
+                        disabled={loading || saving || !canEditField("language")}
                     >
                         <option value="ar">العربية</option>
                         <option value="en">English</option>
@@ -347,20 +375,26 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
                     {validationErrors.language && (
                         <p className="text-red-500 text-sm mt-1">{validationErrors.language}</p>
                     )}
+                    {!canEditField("language") && (
+                        <p className="text-orange-500 text-sm mt-1">لا يمكن تعديل اللغة - صلاحيات غير كافية</p>
+                    )}
           </div>
 
                 {/* Timezone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   المنطقة الزمنية
+                  {!canEditField("timezone") && (
+                      <span className="text-red-500 text-xs mr-2">(محظور)</span>
+                  )}
                 </label>
                 <select
                         value={localSettings.timezone}
                         onChange={(e) => handleInputChange("timezone", e.target.value)}
                         className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                             validationErrors.timezone ? "border-red-500" : "border-gray-300"
-                        }`}
-                        disabled={loading || saving}
+                        } ${!canEditField("timezone") ? "bg-gray-100 cursor-not-allowed" : ""}`}
+                        disabled={loading || saving || !canEditField("timezone")}
                     >
                   <option value="Asia/Riyadh">الرياض (GMT+3)</option>
                   <option value="Asia/Dubai">دبي (GMT+4)</option>
@@ -576,20 +610,26 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
                     {validationErrors.timezone && (
                         <p className="text-red-500 text-sm mt-1">{validationErrors.timezone}</p>
                     )}
+                    {!canEditField("timezone") && (
+                        <p className="text-orange-500 text-sm mt-1">لا يمكن تعديل المنطقة الزمنية - صلاحيات غير كافية</p>
+                    )}
               </div>
 
                 {/* Currency */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                         العملة
+                        {!canEditField("currency") && (
+                            <span className="text-red-500 text-xs mr-2">(محظور)</span>
+                        )}
                 </label>
                 <select
                         value={localSettings.currency}
                         onChange={(e) => handleInputChange("currency", e.target.value)}
                         className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                             validationErrors.currency ? "border-red-500" : "border-gray-300"
-                        }`}
-                        disabled={loading || saving}
+                        } ${!canEditField("currency") ? "bg-gray-100 cursor-not-allowed" : ""}`}
+                        disabled={loading || saving || !canEditField("currency")}
                     >
                         <option value="SAR">ريال سعودي (SAR)</option>
                         <option value="AED">درهم إماراتي (AED)</option>
@@ -744,6 +784,9 @@ const GeneralSettingsTab: React.FC<TabProps> = ({
                 </select>
                     {validationErrors.currency && (
                         <p className="text-red-500 text-sm mt-1">{validationErrors.currency}</p>
+                    )}
+                    {!canEditField("currency") && (
+                        <p className="text-orange-500 text-sm mt-1">لا يمكن تعديل العملة - صلاحيات غير كافية</p>
                     )}
             </div>
           </div>

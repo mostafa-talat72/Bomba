@@ -1317,19 +1317,21 @@ class ApiClient {
   }
 
   // Settings endpoints
-  async getSettings(category: string): Promise<ApiResponse<any>> {
-    return this.request(`/settings/${category}`);
+  async getSettings(category: string, userSpecific: boolean = false): Promise<ApiResponse<any>> {
+    const params = userSpecific ? '?userSpecific=true' : '';
+    return this.request(`/settings/${category}${params}`);
   }
 
-  async updateSettings(category: string, settings: any): Promise<ApiResponse<any>> {
+  async updateSettings(category: string, settings: any, userSpecific: boolean = false): Promise<ApiResponse<any>> {
     return this.request(`/settings/${category}`, {
       method: 'PUT',
-      body: JSON.stringify({ settings }),
+      body: JSON.stringify({ settings, userSpecific }),
     });
   }
 
-  async getAllSettings(): Promise<ApiResponse<any[]>> {
-    return this.request('/settings');
+  async getAllSettings(userSpecific: boolean = false): Promise<ApiResponse<any[]>> {
+    const params = userSpecific ? '?userSpecific=true' : '';
+    return this.request(`/settings${params}`);
   }
 
   async resetSettings(category: string): Promise<ApiResponse<any>> {
