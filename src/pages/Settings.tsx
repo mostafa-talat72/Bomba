@@ -14,6 +14,7 @@ import {
   Settings as SettingsAdvanced,
   AlertTriangle,
   CheckCircle,
+  Info,
   RefreshCw,
   Save,
   X
@@ -36,16 +37,7 @@ import UserSettingsTab from '../components/settings/UserSettingsTab';
 const Settings = () => {
   const { user, api } = useApp();
   const [activeTab, setActiveTab] = useState<keyof SettingsData>('general');
-  const [settingsSummary, setSettingsSummary] = useState<{
-    totalSettings: number;
-    completedSettings: number;
-    incompleteSettings: string[];
-    lastUpdated: string;
-    version: string;
-    totalCategories: number;
-    customSettings: number;
-    categoriesWithErrors: string[];
-  } | null>(null);
+  const [settingsSummary, setSettingsSummary] = useState<any>(null);
   const [globalState, setGlobalState] = useState<{
     loading: boolean;
     saving: boolean;
@@ -223,7 +215,7 @@ const Settings = () => {
         encryption: false
       },
       manualBackup: {
-        lastBackup: '',
+        lastBackup: null,
         backupSize: '0 MB',
         backupLocation: './backups'
       },
@@ -389,7 +381,7 @@ const Settings = () => {
   // الحصول على صلاحيات المستخدم
   const getUserPermissions = (): Permission[] => {
     if (!user) return [];
-    return (user.permissions || []) as Permission[];
+    return user.permissions || [];
   };
 
   // التحقق من إمكانية الوصول للتبويب
@@ -416,7 +408,7 @@ const Settings = () => {
     };
 
     const requiredPermissions = tabPermissions[tabId] || ['settings'];
-    return requiredPermissions.some(permission => permissions.includes(permission as Permission));
+    return requiredPermissions.some(permission => permissions.includes(permission));
   };
 
   // التحقق من إمكانية التعديل
@@ -469,7 +461,7 @@ const Settings = () => {
 
         // عرض التحذيرات إذا وجدت
         if (response.data.validationErrors && response.data.validationErrors.length > 0) {
-          const warnings = response.data.validationErrors.filter((err: { severity: string }) => err.severity === 'warning');
+          const warnings = response.data.validationErrors.filter((err: any) => err.severity === 'warning');
           if (warnings.length > 0) {
             setGlobalState(prev => ({
               ...prev,
@@ -478,13 +470,12 @@ const Settings = () => {
           }
         }
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'خطأ في تحميل الإعدادات';
+    } catch (error: any) {
       setTabStates(prev => ({
         ...prev,
         [category]: {
           ...prev[category],
-          error: errorMessage
+          error: error.message || 'خطأ في تحميل الإعدادات'
         }
       }));
     } finally {
@@ -733,9 +724,9 @@ const Settings = () => {
                   <div className="text-2xl font-bold text-green-600">{settingsSummary.customSettings}</div>
                   <div className="text-sm text-gray-500">مخصصة</div>
                 </div>
-                {settingsSummary.categoriesWithErrors.length > 0 && (
+                {settingsSummary.categoriesWithErrors > 0 && (
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-red-600">{settingsSummary.categoriesWithErrors.length}</div>
+                    <div className="text-2xl font-bold text-red-600">{settingsSummary.categoriesWithErrors}</div>
                     <div className="text-sm text-gray-500">أخطاء</div>
                   </div>
                 )}
