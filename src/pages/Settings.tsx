@@ -9,23 +9,16 @@ const Settings: React.FC = () => {
     const context = useContext(AppContext);
     const user = context?.user;
     const api = context?.api;
-    const [activeTab, setActiveTab] = useState(() => {
-        // إذا كان المستخدم موظف، ابدأ بتبويب الإشعارات
-        const user = context?.user;
-        if (user && user.role !== "owner" && user.role !== "admin") {
-            return "notifications";
-        }
-        return "general";
-    });
-    const [settings, setSettings] = useState<SettingsData>({
-        general: {
-            systemName: "",
+    const [activeTab, setActiveTab] = useState("general");
+  const [settings, setSettings] = useState<SettingsData>({
+    general: {
+            systemName: "نظام إدارة المقهى",
             language: "ar",
             timezone: "Asia/Riyadh",
             currency: "SAR",
         },
         business: {
-            businessName: "",
+            businessName: "مقهى",
             businessType: "cafe",
             taxRate: 15,
             serviceCharge: 0,
@@ -70,19 +63,7 @@ const Settings: React.FC = () => {
         const permissions = getUserPermissions();
         if (permissions.includes("all")) return true;
         if (tab === "security") return true; // Security tab is accessible to all authenticated users
-
-        // تحقق من الصلاحيات المطلوبة لكل تبويب
-        switch (tab) {
-            case "general":
-                return permissions.includes("settings_organization");
-            case "business":
-                return permissions.includes("settings_organization");
-            case "notifications":
-                // جميع المستخدمين يمكنهم الوصول لإعدادات الإشعارات (خاصة بهم)
-                return true;
-            default:
-                return permissions.includes("settings");
-        }
+        return permissions.includes("settings");
     };
 
     // Check if user can edit settings
@@ -90,19 +71,7 @@ const Settings: React.FC = () => {
         const permissions = getUserPermissions();
         if (permissions.includes("all")) return true;
         if (tab === "security") return true; // Security tab is editable by all authenticated users
-
-        // تحقق من الصلاحيات المطلوبة لكل تبويب
-        switch (tab) {
-            case "general":
-                return permissions.includes("settings_organization");
-            case "business":
-                return permissions.includes("settings_organization");
-            case "notifications":
-                // جميع المستخدمين يمكنهم تعديل إعدادات الإشعارات الخاصة بهم
-                return true;
-            default:
-                return permissions.includes("settings");
-        }
+        return permissions.includes("settings");
     };
 
     // Handle password change
@@ -161,34 +130,26 @@ const Settings: React.FC = () => {
         setTabStates(prev => ({ ...prev, [category]: { ...prev[category], loading: true, error: "" } }));
 
         try {
-            // إعدادات الإشعارات تكون خاصة بالمستخدم دائماً
-            const isUserSpecific = category === "notifications" ? true : false;
-            const response = await api.getSettings(category, isUserSpecific);
-            if (response.success && response.data) {
-                // تحديث الإعدادات من قاعدة البيانات
-                const settingsData = response.data.settings || response.data;
-                console.log(`Loaded ${category} settings:`, settingsData);
+            const response = await api.getSettings(category);
+            if (response.success) {
                 setSettings(prev => ({
                     ...prev,
-                    [category]: settingsData,
-                }));
-                setTabStates(prev => ({
-                    ...prev,
-                    [category]: { ...prev[category], loading: false }
+                    [category]: response.data.settings,
                 }));
             } else {
                 setTabStates(prev => ({
-                    ...prev,
-                    [category]: { ...prev[category], loading: false, error: response.message || "خطأ في تحميل الإعدادات" }
-                }));
+        ...prev,
+                    [category]: { ...prev[category], loading: false, error: response.message || "" }
+      }));
             }
-        } catch (error) {
-            console.error("Error loading settings:", error);
+    } catch {
             setTabStates(prev => ({
-                ...prev,
+        ...prev,
                 [category]: { ...prev[category], loading: false, error: "خطأ في تحميل الإعدادات" }
             }));
         }
+
+        setTabStates(prev => ({ ...prev, [category]: { ...prev[category], loading: false } }));
     };
 
     // Save settings for a specific tab
@@ -198,16 +159,11 @@ const Settings: React.FC = () => {
         setTabStates(prev => ({ ...prev, [category]: { ...prev[category], saving: true, error: "", success: "" } }));
 
         try {
-            // إعدادات الإشعارات تكون خاصة بالمستخدم دائماً
-            const isUserSpecific = category === "notifications" ? true : false;
-            const response = await api.updateSettings(category, newSettings, isUserSpecific);
-            if (response.success && response.data) {
-                // تحديث الإعدادات المحفوظة من قاعدة البيانات
-                const settingsData = response.data.settings || response.data;
-                console.log(`Saved ${category} settings:`, settingsData);
+            const response = await api.updateSettings(category, newSettings);
+            if (response.success) {
                 setSettings(prev => ({
                     ...prev,
-                    [category]: settingsData,
+                    [category]: response.data.settings,
                 }));
                 setTabStates(prev => ({
                     ...prev,
@@ -215,33 +171,24 @@ const Settings: React.FC = () => {
                 }));
             } else {
                 setTabStates(prev => ({
-                    ...prev,
-                    [category]: { ...prev[category], saving: false, error: response.message || "خطأ في حفظ الإعدادات" }
-                }));
+        ...prev,
+                    [category]: { ...prev[category], saving: false, error: response.message || "" }
+      }));
             }
-        } catch (error) {
-            console.error("Error saving settings:", error);
+    } catch {
             setTabStates(prev => ({
-                ...prev,
+        ...prev,
                 [category]: { ...prev[category], saving: false, error: "خطأ في حفظ الإعدادات" }
-            }));
-        }
-    };
+      }));
+    }
+  };
 
     // Load settings when tab changes
-    useEffect(() => {
+  useEffect(() => {
         if (canAccessTab(activeTab) && activeTab !== "security") {
             loadSettings(activeTab);
-        }
-    }, [activeTab]);
-
-    // Load initial settings when component mounts
-    useEffect(() => {
-        if (api && canAccessTab(activeTab) && activeTab !== "security") {
-            console.log("Loading initial settings for tab:", activeTab);
-            loadSettings(activeTab);
-        }
-    }, [api, activeTab]); // تحميل الإعدادات عند توفر API أو تغيير التبويب
+    }
+  }, [activeTab]);
 
     // Clear messages after 3 seconds
     useEffect(() => {
@@ -343,8 +290,6 @@ const Settings: React.FC = () => {
         const currentTabState = tabStates[activeTab];
         const canEditCurrent = canEdit(activeTab);
 
-        console.log(`Rendering ${activeTab} tab with settings:`, currentSettings);
-
         if (!canAccessTab(activeTab)) {
             return (
                 <div className="text-center py-8">
@@ -382,19 +327,13 @@ const Settings: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Header */}
                 <div className="mb-8">
-                                            <div className="flex justify-between items-center">
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                                    الإعدادات
-                                </h1>
-                                <p className="text-gray-600">
-                                    إدارة إعدادات النظام والإشعارات
-                                </p>
-                            </div>
-                        </div>
-
-
-                </div>
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                        الإعدادات
+                    </h1>
+                    <p className="text-gray-600">
+                        إدارة إعدادات النظام والإشعارات
+                    </p>
+      </div>
 
                 {/* Global Messages */}
                 {globalState.error && (

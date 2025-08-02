@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { TabProps, NotificationsSettings } from "../../types/settings";
 
 const NotificationsSettingsTab: React.FC<TabProps> = ({
@@ -11,14 +11,6 @@ const NotificationsSettingsTab: React.FC<TabProps> = ({
     success,
 }) => {
     const [localSettings, setLocalSettings] = useState<NotificationsSettings>(settings as NotificationsSettings);
-
-    // Update local settings when props change
-    useEffect(() => {
-        if (settings) {
-            console.log("NotificationsSettingsTab received settings:", settings);
-            setLocalSettings(settings as NotificationsSettings);
-        }
-    }, [settings]);
 
     const handleInputChange = (field: keyof NotificationsSettings, value: boolean) => {
         setLocalSettings(prev => ({ ...prev, [field]: value }));
@@ -47,8 +39,6 @@ const NotificationsSettingsTab: React.FC<TabProps> = ({
                     إدارة الإشعارات والتنبيهات في النظام
                 </p>
             </div>
-
-
 
             {/* Error/Success Messages */}
             {error && (
@@ -94,21 +84,16 @@ const NotificationsSettingsTab: React.FC<TabProps> = ({
                             <p className="text-sm text-gray-600 mt-1">
                                 استلام الإشعارات عبر الرسائل النصية
                             </p>
-                            <div className="mt-2">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                    سوف تتوفر قريباً
-                                </span>
-                            </div>
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer opacity-50">
+                        <label className="relative inline-flex items-center cursor-pointer">
                             <input
                                 type="checkbox"
                                 checked={localSettings.smsNotifications}
                                 onChange={(e) => handleInputChange("smsNotifications", e.target.checked)}
-                                disabled={true}
+                                disabled={loading || saving}
                                 className="sr-only peer"
                             />
-                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-400"></div>
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                     </div>
                 </div>
@@ -136,7 +121,19 @@ const NotificationsSettingsTab: React.FC<TabProps> = ({
                 </div>
             </div>
 
-
+            {/* Notification Preview */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">معاينة الإشعارات</h4>
+                <div className="space-y-3">
+                    <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                        <div className="flex items-center">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
+                            <span className="text-sm text-gray-700">إشعار تجريبي</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">هذا مثال على شكل الإشعارات في النظام</p>
+                    </div>
+                </div>
+            </div>
 
             {/* Save Button */}
             <div className="flex justify-end pt-6 border-t border-gray-200">

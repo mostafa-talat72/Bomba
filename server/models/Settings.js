@@ -7,11 +7,6 @@ const settingsSchema = new mongoose.Schema(
             ref: "Organization",
             required: true,
         },
-        user: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: false, // يمكن أن تكون إعدادات عامة للمنظمة أو خاصة بالمستخدم
-        },
         category: {
             type: String,
             enum: ["general", "business", "notifications"],
@@ -24,10 +19,6 @@ const settingsSchema = new mongoose.Schema(
         isDefault: {
             type: Boolean,
             default: true,
-        },
-        isUserSpecific: {
-            type: Boolean,
-            default: false,
         },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -44,11 +35,8 @@ const settingsSchema = new mongoose.Schema(
     }
 );
 
-// Compound unique index - يمكن أن تكون إعدادات عامة أو خاصة بالمستخدم
-settingsSchema.index(
-    { organization: 1, category: 1, user: 1 },
-    { unique: true }
-);
+// Compound unique index
+settingsSchema.index({ organization: 1, category: 1 }, { unique: true });
 
 // Default settings for each category
 settingsSchema.statics.getDefaultSettings = function (category) {
@@ -110,32 +98,20 @@ settingsSchema.methods.validateSettings = function () {
 settingsSchema.statics.ensureSettingsExist = async function (
     organizationId,
     category,
-    userId,
-    isUserSpecific = false
+    userId
 ) {
-    const query = {
+    const existingSettings = await this.findOne({
         organization: organizationId,
         category,
-    };
-
-    // إذا كانت إعدادات خاصة بالمستخدم، أضف معرف المستخدم للاستعلام
-    if (isUserSpecific) {
-        query.user = userId;
-    } else {
-        query.user = { $exists: false };
-    }
-
-    const existingSettings = await this.findOne(query);
+    });
 
     if (!existingSettings) {
         const defaultSettings = this.getDefaultSettings(category);
         const newSettings = new this({
             organization: organizationId,
-            user: isUserSpecific ? userId : null,
             category,
             settings: defaultSettings,
             isDefault: true,
-            isUserSpecific,
             createdBy: userId,
         });
 

@@ -8,12 +8,6 @@ export const PERMISSIONS = {
     DASHBOARD: "dashboard",
     SETTINGS: "settings",
 
-    // صلاحيات الإعدادات التفصيلية
-    SETTINGS_GENERAL: "settings_general",
-    SETTINGS_BUSINESS: "settings_business",
-    SETTINGS_NOTIFICATIONS: "settings_notifications",
-    SETTINGS_ORGANIZATION: "settings_organization", // إعدادات المنظمة الأساسية
-
     // صلاحيات الأجهزة
     PLAYSTATION: "playstation",
     COMPUTER: "computer",
@@ -51,10 +45,6 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.COSTS,
             PERMISSIONS.USERS,
             PERMISSIONS.SETTINGS,
-            PERMISSIONS.SETTINGS_GENERAL,
-            PERMISSIONS.SETTINGS_BUSINESS,
-            PERMISSIONS.SETTINGS_NOTIFICATIONS,
-            PERMISSIONS.SETTINGS_ORGANIZATION,
         ],
         description: "إدارة كاملة للنظام",
     },
@@ -69,9 +59,8 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.BILLING,
             PERMISSIONS.REPORTS,
             PERMISSIONS.INVENTORY,
-            PERMISSIONS.SETTINGS_NOTIFICATIONS, // يمكنه تعديل إعدادات الإشعارات الخاصة به فقط
         ],
-        description: "إدارة العمليات اليومية والإشعارات الشخصية",
+        description: "إدارة العمليات اليومية",
     },
     cashier: {
         name: "كاشير",
@@ -81,9 +70,8 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.COMPUTER,
             PERMISSIONS.CAFE,
             PERMISSIONS.BILLING,
-            PERMISSIONS.SETTINGS_NOTIFICATIONS, // يمكنه تعديل إعدادات الإشعارات الخاصة به فقط
         ],
-        description: "إدارة المبيعات والمدفوعات والإشعارات الشخصية",
+        description: "إدارة المبيعات والمدفوعات",
     },
     kitchen: {
         name: "مطبخ",
@@ -91,9 +79,8 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.DASHBOARD,
             PERMISSIONS.CAFE,
             PERMISSIONS.MENU,
-            PERMISSIONS.SETTINGS_NOTIFICATIONS, // يمكنه تعديل إعدادات الإشعارات الخاصة به فقط
         ],
-        description: "إدارة الطلبات والمطبخ والإشعارات الشخصية",
+        description: "إدارة الطلبات والمطبخ",
     },
     staff: {
         name: "موظف",
@@ -101,9 +88,8 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.DASHBOARD,
             PERMISSIONS.PLAYSTATION,
             PERMISSIONS.COMPUTER,
-            PERMISSIONS.SETTINGS_NOTIFICATIONS, // يمكنه تعديل إعدادات الإشعارات الخاصة به فقط
         ],
-        description: "إدارة الجلسات والأجهزة والإشعارات الشخصية",
+        description: "إدارة الجلسات والأجهزة",
     },
 };
 
@@ -194,10 +180,10 @@ export const checkSettingsPermission = (user, category) => {
 
     // التحقق من الصلاحيات المطلوبة لكل فئة إعدادات
     const categoryPermissions = {
-        general: [PERMISSIONS.SETTINGS_ORGANIZATION], // فقط صاحب المنشأة والمدير
-        business: [PERMISSIONS.SETTINGS_ORGANIZATION], // فقط صاحب المنشأة والمدير
-        notifications: [PERMISSIONS.SETTINGS_NOTIFICATIONS], // جميع المستخدمين يمكنهم تعديل إشعاراتهم
+        general: [PERMISSIONS.SETTINGS],
+        business: [PERMISSIONS.SETTINGS],
         inventory: [PERMISSIONS.SETTINGS, PERMISSIONS.INVENTORY],
+        notifications: [PERMISSIONS.SETTINGS],
         appearance: [PERMISSIONS.SETTINGS],
         security: [PERMISSIONS.SETTINGS],
         backup: [PERMISSIONS.SETTINGS],
@@ -243,47 +229,6 @@ export const checkEditPermission = (user, path) => {
         ]);
     }
 
-    return checkPermission(user, PERMISSIONS.SETTINGS);
-};
-
-// دالة للتحقق من صلاحيات تعديل حقول محددة في الإعدادات
-export const checkSettingsFieldPermission = (user, category, field) => {
-    if (!user) return false;
-
-    // صاحب المنشأة له صلاحيات كاملة
-    if (user.role === "owner" || user.permissions?.includes(PERMISSIONS.ALL)) {
-        return true;
-    }
-
-    // الحقول المحمية التي تحتاج صلاحيات خاصة
-    const protectedFields = {
-        general: {
-            systemName: [PERMISSIONS.SETTINGS_ORGANIZATION],
-            language: [], // اللغة متاحة للجميع
-            timezone: [PERMISSIONS.SETTINGS_ORGANIZATION],
-            currency: [PERMISSIONS.SETTINGS_ORGANIZATION],
-        },
-        business: {
-            businessName: [PERMISSIONS.SETTINGS_ORGANIZATION],
-            businessType: [PERMISSIONS.SETTINGS_ORGANIZATION],
-            taxRate: [PERMISSIONS.SETTINGS_ORGANIZATION],
-            serviceCharge: [PERMISSIONS.SETTINGS_ORGANIZATION],
-        },
-        notifications: {
-            emailNotifications: [PERMISSIONS.SETTINGS_NOTIFICATIONS],
-            smsNotifications: [PERMISSIONS.SETTINGS_NOTIFICATIONS],
-            pushNotifications: [PERMISSIONS.SETTINGS_NOTIFICATIONS],
-        },
-    };
-
-    // التحقق من الحقول المحمية
-    const categoryFields = protectedFields[category];
-    if (categoryFields && categoryFields[field]) {
-        const requiredPermissions = categoryFields[field];
-        return checkPermissions(user, requiredPermissions);
-    }
-
-    // الحقول الأخرى تحتاج صلاحيات الإعدادات العامة
     return checkPermission(user, PERMISSIONS.SETTINGS);
 };
 
