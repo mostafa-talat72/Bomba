@@ -29,6 +29,7 @@ interface AppContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isLoggingOut: boolean;
   error: string | null;
   notification: NotificationType | null;
 
@@ -140,6 +141,12 @@ interface AppContextType {
   // Export functions
   exportReportToExcel: (reportType: string, period?: string) => Promise<void>;
   exportReportToPDF: (reportType: string, period?: string) => Promise<void>;
+
+  // Settings methods
+  updateUserProfile: (profileData: any) => Promise<boolean>;
+  changePassword: (passwordData: any) => Promise<boolean>;
+  updateNotificationSettings: (settings: any) => Promise<boolean>;
+  updateGeneralSettings: (settings: any) => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -151,6 +158,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<NotificationType | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Data state
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -217,28 +225,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // جلب الإشعارات غير المقروءة بشكل لحظي
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isLoggingOut) return;
     let interval: ReturnType<typeof setInterval>;
     const fetchUnreadNotifications = async () => {
-      const notifs = await getNotifications({ limit: 100 });
-      setNotifications(notifs);
+      try {
+        const notifs = await getNotifications({ limit: 100 });
+        setNotifications(notifs);
+      } catch (error) {
+        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
+        if (!isAuthenticated || isLoggingOut) return;
+        console.error('Error fetching notifications:', error);
+      }
     };
     fetchUnreadNotifications();
     interval = setInterval(fetchUnreadNotifications, 5000); // كل 5 ثوانٍ
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isLoggingOut]);
 
   // جلب الطلبات بشكل لحظي
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isLoggingOut) return;
     let interval: ReturnType<typeof setInterval>;
     const fetchCafeOrders = async () => {
-      await fetchOrders();
+      try {
+        await fetchOrders();
+      } catch (error) {
+        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
+        if (!isAuthenticated || isLoggingOut) return;
+        console.error('Error fetching orders:', error);
+      }
     };
     fetchCafeOrders();
     interval = setInterval(fetchCafeOrders, 5000); // كل 5 ثوانٍ
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isLoggingOut]);
 
   // تحقق من صلاحية مشاهدة الجلسات
   const canViewSessions = user && user.permissions && (
@@ -249,18 +269,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // جلب الجلسات النشطة بشكل لحظي فقط إذا كان لديه الصلاحية
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isLoggingOut) return;
     if (!canViewSessions) return;
     let interval: ReturnType<typeof setInterval>;
     const fetchActiveSessions = async () => {
-      await fetchSessions();
+      try {
+        await fetchSessions();
+      } catch (error) {
+        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
+        if (!isAuthenticated || isLoggingOut) return;
+        console.error('Error fetching sessions:', error);
+      }
     };
     fetchActiveSessions();
     interval = setInterval(fetchActiveSessions, 5000); // كل 5 ثوانٍ
     return () => clearInterval(interval);
-  }, [isAuthenticated, canViewSessions]);
+  }, [isAuthenticated, canViewSessions, isLoggingOut]);
 
   useEffect(() => {
+    if (!isAuthenticated || isLoggingOut) return;
+
     const fetchSubscription = async () => {
       try {
         setSubscriptionStatus('loading');
@@ -272,11 +300,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (data.status === 'active') setSubscriptionStatus('active');
         else setSubscriptionStatus('expired');
       } catch {
+        if (!isAuthenticated || isLoggingOut) return;
         setSubscriptionStatus('expired');
       }
     };
     fetchSubscription();
-  }, []);
+  }, [isAuthenticated, isLoggingOut]);
 
   useEffect(() => {
     // تم تعطيل التوجيه التلقائي لصفحة الاشتراكات، النظام مجاني حالياً
@@ -294,37 +323,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setUser(response.data.user);
           setIsAuthenticated(true);
           await refreshData();
-        } else if (response.message && response.message.includes('توكن غير صالح')) {
+        } else if (response.message && (response.message.includes('توكن غير صالح') || response.message.includes('انتهت صلاحية الجلسة'))) {
           // محاولة تجديد التوكن تلقائياً
           const refreshToken = localStorage.getItem('refreshToken');
           if (refreshToken) {
-            const refreshRes = await api.refreshToken(refreshToken);
-            if (refreshRes.success && refreshRes.data?.token) {
-              localStorage.setItem('token', refreshRes.data.token);
-              if (refreshRes.data.refreshToken) {
-                localStorage.setItem('refreshToken', refreshRes.data.refreshToken);
+            try {
+              const refreshRes = await api.refreshToken(refreshToken);
+              if (refreshRes.success && refreshRes.data?.token) {
+                localStorage.setItem('token', refreshRes.data.token);
+                if (refreshRes.data.refreshToken) {
+                  localStorage.setItem('refreshToken', refreshRes.data.refreshToken);
+                }
+                api.setToken(refreshRes.data.token);
+                // أعد محاولة getMe بعد التجديد
+                response = await api.getMe();
+                if (response.success && response.data?.user) {
+                  setUser(response.data.user);
+                  setIsAuthenticated(true);
+                  await refreshData();
+                  setIsLoading(false);
+                  return;
+                }
               }
-              api.setToken(refreshRes.data.token);
-              // أعد محاولة getMe بعد التجديد
-              response = await api.getMe();
-              if (response.success && response.data?.user) {
-                setUser(response.data.user);
-                setIsAuthenticated(true);
-                await refreshData();
-                setIsLoading(false);
-                return;
-              }
+            } catch (refreshError) {
+              console.log('فشل في تجديد التوكن:', refreshError);
             }
           }
           // إذا فشل التجديد أو لم يوجد refreshToken
           localStorage.removeItem('token');
           localStorage.removeItem('refreshToken');
+          api.clearToken();
           setUser(null);
           setIsAuthenticated(false);
           showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
           navigate('/login', { replace: true });
         } else {
           localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          api.clearToken();
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -334,8 +370,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsAuthenticated(false);
       }
     } catch (error) {
+      console.error('خطأ في التحقق من المصادقة:', error);
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
+      api.clearToken();
       setUser(null);
       setIsAuthenticated(false);
       showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
@@ -414,6 +452,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const logout = async (): Promise<void> => {
+    setIsLoggingOut(true); // منع أي استدعاءات API أثناء تسجيل الخروج
+
+    // إيقاف جميع الـ intervals أولاً
+    const intervals = window.setInterval(() => {}, 999999);
+    for (let i = 1; i <= intervals; i++) {
+      window.clearInterval(i);
+    }
+
     const token = localStorage.getItem('token');
     if (token) {
       try {
@@ -422,6 +468,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // تجاهل أي خطأ (401 أو غيره)
       }
     }
+
+    // مسح التوكن من localStorage و API
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    api.clearToken();
+
+    // إعادة تعيين جميع الحالات
     setUser(null);
     setIsAuthenticated(false);
     setSessions([]);
@@ -429,7 +482,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setInventory([]);
     setBills([]);
     setCosts([]);
+    setDevices([]);
+    setMenuItems([]);
+    setInventoryItems([]);
+    setUsers([]);
+    setNotifications([]);
+    setSettings(null);
+    setError(null);
+    setNotification(null);
+
+    // إعادة توجيه إلى صفحة تسجيل الدخول
+    navigate('/login', { replace: true });
     showNotification('تم تسجيل الخروج بنجاح', 'info');
+
+    setIsLoggingOut(false); // إعادة تعيين العلم
   };
 
   // Data fetching methods
@@ -1465,11 +1531,77 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Settings methods
+  const updateUserProfile = async (profileData: any): Promise<boolean> => {
+    try {
+      const response = await api.updateUserProfile(profileData);
+      if (response.success) {
+        showNotification('تم تحديث الملف الشخصي بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في تحديث الملف الشخصي', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في تحديث الملف الشخصي', 'error');
+      return false;
+    }
+  };
+
+  const changePassword = async (passwordData: any): Promise<boolean> => {
+    try {
+      const response = await api.changePassword(passwordData);
+      if (response.success) {
+        showNotification('تم تغيير كلمة المرور بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في تغيير كلمة المرور', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في تغيير كلمة المرور', 'error');
+      return false;
+    }
+  };
+
+  const updateNotificationSettings = async (settings: any): Promise<boolean> => {
+    try {
+      const response = await api.updateNotificationSettings(settings);
+      if (response.success) {
+        showNotification('تم حفظ إعدادات الإشعارات بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في حفظ إعدادات الإشعارات', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في حفظ إعدادات الإشعارات', 'error');
+      return false;
+    }
+  };
+
+  const updateGeneralSettings = async (settings: any): Promise<boolean> => {
+    try {
+      const response = await api.updateGeneralSettings(settings);
+      if (response.success) {
+        showNotification('تم حفظ الإعدادات العامة بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في حفظ الإعدادات العامة', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في حفظ الإعدادات العامة', 'error');
+      return false;
+    }
+  };
+
   const value: AppContextType = {
     // Auth state
     user,
     isAuthenticated,
     isLoading,
+    isLoggingOut,
     error,
     notification,
 
@@ -1569,6 +1701,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Export functions
     exportReportToExcel,
     exportReportToPDF,
+
+    // Settings methods
+    updateUserProfile,
+    changePassword,
+    updateNotificationSettings,
+    updateGeneralSettings,
   };
 
   return (

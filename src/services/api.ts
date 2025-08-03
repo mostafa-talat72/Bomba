@@ -322,9 +322,9 @@ class ApiClient {
         if (response.status === 401 && retryOn401) {
           // Singleton refresh logic
           const refreshToken = localStorage.getItem('refreshToken');
-          if (refreshToken) {
-            if (!this.refreshPromise) {
-              this.refreshPromise = (async () => {
+          if (refreshToken && !this.refreshPromise) {
+            this.refreshPromise = (async () => {
+              try {
                 const refreshResponse = await this.refreshToken(refreshToken);
                 if (refreshResponse.success && refreshResponse.data?.token) {
                   this.setToken(refreshResponse.data.token);
@@ -335,11 +335,16 @@ class ApiClient {
                   return true;
                 } else {
                   this.clearToken();
-                  localStorage.removeItem('refreshToken');
                   return false;
                 }
-              })();
-            }
+              } catch (error) {
+                this.clearToken();
+                return false;
+              }
+            })();
+          }
+
+          if (this.refreshPromise) {
             const refreshResult = await this.refreshPromise;
             this.refreshPromise = null;
             if (refreshResult) {
@@ -446,6 +451,9 @@ class ApiClient {
   clearToken() {
     this.token = null;
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    // إلغاء جميع الطلبات الجارية
+    this.refreshPromise = null;
   }
 
   private getToken(): string | null {
@@ -537,7 +545,12 @@ class ApiClient {
     this.clearToken();
     localStorage.removeItem('refreshToken');
 
-    // محاولة إرسال طلب logout للـ backend (اختياري)
+    // محاولة إرسال طلب logout للـ backend فقط إذا كان هناك توكن
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return { success: true, message: 'تم تسجيل الخروج' };
+    }
+
     try {
       const response = await this.request('/auth/logout', {
         method: 'POST',
@@ -1311,6 +1324,59 @@ class ApiClient {
   async importSettings(settings: any): Promise<ApiResponse<any>> {
     return this.request('/settings/import', {
       method: 'POST',
+      body: JSON.stringify({ settings }),
+    });
+  }
+
+  // User profile methods
+  async getUserProfile(): Promise<ApiResponse<User>> {
+    return this.request('/settings/profile');
+  }
+
+  async updateUserProfile(profileData: {
+    name: string;
+    email: string;
+    phone?: string;
+    address?: string;
+  }): Promise<ApiResponse<User>> {
+    return this.request('/settings/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
+    });
+  }
+
+  // Password change method
+  async changePassword(passwordData: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/settings/change-password', {
+      method: 'PUT',
+      body: JSON.stringify(passwordData),
+    });
+  }
+
+  // Notification settings methods
+  async getNotificationSettings(): Promise<ApiResponse<any>> {
+    return this.request('/settings/notifications');
+  }
+
+  async updateNotificationSettings(settings: any): Promise<ApiResponse<any>> {
+    return this.request('/settings/notifications', {
+      method: 'PUT',
+      body: JSON.stringify({ settings }),
+    });
+  }
+
+  // General settings methods
+  async getGeneralSettings(): Promise<ApiResponse<any>> {
+    return this.request('/settings/general');
+  }
+
+  async updateGeneralSettings(settings: any): Promise<ApiResponse<any>> {
+    return this.request('/settings/general', {
+      method: 'PUT',
       body: JSON.stringify({ settings }),
     });
   }

@@ -24,7 +24,7 @@ interface NotificationStats {
 }
 
 const NotificationManagement = () => {
-  const { user, getNotifications, getNotificationStats, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, showNotification } = useApp();
+  const { user, getNotifications, getNotificationStats, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, showNotification, isLoggingOut } = useApp();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState<NotificationStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,6 +63,7 @@ const NotificationManagement = () => {
   };
 
   useEffect(() => {
+    if (!user || isLoggingOut) return; // لا تحمل البيانات إذا لم يكن المستخدم مصادق عليه أو أثناء تسجيل الخروج
     loadNotifications();
     loadStats();
     // تحديد جميع الإشعارات كمقروءة عند فتح الصفحة
@@ -72,7 +73,7 @@ const NotificationManagement = () => {
     return () => {
       handleMarkAllAsReadOnPageLoad();
     };
-  }, [filterCategory, filterUnread]);
+  }, [filterCategory, filterUnread, user, isLoggingOut]);
 
   const handleMarkAllAsReadOnPageLoad = async () => {
     if (isMarkingAllAsRead) return; // تجنب الاستدعاءات المتكررة
@@ -107,6 +108,8 @@ const NotificationManagement = () => {
       const data = await getNotifications(options);
       setNotifications(data);
     } catch {
+      // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه أو أثناء تسجيل الخروج
+      if (!user || isLoggingOut) return;
       showNotification('خطأ في تحميل الإشعارات', 'error');
     } finally {
       setLoading(false);
@@ -122,6 +125,8 @@ const NotificationManagement = () => {
         setStats(null);
       }
     } catch {
+      // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه أو أثناء تسجيل الخروج
+      if (!user || isLoggingOut) return;
       console.error('Error loading stats');
       setStats(null);
     }

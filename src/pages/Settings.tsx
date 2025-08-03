@@ -1,752 +1,573 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Bell, Palette, Shield, Database } from 'lucide-react';
-import { api } from '../services/api';
+import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState('general');
-  const [general, setGeneral] = useState({
-    cafeName: '',
-    currency: 'EGP',
-    timezone: 'Africa/Cairo',
-    language: 'ar',
-    address: '',
-    phone: '',
-    email: '',
-  });
-  // إعدادات كل تبويب
-  const [notifications, setNotifications] = useState<any>(null);
-  const [appearance, setAppearance] = useState<any>(null);
-  const [security, setSecurity] = useState<any>(null);
-  const [backup, setBackup] = useState<any>(null);
-  // حالة التحميل/الحفظ/النجاح/الخطأ لكل تبويب
-  const [tabState, setTabState] = useState({
-    general: { loading: false, saving: false, success: '', error: '' },
-    notifications: { loading: false, saving: false, success: '', error: '' },
-    appearance: { loading: false, saving: false, success: '', error: '' },
-    security: { loading: false, saving: false, success: '', error: '' },
-    backup: { loading: false, saving: false, success: '', error: '' },
-  });
-
-  const [loading, setLoading] = useState(false);
+  const { user, showNotification, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings } = useApp();
+  const [activeTab, setActiveTab] = useState('profile');
   const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
 
-  // دالة جلب الإعدادات لأي تبويب
-  const fetchTabSettings = async (category: string) => {
-    setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: true, error: '', success: '' } }));
-    const res = await api.getSettings(category);
-    if (res.success && res.data) {
-      switch (category) {
-        case 'general': setGeneral({ ...general, ...res.data.settings }); break;
-        case 'notifications': setNotifications(res.data.settings); break;
-        case 'appearance': setAppearance(res.data.settings); break;
-        case 'security': setSecurity(res.data.settings); break;
-        case 'backup': setBackup(res.data.settings); break;
-      }
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: '', success: '' } }));
-    } else {
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: res.message || 'تعذر تحميل الإعدادات', success: '' } }));
-    }
-  };
+  // Profile state
+  const [profile, setProfile] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    address: user?.address || '',
+  });
 
-  // دالة استعادة الإعدادات الافتراضية لأي تبويب
-  const handleReset = async (category: string) => {
-    setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: true, error: '', success: '' } }));
-    const res = await api.resetSettings(category);
-    if (res.success && res.data) {
-      await fetchTabSettings(category);
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: '', success: 'تم استعادة الإعدادات الافتراضية بنجاح' } }));
-    } else {
-      setTabState((prev) => ({ ...prev, [category]: { ...prev[category], loading: false, error: res.message || 'تعذر استعادة الإعدادات الافتراضية', success: '' } }));
-    }
-  };
+  // Password change state
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
 
-  // جلب الإعدادات عند تغيير التبويب
+  // Notification settings state
+  const [notificationSettings, setNotificationSettings] = useState({
+    sessionNotifications: true,
+    orderNotifications: true,
+    inventoryNotifications: true,
+    billingNotifications: true,
+    soundEnabled: true,
+    emailNotifications: false,
+    showNotificationCount: true,
+    autoMarkAsRead: false,
+  });
+
+  // General settings state
+  const [generalSettings, setGeneralSettings] = useState({
+    theme: 'light',
+    language: 'ar',
+    timezone: 'Africa/Cairo',
+    currency: 'EGP',
+  });
+
   useEffect(() => {
-    fetchTabSettings(activeTab);
-    // eslint-disable-next-line
-  }, [activeTab]);
+    if (user) {
+      setProfile({
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || '',
+      });
+    }
+  }, [user]);
 
-  const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setGeneral({ ...general, [e.target.name]: e.target.value });
+  const handleProfileUpdate = async () => {
+    if (!profile.name.trim() || !profile.email.trim()) {
+      showNotification('الاسم والبريد الإلكتروني مطلوبان', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const success = await updateUserProfile(profile);
+      if (success) {
+        // تحديث بيانات المستخدم في الواجهة
+        // يمكن إضافة منطق إضافي هنا
+      }
+    } catch {
+      // تم التعامل مع الخطأ في الدالة
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    setSuccess('');
-    setError('');
-    const res = await api.updateSettings('general', general);
-    if (res.success) {
-      setSuccess('تم حفظ الإعدادات بنجاح');
-    } else {
-      setError(res.message || 'حدث خطأ أثناء الحفظ');
+  const handlePasswordChange = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      showNotification('جميع الحقول مطلوبة', 'error');
+      return;
     }
-    setSaving(false);
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      showNotification('كلمة المرور الجديدة غير متطابقة', 'error');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      showNotification('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const success = await changePassword(passwordData);
+      if (success) {
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+        });
+      }
+    } catch {
+      // تم التعامل مع الخطأ في الدالة
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleNotificationSettingsUpdate = async () => {
+    setSaving(true);
+    try {
+      await updateNotificationSettings(notificationSettings);
+    } catch {
+      // تم التعامل مع الخطأ في الدالة
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGeneralSettingsUpdate = async () => {
+    setSaving(true);
+    try {
+      await updateGeneralSettings(generalSettings);
+    } catch {
+      // تم التعامل مع الخطأ في الدالة
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = [
-    { id: 'general', name: 'عام', icon: SettingsIcon },
+    { id: 'profile', name: 'الملف الشخصي', icon: User },
+    { id: 'password', name: 'كلمة المرور', icon: Lock },
     { id: 'notifications', name: 'الإشعارات', icon: Bell },
-    { id: 'appearance', name: 'المظهر', icon: Palette },
-    { id: 'security', name: 'الأمان', icon: Shield },
-    { id: 'backup', name: 'النسخ الاحتياطي', icon: Database },
+    { id: 'general', name: 'عام', icon: SettingsIcon },
   ];
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center">
-        <SettingsIcon className="h-8 w-8 text-primary-600 ml-3" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">إعدادات النظام</h1>
-          <p className="text-gray-600">تخصيص وإدارة إعدادات التطبيق</p>
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">جاري التحميل...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Sidebar */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <nav className="space-y-2">
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">الإعدادات</h1>
+          <p className="text-gray-600">إدارة إعدادات حسابك وتفضيلاتك</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border">
+          {/* Tabs */}
+          <div className="border-b border-gray-200">
+            <nav className="flex space-x-8 px-6" aria-label="Tabs">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+                    className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
                       activeTab === tab.id
-                        ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    <Icon className="h-5 w-5 ml-3" />
-                    {tab.name}
+                    <Icon className="h-5 w-5" />
+                    <span>{tab.name}</span>
                   </button>
                 );
               })}
             </nav>
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="lg:col-span-3">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            {/* General Settings */}
-            {activeTab === 'general' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">الإعدادات العامة</h3>
-                {tabState.general.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.general.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.general.error}
-                    {tabState.general.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('general')}
-                        disabled={tabState.general.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                <div className="space-y-6">
-                  {tabState.general.success && <div className="text-green-600 text-center">{tabState.general.success}</div>}
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Profile Tab */}
+            {activeTab === 'profile' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">الملف الشخصي</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">اسم الطلبات</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        الاسم الكامل
+                      </label>
                       <input
                         type="text"
-                        name="cafeName"
-                        value={general.cafeName}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        value={profile.name}
+                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="أدخل اسمك الكامل"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">العملة</label>
-                      <select
-                        name="currency"
-                        value={general.currency}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="EGP">جنيه مصري (ج.م)</option>
-                        <option value="USD">دولار أمريكي ($)</option>
-                        <option value="EUR">يورو (€)</option>
-                      </select>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        البريد الإلكتروني
+                      </label>
+                      <input
+                        type="email"
+                        value={profile.email}
+                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="أدخل بريدك الإلكتروني"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        رقم الهاتف
+                      </label>
+                      <input
+                        type="tel"
+                        value={profile.phone}
+                        onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="أدخل رقم هاتفك"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        العنوان
+                      </label>
+                      <input
+                        type="text"
+                        value={profile.address}
+                        onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="أدخل عنوانك"
+                      />
                     </div>
                   </div>
+                  <div className="mt-6">
+                    <button
+                      onClick={handleProfileUpdate}
+                      disabled={saving}
+                      className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4" />
+                      <span>{saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Password Tab */}
+            {activeTab === 'password' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">تغيير كلمة المرور</h3>
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">المنطقة الزمنية</label>
-                      <select
-                        name="timezone"
-                        value={general.timezone}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="Africa/Cairo">القاهرة (GMT+2)</option>
-                        <option value="Asia/Dubai">دبي (GMT+4)</option>
-                        <option value="Asia/Riyadh">الرياض (GMT+3)</option>
-                      </select>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        كلمة المرور الحالية
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPasswords.current ? 'text' : 'password'}
+                          value={passwordData.currentPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="أدخل كلمة المرور الحالية"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        >
+                          {showPasswords.current ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
+                        </button>
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">اللغة</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        كلمة المرور الجديدة
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPasswords.new ? 'text' : 'password'}
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="أدخل كلمة المرور الجديدة"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        >
+                          {showPasswords.new ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        تأكيد كلمة المرور الجديدة
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPasswords.confirm ? 'text' : 'password'}
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="أعد إدخال كلمة المرور الجديدة"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        >
+                          {showPasswords.confirm ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-6">
+                      <button
+                        onClick={handlePasswordChange}
+                        disabled={saving}
+                        className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50"
+                      >
+                        <Lock className="h-4 w-4" />
+                        <span>{saving ? 'جاري التغيير...' : 'تغيير كلمة المرور'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Notifications Tab */}
+            {activeTab === 'notifications' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">إعدادات الإشعارات</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">إشعارات الجلسات</h4>
+                        <p className="text-sm text-gray-500">استلام إشعارات عند بدء أو انتهاء الجلسات</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.sessionNotifications}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, sessionNotifications: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">إشعارات الطلبات</h4>
+                        <p className="text-sm text-gray-500">استلام إشعارات عند إنشاء أو تحديث الطلبات</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.orderNotifications}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, orderNotifications: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">إشعارات المخزون</h4>
+                        <p className="text-sm text-gray-500">استلام إشعارات عند انخفاض المخزون</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.inventoryNotifications}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, inventoryNotifications: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">إشعارات الفواتير</h4>
+                        <p className="text-sm text-gray-500">استلام إشعارات عند إنشاء أو دفع الفواتير</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.billingNotifications}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, billingNotifications: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">صوت الإشعارات</h4>
+                        <p className="text-sm text-gray-500">تشغيل صوت عند استلام الإشعارات</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.soundEnabled}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, soundEnabled: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">إشعارات البريد الإلكتروني</h4>
+                        <p className="text-sm text-gray-500">إرسال الإشعارات عبر البريد الإلكتروني</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.emailNotifications}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, emailNotifications: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">إظهار عدد الإشعارات</h4>
+                        <p className="text-sm text-gray-500">إظهار عدد الإشعارات غير المقروءة</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.showNotificationCount}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, showNotificationCount: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">تحديد كمقروء تلقائياً</h4>
+                        <p className="text-sm text-gray-500">تحديد الإشعارات كمقروءة تلقائياً بعد فترة</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.autoMarkAsRead}
+                          onChange={(e) => setNotificationSettings({ ...notificationSettings, autoMarkAsRead: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="mt-6">
+                      <button
+                        onClick={handleNotificationSettingsUpdate}
+                        disabled={saving}
+                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>{saving ? 'جاري الحفظ...' : 'حفظ إعدادات الإشعارات'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* General Tab */}
+            {activeTab === 'general' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">الإعدادات العامة</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        المظهر
+                      </label>
                       <select
-                        name="language"
-                        value={general.language}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        value={generalSettings.theme}
+                        onChange={(e) => setGeneralSettings({ ...generalSettings, theme: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="light">فاتح</option>
+                        <option value="dark">داكن</option>
+                        <option value="auto">تلقائي</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        اللغة
+                      </label>
+                      <select
+                        value={generalSettings.language}
+                        onChange={(e) => setGeneralSettings({ ...generalSettings, language: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="ar">العربية</option>
                         <option value="en">English</option>
                       </select>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">عنوان الطلبات</label>
-                    <textarea
-                      name="address"
-                      rows={3}
-                      value={general.address}
-                      onChange={handleGeneralChange}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">رقم الهاتف</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={general.phone}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        المنطقة الزمنية
+                      </label>
+                      <select
+                        value={generalSettings.timezone}
+                        onChange={(e) => setGeneralSettings({ ...generalSettings, timezone: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Africa/Cairo">القاهرة (GMT+2)</option>
+                        <option value="Asia/Riyadh">الرياض (GMT+3)</option>
+                        <option value="Asia/Dubai">دبي (GMT+4)</option>
+                      </select>
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">البريد الإلكتروني</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={general.email}
-                        onChange={handleGeneralChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
-            )}
-
-            {/* Notifications Settings */}
-            {activeTab === 'notifications' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات الإشعارات</h3>
-                {tabState.notifications.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.notifications.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.notifications.error}
-                    {tabState.notifications.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('notifications')}
-                        disabled={tabState.notifications.loading}
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        العملة
+                      </label>
+                      <select
+                        value={generalSettings.currency}
+                        onChange={(e) => setGeneralSettings({ ...generalSettings, currency: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.notifications.success && <div className="text-green-600 text-center">{tabState.notifications.success}</div>}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات الجلسات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند انتهاء الجلسة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند بدء جلسة جديدة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند إيقاف الجلسة مؤقتاً</span>
-                      </label>
+                        <option value="EGP">جنيه مصري (EGP)</option>
+                        <option value="SAR">ريال سعودي (SAR)</option>
+                        <option value="AED">درهم إماراتي (AED)</option>
+                        <option value="USD">دولار أمريكي (USD)</option>
+                      </select>
                     </div>
-                  </div>
 
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات الطلبات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند طلب جديد</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند اكتمال تحضير الطلب</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند إلغاء الطلب</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات المخزون</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند انخفاض المخزون</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند نفاد المخزون</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إشعارات الفواتير</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند إنشاء فاتورة جديدة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند دفع الفاتورة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعار عند الدفع الجزئي</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إعدادات الصوت</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="flex items-center">
-                          <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                          <span className="mr-3 text-sm text-gray-700">تفعيل صوت الإشعارات</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mt-1 mr-6">تشغيل صوت عند وصول إشعار جديد</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">مستوى الصوت</label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          defaultValue="60"
-                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                        />
-                        <div className="flex justify-between text-xs text-gray-500 mt-1">
-                          <span>صامت</span>
-                          <span>60%</span>
-                          <span>عالي</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">نوع الصوت الافتراضي</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="default">النغمة الافتراضية</option>
-                          <option value="success">نغمة النجاح</option>
-                          <option value="warning">نغمة التحذير</option>
-                          <option value="error">نغمة الخطأ</option>
-                          <option value="urgent">نغمة عاجلة</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">أصوات خاصة حسب الأولوية</label>
-                        <div className="space-y-2">
-                          <label className="flex items-center">
-                            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات العاجلة</span>
-                          </label>
-                          <label className="flex items-center">
-                            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات عالية الأولوية</span>
-                          </label>
-                          <label className="flex items-center">
-                            <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                            <span className="mr-3 text-sm text-gray-700">صوت مختلف للإشعارات العادية</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">خيارات الإشعارات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تفعيل الصوت</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إشعارات البريد الإلكتروني</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إظهار عدد الإشعارات</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تحديد كمقروء تلقائياً</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إعدادات متقدمة</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">مدة ظهور الإشعار (بالثواني)</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="30"
-                          defaultValue="5"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">نغمة الإشعار</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="default">النغمة الافتراضية</option>
-                          <option value="bell">جرس</option>
-                          <option value="chime">رنين</option>
-                          <option value="beep">صوت تنبيه</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">أولوية الإشعارات</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="all">جميع الإشعارات</option>
-                          <option value="high">عالية فقط</option>
-                          <option value="urgent">عاجلة فقط</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">إدارة الإشعارات</h4>
-                    <div className="space-y-4">
-                      <div className="flex items-center space-x-3 space-x-reverse">
-                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          تحديد جميع الإشعارات كمقروءة
-                        </button>
-                        <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          حذف جميع الإشعارات
-                        </button>
-                      </div>
-                      <div className="flex items-center space-x-3 space-x-reverse">
-                        <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          تنظيف الإشعارات المنتهية الصلاحية
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
-            )}
-
-            {/* Appearance Settings */}
-            {activeTab === 'appearance' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات المظهر</h3>
-                {tabState.appearance.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.appearance.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.appearance.error}
-                    {tabState.appearance.error.includes('غير موجودة') && (
+                    <div className="mt-6">
                       <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('appearance')}
-                        disabled={tabState.appearance.loading}
+                        onClick={handleGeneralSettingsUpdate}
+                        disabled={saving}
+                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
                       >
-                        استعادة الإعدادات الافتراضية
+                        <Save className="h-4 w-4" />
+                        <span>{saving ? 'جاري الحفظ...' : 'حفظ الإعدادات العامة'}</span>
                       </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.appearance.success && <div className="text-green-600 text-center">{tabState.appearance.success}</div>}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">السمة</label>
-                    <div className="grid grid-cols-3 gap-3">
-                      <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input type="radio" name="theme" value="light" defaultChecked className="text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">فاتح</span>
-                      </label>
-                      <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input type="radio" name="theme" value="dark" className="text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">داكن</span>
-                      </label>
-                      <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input type="radio" name="theme" value="auto" className="text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تلقائي</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">اللون الأساسي</label>
-                    <div className="grid grid-cols-6 gap-3">
-                      {['bg-blue-600', 'bg-green-600', 'bg-purple-600', 'bg-red-600', 'bg-yellow-600', 'bg-indigo-600'].map((color) => (
-                        <button
-                          key={color}
-                          className={`w-10 h-10 rounded-lg ${color} border-2 border-transparent hover:border-gray-300`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">حجم الخط</label>
-                    <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                      <option value="small">صغير</option>
-                      <option value="medium" selected>متوسط</option>
-                      <option value="large">كبير</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">تخصيص الواجهة</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إظهار الشريط الجانبي</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">إظهار معلومات المستخدم</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">وضع ملء الشاشة</span>
-                      </label>
                     </div>
                   </div>
                 </div>
-                )}
               </div>
             )}
-
-            {/* Security Settings */}
-            {activeTab === 'security' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">إعدادات الأمان</h3>
-                {tabState.security.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.security.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.security.error}
-                    {tabState.security.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('security')}
-                        disabled={tabState.security.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.security.success && <div className="text-green-600 text-center">{tabState.security.success}</div>}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">كلمة المرور</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">كلمة المرور الحالية</label>
-                        <input
-                          type="password"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">كلمة المرور الجديدة</label>
-                        <input
-                          type="password"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">تأكيد كلمة المرور</label>
-                        <input
-                          type="password"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">الجلسات</h4>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">مدة انتهاء الجلسة (بالدقائق)</label>
-                        <input
-                          type="number"
-                          defaultValue="60"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تسجيل الخروج التلقائي عند عدم النشاط</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">الصلاحيات</h4>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تسجيل عمليات تسجيل الدخول</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">السماح بتسجيل الدخول من أجهزة متعددة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تشفير البيانات الحساسة</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
-            )}
-
-            {/* Backup Settings */}
-            {activeTab === 'backup' && (
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">النسخ الاحتياطي</h3>
-                {tabState.backup.loading ? (
-                  <div className="text-center text-gray-500">جاري تحميل الإعدادات...</div>
-                ) : tabState.backup.error ? (
-                  <div className="text-center text-red-600">
-                    {tabState.backup.error}
-                    {tabState.backup.error.includes('غير موجودة') && (
-                      <button
-                        className="mt-4 block mx-auto bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-                        onClick={() => handleReset('backup')}
-                        disabled={tabState.backup.loading}
-                      >
-                        استعادة الإعدادات الافتراضية
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {tabState.backup.success && <div className="text-green-600 text-center">{tabState.backup.success}</div>}
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">النسخ الاحتياطي التلقائي</h4>
-                    <div className="space-y-4">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="mr-3 text-sm text-gray-700">تفعيل النسخ الاحتياطي التلقائي</span>
-                      </label>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">التكرار</label>
-                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                          <option value="daily">يومي</option>
-                          <option value="weekly" selected>أسبوعي</option>
-                          <option value="monthly">شهري</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">عدد النسخ المحفوظة</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="30"
-                          defaultValue="7"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">النسخ الاحتياطي اليدوي</h4>
-                    <div className="space-y-4">
-                      <div className="flex items-center space-x-3 space-x-reverse">
-                        <button className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                          إنشاء نسخة احتياطية الآن
-                        </button>
-                        <span className="text-sm text-gray-500">آخر نسخة احتياطية: 15 يناير 2024</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-4">استعادة البيانات</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">اختر ملف النسخة الاحتياطية</label>
-                        <input
-                          type="file"
-                          accept=".backup"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200">
-                        استعادة البيانات
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-yellow-800">
-                      <strong>تحذير:</strong> عملية الاستعادة ستحل محل جميع البيانات الحالية.
-                      تأكد من إنشاء نسخة احتياطية قبل المتابعة.
-                    </p>
-                  </div>
-                </div>
-                )}
-              </div>
-            )}
-
-            {/* Save Button */}
-            <div className="border-t border-gray-200 px-6 py-4 flex justify-end">
-              <button
-                className={`bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-lg flex items-center transition-colors duration-200 ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}
-                onClick={handleSave}
-                disabled={saving || loading}
-              >
-                <Save className="h-4 w-4 ml-2" />
-                {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -755,3 +576,4 @@ const Settings = () => {
 };
 
 export default Settings;
+
