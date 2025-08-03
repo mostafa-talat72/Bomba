@@ -1649,6 +1649,13 @@ class ApiClient {
   async getAvailableBillsForSession(type: 'playstation' | 'computer'): Promise<ApiResponse<Bill[]>> {
     return this.request<Bill[]>(`/bills/available-for-session?type=${type}`);
   }
+
+  // Trigger daily report manually (for testing)
+  async triggerDailyReport(): Promise<ApiResponse> {
+    return this.request('/reports/trigger-daily', {
+      method: 'POST',
+    });
+  }
 }
 
 // Create and export API client instance

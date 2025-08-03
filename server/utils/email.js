@@ -9,10 +9,21 @@ const createTransporter = () => {
         !process.env.EMAIL_PASS
     ) {
         Logger.warn(
-            "Email configuration not found, email features will be disabled"
+            "Email configuration not found, email features will be disabled",
+            {
+                EMAIL_HOST: process.env.EMAIL_HOST ? "set" : "not set",
+                EMAIL_USER: process.env.EMAIL_USER ? "set" : "not set",
+                EMAIL_PASS: process.env.EMAIL_PASS ? "set" : "not set",
+            }
         );
         return null;
     }
+
+    Logger.info("Email configuration found, creating transporter", {
+        EMAIL_HOST: process.env.EMAIL_HOST,
+        EMAIL_USER: process.env.EMAIL_USER,
+        EMAIL_PORT: process.env.EMAIL_PORT || 587,
+    });
 
     // Try different configurations
     const configs = [
@@ -62,10 +73,23 @@ const createTransporter = () => {
     for (let i = 0; i < configs.length; i++) {
         try {
             const transporter = nodemailer.createTransport(configs[i]);
-            Logger.info(`Trying email config ${i + 1}`);
+            Logger.info(`Trying email config ${i + 1}`, {
+                config: {
+                    host: configs[i].host,
+                    port: configs[i].port,
+                    secure: configs[i].secure,
+                },
+            });
             return transporter;
         } catch (error) {
-            Logger.warn(`Email config ${i + 1} failed:`, error.message);
+            Logger.warn(`Email config ${i + 1} failed:`, {
+                error: error.message,
+                config: {
+                    host: configs[i].host,
+                    port: configs[i].port,
+                    secure: configs[i].secure,
+                },
+            });
             if (i === configs.length - 1) {
                 throw new Error("All email configurations failed");
             }
@@ -888,7 +912,7 @@ export const emailTemplates = {
               <div class="section-title">📈 إحصائيات الأجهزة</div>
               <div class="device-stats">
                 ${data.deviceStats
-              .map(
+                    .map(
                         (device) => `
                   <div class="device-card">
                     <div class="device-name">${
@@ -907,8 +931,8 @@ export const emailTemplates = {
                     )} دقيقة متوسط</div>
                   </div>
           `
-              )
-              .join("")}
+                    )
+                    .join("")}
               </div>
             </div>
 
@@ -997,23 +1021,64 @@ export const sendLowStockAlert = async (items, adminEmails) => {
 
 // Send daily report
 export const sendDailyReport = async (reportData, adminEmails) => {
-    if (!adminEmails || adminEmails.length === 0) return;
+    Logger.info("Starting daily report email sending", {
+        adminEmailsCount: adminEmails?.length || 0,
+        adminEmails: adminEmails,
+        reportData: {
+            organizationName: reportData.organizationName,
+            totalRevenue: reportData.totalRevenue,
+            totalBills: reportData.totalBills,
+            totalOrders: reportData.totalOrders,
+            totalSessions: reportData.totalSessions,
+        },
+    });
+
+    if (!adminEmails || adminEmails.length === 0) {
+        Logger.warn("No admin emails found for daily report", {
+            reportData: {
+                organizationName: reportData.organizationName,
+            },
+        });
+        return;
+    }
 
     const template = emailTemplates.dailyReport(reportData);
 
+    Logger.info("Daily report template generated", {
+        subject: template.subject,
+        adminEmailsCount: adminEmails.length,
+    });
+
+    let successCount = 0;
+    let failureCount = 0;
+
     for (const email of adminEmails) {
         try {
+            Logger.info("Sending daily report to email", { email });
+
             await sendEmail({
                 to: email,
                 ...template,
             });
+
+            successCount++;
+            Logger.info("Daily report sent successfully", { email });
         } catch (error) {
+            failureCount++;
             Logger.error("Failed to send daily report", {
                 email,
                 error: error.message,
+                stack: error.stack,
             });
         }
     }
+
+    Logger.info("Daily report sending completed", {
+        totalEmails: adminEmails.length,
+        successCount,
+        failureCount,
+        organizationName: reportData.organizationName,
+    });
 };
 
 // Send monthly report

@@ -15,6 +15,8 @@ import Session from "../models/Session.js";
 import Order from "../models/Order.js";
 import InventoryItem from "../models/InventoryItem.js";
 import Cost from "../models/Cost.js";
+import { runTask } from "../utils/scheduler.js";
+import Logger from "../middleware/logger.js";
 
 const router = express.Router();
 
@@ -353,5 +355,40 @@ router.get("/financial", async (req, res) => {
         });
     }
 });
+
+// @desc    Manually trigger daily report (for testing)
+// @route   POST /api/reports/trigger-daily
+// @access  Private (Admin only)
+router.post(
+    "/trigger-daily",
+    protect,
+    authorize("admin", "owner"),
+    async (req, res) => {
+        try {
+            Logger.info("Manual daily report trigger requested by user", {
+                userId: req.user._id,
+                organization: req.user.organization,
+            });
+
+            await runTask("dailyReport");
+
+            res.status(200).json({
+                success: true,
+                message: "تم إرسال التقرير اليومي بنجاح",
+            });
+        } catch (error) {
+            Logger.error("Failed to trigger daily report", {
+                error: error.message,
+                userId: req.user._id,
+            });
+
+            res.status(500).json({
+                success: false,
+                message: "فشل في إرسال التقرير اليومي",
+                error: error.message,
+            });
+        }
+    }
+);
 
 export default router;

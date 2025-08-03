@@ -21,7 +21,7 @@ import Organization from "../models/Organization.js";
 const checkLowStock = async () => {
     try {
         // Get all organizations
-        const organizations = await Organization.find({ isActive: true });
+        const organizations = await Organization.find();
 
         for (const organization of organizations) {
             try {
@@ -81,6 +81,8 @@ const checkLowStock = async () => {
 // Generate and send daily report
 const generateDailyReport = async () => {
     try {
+        Logger.info("Starting daily report generation...");
+
         const today = new Date();
         const startOfDay = new Date(
             today.getFullYear(),
@@ -93,8 +95,18 @@ const generateDailyReport = async () => {
             today.getDate() + 1
         );
 
+        Logger.info("Daily report date range:", {
+            today: today.toISOString(),
+            startOfDay: startOfDay.toISOString(),
+            endOfDay: endOfDay.toISOString(),
+        });
+
         // Get all organizations
-        const organizations = await Organization.find({ isActive: true });
+        const organizations = await Organization.find();
+
+        Logger.info(
+            `Found ${organizations.length} organizations for daily report`
+        );
 
         for (const organization of organizations) {
             try {
@@ -182,6 +194,14 @@ const generateDailyReport = async () => {
 
                 const adminEmails = admins.map((admin) => admin.email);
 
+                Logger.info(
+                    `Organization "${organization.name}" has ${adminEmails.length} admin emails:`,
+                    {
+                        organizationId: organization._id,
+                        adminEmails: adminEmails,
+                    }
+                );
+
                 if (adminEmails.length > 0) {
                     await sendDailyReport(reportData, adminEmails);
                     Logger.info(
@@ -210,6 +230,8 @@ const generateDailyReport = async () => {
                 );
             }
         }
+
+        Logger.info("Daily report generation completed for all organizations");
     } catch (error) {
         Logger.error("Failed to generate daily report", {
             error: error.message,
@@ -229,7 +251,7 @@ const generateMonthlyReport = async () => {
         );
 
         // Get all organizations
-        const organizations = await Organization.find({ isActive: true });
+        const organizations = await Organization.find();
 
         for (const organization of organizations) {
             try {
@@ -444,7 +466,7 @@ const updateOverdueItems = async () => {
         const now = new Date();
 
         // Get all organizations
-        const organizations = await Organization.find({ isActive: true });
+        const organizations = await Organization.find();
 
         for (const organization of organizations) {
             try {
@@ -504,7 +526,7 @@ const createRecurringCosts = async () => {
         const now = new Date();
 
         // Get all organizations
-        const organizations = await Organization.find({ isActive: true });
+        const organizations = await Organization.find();
 
         for (const organization of organizations) {
             try {
@@ -594,47 +616,93 @@ export const scheduleSubscriptionExpiryNotifications = () => {
 
 // Initialize all scheduled tasks
 export const initializeScheduler = () => {
+    Logger.info("Initializing scheduled tasks...");
+
     // Check low stock every hour
     cron.schedule("0 * * * *", checkLowStock);
+    Logger.info("✅ Low stock check scheduled: every hour at minute 0");
 
-    // Generate daily report at 11:59 PM
-    cron.schedule("59 23 * * *", generateDailyReport);
+    // Generate daily report at 11:59 PM (Egypt time)
+    cron.schedule("59 23 * * *", () => {
+        const now = new Date();
+        Logger.info(
+            "🕐 Daily report scheduled task triggered at 11:59 PM (Egypt time)",
+            {
+                currentTime: now.toLocaleString("ar-EG"),
+                egyptTime: now.toLocaleString("ar-EG", {
+                    timeZone: "Africa/Cairo",
+                }),
+            }
+        );
+        generateDailyReport();
+    });
+    Logger.info(
+        "✅ Daily report scheduled: every day at 11:59 PM (Egypt time)"
+    );
+
+    // For testing: also run daily report every hour (only in development)
+    if (process.env.NODE_ENV === "development") {
+        cron.schedule("0 * * * *", () => {
+            Logger.info(
+                "🧪 Development mode: Running daily report every hour for testing"
+            );
+            generateDailyReport();
+        });
+        Logger.info(
+            "✅ Development mode: Daily report also scheduled every hour for testing"
+        );
+    }
 
     // Generate monthly report at 11:59 PM on the last day of the month
     cron.schedule("59 23 28-31 * *", () => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         if (tomorrow.getDate() === 1) {
+            Logger.info("📅 Monthly report scheduled task triggered");
             generateMonthlyReport();
         }
     });
+    Logger.info("✅ Monthly report scheduled: last day of month at 11:59 PM");
 
     // Update overdue items every 6 hours
     cron.schedule("0 */6 * * *", updateOverdueItems);
+    Logger.info("✅ Overdue items update scheduled: every 6 hours");
 
     // Create recurring costs daily at midnight
     cron.schedule("0 0 * * *", createRecurringCosts);
+    Logger.info("✅ Recurring costs creation scheduled: daily at midnight");
 
     // Create database backup weekly on Sunday at 2 AM
     cron.schedule("0 2 * * 0", async () => {
         try {
+            Logger.info("💾 Database backup scheduled task triggered");
             await createDatabaseBackup();
         } catch (error) {
             Logger.error("Scheduled backup failed", { error: error.message });
         }
     });
+    Logger.info("✅ Database backup scheduled: weekly on Sunday at 2 AM");
 
     // Clean expired notifications daily at 3 AM
     cron.schedule("0 3 * * *", async () => {
         try {
+            Logger.info(
+                "🧹 Expired notifications cleanup scheduled task triggered"
+            );
             await NotificationService.cleanExpiredNotifications();
         } catch (error) {
             Logger.error("❌ Failed to clean expired notifications:", error);
         }
     });
+    Logger.info("✅ Expired notifications cleanup scheduled: daily at 3 AM");
 
     // Schedule subscription expiry notifications
     scheduleSubscriptionExpiryNotifications();
+    Logger.info(
+        "✅ Subscription expiry notifications scheduled: every 24 hours"
+    );
+
+    Logger.info("🎯 All scheduled tasks initialized successfully!");
 };
 
 // Manual task execution (for testing)

@@ -296,6 +296,11 @@ server.listen(PORT, () => {
     // Initialize scheduled tasks
     if (process.env.NODE_ENV === "production") {
         initializeScheduler();
+        Logger.info("✅ Scheduler initialized in production mode");
+    } else {
+        // Initialize scheduler in development mode as well
+        initializeScheduler();
+        Logger.info("✅ Scheduler initialized in development mode");
     }
 });
 

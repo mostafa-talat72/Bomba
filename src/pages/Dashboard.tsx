@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Gamepad2, Monitor, ShoppingCart, Receipt, TrendingUp, Clock, Users, DollarSign, BarChart3, Calendar, Coffee } from 'lucide-react';
+import { Gamepad2, Monitor, ShoppingCart, Receipt, TrendingUp, Clock, Users, DollarSign, BarChart3, Calendar, Coffee, Send } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import api from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
@@ -16,10 +16,11 @@ interface RecentActivity {
 }
 
 const Dashboard = () => {
-  const { sessions, orders, bills, isAuthenticated, getRecentActivity, refreshData } = useApp();
+  const { sessions, orders, bills, isAuthenticated, getRecentActivity, refreshData, showNotification } = useApp();
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isTriggeringReport, setIsTriggeringReport] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -80,6 +81,22 @@ const Dashboard = () => {
 
     } catch (error) {
       console.error('❌ Failed to refresh dashboard data:', error);
+    }
+  };
+
+  const handleTriggerDailyReport = async () => {
+    setIsTriggeringReport(true);
+    try {
+      const response = await api.triggerDailyReport();
+      if (response.success) {
+        showNotification('تم إرسال التقرير اليومي بنجاح', 'success');
+      } else {
+        showNotification('فشل في إرسال التقرير اليومي', 'error');
+      }
+    } catch (error) {
+      showNotification('خطأ في إرسال التقرير اليومي', 'error');
+    } finally {
+      setIsTriggeringReport(false);
     }
   };
 
@@ -296,6 +313,15 @@ const Dashboard = () => {
             >
               <div className={`w-4 h-4 border-2 border-white border-t-transparent rounded-full ${loading ? 'animate-spin' : ''}`}></div>
               <span>تحديث البيانات</span>
+            </button>
+            <button
+              onClick={handleTriggerDailyReport}
+              disabled={isTriggeringReport}
+              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 space-x-reverse"
+            >
+              <div className={`w-4 h-4 border-2 border-white border-t-transparent rounded-full ${isTriggeringReport ? 'animate-spin' : ''}`}></div>
+              <Send className="h-4 w-4" />
+              <span>{isTriggeringReport ? 'جاري الإرسال...' : 'اختبار التقرير اليومي'}</span>
             </button>
             <div className="w-24 h-24 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
               <BarChart3 className="h-12 w-12 text-white" />
