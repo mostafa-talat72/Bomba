@@ -156,9 +156,14 @@ const Settings = () => {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">الإعدادات</h1>
-          <p className="text-gray-600 dark:text-gray-300">إدارة إعدادات حسابك وتفضيلاتك</p>
-      </div>
+          <div className="flex items-center">
+            <SettingsIcon className="h-8 w-8 text-primary-600 dark:text-primary-400 ml-3" />
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">الإعدادات</h1>
+              <p className="text-gray-600 dark:text-gray-400">إدارة إعدادات حسابك وتفضيلاتك</p>
+            </div>
+          </div>
+        </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
           {/* Tabs */}
@@ -172,7 +177,7 @@ const Settings = () => {
                     onClick={() => setActiveTab(tab.id)}
                     className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
                       activeTab === tab.id
-                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                        ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
@@ -182,13 +187,13 @@ const Settings = () => {
                 );
               })}
             </nav>
-        </div>
+          </div>
 
           {/* Tab Content */}
               <div className="p-6">
             {/* Profile Tab */}
             {activeTab === 'profile' && (
-                <div className="space-y-6">
+              <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">الملف الشخصي</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -200,7 +205,7 @@ const Settings = () => {
                         type="text"
                         value={profile.name}
                         onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل اسمك الكامل"
                       />
                     </div>
@@ -212,7 +217,7 @@ const Settings = () => {
                         type="email"
                         value={profile.email}
                         onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل بريدك الإلكتروني"
                       />
                     </div>
@@ -224,7 +229,7 @@ const Settings = () => {
                         type="tel"
                         value={profile.phone}
                         onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل رقم هاتفك"
                       />
                     </div>
@@ -236,7 +241,7 @@ const Settings = () => {
                         type="text"
                         value={profile.address}
                         onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل عنوانك"
                       />
                     </div>
@@ -245,7 +250,7 @@ const Settings = () => {
                     <button
                       onClick={handleProfileUpdate}
                       disabled={saving}
-                      className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                      className="flex items-center space-x-2 bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border border-primary-200 dark:border-primary-700 hover:bg-primary-100 dark:hover:bg-primary-700 px-4 py-2 rounded-md disabled:opacity-50 transition-colors duration-200 shadow-sm"
                     >
                       <Save className="h-4 w-4" />
                       <span>{saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}</span>
@@ -257,11 +262,11 @@ const Settings = () => {
 
             {/* Password Tab */}
             {activeTab === 'password' && (
-                  <div className="space-y-6">
-                  <div>
+              <div className="space-y-6">
+                <div>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">تغيير كلمة المرور</h3>
                   <div className="space-y-4">
-                  <div>
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         كلمة المرور الحالية
                       </label>
@@ -270,7 +275,7 @@ const Settings = () => {
                           type={showPasswords.current ? 'text' : 'password'}
                           value={passwordData.currentPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                           placeholder="أدخل كلمة المرور الحالية"
                         />
                         <button
@@ -280,9 +285,9 @@ const Settings = () => {
                         >
                           {showPasswords.current ? <EyeOff className="h-4 w-4 text-gray-400 dark:text-gray-500" /> : <Eye className="h-4 w-4 text-gray-400 dark:text-gray-500" />}
                         </button>
-                  </div>
+                      </div>
                     </div>
-                  <div>
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         كلمة المرور الجديدة
                       </label>
@@ -291,7 +296,7 @@ const Settings = () => {
                           type={showPasswords.new ? 'text' : 'password'}
                           value={passwordData.newPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                           placeholder="أدخل كلمة المرور الجديدة"
                         />
                         <button
@@ -303,7 +308,7 @@ const Settings = () => {
                         </button>
                       </div>
                     </div>
-                  <div>
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         تأكيد كلمة المرور الجديدة
                       </label>
@@ -312,7 +317,7 @@ const Settings = () => {
                           type={showPasswords.confirm ? 'text' : 'password'}
                           value={passwordData.confirmPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                           placeholder="أعد إدخال كلمة المرور الجديدة"
                         />
                         <button
@@ -328,7 +333,7 @@ const Settings = () => {
                       <button
                         onClick={handlePasswordChange}
                         disabled={saving}
-                        className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50"
+                        className="flex items-center space-x-2 bg-red-50 dark:bg-red-800 text-red-700 dark:text-red-100 border border-red-200 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-700 px-4 py-2 rounded-md disabled:opacity-50 transition-colors duration-200 shadow-sm"
                       >
                         <Lock className="h-4 w-4" />
                         <span>{saving ? 'جاري التغيير...' : 'تغيير كلمة المرور'}</span>
@@ -341,10 +346,10 @@ const Settings = () => {
 
             {/* Notifications Tab */}
             {activeTab === 'notifications' && (
-                  <div className="space-y-6">
-                  <div>
+              <div className="space-y-6">
+                <div>
                   <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">إعدادات الإشعارات</h3>
-                    <div className="space-y-4">
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إشعارات الجلسات</h4>
@@ -357,9 +362,9 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, sessionNotifications: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
-                      </div>
+                    </div>
 
                     <div className="flex items-center justify-between">
                       <div>
@@ -373,9 +378,9 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, orderNotifications: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
-                      </div>
+                    </div>
 
                     <div className="flex items-center justify-between">
                       <div>
@@ -389,7 +394,7 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, inventoryNotifications: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
                     </div>
 
@@ -405,9 +410,9 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, billingNotifications: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
-                  </div>
+                    </div>
 
                     <div className="flex items-center justify-between">
                       <div>
@@ -421,12 +426,12 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, soundEnabled: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
-                  </div>
+                    </div>
 
                     <div className="flex items-center justify-between">
-                  <div>
+                      <div>
                         <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إشعارات البريد الإلكتروني</h4>
                         <p className="text-sm text-gray-500 dark:text-gray-400">إرسال الإشعارات عبر البريد الإلكتروني</p>
                       </div>
@@ -437,7 +442,7 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, emailNotifications: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
                     </div>
 
@@ -453,7 +458,7 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, showNotificationCount: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
                     </div>
 
@@ -469,7 +474,7 @@ const Settings = () => {
                           onChange={(e) => setNotificationSettings({ ...notificationSettings, autoMarkAsRead: e.target.checked })}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 dark:peer-checked:bg-primary-500"></div>
                       </label>
                     </div>
 
@@ -477,7 +482,7 @@ const Settings = () => {
                       <button
                         onClick={handleNotificationSettingsUpdate}
                         disabled={saving}
-                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        className="flex items-center space-x-2 bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border border-primary-200 dark:border-primary-700 hover:bg-primary-100 dark:hover:bg-primary-700 px-4 py-2 rounded-md disabled:opacity-50 transition-colors duration-200 shadow-sm"
                       >
                         <Save className="h-4 w-4" />
                         <span>{saving ? 'جاري الحفظ...' : 'حفظ إعدادات الإشعارات'}</span>
@@ -501,64 +506,64 @@ const Settings = () => {
                       <select
                         value={generalSettings.theme}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, theme: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="light">فاتح</option>
                         <option value="dark">داكن</option>
                         <option value="auto">تلقائي</option>
                       </select>
-                  </div>
+                    </div>
 
-                  <div>
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         اللغة
                       </label>
                       <select
                         value={generalSettings.language}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, language: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="ar">العربية</option>
                         <option value="en">English</option>
-                        </select>
-                      </div>
+                      </select>
+                    </div>
 
-                      <div>
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         المنطقة الزمنية
                       </label>
                       <select
                         value={generalSettings.timezone}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, timezone: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="Africa/Cairo">القاهرة (GMT+2)</option>
                         <option value="Asia/Riyadh">الرياض (GMT+3)</option>
                         <option value="Asia/Dubai">دبي (GMT+4)</option>
                       </select>
-                  </div>
+                    </div>
 
-                  <div>
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         العملة
                       </label>
                       <select
                         value={generalSettings.currency}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, currency: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="EGP">جنيه مصري (EGP)</option>
                         <option value="SAR">ريال سعودي (SAR)</option>
                         <option value="AED">درهم إماراتي (AED)</option>
                         <option value="USD">دولار أمريكي (USD)</option>
                       </select>
-                  </div>
+                    </div>
 
                     <div className="mt-6">
                       <button
                         onClick={handleGeneralSettingsUpdate}
                         disabled={saving}
-                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        className="flex items-center space-x-2 bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border border-primary-200 dark:border-primary-700 hover:bg-primary-100 dark:hover:bg-primary-700 px-4 py-2 rounded-md disabled:opacity-50 transition-colors duration-200 shadow-sm"
                       >
                         <Save className="h-4 w-4" />
                         <span>{saving ? 'جاري الحفظ...' : 'حفظ الإعدادات العامة'}</span>

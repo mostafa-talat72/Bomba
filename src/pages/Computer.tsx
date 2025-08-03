@@ -314,13 +314,13 @@ const Computer: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           {user?.role === 'admin' && (
-            <button
-              onClick={() => setShowAddDevice(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 font-medium"
-            >
-              <Plus className="h-5 w-5 ml-2" />
-              إضافة جهاز
-            </button>
+                          <button
+                onClick={() => setShowAddDevice(true)}
+                className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 font-medium"
+              >
+                <Plus className="h-5 w-5 ml-2" />
+                إضافة جهاز
+              </button>
           )}
         </div>
       </div>
@@ -404,7 +404,7 @@ const Computer: React.FC = () => {
                     ) : device.status === 'available' ? (
                       <button
                         onClick={() => openSessionModal(device)}
-                        className="w-full bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200 font-medium"
+                        className="w-full bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200 font-medium"
                       >
                         <Play className="h-4 w-4 ml-2" />
                         بدء الجلسة
@@ -441,8 +441,8 @@ const Computer: React.FC = () => {
                   ).map((session) => (
                     <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                       <div className="flex items-center">
-                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                          <Monitor className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                        <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+                          <Monitor className="h-6 w-6 text-orange-600 dark:text-orange-400" />
                         </div>
                         <div className="mr-4">
                           <p className="font-medium text-gray-900 dark:text-white">
@@ -454,16 +454,16 @@ const Computer: React.FC = () => {
                           {/* عرض رقم الفاتورة المرتبطة */}
                           {session.bill && (
                             <div className="mt-2">
-                              <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-                                فاتورة: {session.bill.billNumber}
-                              </span>
+                                                        <span className="text-sm text-orange-600 dark:text-orange-400 font-medium">
+                            فاتورة: {session.bill.billNumber}
+                          </span>
                             </div>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-3 space-x-reverse">
                         <div className="text-left">
-                          <p className="font-bold text-emerald-600 dark:text-emerald-400">
+                                                    <p className="font-bold text-orange-600 dark:text-orange-400">
                             {devices.find(d => d.number === session.deviceNumber)?.hourlyRate ?
                               `${devices.find(d => d.number === session.deviceNumber)?.hourlyRate} ج.م/ساعة` : '-'}
                           </p>
@@ -496,13 +496,13 @@ const Computer: React.FC = () => {
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ربط الجلسة بفاتورة</label>
               <div className="grid grid-cols-2 gap-2 mb-2">
-                <button
+                                <button
                   type="button"
                   onClick={() => setBillOption('new')}
                   className={`p-3 rounded-lg border text-center transition-colors duration-200 ${
                     billOption === 'new'
-                      ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-300'
-                      : 'bg-white dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-500 dark:hover:border-blue-400 text-gray-900 dark:text-white'
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-500 dark:border-orange-400 text-orange-700 dark:text-orange-300'
+                      : 'bg-white dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-500 dark:hover:border-orange-400 text-gray-900 dark:text-white'
                   }`}
                 >
                   <div className="text-lg mb-1">🆕</div>
@@ -513,8 +513,8 @@ const Computer: React.FC = () => {
                   onClick={() => setBillOption('existing')}
                   className={`p-3 rounded-lg border text-center transition-colors duration-200 ${
                     billOption === 'existing'
-                      ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-300'
-                      : 'bg-white dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-500 dark:hover:border-blue-400 text-gray-900 dark:text-white'
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-500 dark:border-orange-400 text-orange-700 dark:text-orange-300'
+                      : 'bg-white dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-500 dark:hover:border-orange-400 text-gray-900 dark:text-white'
                   }`}
                 >
                   <div className="text-lg mb-1">🔗</div>
@@ -529,7 +529,7 @@ const Computer: React.FC = () => {
                     placeholder="ابحث عن فاتورة..."
                     value={searchBill}
                     onChange={e => setSearchBill(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                   {filteredAvailableBills.filter(bill =>
                     bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
@@ -544,9 +544,9 @@ const Computer: React.FC = () => {
                           key={bill._id}
                           type="button"
                           onClick={() => setSelectedBillId(bill._id)}
-                          className={`w-full p-2 text-right text-sm hover:bg-gray-50 dark:hover:bg-gray-600 border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${
+                                                    className={`w-full p-2 text-right text-sm hover:bg-gray-50 dark:hover:bg-gray-600 border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${
                             selectedBillId === bill._id
-                              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                              ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
                               : 'text-gray-700 dark:text-gray-300'
                           }`}
                         >
@@ -563,13 +563,13 @@ const Computer: React.FC = () => {
                     <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 text-center">لا توجد فواتير مطابقة</div>
                   )}
                   {selectedBillId && (
-                    <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700 border border-blue-200 dark:border-blue-800 rounded">
+                    <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700 border border-orange-200 dark:border-orange-800 rounded">
                       {(() => {
                         const bill = availableBills.find(b => b._id === selectedBillId);
                         if (!bill) return null;
                         return (
                           <div>
-                            <div className="font-bold text-blue-700 dark:text-blue-300">فاتورة #{bill.billNumber}</div>
+                            <div className="font-bold text-orange-700 dark:text-orange-300">فاتورة #{bill.billNumber}</div>
                             <div className="text-sm text-gray-700 dark:text-gray-300">العميل: {bill.customerName || 'بدون اسم'}</div>
                             <div className="text-xs text-gray-500 dark:text-gray-400">الإجمالي: {bill.total} ج.م</div>
                           </div>
@@ -586,7 +586,7 @@ const Computer: React.FC = () => {
               <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
-                  className="p-3 rounded-lg border text-center transition-colors duration-200 bg-blue-100 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-300"
+                  className="p-3 rounded-lg border text-center transition-colors duration-200 bg-orange-100 dark:bg-orange-900/30 border-orange-500 dark:border-orange-400 text-orange-700 dark:text-orange-300"
                   disabled
                 >
                   <Monitor className="h-5 w-5 mx-auto mb-1" />
@@ -606,7 +606,7 @@ const Computer: React.FC = () => {
               <button
                 type="button"
                 onClick={handleStartSession}
-                className="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-600 font-medium transition-colors duration-200"
+                className="px-4 py-2 bg-orange-600 dark:bg-orange-500 text-white rounded hover:bg-orange-700 dark:hover:bg-orange-600 font-medium transition-colors duration-200"
                 disabled={loadingSession || (billOption === 'existing' && !selectedBillId)}
               >
                 بدء الجلسة
@@ -623,36 +623,36 @@ const Computer: React.FC = () => {
             <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-white">إضافة جهاز كمبيوتر جديد</h2>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اسم الجهاز</label>
-              <input
-                type="text"
-                value={newDevice.name}
-                onChange={e => setNewDevice({ ...newDevice, name: e.target.value })}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400"
-                required
-              />
+                              <input
+                  type="text"
+                  value={newDevice.name}
+                  onChange={e => setNewDevice({ ...newDevice, name: e.target.value })}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400"
+                  required
+                />
             </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رقم الجهاز</label>
-              <input
-                type="number"
-                value={newDevice.number}
-                onChange={e => setNewDevice({ ...newDevice, number: e.target.value })}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400"
-                required
-                min="1"
-              />
+                              <input
+                  type="number"
+                  value={newDevice.number}
+                  onChange={e => setNewDevice({ ...newDevice, number: e.target.value })}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400"
+                  required
+                  min="1"
+                />
             </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">سعر الساعة (ج.م)</label>
-              <input
-                type="number"
-                value={newDevice.hourlyRate}
-                onChange={e => setNewDevice({ ...newDevice, hourlyRate: e.target.value })}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400"
-                required
-                min="0"
-                step="0.01"
-              />
+                              <input
+                  type="number"
+                  value={newDevice.hourlyRate}
+                  onChange={e => setNewDevice({ ...newDevice, hourlyRate: e.target.value })}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400"
+                  required
+                  min="0"
+                  step="0.01"
+                />
             </div>
             {addDeviceError && <div className="text-red-600 dark:text-red-400 mb-2 text-sm">{addDeviceError}</div>}
             <div className="flex justify-between mt-6">
@@ -665,7 +665,7 @@ const Computer: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-600 font-medium transition-colors duration-200"
+                className="px-4 py-2 bg-orange-600 dark:bg-orange-500 text-white rounded hover:bg-orange-700 dark:hover:bg-orange-600 font-medium transition-colors duration-200"
               >
                 إضافة
               </button>

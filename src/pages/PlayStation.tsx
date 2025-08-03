@@ -98,85 +98,67 @@ const PlayStation: React.FC = () => {
     loadAllData();
   }, []); // Remove dependencies to prevent infinite loop
 
-  // إغلاق النافذة بمفتاح Escape
+  // إغلاق النافذة عند الضغط على Escape
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showNewSession && !loadingSession) {
+      if (e.key === 'Escape') {
         setShowNewSession(false);
+        setShowAddDevice(false);
         setSelectedDevice(null);
-        setSelectedControllers(null);
         setSessionError(null);
+        setAddDeviceError(null);
+        setBillOption('new');
+        setSelectedBillId('');
+        setSearchBill('');
       }
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [showNewSession, loadingSession]);
+  }, []);
 
-  // إضافة جهاز جديد
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
+    try {
     setAddDeviceError(null);
-    if (!newDevice.name || !newDevice.number) return;
-
-    // فحص عدم تكرار رقم الجهاز في الواجهة
-    const existingDevice = devices.find(d => d.number === Number(newDevice.number));
-    if (existingDevice) {
-      setAddDeviceError(`رقم الجهاز ${newDevice.number} مستخدم بالفعل`);
-      return;
-    }
-
-    // تجهيز playstationRates كأرقام
-    const playstationRates = {
-      1: parseFloat(newDevice.playstationRates[1]),
-      2: parseFloat(newDevice.playstationRates[2]),
-      3: parseFloat(newDevice.playstationRates[3]),
-      4: parseFloat(newDevice.playstationRates[4])
-    };
-
-    const deviceData = {
+      const response = await createDevice({
       name: newDevice.name,
-      number: Number(newDevice.number),
+        number: parseInt(newDevice.number),
       type: 'playstation',
       status: 'available',
       controllers: newDevice.controllers,
-      playstationRates
-    };
+        playstationRates: newDevice.playstationRates
+      });
 
-    try {
-      const device = await createDevice(deviceData);
-      if (device) {
+      if (response) {
         setShowAddDevice(false);
         setNewDevice({ name: '', number: '', controllers: 2, playstationRates: { 1: '', 2: '', 3: '', 4: '' } });
-      } else {
-        setAddDeviceError('حدث خطأ أثناء إضافة الجهاز.');
+        await loadDevices();
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } }; message?: string };
       setAddDeviceError(error?.response?.data?.error || error?.message || 'حدث خطأ غير متوقع.');
-      showNotification('addDevice error:', 'error');
+      console.error('addDevice error:', err);
     }
   };
 
-  // بدء جلسة جديدة
   const openSessionModal = (device: Device) => {
     setSelectedDevice(device);
-    setSelectedControllers(null);
     setShowNewSession(true);
+    setBillOption('new');
+    setSelectedBillId('');
+    setSearchBill('');
   };
 
-  // استبدال دالة getPlayStationHourlyRate بدالة تعتمد على بيانات الجهاز
   const getPlayStationHourlyRate = (device: Device | null, controllers: number) => {
     if (!device || !device.playstationRates) return 0;
-    return device.playstationRates[controllers] || 0;
+    return device.playstationRates[controllers as keyof typeof device.playstationRates] || 0;
   };
 
-  // دالة لاختيار فاتورة
   const handleBillSelection = (bill: { _id?: string; id?: string }) => {
     setSelectedBillId(bill._id || bill.id || '');
   };
 
-  // دالة لتغيير خيار الفاتورة
   const handleBillOptionChange = (option: 'new' | 'existing') => {
     setBillOption(option);
     setSelectedBillId('');
@@ -188,49 +170,37 @@ const PlayStation: React.FC = () => {
       setSessionError(null);
       if (!selectedDevice || !selectedControllers) return;
 
-      const hourlyRate = getPlayStationHourlyRate(selectedDevice, selectedControllers);
-
       let session;
       let apiResponse;
 
-      if (billOption === 'new') {
-        // إنشاء جلسة جديدة مع فاتورة جديدة (كما كان سابقاً)
-        apiResponse = await createSession({
-          deviceId: selectedDevice._id, // أضف هذا السطر
+      if (billOption === 'existing' && selectedBillId) {
+        // إنشاء جلسة مرتبطة بفاتورة موجودة
+        apiResponse = await api.createSessionWithExistingBill({
           deviceType: 'playstation',
           deviceNumber: selectedDevice.number,
           deviceName: selectedDevice.name,
-          customerName: `عميل (${selectedDevice.name})`,
+          customerName: `عميل بلايستيشن (${selectedDevice.name})`,
           controllers: selectedControllers,
-          hourlyRate,
+          billId: selectedBillId
         });
-        session = apiResponse;
-      } else if (billOption === 'existing' && selectedBillId) {
-        // إنشاء جلسة جديدة وربطها بفاتورة موجودة
-        const sessionData = {
-          deviceId: selectedDevice._id, // أضف هذا السطر
-          deviceType: 'playstation',
-          deviceNumber: selectedDevice.number,
-          deviceName: selectedDevice.name,
-          customerName: `عميل (${selectedDevice.name})`,
-          controllers: selectedControllers,
-          hourlyRate,
-          billId: selectedBillId // إضافة معرف الفاتورة
-        };
-
-        // استدعاء API لإنشاء جلسة وربطها بفاتورة موجودة
-        apiResponse = await api.createSessionWithExistingBill(sessionData);
         if (apiResponse.success && apiResponse.data) {
           session = apiResponse.data.session;
         } else {
-          setSessionError(apiResponse.message || 'فشل في إنشاء الجلسة');
-          showNotification(apiResponse.message || 'فشل في إنشاء الجلسة', 'error');
+          setSessionError(apiResponse.message || 'فشل في بدء الجلسة');
+          showNotification(apiResponse.message || 'فشل في بدء الجلسة', 'error');
           return;
         }
       } else {
-        setSessionError('يرجى اختيار فاتورة موجودة');
-        showNotification('يرجى اختيار فاتورة موجودة', 'error');
-        return;
+        // إنشاء جلسة جديدة مع فاتورة جديدة
+        apiResponse = await createSession({
+          deviceType: 'playstation',
+          deviceNumber: selectedDevice.number,
+          deviceName: selectedDevice.name,
+          customerName: `عميل بلايستيشن (${selectedDevice.name})`,
+          controllers: selectedControllers,
+          hourlyRate: getPlayStationHourlyRate(selectedDevice, selectedControllers)
+        });
+        session = apiResponse;
       }
 
       if (session && (session.id || session._id)) {
@@ -239,15 +209,15 @@ const PlayStation: React.FC = () => {
 
         // تحديث البيانات
         await loadDevices();
-        await fetchBills();
 
         // إغلاق النافذة وتنظيف الحالة
         setShowNewSession(false);
         setSelectedDevice(null);
         setSelectedControllers(null);
-        setSessionError(null);
         setBillOption('new');
         setSelectedBillId('');
+        setSearchBill('');
+        setSessionError(null);
 
         // رسالة نجاح
         const billInfo = billOption === 'existing' ? ' وربطها بفاتورة موجودة' : '';
@@ -274,28 +244,27 @@ const PlayStation: React.FC = () => {
       if (result && typeof result === 'object' && 'bill' in result) {
         const billData = result as { bill?: { billNumber?: string } };
         if (billData?.bill?.billNumber) {
-          showNotification(`✅ تم إنهاء الجلسة وإنشاء الفاتورة: ${billData.bill.billNumber}`);
           // يمكن إضافة رسالة نجاح للمستخدم هنا
         }
       }
 
       // Refresh data after ending session
       await loadDevices();
-      await fetchBills();
-    } catch {
-      showNotification('Error ending session:', 'error');
+    } catch (error) {
+      console.error('Error ending session:', error);
     }
   };
 
   // Helpers
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'available': return 'bg-green-100 text-green-800';
-      case 'active': return 'bg-blue-100 text-blue-800';
-      case 'maintenance': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'available': return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300';
+      case 'active': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
+      case 'maintenance': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
     }
   };
+
   const getStatusText = (status: string) => {
     switch (status) {
       case 'available': return 'متاح';
@@ -305,23 +274,22 @@ const PlayStation: React.FC = () => {
     }
   };
 
-  // --- UI ---
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center">
-          <Gamepad2 className="h-8 w-8 text-primary-600 dark:text-primary-400 ml-3" />
+          <Gamepad2 className="h-8 w-8 text-purple-600 dark:text-purple-400 ml-3" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة البلايستيشن</h1>
-            <p className="text-gray-600 dark:text-gray-300">متابعة وإدارة جلسات البلايستيشن</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">إدارة أجهزة البلايستيشن</h1>
+            <p className="text-gray-600 dark:text-gray-400">متابعة وإدارة جلسات البلايستيشن</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {user?.role === 'admin' && (
             <button
               onClick={() => setShowAddDevice(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+              className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 font-medium"
             >
               <Plus className="h-5 w-5 ml-2" />
               إضافة جهاز
@@ -332,23 +300,23 @@ const PlayStation: React.FC = () => {
 
       {/* Loading State */}
       {isInitialLoading && (
-        <div className="bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg p-6 text-center">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6 text-center">
           <div className="flex items-center justify-center mb-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
           </div>
-          <p className="text-blue-800 dark:text-blue-200 font-medium">جاري تحميل البيانات...</p>
-          <p className="text-blue-600 dark:text-blue-300 text-sm">يرجى الانتظار قليلاً</p>
+          <p className="text-blue-800 dark:text-blue-300 font-medium">جاري تحميل البيانات...</p>
+          <p className="text-blue-600 dark:text-blue-400 text-sm">يرجى الانتظار قليلاً</p>
         </div>
       )}
 
       {/* Error State */}
       {loadingError && (
-        <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <div className="flex items-center">
             <svg className="w-5 h-5 text-red-600 dark:text-red-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-red-800 dark:text-red-200 font-medium">{loadingError}</p>
+            <p className="text-red-800 dark:text-red-300 font-medium">{loadingError}</p>
           </div>
           <button
             onClick={() => window.location.reload()}
@@ -362,58 +330,34 @@ const PlayStation: React.FC = () => {
       {/* Content - Show only when not loading */}
       {!isInitialLoading && !loadingError && (
         <>
-
-
       {/* Devices Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {devices.filter(d => d.type === 'playstation').map((device) => {
+            {devices.map((device) => {
           const activeSession = sessions.find(s => s.deviceNumber === device.number && s.status === 'active');
           return (
-                <div key={device.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col h-full">
+                <div key={device.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col h-full hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow duration-200">
               <div className="flex items-center justify-between mb-4">
-                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{device.name}</h3>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(device.status)}`}>{getStatusText(device.status)}</span>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{device.name}</h3>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(device.status)}`}>
+                      {getStatusText(device.status)}
+                    </span>
               </div>
 
                   <div className="flex-1">
               {activeSession ? (
                 <div className="space-y-3">
-                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                     <Clock className="h-4 w-4 ml-1" />
                     بدأت: {new Date(activeSession.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                   </div>
-                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                     <Users className="h-4 w-4 ml-1" />
-                    {activeSession.controllers} دراع
+                          {activeSession.controllers} لاعب
                   </div>
-                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                     <DollarSign className="h-4 w-4 ml-1" />
-                    {getPlayStationHourlyRate(device, activeSession?.controllers ?? 1)} ج.م/ساعة
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500"
-                      disabled={(activeSession.controllers ?? 1) <= 1}
-                      onClick={async () => {
-                        const newCount = (activeSession.controllers ?? 1) - 1;
-                        const res = await api.updateSessionControllers(activeSession.id, newCount);
-                        if (res.success && res.data) {
-                          // No need to fetchSessions here, as sessions are managed by useApp
-                        }
-                      }}
-                    >-</button>
-                    <span className="mx-2 font-bold text-gray-900 dark:text-gray-100">{activeSession.controllers ?? 1} دراع</span>
-                    <button
-                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500"
-                      disabled={(activeSession.controllers ?? 1) >= 4}
-                      onClick={async () => {
-                        const newCount = (activeSession.controllers ?? 1) + 1;
-                        const res = await api.updateSessionControllers(activeSession.id, newCount);
-                        if (res.success && res.data) {
-                          // No need to fetchSessions here, as sessions are managed by useApp
-                        }
-                      }}
-                    >+</button>
+                          {device.playstationRates && device.playstationRates[activeSession.controllers as keyof typeof device.playstationRates] ?
+                            `${device.playstationRates[activeSession.controllers as keyof typeof device.playstationRates]} ج.م/ساعة` : '-'}
                   </div>
                       </div>
                     ) : (
@@ -430,7 +374,7 @@ const PlayStation: React.FC = () => {
                     {activeSession ? (
                   <button
                     onClick={() => handleEndSession(activeSession.id)}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
+                        className="w-full bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200 font-medium"
                   >
                     <Square className="h-4 w-4 ml-2" />
                     إنهاء الجلسة
@@ -438,13 +382,13 @@ const PlayStation: React.FC = () => {
                     ) : device.status === 'available' ? (
                     <button
                       onClick={() => openSessionModal(device)}
-                      className="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
+                        className="w-full bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200 font-medium"
                     >
                       <Play className="h-4 w-4 ml-2" />
                       بدء الجلسة
                     </button>
                   ) : (
-                      <div className="w-full py-2 px-4 rounded-lg bg-gray-100 text-gray-500 text-center text-sm">
+                      <div className="w-full py-2 px-4 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm">
                         غير متاح
                 </div>
               )}
@@ -457,7 +401,7 @@ const PlayStation: React.FC = () => {
       {/* Active Sessions */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الجلسات النشطة</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">الجلسات النشطة</h3>
         </div>
         <div className="p-6">
           {sessions.filter(
@@ -475,18 +419,23 @@ const PlayStation: React.FC = () => {
               ).map((session) => (
                 <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                      <Gamepad2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                        <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                          <Gamepad2 className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                     </div>
                     <div className="mr-4">
-                      <p className="font-medium text-gray-900 dark:text-gray-100">{devices.find(d => d.number === session.deviceNumber)?.name || session.deviceName}</p>
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            {devices.find(d => d.number === session.deviceNumber)?.name || session.deviceName}
+                          </p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            بدأت: {new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {session.controllers} دراع • بدأت: {new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                            {session.controllers} لاعب
                       </p>
                           {/* عرض رقم الفاتورة المرتبطة */}
                           {session.bill && (
                             <div className="mt-2">
-                              <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+                              <span className="text-sm text-orange-600 dark:text-orange-400 font-medium">
                                 فاتورة: {session.bill.billNumber}
                               </span>
                             </div>
@@ -494,38 +443,20 @@ const PlayStation: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-center space-x-3 space-x-reverse">
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500"
-                        disabled={(session.controllers ?? 1) <= 1}
-                        onClick={async () => {
-                          const newCount = (session.controllers ?? 1) - 1;
-                          const res = await api.updateSessionControllers(session.id, newCount);
-                          if (res.success && res.data) {
-                            // No need to fetchSessions here, as sessions are managed by useApp
-                          }
-                        }}
-                      >-</button>
-                      <span className="mx-2 font-bold text-gray-900 dark:text-gray-100">{session.controllers ?? 1} دراع</span>
-                      <button
-                        className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500"
-                        disabled={(session.controllers ?? 1) >= 4}
-                        onClick={async () => {
-                          const newCount = (session.controllers ?? 1) + 1;
-                          const res = await api.updateSessionControllers(session.id, newCount);
-                          if (res.success && res.data) {
-                            // No need to fetchSessions here, as sessions are managed by useApp
-                          }
-                        }}
-                      >+</button>
-                    </div>
-                    <div className="text-left">
-                      <p className="font-bold text-green-600 dark:text-green-400">{getPlayStationHourlyRate(devices.find(d => d.number === session.deviceNumber) || null, session.controllers ?? 1)} ج.م/ساعة</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">السعر الحالي</p>
+                        <div className="text-left">
+                          <p className="font-bold text-orange-600 dark:text-orange-400">
+                            {(() => {
+                              const device = devices.find(d => d.number === session.deviceNumber);
+                              if (device?.playstationRates && device.playstationRates[session.controllers as keyof typeof device.playstationRates]) {
+                                return `${device.playstationRates[session.controllers as keyof typeof device.playstationRates]} ج.م/ساعة`;
+                              }
+                              return '-';
+                            })()}
+                          </p>
                     </div>
                     <button
                       onClick={() => handleEndSession(session.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+                          className="bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 font-medium"
                     >
                       <Square className="h-4 w-4 ml-1" />
                       إنهاء
@@ -543,24 +474,35 @@ const PlayStation: React.FC = () => {
       {/* نافذة بدء جلسة جديدة */}
       {showNewSession && selectedDevice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-gray-100">بدء جلسة جديدة لجهاز {selectedDevice.name}</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-white">
+              بدء جلسة جديدة لجهاز {selectedDevice.name}
+            </h2>
+
             {/* خيارات ربط الفاتورة */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ربط الجلسة بفاتورة</label>
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <button
                   type="button"
-                  onClick={() => { setBillOption('new'); setSelectedBillId(''); }}
-                  className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'new' ? 'bg-blue-100 dark:bg-blue-900 border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-300' : 'bg-white dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900 hover:border-blue-500 dark:hover:border-blue-400 text-gray-900 dark:text-gray-100'}`}
+                  onClick={() => setBillOption('new')}
+                  className={`p-3 rounded-lg border text-center transition-colors duration-200 ${
+                    billOption === 'new'
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-500 dark:border-orange-400 text-orange-700 dark:text-orange-300'
+                      : 'bg-white dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-500 dark:hover:border-orange-400 text-gray-900 dark:text-white'
+                  }`}
                 >
                   <div className="text-lg mb-1">🆕</div>
                   <div className="text-sm font-medium">فاتورة جديدة</div>
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setBillOption('existing'); setSelectedBillId(''); }}
-                  className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'existing' ? 'bg-blue-100 dark:bg-blue-900 border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-300' : 'bg-white dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900 hover:border-blue-500 dark:hover:border-blue-400 text-gray-900 dark:text-gray-100'}`}
+                  onClick={() => setBillOption('existing')}
+                  className={`p-3 rounded-lg border text-center transition-colors duration-200 ${
+                    billOption === 'existing'
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-500 dark:border-orange-400 text-orange-700 dark:text-orange-300'
+                      : 'bg-white dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-500 dark:hover:border-orange-400 text-gray-900 dark:text-white'
+                  }`}
                 >
                   <div className="text-lg mb-1">🔗</div>
                   <div className="text-sm font-medium">فاتورة موجودة</div>
@@ -574,14 +516,13 @@ const PlayStation: React.FC = () => {
                     placeholder="ابحث عن فاتورة..."
                     value={searchBill}
                     onChange={e => setSearchBill(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
-                  {/* عند تحميل availableBills أو تصفيتها: */}
                   {filteredAvailableBills.filter(bill =>
                     bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
                     bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
                   ).length > 0 && (
-                    <div className="mt-2 max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg">
+                    <div className="mt-2 max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
                       {filteredAvailableBills.filter(bill =>
                         bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
                         bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
@@ -590,7 +531,11 @@ const PlayStation: React.FC = () => {
                           key={bill._id}
                           type="button"
                           onClick={() => setSelectedBillId(bill._id)}
-                          className={`w-full p-2 text-right text-sm hover:bg-gray-50 dark:hover:bg-gray-600 border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${selectedBillId === bill._id ? 'bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}
+                          className={`w-full p-2 text-right text-sm hover:bg-gray-50 dark:hover:bg-gray-600 border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${
+                            selectedBillId === bill._id
+                              ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                              : 'text-gray-700 dark:text-gray-300'
+                          }`}
                         >
                           <div className="font-medium">#{bill.billNumber}</div>
                           <div className="text-xs text-gray-500 dark:text-gray-400">{bill.customerName || 'بدون اسم'}</div>
@@ -605,13 +550,13 @@ const PlayStation: React.FC = () => {
                     <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 text-center">لا توجد فواتير مطابقة</div>
                   )}
                   {selectedBillId && (
-                    <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700 border border-blue-200 dark:border-blue-600 rounded">
+                    <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700 border border-orange-200 dark:border-orange-800 rounded">
                       {(() => {
-                        const bill = availableBills.find(b => b._id === selectedBillId || b.id === selectedBillId);
+                        const bill = availableBills.find(b => b._id === selectedBillId);
                         if (!bill) return null;
                         return (
                           <div>
-                            <div className="font-bold text-blue-700 dark:text-blue-300">فاتورة #{bill.billNumber}</div>
+                            <div className="font-bold text-orange-700 dark:text-orange-300">فاتورة #{bill.billNumber}</div>
                             <div className="text-sm text-gray-700 dark:text-gray-300">العميل: {bill.customerName || 'بدون اسم'}</div>
                             <div className="text-xs text-gray-500 dark:text-gray-400">الإجمالي: {bill.total} ج.م</div>
                           </div>
@@ -622,71 +567,149 @@ const PlayStation: React.FC = () => {
                 </div>
               )}
             </div>
-            {/* عدد الدراعات */}
+
+            {/* اختيار عدد اللاعبين */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">عدد الدراعات</label>
-              <div className="grid grid-cols-4 gap-2">
-                {[1, 2, 3, 4].map(num => (
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">عدد اللاعبين</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[1, 2, 3, 4].map((controllers) => (
                   <button
-                    key={num}
+                    key={controllers}
                     type="button"
-                    onClick={() => setSelectedControllers(num)}
-                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${selectedControllers === num ? 'bg-blue-100 dark:bg-blue-900 border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-300' : 'bg-white dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900 hover:border-blue-500 dark:hover:border-blue-400 text-gray-900 dark:text-gray-100'}`}
+                    onClick={() => setSelectedControllers(controllers)}
+                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${
+                      selectedControllers === controllers
+                        ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-500 dark:border-orange-400 text-orange-700 dark:text-orange-300'
+                        : 'bg-white dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-500 dark:hover:border-orange-400 text-gray-900 dark:text-white'
+                    }`}
                   >
                     <Users className="h-5 w-5 mx-auto mb-1" />
-                    <span className="text-sm">{num}</span>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {selectedDevice.playstationRates && selectedDevice.playstationRates[num] ? `${selectedDevice.playstationRates[num]} ج.م/س` : '-'}
-                    </div>
+                    <span className="text-sm">{controllers} لاعب</span>
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* عرض سعر الساعة */}
+            {selectedControllers && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">سعر الساعة</label>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    className="p-3 rounded-lg border text-center transition-colors duration-200 bg-orange-100 dark:bg-orange-900/30 border-orange-500 dark:border-orange-400 text-orange-700 dark:text-orange-300"
+                    disabled
+                  >
+                    <DollarSign className="h-5 w-5 mx-auto mb-1" />
+                    <span className="text-sm">{getPlayStationHourlyRate(selectedDevice, selectedControllers) ? `${getPlayStationHourlyRate(selectedDevice, selectedControllers)} ج.م/س` : '-'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {sessionError && <div className="text-red-600 dark:text-red-400 mb-2 text-sm">{sessionError}</div>}
             <div className="flex justify-between mt-6">
-              <button type="button" onClick={() => setShowNewSession(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100">إلغاء</button>
-              <button type="button" onClick={handleStartSession} className="px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded hover:bg-blue-700 dark:hover:bg-blue-800" disabled={loadingSession || (billOption === 'existing' && !selectedBillId)}>بدء الجلسة</button>
+              <button
+                type="button"
+                onClick={() => setShowNewSession(false)}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded font-medium transition-colors duration-200"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleStartSession}
+                className="px-4 py-2 bg-orange-600 dark:bg-orange-500 text-white rounded hover:bg-orange-700 dark:hover:bg-orange-600 font-medium transition-colors duration-200"
+                disabled={loadingSession || !selectedControllers || (billOption === 'existing' && !selectedBillId)}
+              >
+                بدء الجلسة
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* نافذة إضافة جهاز جديد */}
+      {/* Add Device Modal */}
       {showAddDevice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <form onSubmit={handleAddDevice} className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4 text-center">إضافة جهاز بلايستيشن جديد</h2>
+          <form onSubmit={handleAddDevice} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-white">إضافة جهاز بلايستيشن جديد</h2>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">اسم الجهاز</label>
-              <input type="text" value={newDevice.name} onChange={e => setNewDevice({ ...newDevice, name: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2" required />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اسم الجهاز</label>
+              <input
+                type="text"
+                value={newDevice.name}
+                onChange={e => setNewDevice({ ...newDevice, name: e.target.value })}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400"
+                required
+              />
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">رقم الجهاز</label>
-              <input type="number" value={newDevice.number} onChange={e => setNewDevice({ ...newDevice, number: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2" required min="1" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رقم الجهاز</label>
+              <input
+                type="number"
+                value={newDevice.number}
+                onChange={e => setNewDevice({ ...newDevice, number: e.target.value })}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400"
+                required
+                min="1"
+              />
             </div>
-            <div className="mb-4 grid grid-cols-2 gap-2">
-              <label className="block text-sm font-medium text-gray-700 col-span-2">سعر الساعة لكل عدد دراعات</label>
-              <div>
-                <span className="block text-xs text-gray-600 mb-1">دراع واحد</span>
-                <input type="number" value={newDevice.playstationRates[1]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 1: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">عدد أجهزة التحكم</label>
+              <input
+                type="number"
+                value={newDevice.controllers}
+                onChange={e => setNewDevice({ ...newDevice, controllers: parseInt(e.target.value) })}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400"
+                required
+                min="1"
+                max="4"
+              />
               </div>
-              <div>
-                <span className="block text-xs text-gray-600 mb-1">درعين</span>
-                <input type="number" value={newDevice.playstationRates[2]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 2: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
+
+            {/* أسعار الساعة لكل عدد لاعبين */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">أسعار الساعة</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[1, 2, 3, 4].map((controllers) => (
+                  <div key={controllers}>
+                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{controllers} لاعب</label>
+                    <input
+                      type="number"
+                      value={newDevice.playstationRates[controllers as keyof typeof newDevice.playstationRates]}
+                      onChange={e => setNewDevice({
+                        ...newDevice,
+                        playstationRates: {
+                          ...newDevice.playstationRates,
+                          [controllers]: e.target.value
+                        }
+                      })}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400"
+                      placeholder="0"
+                      min="0"
+                      step="0.01"
+                    />
               </div>
-              <div>
-                <span className="block text-xs text-gray-600 mb-1">3 دراعات</span>
-                <input type="number" value={newDevice.playstationRates[3]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 3: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
-              </div>
-              <div>
-                <span className="block text-xs text-gray-600 mb-1">4 دراعات</span>
-                <input type="number" value={newDevice.playstationRates[4]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 4: e.target.value } })} className="w-full border border-gray-300 rounded px-2 py-1" required min="0" step="0.01" />
+                ))}
               </div>
             </div>
-            {addDeviceError && <div className="text-red-600 mb-2 text-sm">{addDeviceError}</div>}
+
+            {addDeviceError && <div className="text-red-600 dark:text-red-400 mb-2 text-sm">{addDeviceError}</div>}
             <div className="flex justify-between mt-6">
-              <button type="button" onClick={() => setShowAddDevice(false)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">إلغاء</button>
-              <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">إضافة</button>
+              <button
+                type="button"
+                onClick={() => setShowAddDevice(false)}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded font-medium transition-colors duration-200"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-orange-600 dark:bg-orange-500 text-white rounded hover:bg-orange-700 dark:hover:bg-orange-600 font-medium transition-colors duration-200"
+              >
+                إضافة
+              </button>
             </div>
           </form>
         </div>

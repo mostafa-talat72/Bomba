@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Plus, TrendingUp, TrendingDown, Calendar, Receipt, Filter, Edit, Trash2 } from 'lucide-react';
+import { Wallet, Plus, TrendingUp, TrendingDown, Calendar, Receipt, Edit, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Cost } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
@@ -10,7 +10,7 @@ const Costs = () => {
   const [showEditCost, setShowEditCost] = useState(false);
   const [selectedCost, setSelectedCost] = useState<Cost | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -361,11 +361,11 @@ const Costs = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'partially_paid': return 'bg-blue-100 text-blue-800';
-      case 'overdue': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'paid': return 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200';
+      case 'pending': return 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200';
+      case 'partially_paid': return 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200';
+      case 'overdue': return 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
     }
   };
 
@@ -392,100 +392,66 @@ const Costs = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center">
-          <Wallet className="h-8 w-8 text-primary-600 ml-3" />
+          <Wallet className="h-8 w-8 text-primary-600 dark:text-primary-400 ml-3" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">إدارة التكاليف</h1>
-            <p className="text-gray-600">متابعة وتحليل المصروفات والتكاليف</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة التكاليف</h1>
+            <p className="text-gray-600 dark:text-gray-400">متابعة وإدارة المصروفات والتكاليف</p>
           </div>
         </div>
-        <div className="flex items-center space-x-3 space-x-reverse">
-          <button
-            onClick={loadCosts}
-            disabled={loading}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center transition-colors duration-200 disabled:opacity-50"
-          >
-            <Calendar className="h-5 w-5 ml-2" />
-            تحديث
-          </button>
-          <button
-            onClick={() => {
-              resetForm();
-              setShowAddCost(true);
-            }}
-            className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
-          >
-            <Plus className="h-5 w-5 ml-2" />
-            إضافة مصروف
-          </button>
-        </div>
+        <button
+          onClick={() => setShowAddCost(true)}
+          className="bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border border-primary-200 dark:border-primary-700 hover:bg-primary-100 dark:hover:bg-primary-700 px-4 py-2 rounded-lg flex items-center transition-colors duration-200 shadow-sm"
+        >
+          <Plus className="h-5 w-5 ml-2" />
+          إضافة تكلفة
+        </button>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">الفلترة والبحث</h3>
-          <Filter className="h-5 w-5 text-gray-500" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">الفترة الزمنية</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفترة</label>
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="today">اليوم</option>
-              <option value="week">هذا الأسبوع</option>
-              <option value="month">هذا الشهر</option>
-              <option value="quarter">هذا الربع</option>
-              <option value="year">هذا العام</option>
+              <option value="week">الأسبوع</option>
+              <option value="month">الشهر</option>
+              <option value="quarter">الربع</option>
+              <option value="year">السنة</option>
             </select>
           </div>
 
           {selectedPeriod === 'month' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الشهر</label>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i} value={i}>
-                      {new Date(2024, i).toLocaleDateString('ar-EG', { month: 'long' })}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">السنة</label>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                >
-                  {Array.from({ length: 5 }, (_, i) => {
-                    const year = new Date().getFullYear() - 2 + i;
-                    return (
-                      <option key={year} value={year}>{year}</option>
-                    );
-                  })}
-                </select>
-              </div>
-            </>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الشهر</label>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {new Date(2024, i).toLocaleDateString('ar-EG', { month: 'long' })}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">الفئة</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="all">جميع الفئات</option>
               {costCategories.map(category => (
@@ -495,15 +461,15 @@ const Costs = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">الحالة</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الحالة</label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="all">جميع الحالات</option>
               <option value="paid">مدفوع</option>
-              <option value="pending">معلق</option>
+              <option value="pending">في الانتظار</option>
               <option value="overdue">متأخر</option>
             </select>
           </div>
@@ -512,67 +478,67 @@ const Costs = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow duration-200">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <TrendingDown className="h-6 w-6 text-red-600" />
+            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center">
+              <TrendingDown className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">إجمالي التكاليف</p>
-              <p className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalAmount)}</p>
-              <p className="text-xs text-gray-500">متوسط يومي: {formatCurrency(getDailyAverage())}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">إجمالي التكاليف</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatCurrency(stats.totalAmount)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">متوسط يومي: {formatCurrency(getDailyAverage())}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow duration-200">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-green-600" />
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+              <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">المدفوع</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(stats.paidAmount)}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">المدفوع</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(stats.paidAmount)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 {stats.totalAmount > 0 ? formatDecimal((stats.paidAmount / stats.totalAmount) * 100) : '٠'}% من الإجمالي
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow duration-200">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Calendar className="h-6 w-6 text-yellow-600" />
+            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
+              <Calendar className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">معلق</p>
-              <p className="text-2xl font-bold text-yellow-600">{formatCurrency(stats.pendingAmount)}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">معلق</p>
+              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{formatCurrency(stats.pendingAmount)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 {stats.totalAmount > 0 ? formatDecimal((stats.pendingAmount / stats.totalAmount) * 100) : '٠'}% من الإجمالي
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow duration-200">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Receipt className="h-6 w-6 text-blue-600" />
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+              <Receipt className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">عدد المعاملات</p>
-              <p className="text-2xl font-bold text-blue-600">{formatDecimal(stats.totalCount)}</p>
-              <p className="text-xs text-gray-500">متوسط: {formatCurrency(stats.totalCount > 0 ? stats.totalAmount / stats.totalCount : 0)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">عدد المعاملات</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalCount)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">متوسط: {formatCurrency(stats.totalCount > 0 ? stats.totalAmount / stats.totalCount : 0)}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Category Breakdown */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">توزيع التكاليف حسب الفئة</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">توزيع التكاليف حسب الفئة</h3>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -580,24 +546,24 @@ const Costs = () => {
               .filter(cat => cat.total > 0)
               .sort((a, b) => b.total - a.total)
               .map(category => (
-                <div key={category.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
+                <div key={category.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow duration-200 bg-white dark:bg-gray-800">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center">
                       <span className="text-2xl mr-2">{category.icon}</span>
-                      <span className="font-medium text-gray-900">{category.name}</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{category.name}</span>
                     </div>
-                    <span className="text-sm text-gray-500">{formatDecimal(category.percentage)}%</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{formatDecimal(category.percentage)}%</span>
                   </div>
                   <div className="mb-2">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div
                         className={`h-2 rounded-full ${category.color}`}
                         style={{ width: `${category.percentage}%` }}
                       ></div>
                     </div>
                   </div>
-                  <p className="text-lg font-bold text-gray-900">{formatCurrency(category.total)}</p>
-                  <p className="text-sm text-gray-500">{formatDecimal(category.count)} معاملة</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(category.total)}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{formatDecimal(category.count)} معاملة</p>
                 </div>
               ))}
           </div>
@@ -605,18 +571,18 @@ const Costs = () => {
       </div>
 
       {/* Monthly Comparison */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">مقارنة الشهور (آخر 12 شهر)</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">مقارنة الشهور (آخر 12 شهر)</h3>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-4">
             {monthlyData.map((month, index) => (
               <div key={index} className="text-center">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-600 mb-1">{month.month}</p>
-                  <p className="text-sm font-bold text-gray-900">{formatCurrency(month.total)}</p>
-                  <p className="text-xs text-gray-500">{formatDecimal(month.count)} معاملة</p>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{month.month}</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{formatCurrency(month.total)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatDecimal(month.count)} معاملة</p>
                 </div>
               </div>
             ))}
@@ -625,86 +591,86 @@ const Costs = () => {
       </div>
 
       {/* Costs List */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">سجل التكاليف</h3>
-            <div className="text-sm text-gray-500">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">سجل التكاليف</h3>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
               {formatDecimal(filteredCosts.length)} من {formatDecimal(costs?.length || 0)} معاملة
             </div>
           </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   التاريخ
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   الفئة
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   الوصف
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   المبلغ
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   المدفوع
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   المتبقي
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   رقم الإيصال
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   الحالة
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   الإجراءات
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                     جاري التحميل...
                   </td>
                 </tr>
               ) : filteredCosts.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                     لا توجد تكاليف في الفترة المحددة
                   </td>
                 </tr>
               ) : (
                 filteredCosts.map((cost) => (
-                  <tr key={cost.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <tr key={cost.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       {formatDate(cost.date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <span className="text-lg mr-2">{getCategoryIcon(cost.category)}</span>
-                        <span className="text-sm text-gray-900">{getCategoryName(cost.category)}</span>
+                        <span className="text-sm text-gray-900 dark:text-gray-100">{getCategoryName(cost.category)}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       {cost.description}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600 dark:text-red-400">
                       {formatCurrency(cost.amount)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 dark:text-green-400">
                       {formatCurrency(cost.paidAmount)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-yellow-600">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-yellow-600 dark:text-yellow-400">
                       {formatCurrency(cost.remainingAmount)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {cost.receipt || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -716,14 +682,14 @@ const Costs = () => {
                       <div className="flex items-center space-x-2 space-x-reverse">
                         <button
                           onClick={() => handleEdit(cost)}
-                          className="text-blue-600 hover:text-blue-900 p-1"
+                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors duration-150 p-1"
                           title="تعديل"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(cost.id)}
-                          className="text-red-600 hover:text-red-900 p-1"
+                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors duration-150 p-1"
                           title="حذف"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -741,22 +707,22 @@ const Costs = () => {
       {/* Add/Edit Cost Modal */}
       {(showAddCost || showEditCost) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {showEditCost ? 'تعديل التكلفة' : 'إضافة مصروف جديد'}
               </h3>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الفئة *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة *</label>
                 <select
                   name="category"
                   value={formData.category}
                   onChange={handleInputChange}
                   required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="">اختر الفئة</option>
                   {costCategories.map(category => (
@@ -768,20 +734,20 @@ const Costs = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الوصف *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف *</label>
                 <input
                   type="text"
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
                   required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="وصف المصروف"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">المبلغ *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المبلغ *</label>
                 <input
                   type="number"
                   name="amount"
@@ -790,30 +756,30 @@ const Costs = () => {
                   required
                   step="0.01"
                   min="0"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="0.00"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">التاريخ *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">التاريخ *</label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date}
                   onChange={handleInputChange}
                   required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">طريقة الدفع</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">طريقة الدفع</label>
                 <select
                   name="paymentMethod"
                   value={formData.paymentMethod}
                   onChange={handleInputChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="cash">نقداً</option>
                   <option value="card">بطاقة ائتمان</option>
@@ -823,12 +789,12 @@ const Costs = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الحالة</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الحالة</label>
                 <select
                   name="status"
                   value={formData.status}
                   onChange={handleInputChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="pending">معلق</option>
                   <option value="paid">مدفوع</option>
@@ -840,10 +806,10 @@ const Costs = () => {
               {/* إظهار حقول الدفع فقط إذا كانت الحالة ليست "مدفوع" */}
               {formData.status !== 'paid' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     المبلغ المدفوع
                     {formData.status === 'partially_paid' && (
-                      <span className="text-xs text-gray-500 mr-2">(جزئي)</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">(جزئي)</span>
                     )}
                   </label>
                   <input
@@ -854,11 +820,11 @@ const Costs = () => {
                     step="0.01"
                     min="0"
                     max={parseFloat(formData.amount || '0')}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="0.00"
                   />
                   {formData.paidAmount && (
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       المتبقي: {formatDecimal(calculateRemainingAmount())} ج.م
                     </div>
                   )}
@@ -867,9 +833,9 @@ const Costs = () => {
 
               {/* إظهار ملخص التكلفة */}
               {formData.amount && (
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
-                  <div className="text-sm text-gray-600">
+                <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ملخص التكلفة:</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
                     <div>إجمالي التكلفة: {formatDecimal(parseFloat(formData.amount || '0'))} ج.م</div>
                     {formData.paidAmount && (
                       <>
@@ -882,55 +848,55 @@ const Costs = () => {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">رقم الإيصال (اختياري)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم الإيصال (اختياري)</label>
                 <input
                   type="text"
                   name="receipt"
                   value={formData.receipt}
                   onChange={handleInputChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="REC-2024-001"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">المورد (اختياري)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المورد (اختياري)</label>
                 <input
                   type="text"
                   name="vendor"
                   value={formData.vendor}
                   onChange={handleInputChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="اسم المورد"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">رقم هاتف المورد (اختياري)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم هاتف المورد (اختياري)</label>
                 <input
                   type="text"
                   name="vendorContact"
                   value={formData.vendorContact}
                   onChange={handleInputChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="رقم الهاتف"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">ملاحظات (اختياري)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ملاحظات (اختياري)</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleInputChange}
                   rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="ملاحظات إضافية"
                 />
               </div>
             </form>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
               <button
                 onClick={() => {
                   setShowAddCost(false);
@@ -938,14 +904,14 @@ const Costs = () => {
                   resetForm();
                   setSelectedCost(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 shadow-sm"
               >
                 {loading ? 'جاري الحفظ...' : (showEditCost ? 'تحديث التكلفة' : 'إضافة المصروف')}
               </button>

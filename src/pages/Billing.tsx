@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle } from 'lucide-react';
+import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
@@ -80,12 +80,12 @@ const Billing = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'draft': return 'bg-gray-100 text-gray-800';
-      case 'partial': return 'bg-yellow-100 text-yellow-800';
-      case 'paid': return 'bg-green-100 text-green-800';
-      case 'overdue': return 'bg-red-100 text-red-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'draft': return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+      case 'partial': return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
+      case 'paid': return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+      case 'overdue': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+      case 'cancelled': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
     }
   };
 
@@ -102,62 +102,48 @@ const Billing = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'draft': return '📄';
-      case 'partial': return '💰';
-      case 'paid': return '✅';
-      case 'overdue': return '⚠️';
-      case 'cancelled': return '❌';
-      default: return '📄';
+      case 'draft': return <Receipt className="h-4 w-4" />;
+      case 'partial': return <DollarSign className="h-4 w-4" />;
+      case 'paid': return <CheckCircle className="h-4 w-4" />;
+      case 'overdue': return <AlertTriangle className="h-4 w-4" />;
+      case 'cancelled': return <X className="h-4 w-4" />;
+      default: return <Receipt className="h-4 w-4" />;
     }
   };
 
-  // Helper: Safely get field or fallback
   const safe = (val: unknown, fallback = '-') => (val !== undefined && val !== null && val !== '' ? String(val) : fallback);
 
   const handlePaymentClick = async (bill: Bill) => {
     setSelectedBill(bill);
-    setPaymentAmount('');
+    setPaymentAmount(bill.totalAmount.toString());
+    setPaymentMethod('cash');
     setShowPaymentModal(true);
-
-    // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-    await updateBillStatus(bill.id || bill._id);
   };
 
   const handlePaymentSubmit = async () => {
     if (!selectedBill) return;
 
-    // التحقق من وجود جلسات نشطة
-    if (selectedBill && hasActiveSession(selectedBill)) {
-      showNotification('لا يمكن الدفع - هذه الفاتورة تحتوي على جلسة نشطة. يرجى إنهاء الجلسة أولاً.');
-      return;
-    }
-
     try {
-      const result = await api.updatePayment(selectedBill.id || selectedBill._id, {
-        paid: selectedBill.paid || 0,
-        remaining: selectedBill.remaining || 0,
-        status: selectedBill.status || 'draft',
-        paymentAmount: parseFloat(paymentAmount),
+      const response = await api.payBill(selectedBill._id || selectedBill.id, {
+        amount: parseFloat(paymentAmount),
         method: paymentMethod,
         reference: paymentReference
       });
 
-      if (result && result.data) {
-        setSelectedBill(result.data);
+      if (response.success) {
+        showNotification('تم دفع الفاتورة بنجاح', 'success');
         setShowPaymentModal(false);
         setPaymentAmount('');
         setPaymentMethod('cash');
         setPaymentReference('');
-        fetchBills(); // إعادة تحميل قائمة الفواتير
-
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-        await updateBillStatus(selectedBill.id || selectedBill._id);
-
-        showNotification('تم تسجيل الدفع بنجاح!');
+        setSelectedBill(null);
+        await fetchBills();
+      } else {
+        showNotification(response.message || 'حدث خطأ أثناء دفع الفاتورة', 'error');
       }
     } catch (error) {
-      console.error('Failed to update payment:', error);
-      showNotification('فشل في تسجيل الدفع');
+      console.error('Error paying bill:', error);
+      showNotification('حدث خطأ أثناء دفع الفاتورة', 'error');
     }
   };
 
@@ -166,184 +152,88 @@ const Billing = () => {
   };
 
   const getCustomerDisplay = (bill: Bill) => {
-      return bill.customerName || 'عميل';
+    if (bill.customerName) {
+      return bill.customerName;
+    }
+    if (bill.customerPhone) {
+      return `عميل - ${bill.customerPhone}`;
+    }
+    if (bill.customerId) {
+      return `عميل - ${bill.customerId}`;
+    }
+    return 'عميل بدون اسم';
   };
 
-  const filteredBills = bills.filter(bill => {
-    // فلترة حسب الحالة
-    const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
-
-    // فلترة حسب التاريخ
-    let dateMatch = true;
-    if (dateFilter) {
-      const billDate = new Date(bill.createdAt);
-      const filterDate = new Date(dateFilter);
-
-      // مقارنة التاريخ فقط (بدون الوقت)
-      const billDateOnly = new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate());
-      const filterDateOnly = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate());
-
-      dateMatch = billDateOnly.getTime() === filterDateOnly.getTime();
-    }
-
-    return statusMatch && dateMatch;
-  });
-
-  // Helper: Check if bill has any unprepared items
   const hasUnpreparedItems = (bill: Bill) => {
-    if (!bill.orders) return false;
-    for (const order of bill.orders) {
-      if (!order.items) continue;
-      for (const item of order.items) {
-        if ((item.preparedCount || 0) < (item.quantity || 0)) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return bill.orders.some(order =>
+      order.items.some(item => item.status === 'pending' || item.status === 'preparing')
+    );
   };
 
   const handlePartialPayment = async (bill: Bill) => {
     setSelectedBill(bill);
+    setPaymentAmount('');
+    setPartialPaymentMethod('cash');
+    setPaymentReference('');
     setShowPartialPaymentModal(true);
-
-    try {
-      setSelectedItems({});
-      setItemQuantities({});
-
-      // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-      await updateBillStatus(bill.id || bill._id);
-    } catch (error) {
-      console.error('Failed to load bill items:', error);
-    }
   };
 
-  // دالة لتحديث حالة الفاتورة بناءً على الأصناف والجلسات
   const updateBillStatus = async (billId: string) => {
     try {
-      // الحصول على عناصر الفاتورة
-      const aggItems = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || []);
+      const response = await api.getBill(billId);
+      if (response.success && response.data) {
+        const updatedBill = response.data;
+        setSelectedBill(updatedBill);
 
-      // التحقق من وجود جلسات نشطة
-      const hasActive = selectedBill ? hasActiveSession(selectedBill) : false;
-
-      // التحقق من أن جميع الأصناف مدفوعة بالكامل
-      const allItemsPaid = aggItems.every(item => item.remainingQuantity === 0);
-
-      // تحديد الحالة الجديدة
-      let newStatus: 'draft' | 'partial' | 'paid' | 'cancelled' | 'overdue';
-
-      if (allItemsPaid && !hasActive) {
-        // جميع الأصناف مدفوعة ولا توجد جلسات نشطة
-        newStatus = 'paid';
-      } else if (hasActive) {
-        // توجد جلسات نشطة (حتى لو كانت جميع الأصناف مدفوعة)
-        newStatus = 'partial';
-      } else {
-        // بعض الأصناف غير مدفوعة ولا توجد جلسات نشطة
-        newStatus = 'partial';
-      }
-
-      // تحديث حالة الفاتورة في الباكند
-      const result = await api.updateBill(billId, { status: newStatus });
-
-      if (result && result.data) {
-        // تحديث الفاتورة المحلية
-        setSelectedBill(result.data);
-        // إعادة تحميل قائمة الفواتير
-        fetchBills();
+        // تحديث قائمة الفواتير
+        const updatedBills = bills.map(bill =>
+          (bill._id === billId || bill.id === billId) ? updatedBill : bill
+        );
+        // يمكن إضافة دالة لتحديث قائمة الفواتير في context إذا كانت متاحة
       }
     } catch (error) {
-      console.error('Failed to update bill status:', error);
-      showNotification('فشل في تحديث حالة الفاتورة');
+      console.error('Error updating bill status:', error);
     }
   };
 
   const handlePartialPaymentSubmit = async () => {
-    if (!selectedBill) return;
-
-    // استخدم نفس منطق المفاتيح كما في aggregateItemsWithPayments
-    const aggItems = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || []);
-    const selectedItemIds = Object.keys(selectedItems).filter(id => selectedItems[id]);
-
-    if (selectedItemIds.length === 0) {
-      showNotification('يرجى تحديد العناصر المطلوب دفعها');
-      return;
-    }
-
-    const itemsToPay = aggItems.filter(item => {
-      const addonsKey = (item.addons || []).map((a: { name: string; price: number }) => `${a.name}:${a.price}`).sort().join('|');
-      const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-      const isSelected = selectedItemIds.includes(itemKey);
-      const hasQuantity = itemQuantities[itemKey] > 0;
-
-      return isSelected && hasQuantity;
-    }).map(item => {
-      const addonsKey = (item.addons || []).map((a: { name: string; price: number }) => `${a.name}:${a.price}`).sort().join('|');
-      const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-      const quantity = itemQuantities[itemKey] || 0;
-      // ابحث عن العنصر الأصلي في selectedBill.orders للحصول على orderId وorderNumber
-      const original = selectedBill?.orders?.find(order =>
-        order.items?.some(orderItem => orderItem.name === item.name && orderItem.price === item.price)
-      );
-
-      return {
-        itemName: item.name,
-        price: item.price,
-        quantity: Math.min(quantity, item.remainingQuantity),
-        orderId: original?._id,
-        orderNumber: original?.orderNumber,
-        addons: item.addons || [],
-      };
-    });
-
-    if (itemsToPay.length === 0) {
-      showNotification('يرجى تحديد الكميات المطلوب دفعها');
-      return;
-    }
-
-    // الحصول على orderId من أول عنصر
-    const firstItem = itemsToPay[0];
-    if (!firstItem || !firstItem.orderId) {
-      showNotification('لم يتم العثور على عناصر صالحة للدفع');
-      return;
-    }
+    if (!selectedBill || !paymentAmount) return;
 
     try {
-      const result = await addPartialPayment(selectedBill.id || selectedBill._id, {
-        orderId: firstItem.orderId,
-        items: itemsToPay.map(item => ({
-          itemName: item.itemName,
-          price: item.price,
-          quantity: item.quantity,
-          orderId: item.orderId,
-          orderNumber: item.orderNumber,
-          addons: item.addons || [],
-        })),
-        paymentMethod: partialPaymentMethod
+      const amount = parseFloat(paymentAmount);
+      if (amount <= 0) {
+        showNotification('يرجى إدخال مبلغ صحيح', 'error');
+      return;
+    }
+
+      if (amount >= selectedBill.totalAmount) {
+        showNotification('المبلغ المدخل أكبر من أو يساوي المبلغ الإجمالي. استخدم دفع كامل بدلاً من ذلك.', 'error');
+      return;
+    }
+
+      const response = await addPartialPayment(selectedBill._id || selectedBill.id, {
+        amount: amount,
+        method: partialPaymentMethod,
+        reference: paymentReference
       });
 
-      if (result) {
-        // تحديث بيانات الفاتورة المحلية
-        setSelectedBill(result);
-
-        // إعادة تعيين العناصر المحددة
-        setSelectedItems({});
-        setItemQuantities({});
-
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-        await updateBillStatus(selectedBill.id || selectedBill._id);
-
-        // إظهار رسالة نجاح
-        showNotification('تم تسجيل الدفع الجزئي بنجاح!');
+      if (response.success) {
+        showNotification('تم إضافة الدفع الجزئي بنجاح', 'success');
+        setShowPartialPaymentModal(false);
+        setPaymentAmount('');
+        setPartialPaymentMethod('cash');
+        setPaymentReference('');
+        setSelectedBill(null);
+        await fetchBills();
+      } else {
+        showNotification(response.message || 'حدث خطأ أثناء إضافة الدفع الجزئي', 'error');
       }
     } catch (error) {
-      console.error('Failed to add partial payment:', error);
-      showNotification('فشل في تسجيل الدفع الجزئي');
+      console.error('Error adding partial payment:', error);
+      showNotification('حدث خطأ أثناء إضافة الدفع الجزئي', 'error');
     }
   };
 
-    // دالة إنهاء الجلسة
   const handleEndSession = async (sessionId: string) => {
     setSessionToEnd(sessionId);
     setShowSessionEndModal(true);
@@ -353,54 +243,30 @@ const Billing = () => {
     if (!sessionToEnd) return;
 
     try {
-      const result = await api.endSession(sessionToEnd);
-      if (result && result.success) {
-        showNotification('تم إنهاء الجلسة بنجاح!');
-
-        // إعادة تحميل الفواتير لتحديث البيانات
+      const response = await api.endSession(sessionToEnd);
+      if (response.success) {
+        showNotification('تم إنهاء الجلسة بنجاح', 'success');
+        setShowSessionEndModal(false);
+        setSessionToEnd(null);
         await fetchBills();
 
-        // إعادة تعيين بيانات الدفع
-        setPaymentAmount('');
-        setPaymentMethod('cash');
-        setPaymentReference('');
-
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
+        // تحديث الفاتورة المختارة إذا كانت تحتوي على الجلسة المنتهية
         if (selectedBill) {
-          await updateBillStatus(selectedBill.id || selectedBill._id);
+          await updateBillStatus(selectedBill._id || selectedBill.id);
         }
-
       } else {
-        console.error('Failed to end session:', result);
-        showNotification('فشل في إنهاء الجلسة');
+        showNotification(response.message || 'حدث خطأ أثناء إنهاء الجلسة', 'error');
       }
     } catch (error) {
-      console.error('Failed to end session:', error);
-      showNotification('حدث خطأ في إنهاء الجلسة');
-    } finally {
-      setSessionToEnd(null);
-      setShowSessionEndModal(false);
+      console.error('Error ending session:', error);
+      showNotification('حدث خطأ أثناء إنهاء الجلسة', 'error');
     }
   };
 
-  // دالة لفحص ما إذا كانت هناك جلسة نشطة مرتبطة بالفاتورة
   const hasActiveSession = (bill: Bill) => {
-    if (!bill.sessions || bill.sessions.length === 0) {
-      return false;
-    }
-
-    // استخدام نفس منطق BillView - التحقق من حالة الجلسات في الفاتورة نفسها
-    const hasActive = bill.sessions.some(session => {
-      const sessionStatus = typeof session === 'object' ? session.status : null;
-      const isActive = sessionStatus === 'active';
-
-      return isActive;
-    });
-
-    return hasActive;
+    return bill.sessions && bill.sessions.some(session => session.status === 'active');
   };
 
-  // دالة لتجميع الأصناف والإضافات مع حساب الكمية والمدفوع والمتبقي (نفس منطق BillView)
   function aggregateItemsWithPayments(orders: Order[], partialPayments: Bill['partialPayments']) {
     type AggregatedItem = {
       name: string;
@@ -409,155 +275,78 @@ const Billing = () => {
       paidQuantity: number;
       remainingQuantity: number;
     };
-    const map = new Map<string, AggregatedItem>();
 
-    // Helper لحساب المدفوع لصنف رئيسي فقط
+    const itemMap = new Map<string, AggregatedItem>();
+
     function getPaidQty(itemName: string) {
-      let paid = 0;
+      if (!partialPayments || partialPayments.length === 0) return 0;
+
+      let totalPaid = 0;
       partialPayments.forEach(payment => {
-        if (!payment.items || !Array.isArray(payment.items)) return;
-        payment.items.forEach((item: { itemName: string; quantity: number }) => {
-            if (item.itemName === itemName) {
-              paid += item.quantity;
+        if (payment.items && payment.items.length > 0) {
+          const itemPayment = payment.items.find(item => item.name === itemName);
+          if (itemPayment) {
+            totalPaid += itemPayment.quantity || 0;
           }
-        });
+        }
       });
-      return paid;
+      return totalPaid;
     }
 
-    if (!orders || !Array.isArray(orders)) return [];
-
     orders.forEach(order => {
-      if (!order.items) return; // تخطي الطلبات التي لا تحتوي على أصناف
-      order.items.forEach((item: OrderItem) => {
-        const key = `${item.name}|${item.price}`;
-      if (!map.has(key)) {
+      order.items.forEach(item => {
+        const key = item.name;
+        const existingItem = itemMap.get(key);
           const paidQty = getPaidQty(item.name);
-        map.set(key, {
+
+        if (existingItem) {
+          existingItem.totalQuantity += item.quantity;
+          existingItem.paidQuantity = Math.max(existingItem.paidQuantity, paidQty);
+        } else {
+          itemMap.set(key, {
             name: item.name,
           price: item.price,
           totalQuantity: item.quantity,
           paidQuantity: paidQty,
-          remainingQuantity: item.quantity - paidQty,
+            remainingQuantity: item.quantity - paidQty
         });
       }
       });
     });
-    return Array.from(map.values());
+
+    return Array.from(itemMap.values());
   }
 
+  const filteredBills = bills.filter(bill => {
+    const matchesStatus = statusFilter === 'all' || bill.status === statusFilter;
+    const matchesDate = !dateFilter || bill.createdAt?.includes(dateFilter);
+    return matchesStatus && matchesDate;
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center">
-          <Receipt className="h-6 w-6 sm:h-8 sm:w-8 text-primary-600 dark:text-primary-400 ml-2 sm:ml-3" />
+          <Receipt className="h-8 w-8 text-orange-600 dark:text-orange-400 ml-3" />
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الفواتير</h1>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">إنشاء وإدارة فواتير العملاء</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">إدارة الفواتير</h1>
+            <p className="text-gray-600 dark:text-gray-400">متابعة وإدارة الفواتير والمدفوعات</p>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">إجمالي الفواتير</p>
-              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(bills.length)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
-            </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">المبلغ المحصل</p>
-              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
-                {formatCurrency(bills.reduce((sum, bill) => sum + (bill.paid || 0), 0))}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">المبلغ المتبقي</p>
-              <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
-                {formatCurrency(bills.reduce((sum, bill) => sum + (bill.remaining || 0), 0))}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
-              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">فواتير جزئية</p>
-              <p className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {formatDecimal(bills.filter(b => b.status === 'partial').length)}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الفواتير الحالية</h3>
-            <div className="text-sm text-gray-600 dark:text-gray-300">
-              {filteredBills.length} من {bills.length} فاتورة
-              {dateFilter && (
-                <span className="mr-2 text-blue-600 dark:text-blue-400">
-                  • التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">التاريخ:</label>
-              <div className="flex items-center space-x-2 space-x-reverse w-full sm:w-auto">
-                <input
-                  type="date"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                />
-                {dateFilter && (
-                  <button
-                    onClick={() => setDateFilter('')}
-                    className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 whitespace-nowrap px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900"
-                  >
-                    مسح التاريخ
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">فلترة حسب الحالة:</label>
+      {/* Filters */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">حالة الفاتورة</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
-                <option value="all">جميع الفواتير</option>
+              <option value="all">جميع الحالات</option>
                 <option value="draft">مسودة</option>
                 <option value="partial">مدفوع جزئياً</option>
                 <option value="paid">مدفوع بالكامل</option>
@@ -565,893 +354,403 @@ const Billing = () => {
                 <option value="cancelled">ملغية</option>
               </select>
             </div>
-          </div>
-        </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">التاريخ</label>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
       </div>
 
-      {/* Bills Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-        {filteredBills.map((bill: Bill) => (
-          <div
-            key={bill.id || bill._id}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200 cursor-pointer relative"
-            onClick={() => handlePaymentClick(bill)}
-          >
-            {/* Unprepared Items Badge */}
-            {hasUnpreparedItems(bill) && (
-              <span className="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full z-10">
-                طلبات غير جاهزة
-              </span>
-            )}
-            {/* Header */}
-            <div className="p-3 sm:p-4 border-b border-gray-100 dark:border-gray-700">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center">
-                  <span className="text-xl sm:text-2xl mr-2">{getStatusIcon(bill.status)}</span>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(bill.status)}`}>
-                    {getStatusText(bill.status)}
+          <div className="flex items-end">
+            <button
+              onClick={() => {
+                setStatusFilter('all');
+                setDateFilter('');
+              }}
+              className="w-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg transition-colors duration-200 font-medium"
+            >
+              إعادة تعيين
+            </button>
+                </div>
+              </div>
+              </div>
+
+      {/* Bills List */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">قائمة الفواتير</h3>
+              </div>
+        <div className="p-6">
+          {filteredBills.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد فواتير</p>
+          ) : (
+            <div className="space-y-4">
+              {filteredBills.map((bill) => (
+                <div key={bill._id || bill.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-4 space-x-reverse">
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(bill.status)}`}>
+                          {getStatusText(bill.status)}
                   </span>
-                </div>
-                <span className="text-xs text-gray-500 dark:text-gray-400">#{safe(bill.billNumber, bill.id || bill._id)}</span>
-              </div>
-
-              <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300 mb-1">
-                <User className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                <span className="truncate">{(getCustomerDisplay(bill as Bill) || 'عميل') as string}</span>
-              </div>
-
-              <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
-                <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                <span>{bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('ar-EG') : '-'}</span>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-3 sm:p-4">
-              <div className="space-y-2 sm:space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
-                  <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm sm:text-base">{formatCurrency(bill.total || 0)}</span>
-                </div>
-
-                <div className="flex justify-between items-center">
-                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">المدفوع:</span>
-                  <span className="font-semibold text-green-600 dark:text-green-400 text-sm sm:text-base">{formatCurrency(bill.paid || 0)}</span>
-                </div>
-
-                <div className="flex justify-between items-center">
-                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">المتبقي:</span>
-                  <span className={`font-semibold text-sm sm:text-base ${(bill.remaining || 0) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                    {formatCurrency(bill.remaining || 0)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
-                  <span>الطلبات: {formatDecimal(bill.orders?.length || 0)}</span>
-                  <span className="flex items-center gap-1">
-                    الجلسات: {formatDecimal(bill.sessions?.length || 0)}
                     {hasActiveSession(bill) && (
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs text-red-600 dark:text-red-400 font-bold">نشط</span>
-                      </div>
-                    )}
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                            جلسة نشطة
                   </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className={`p-3 sm:p-4 border-t border-gray-100 dark:border-gray-700 rounded-b-lg ${bill.status === 'paid' ? 'bg-green-50 dark:bg-green-900' : 'bg-gray-50 dark:bg-gray-700'
-              }`}>
-              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'
-                }`}>
-                {bill.status === 'paid' ? (
-                  <>
-                    <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    مدفوع بالكامل
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    انقر لإدارة الفاتورة
-                  </>
                 )}
               </div>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {new Date(bill.createdAt).toLocaleDateString('ar-EG')}
+                      </span>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Empty State */}
-      {filteredBills.length === 0 && (
-        <div className="text-center py-12">
-          <Receipt className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">لا توجد فواتير</h3>
-          <p className="text-gray-600 dark:text-gray-300">
-            {(() => {
-              let message = '';
-              if (statusFilter === 'all' && !dateFilter) {
-                message = 'لم يتم إنشاء أي فواتير بعد';
-              } else if (statusFilter !== 'all' && !dateFilter) {
-                message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}"`;
-              } else if (statusFilter === 'all' && dateFilter) {
-                message = `لا توجد فواتير بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
-              } else {
-                message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}" بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
-              }
-              return message;
-            })()}
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">
+                        {formatCurrency(bill.totalAmount)}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {getCustomerDisplay(bill)}
           </p>
+        </div>
+            </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {bill.orders.length} طلب
+                        </span>
+                      {hasUnpreparedItems(bill) && (
+                        <span className="text-sm text-yellow-600 dark:text-yellow-400">
+                          • تحتوي على عناصر غير جاهزة
+                              </span>
+                              )}
+                            </div>
+
+                    <div className="flex space-x-2 space-x-reverse">
+                      {bill.status === 'draft' && (
+                              <button
+                          onClick={() => handlePaymentClick(bill)}
+                          className="px-3 py-1 bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white text-sm rounded font-medium transition-colors duration-200"
+                              >
+                          دفع كامل
+                              </button>
+                      )}
+
+                      {bill.status === 'partial' && (
+                          <button
+                          onClick={() => handlePartialPayment(bill)}
+                          className="px-3 py-1 bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white text-sm rounded font-medium transition-colors duration-200"
+                        >
+                          دفع جزئي
+                          </button>
+                      )}
+
+                          <button
+                        onClick={() => setSelectedBill(bill)}
+                        className="px-3 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 text-sm rounded font-medium transition-colors duration-200"
+                      >
+                        عرض التفاصيل
+                          </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+                        </div>
+                      </div>
+
+      {/* Bill Details Modal */}
+      {selectedBill && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">تفاصيل الفاتورة</h2>
+              <button
+                onClick={() => setSelectedBill(null)}
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                ✕
+              </button>
+                          </div>
+
+            <div className="space-y-6">
+              {/* Bill Header */}
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">رقم الفاتورة</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{safe(selectedBill.billNumber)}</p>
+                          </div>
+                              <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">التاريخ</p>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {new Date(selectedBill.createdAt).toLocaleDateString('ar-EG')}
+                                </p>
+                              </div>
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">الحالة</p>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedBill.status)}`}>
+                      {getStatusText(selectedBill.status)}
+                    </span>
+                            </div>
+                          </div>
+                        </div>
+
+              {/* Customer Info */}
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <h3 className="font-medium text-gray-900 dark:text-white mb-2">معلومات العميل</h3>
+                <p className="text-gray-600 dark:text-gray-400">{getCustomerDisplay(selectedBill)}</p>
+                        </div>
+
+              {/* Orders */}
+              <div className="space-y-4">
+                <h3 className="font-medium text-gray-900 dark:text-white">الطلبات</h3>
+                {selectedBill.orders.map((order, orderIndex) => (
+                  <div key={order._id || order.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium text-gray-900 dark:text-white">طلب #{orderIndex + 1}</h4>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {new Date(order.createdAt).toLocaleTimeString('ar-EG')}
+                      </span>
+                      </div>
+
+                    <div className="space-y-2">
+                      {order.items.map((item, itemIndex) => (
+                        <div key={itemIndex} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-600 last:border-b-0">
+                          <div className="flex items-center space-x-3 space-x-reverse">
+                            <span className="text-gray-900 dark:text-white">{item.name}</span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {item.quantity} × {formatCurrency(item.price)}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium text-gray-900 dark:text-white">
+                              {formatCurrency(item.quantity * item.price)}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {item.status === 'ready' ? 'جاهز' : item.status === 'preparing' ? 'قيد التحضير' : 'في الانتظار'}
+                            </p>
+                        </div>
+                        </div>
+                      ))}
+                        </div>
+                      </div>
+                ))}
+                </div>
+
+              {/* Sessions */}
+              {selectedBill.sessions && selectedBill.sessions.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 dark:text-white">الجلسات</h3>
+                  {selectedBill.sessions.map((session) => (
+                    <div key={session._id || session.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                <div>
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            {session.deviceName || session.deviceId}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {session.startTime ? new Date(session.startTime).toLocaleString('ar-EG') : 'بدون وقت بداية'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            {formatCurrency(session.cost || 0)}
+                          </p>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            session.status === 'active'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                          }`}>
+                            {session.status === 'active' ? 'نشطة' : 'منتهية'}
+                          </span>
+                                        </div>
+                                      </div>
+
+                      {session.status === 'active' && (
+                          <button
+                          onClick={() => handleEndSession(session._id || session.id)}
+                          className="mt-2 px-3 py-1 bg-red-600 dark:bg-red-500 hover:bg-red-700 dark:hover:bg-red-600 text-white text-sm rounded font-medium transition-colors duration-200"
+                        >
+                          إنهاء الجلسة
+                          </button>
+                      )}
+                        </div>
+                  ))}
+                      </div>
+                    )}
+
+              {/* Partial Payments */}
+              {selectedBill.partialPayments && selectedBill.partialPayments.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 dark:text-white">المدفوعات الجزئية</h3>
+                  {selectedBill.partialPayments.map((payment, index) => (
+                    <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            {formatCurrency(payment.amount)}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {payment.method === 'cash' ? 'نقداً' : payment.method === 'card' ? 'بطاقة' : 'تحويل'}
+                          </p>
+                      </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {payment.createdAt ? new Date(payment.createdAt).toLocaleString('ar-EG') : 'بدون تاريخ'}
+                          </p>
+                          {payment.reference && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              مرجع: {payment.reference}
+                            </p>
+                          )}
+                      </div>
+                      </div>
+                    </div>
+                  ))}
+                      </div>
+                    )}
+
+              {/* Total */}
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-medium text-gray-900 dark:text-white">الإجمالي</span>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(selectedBill.totalAmount)}
+                  </span>
+                  </div>
+                </div>
+              </div>
+            </div>
         </div>
       )}
 
       {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">إدارة الدفع - فاتورة #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</h3>
-            </div>
+      {showPaymentModal && selectedBill && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-bold mb-4 text-center text-gray-900 dark:text-white">دفع الفاتورة</h3>
 
-            <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Payment Section */}
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">معلومات الدفع</h4>
-
-                  {/* معلومات الفاتورة */}
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">معلومات الفاتورة</h5>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">رقم الفاتورة:</span>
-                        <span className="font-medium mr-2 dark:text-gray-100">#{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">العميل:</span>
-                        <span className="font-medium mr-2 dark:text-gray-100">{selectedBill && (getCustomerDisplay(selectedBill) as string)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
-                        <span className="font-medium text-green-600 dark:text-green-400 mr-2">{formatCurrency(selectedBill?.total || 0)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">المدفوع مسبقاً:</span>
-                        <span className="font-medium text-blue-600 dark:text-blue-400 mr-2">{formatCurrency(selectedBill?.paid || 0)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
-                        <span className="font-medium text-red-600 dark:text-red-400 mr-2">{formatCurrency(selectedBill?.remaining || 0)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">الحالة:</span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full mr-2 ${getStatusColor(selectedBill?.status || 'draft')}`}>
-                          {getStatusText(selectedBill?.status || 'draft')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* تفاصيل الجهاز النشط */}
-                  {selectedBill && hasActiveSession(selectedBill) && (
-                    <div className="bg-red-50 dark:bg-red-900 p-4 rounded-lg mb-6 border border-red-200 dark:border-red-700">
-                      <h5 className="font-medium text-red-900 dark:text-red-100 mb-3 flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                        الجهاز النشط
-                      </h5>
-                      <div className="space-y-2 text-sm">
-                        {selectedBill.sessions?.filter(s => s.status === 'active').map((session, index) => (
-                          <div key={index} className="bg-white dark:bg-gray-800 p-3 rounded border border-red-100 dark:border-red-700">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="font-medium text-red-800 dark:text-red-200">{session.deviceName}</span>
-                              <span className="text-xs text-red-600 dark:text-red-300 bg-red-100 dark:bg-red-800 px-2 py-1 rounded">
-                                {session.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
-                              </span>
-                            </div>
-                            <div className="text-xs text-red-700 dark:text-red-300 mb-3">
-                              <div>وقت البداية: {new Date(session.startTime).toLocaleTimeString('ar-EG')}</div>
-                              <div>المدة: {(() => {
-                                const start = new Date(session.startTime);
-                                const now = new Date();
-                                const durationMs = now.getTime() - start.getTime();
-                                const hours = Math.floor(durationMs / (1000 * 60 * 60));
-                                const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-                                return `${hours > 0 ? hours + ' ساعة' : ''} ${minutes > 0 ? minutes + ' دقيقة' : ''}`;
-                              })()}</div>
-                              {session.deviceType === 'playstation' && (
-                                <div>عدد الدراعات: {session.controllers || 1}</div>
-                              )}
-                            </div>
-                            <div className="flex justify-end">
-                              <button
-                                onClick={() => handleEndSession(session._id || session.id)}
-                                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors duration-200"
-                              >
-                                إنهاء الجلسة
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* المدفوعات الجزئية */}
-                  {selectedBill?.partialPayments && selectedBill.partialPayments.length > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg mb-6">
-                      <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-3">المدفوعات الجزئية السابقة</h5>
-                      <div className="space-y-2">
-                        {/* تجميع الأصناف حسب الاسم والسعر */}
-                        {(() => {
-                          const itemMap = new Map<string, { itemName: string; price: number; totalQuantity: number; totalAmount: number }>();
-                          selectedBill.partialPayments.forEach(payment => {
-                            payment.items.forEach(item => {
-                              const key = `${item.itemName}|${item.price}`;
-                              if (!itemMap.has(key)) {
-                                itemMap.set(key, {
-                                  itemName: item.itemName,
-                                  price: item.price,
-                                  totalQuantity: item.quantity,
-                                  totalAmount: item.price * item.quantity
-                                });
-                              } else {
-                                const agg = itemMap.get(key)!;
-                                agg.totalQuantity += item.quantity;
-                                agg.totalAmount += item.price * item.quantity;
-                              }
-                            });
-                          });
-                          return Array.from(itemMap.values()).map((agg) => (
-                            <div key={agg.itemName + agg.price} className="flex justify-between text-sm bg-white dark:bg-gray-800 p-3 rounded-lg border border-blue-100 dark:border-blue-700 mb-1">
-                              <span className="text-blue-800 dark:text-blue-200">{agg.itemName} × {formatDecimal(agg.totalQuantity)}</span>
-                              <span className="text-blue-700 dark:text-blue-300 font-medium">{formatCurrency(agg.totalAmount)}</span>
-                            </div>
-                          ));
-                        })()}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* إدخال الدفع - يظهر فقط إذا لم تكن الفاتورة مدفوعة بالكامل */}
-                  {selectedBill?.status !== 'paid' && (
-                    <>
-                      {/* أزرار الدفع - معطل إذا كانت هناك جلسات نشطة */}
-                      <div className="mb-6">
-                        <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">خيارات الدفع</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {/* زر دفع الفاتورة بالكامل */}
-                          <button
-                            onClick={() => {
-                              if (selectedBill?.remaining && selectedBill.remaining > 0) {
-                                setPaymentAmount(selectedBill.remaining.toString());
-                              }
-                              setPaymentMethod('cash');
-                            }}
-                            disabled={selectedBill ? hasActiveSession(selectedBill) : false}
-                            className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 ${
-                              selectedBill && hasActiveSession(selectedBill)
-                                ? 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                            }`}
-                          >
-                            <div className="text-2xl mb-2">💰</div>
-                            <div className="font-medium dark:text-gray-100">دفع الفاتورة بالكامل</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">دفع المبلغ المتبقي بالكامل</div>
-                            {selectedBill && hasActiveSession(selectedBill) && (
-                              <div className="text-xs text-red-500 dark:text-red-400 mt-1">غير متاح - جلسة نشطة</div>
-                            )}
-                          </button>
-
-                          {/* زر دفع مشروب معين */}
-                          <button
-                            onClick={async () => {
-                              if (selectedBill) {
-                                await handlePartialPayment(selectedBill);
-                              }
-                            }}
-                            className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500`}
-                          >
-                            <div className="text-2xl mb-2">🍹</div>
-                            <div className="font-medium dark:text-gray-100">دفع مشروب معين</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">اختيار مشروبات محددة للدفع</div>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* إدخال الدفع - يظهر فقط إذا تم اختيار دفع الفاتورة بالكامل */}
-                      {paymentAmount && (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">مبلغ الدفع</label>
-                            <input
-                              type="text"
-                              value={formatCurrency(parseFloat(paymentAmount))}
-                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              disabled
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المبلغ المتبقي بعد الدفع</label>
-                            <input
-                              type="text"
-                              value={formatCurrency(Math.max(0, (selectedBill?.remaining || 0) - parseFloat(paymentAmount)))}
-                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              disabled
-                            />
-                          </div>
-
-                          {/* مؤشر حالة الدفع */}
-                          <div className="p-3 rounded-lg border bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700">
-                            <div className="flex items-center">
-                              <span className="text-lg mr-2 text-green-600 dark:text-green-400">✅</span>
-                              <div>
-                                <p className="font-medium text-green-800 dark:text-green-200">
-                                  ستصبح الفاتورة مدفوعة بالكامل!
-                                </p>
-                                <p className="text-sm text-green-600 dark:text-green-300">
-                                  المبلغ المتبقي سيكون صفر
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ملاحظات */}
-                      <div className="mt-6">
-                        <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
-                          <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">ملاحظات مهمة:</h5>
-                          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                            <li>• سيتم تحديث حالة الفاتورة تلقائياً بناءً على المبلغ المدفوع</li>
-                            <li>• إذا كان المبلغ المتبقي صفر، ستتحول الحالة إلى "مدفوع بالكامل"</li>
-                            <li>• إذا كان هناك مبلغ متبقي، ستتحول الحالة إلى "مدفوع جزئياً"</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* رسالة للفواتير المدفوعة بالكامل */}
-                  {selectedBill?.status === 'paid' && (
-                    <div className="bg-green-50 dark:bg-green-900 p-6 rounded-lg text-center">
-                      <div className="text-6xl mb-4">✅</div>
-                      <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">الفاتورة مدفوعة بالكامل!</h5>
-                      <p className="text-green-700 dark:text-green-300 mb-4">
-                        تم دفع جميع المبالغ المطلوبة لهذه الفاتورة
-                      </p>
-                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
-                          <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.total || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600 dark:text-gray-300">المدفوع:</span>
-                          <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.paid || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                          <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
-                          <span className="font-semibold text-green-600 dark:text-green-400">0.00 ج.م</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* QR Code Section */}
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">رمز QR للعميل</h4>
-
-                  <div className="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg text-center">
-                    {selectedBill?.qrCode ? (
-                      <div>
-                        <img
-                          src={selectedBill.qrCode}
-                          alt="QR Code"
-                          className="mx-auto mb-4 w-48 h-48 border-4 border-white dark:border-gray-600 shadow-lg"
-                        />
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                          يمكن للعميل مسح هذا الرمز لمعرفة تفاصيل فاتورته
-                        </p>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1 mb-4">
-                          <p>• عرض جميع الطلبات والجلسات</p>
-                          <p>• معرفة المبلغ المدفوع والمتبقي</p>
-                          <p>• مراقبة حالة الفاتورة</p>
-                        </div>
-                        <div className="flex justify-center space-x-2 space-x-reverse">
-                          <button
-                            onClick={() => {
-                              const newWindow = window.open();
-                              if (newWindow) {
-                                newWindow.document.write(`
-                                  <html dir="rtl">
-                                    <head>
-                                      <title>QR Code - فاتورة #${selectedBill?.billNumber}</title>
-                                      <style>
-                                        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-                                        .qr-container { margin: 20px auto; max-width: 400px; }
-                                        .qr-code { width: 300px; height: 300px; border: 2px solid #333; }
-                                        .info { margin: 20px 0; }
-                                        .bill-number { font-size: 18px; font-weight: bold; margin: 10px 0; }
-                                        .instructions { font-size: 14px; color: #666; }
-                                      </style>
-                                    </head>
-                                    <body>
-                                      <div class="qr-container">
-                                        <h2>رمز QR للفاتورة</h2>
-                                        <div class="bill-number">فاتورة #${selectedBill?.billNumber}</div>
-                                        <img src="${selectedBill?.qrCode}" alt="QR Code" class="qr-code" />
-                                        <div class="info">
-                                          <p>يمكن للعميل مسح هذا الرمز لمعرفة تفاصيل فاتورته</p>
-                                          <p class="instructions">• عرض جميع الطلبات والجلسات</p>
-                                          <p class="instructions">• معرفة المبلغ المدفوع والمتبقي</p>
-                                          <p class="instructions">• مراقبة حالة الفاتورة</p>
-                                        </div>
-                                      </div>
-                                    </body>
-                                  </html>
-                                `);
-                                newWindow.document.close();
-                                newWindow.print();
-                              }
-                            }}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors duration-200"
-                          >
-                            <Printer className="h-4 w-4 ml-1 inline" />
-                            طباعة QR
-                          </button>
-                          <button
-                            onClick={() => {
-                              const link = document.createElement('a');
-                              link.href = selectedBill?.qrCodeUrl || '';
-                              link.download = `qr-code-${selectedBill?.billNumber}.png`;
-                              link.click();
-                            }}
-                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors duration-200"
-                          >
-                            تحميل QR
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="py-8">
-                        <QrCode className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <p className="text-gray-500 dark:text-gray-400">سيتم إنشاء رمز QR تلقائياً عند حفظ الفاتورة</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Bill Summary */}
-                  <div className="mt-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">ملخص الفاتورة</h5>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">عدد الطلبات:</span>
-                        <span className="font-medium dark:text-gray-100">{formatDecimal(selectedBill?.orders?.length || 0)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">عدد الجلسات:</span>
-                        <span className="font-medium flex items-center gap-1 dark:text-gray-100">
-                          {formatDecimal(selectedBill?.sessions?.length || 0)}
-                          {selectedBill && hasActiveSession(selectedBill) && (
-                            <>
-                              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                              <span className="text-xs text-red-600 dark:text-red-400 font-bold">نشط</span>
-                            </>
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">تاريخ الإنشاء:</span>
-                        <span className="font-medium dark:text-gray-100">
-                          {selectedBill?.createdAt ? new Date(selectedBill.createdAt).toLocaleDateString('ar-EG') : '-'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {selectedBill?.qrCodeUrl && (
-                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <h6 className="font-medium text-gray-900 dark:text-gray-100 mb-2">رابط الفاتورة للعميل:</h6>
-                        <div className="flex items-center space-x-2 space-x-reverse">
-                          <input
-                            type="text"
-                            value={selectedBill.qrCodeUrl}
-                            readOnly
-                            className="flex-1 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-gray-900 dark:text-gray-100"
-                          />
-                          <button
-                            onClick={() => {
-                              const url = selectedBill?.qrCodeUrl;
-                              if (url) {
-                                navigator.clipboard.writeText(url);
-                                showNotification('تم نسخ الرابط إلى الحافظة');
-                              }
-                            }}
-                            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors duration-200"
-                          >
-                            نسخ
-                          </button>
-                          <button
-                            onClick={() => window.open(selectedBill.qrCodeUrl, '_blank')}
-                            className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors duration-200"
-                          >
-                            فتح
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المبلغ</label>
+                <input
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">طريقة الدفع</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'card' | 'transfer')}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="cash">نقداً</option>
+                  <option value="card">بطاقة ائتمان</option>
+                  <option value="transfer">تحويل بنكي</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المرجع (اختياري)</label>
+                <input
+                  type="text"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  placeholder="رقم المرجع"
+                />
+                </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-              {/* زر إلغاء الفاتورة - يظهر فقط إذا لم تكن مدفوعة بالكامل */}
-              {selectedBill?.status !== 'paid' && (
-                <button
-                  onClick={async () => {
-                    if (!selectedBill) return;
-
-
-
-                    if (confirm('هل أنت متأكد من إلغاء هذه الفاتورة؟')) {
-                      try {
-
-                        const result = await cancelBill(selectedBill._id || selectedBill.id);
-
-
-                        if (result) {
-                          showNotification('تم إلغاء الفاتورة بنجاح');
-                          setShowPaymentModal(false);
-
-                          // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-                          await updateBillStatus(selectedBill._id || selectedBill.id);
-                        } else {
-                          showNotification('فشل في إلغاء الفاتورة');
-                        }
-                      } catch (error) {
-                        console.error('❌ Billing: Error cancelling bill:', error);
-                        showNotification('حدث خطأ في إلغاء الفاتورة');
-                      }
-                    }
-                  }}
-                  className="px-4 py-2 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-colors duration-200"
-                >
-                  إلغاء الفاتورة
-                </button>
-              )}
-
-              {/* رسالة للفواتير المدفوعة */}
-              {selectedBill?.status === 'paid' && (
-                <div className="flex items-center text-green-700 dark:text-green-300">
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  <span className="text-sm font-medium">الفاتورة مدفوعة بالكامل</span>
-                </div>
-              )}
-
-              <div className="flex space-x-3 space-x-reverse">
+            <div className="flex justify-between pt-4">
                 <button
                   onClick={() => setShowPaymentModal(false)}
-                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded font-medium transition-colors duration-200"
                 >
-                  إغلاق
+                إلغاء
                 </button>
-
-                {/* زر دفع الفاتورة بالكامل - يظهر فقط إذا لم تكن الفاتورة مدفوعة بالكامل */}
-                {selectedBill?.status !== 'paid' && paymentAmount && (
                   <button
                     onClick={handlePaymentSubmit}
-                    disabled={selectedBill ? hasActiveSession(selectedBill) : false}
-                    className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
-                      selectedBill && hasActiveSession(selectedBill)
-                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                        : 'bg-primary-600 hover:bg-primary-700 text-white'
-                    }`}
-                  >
-                    {selectedBill && hasActiveSession(selectedBill) ? 'لا يمكن الدفع - جلسة نشطة' : 'دفع الفاتورة بالكامل'}
+                className="px-6 py-2 bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white rounded font-medium transition-colors duration-200"
+              >
+                تأكيد الدفع
                   </button>
-                )}
-              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Partial Payment Modal */}
-      {showPartialPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">دفع مشروبات محددة - فاتورة #{selectedBill?.billNumber}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">اختر المشروبات المطلوب دفعها من هذه الفاتورة</p>
-            </div>
+      {showPartialPaymentModal && selectedBill && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-bold mb-4 text-center text-gray-900 dark:text-white">دفع جزئي</h3>
 
-            <div className="p-6">
-              <div className="mb-6">
-                <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر المشروبات المطلوب دفعها</h4>
-
-                {(() => {
-                  const itemsWithRemaining = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                    .filter(item => item.remainingQuantity > 0);
-
-
-                  if (itemsWithRemaining.length === 0) {
-                    return (
-                      <div className="text-center py-8 bg-green-50 dark:bg-green-900 rounded-lg border border-green-200 dark:border-green-700">
-                        <div className="text-4xl mb-4">✅</div>
-                        <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">جميع العناصر مدفوعة بالكامل!</h5>
-                        <p className="text-green-700 dark:text-green-300">
-                          لا توجد عناصر متبقية للدفع في هذه الفاتورة
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return itemsWithRemaining.map((item) => {
-                  // استخدم نفس منطق المفتاح كما في التجميع
-                  const addonsKey = (item.addons || [])
-                      .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                    .sort()
-                    .join('|');
-                    const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                  return (
-                    <div key={itemKey} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <span className="text-base font-bold text-gray-900 dark:text-white">{item.name}</span>
-                          {/* زر - للصنف الرئيسي */}
-                          <button
-                            type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
-                            onClick={() => {
-                              const newQty = Math.max(0, (itemQuantities[itemKey] || 0) - 1);
-                              setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
-                              setSelectedItems(prev => {
-                                const updated = { ...prev };
-                                if (newQty > 0) updated[itemKey] = true;
-                                else delete updated[itemKey];
-                                return updated;
-                              });
-                            }}
-                            disabled={(itemQuantities[itemKey] || 0) <= 0}
-                          >-</button>
-                          <span className="mx-2 w-6 text-center select-none font-bold text-gray-900 dark:text-white text-base">{itemQuantities[itemKey] || 0}</span>
-                          {/* زر + للصنف الرئيسي */}
-                          <button
-                            type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
-                            onClick={() => {
-                              const newQty = Math.min(item.remainingQuantity, (itemQuantities[itemKey] || 0) + 1);
-                              setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
-                              setSelectedItems(prev => ({ ...prev, [itemKey]: newQty > 0 }));
-                            }}
-                            disabled={(itemQuantities[itemKey] || 0) >= item.remainingQuantity}
-                          >+</button>
-                          {/* زر دفع الكمية بالكامل للصنف الرئيسي */}
-                          <button
-                            type="button"
-                            className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs font-medium"
-                            onClick={() => {
-                              setItemQuantities({ ...itemQuantities, [itemKey]: item.remainingQuantity });
-                              setSelectedItems(prev => ({ ...prev, [itemKey]: item.remainingQuantity > 0 }));
-                            }}
-                            disabled={(itemQuantities[itemKey] || 0) === item.remainingQuantity}
-                          >دفع الكمية بالكامل</button>
-                        </div>
-                        <div className="text-sm text-gray-700 dark:text-gray-200 font-bold">{formatCurrency(item.price)}</div>
-                      </div>
-                      <div className="flex gap-4 text-sm">
-                        <div className="text-gray-700 dark:text-gray-300">الكمية: <span className="font-bold text-gray-900 dark:text-white">{formatDecimal(item.totalQuantity)}</span></div>
-                        <div className="text-gray-700 dark:text-gray-300">المدفوع: <span className="text-green-600 dark:text-green-400 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
-                        <div className="text-gray-700 dark:text-gray-300">المتبقي: <span className="text-orange-600 dark:text-orange-400 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>
-                      </div>
-                      {/* اختيار الكمية للدفع */}
-                      {/* تم نقل أزرار التحكم بجانب اسم الصنف في الأعلى ولن تتكرر هنا */}
-                      {/* عرض الإضافات */}
-                      {item.addons && item.addons.length > 0 && (
-                        <div className="mt-2 pl-4 border-r-2 border-orange-200 dark:border-orange-600">
-                            {item.addons
-                              .filter(addon => addon.remainingQuantity > 0) // عرض الإضافات التي لها كمية متبقية فقط
-                              .map((addon) => {
-                            const addonKey = itemKey + '|addon|' + addon.name + '|' + addon.price;
-                            const isAddonSelected = selectedItems[addonKey] || false;
-                            // إذا كانت الإضافة برسوم ثابتة، لا يوجد إدخال كمية
-                            return (
-                              <div key={addonKey} className="flex flex-col gap-1 mb-2">
-                                <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                  <span className="font-medium">↳ إضافة: <span className="font-semibold text-gray-900 dark:text-white">{addon.name}</span></span>
-                                  <span className="font-medium">({formatCurrency(addon.price)})</span>
-                                  <span className="font-medium">الكمية: <b className="text-gray-900 dark:text-white">{formatDecimal(addon.totalQuantity)}</b></span>
-                                  <span className="font-medium">المدفوع: <b className="text-green-600 dark:text-green-400">{formatDecimal(addon.paidQuantity)}</b></span>
-                                  <span className="font-medium">المتبقي: <b className="text-orange-600 dark:text-orange-400">{formatDecimal(addon.remainingQuantity)}</b></span>
-                                </div>
-                                <div className="flex items-center gap-2">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المبلغ</label>
                                   <input
-                                    type="checkbox"
-                                    checked={isAddonSelected}
-                                    onChange={e => setSelectedItems({ ...selectedItems, [addonKey]: e.target.checked })}
-                                    className="dark:bg-gray-700 dark:border-gray-500"
-                                  />
-                                    <div className="flex items-center justify-between gap-2 mt-2">
-                                      <div className="font-bold text-gray-900 dark:text-white flex-1 text-right text-base">{addon.name}</div>
-                                      <div className="text-sm text-gray-700 dark:text-gray-200 w-20 text-center font-bold">{formatCurrency(addon.price)}</div>
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          type="button"
-                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
-                                          onClick={() => {
-                                            const newQty = Math.max(0, (itemQuantities[addonKey] || 0) - 1);
-                                            setItemQuantities({ ...itemQuantities, [addonKey]: newQty });
-                                            setSelectedItems(prev => {
-                                              const updated = { ...prev };
-                                              if (newQty > 0) updated[addonKey] = true;
-                                              else delete updated[addonKey];
-                                              return updated;
-                                            });
-                                          }}
-                                          disabled={(itemQuantities[addonKey] || 0) <= 0}
-                                        >-</button>
-                                        <span className="mx-2 w-6 text-center select-none font-bold text-gray-900 dark:text-white text-base">{itemQuantities[addonKey] || 0}</span>
-                                        <button
-                                          type="button"
-                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
-                                          onClick={() => {
-                                            const newQty = Math.min(addon.remainingQuantity, (itemQuantities[addonKey] || 0) + 1);
-                                            setItemQuantities({ ...itemQuantities, [addonKey]: newQty });
-                                            setSelectedItems(prev => ({ ...prev, [addonKey]: newQty > 0 }));
-                                          }}
-                                          disabled={(itemQuantities[addonKey] || 0) >= addon.remainingQuantity}
-                                        >+</button>
-                                        <button
-                                          type="button"
-                                          className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs font-medium"
-                                          onClick={() => {
-                                            setItemQuantities({ ...itemQuantities, [addonKey]: addon.remainingQuantity });
-                                            setSelectedItems(prev => ({ ...prev, [addonKey]: addon.remainingQuantity > 0 }));
-                                          }}
-                                          disabled={(itemQuantities[addonKey] || 0) === addon.remainingQuantity}
-                                        >دفع الكمية بالكامل</button>
-                                      </div>
-                                    </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                  });
-                })()}
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  placeholder="0.00"
+                  min="0"
+                  max={selectedBill.totalAmount}
+                  step="0.01"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  المتبقي: {formatCurrency(selectedBill.totalAmount - (parseFloat(paymentAmount) || 0))}
+                </p>
               </div>
 
-              {(() => {
-                const itemsWithRemaining = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                  .filter(item => item.remainingQuantity > 0);
-                return itemsWithRemaining.length > 0;
-              })() && (
-                <div className="mb-6">
-                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4 text-base">طريقة الدفع</h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    <button
-                      onClick={() => setPartialPaymentMethod('cash')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'cash' ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-500 hover:border-gray-300 dark:hover:border-gray-400 bg-white dark:bg-gray-700'
-                        }`}
-                    >
-                      <div className="text-2xl mb-1">💵</div>
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">نقداً</div>
-                    </button>
-                    <button
-                      onClick={() => setPartialPaymentMethod('card')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'card' ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-500 hover:border-gray-300 dark:hover:border-gray-400 bg-white dark:bg-gray-700'
-                        }`}
-                    >
-                      <div className="text-2xl mb-1">💳</div>
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">بطاقة</div>
-                    </button>
-                    <button
-                      onClick={() => setPartialPaymentMethod('transfer')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'transfer' ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-500 hover:border-gray-300 dark:hover:border-gray-400 bg-white dark:bg-gray-700'
-                        }`}
-                    >
-                      <div className="text-2xl mb-1">📱</div>
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">تحويل</div>
-                    </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">طريقة الدفع</label>
+                <select
+                  value={partialPaymentMethod}
+                  onChange={(e) => setPartialPaymentMethod(e.target.value as 'cash' | 'card' | 'transfer')}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="cash">نقداً</option>
+                  <option value="card">بطاقة ائتمان</option>
+                  <option value="transfer">تحويل بنكي</option>
+                </select>
                   </div>
-                </div>
-              )}
 
-              {/* ملخص الدفع */}
-              {Object.keys(selectedItems).some(id => selectedItems[id]) && (
-                <div className="mb-6 bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
-                  <h4 className="font-semibold text-blue-900 dark:text-white mb-2 text-base">ملخص الدفع</h4>
-                  <div className="space-y-2">
-                    {aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                      .filter(item => {
-                        const addonsKey = (item.addons || [])
-                          .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                          .sort()
-                          .join('|');
-                        const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                        return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
-                      })
-                      .map((item, index) => {
-                        const addonsKey = (item.addons || [])
-                          .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                          .sort()
-                          .join('|');
-                        const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                        const quantity = itemQuantities[itemKey] || 0;
-                        return (
-                          <div key={index} className="flex flex-col text-sm mb-3 p-2 bg-blue-100 dark:bg-blue-800 rounded">
-                            <span className="text-blue-800 dark:text-blue-200 font-semibold text-base">
-                              {item.name}
-                              {item.addons && item.addons.length > 0 && (
-                                <span className="ml-2 text-xs bg-orange-100 dark:bg-orange-800 text-orange-800 dark:text-orange-200 px-2 py-1 rounded-full font-medium">
-                                  إضافات
-                                </span>
-                              )}
-                              {' '}× {formatDecimal(quantity)}
-                            </span>
-                            <span className="font-bold text-blue-900 dark:text-blue-100 mt-1 text-base">
-                              المجموع: {formatCurrency(item.price * quantity)}
-                            </span>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المرجع (اختياري)</label>
+                <input
+                  type="text"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  placeholder="رقم المرجع"
+                />
                           </div>
-                        );
-                      })}
-                    <div className="border-t border-blue-200 dark:border-blue-700 pt-2 mt-2">
-                      <div className="flex justify-between font-semibold text-blue-900 dark:text-white text-base">
-                        <span>المجموع:</span>
-                        <span>
-                          {formatCurrency(
-                            aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                              .filter(item => {
-                                const addonsKey = (item.addons || [])
-                                  .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                                  .sort()
-                                  .join('|');
-                                const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                                return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
-                              })
-                              .reduce((sum, item) => {
-                                const addonsKey = (item.addons || [])
-                                  .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                                  .sort()
-                                  .join('|');
-                                const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                                const quantity = itemQuantities[itemKey] || 0;
-                                return sum + (item.price * quantity);
-                              }, 0)
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+            <div className="flex justify-between pt-4">
               <button
-                onClick={() => {
-                  setShowPartialPaymentModal(false);
-                  setSelectedItems({});
-                }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+                onClick={() => setShowPartialPaymentModal(false)}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded font-medium transition-colors duration-200"
               >
                 إلغاء
               </button>
-
               <button
                 onClick={handlePartialPaymentSubmit}
-                disabled={
-                  !Object.keys(selectedItems).some(id => {
-                    // تحقق من الصنف أو الإضافة
-                    return selectedItems[id] && (itemQuantities[id] || 0) > 0;
-                  })
-                }
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
+                className="px-6 py-2 bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white rounded font-medium transition-colors duration-200"
               >
                 تأكيد الدفع الجزئي
               </button>
@@ -1461,28 +760,26 @@ const Billing = () => {
       )}
 
       {/* Session End Confirmation Modal */}
-      {showSessionEndModal && sessionToEnd && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[80vh] overflow-y-auto p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">تأكيد إنهاء الجلسة</h3>
-            <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
-              هل أنت متأكد من إنهاء هذه الجلسة؟ سيتم حساب التكلفة النهائية وإغلاق الجلسة.
+      {showSessionEndModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-bold mb-4 text-center text-gray-900 dark:text-white">تأكيد إنهاء الجلسة</h3>
+            <p className="text-gray-600 dark:text-gray-400 text-center mb-6">
+              هل أنت متأكد من إنهاء هذه الجلسة؟ هذا الإجراء لا يمكن التراجع عنه.
             </p>
-            <div className="flex justify-end space-x-3">
+
+            <div className="flex justify-between">
               <button
-                onClick={() => {
-                  setShowSessionEndModal(false);
-                  setSessionToEnd(null);
-                }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+                onClick={() => setShowSessionEndModal(false)}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded font-medium transition-colors duration-200"
               >
                 إلغاء
               </button>
               <button
                 onClick={confirmSessionEnd}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200"
+                className="px-6 py-2 bg-red-600 dark:bg-red-500 hover:bg-red-700 dark:hover:bg-red-600 text-white rounded font-medium transition-colors duration-200"
               >
-                تأكيد الإنهاء
+                إنهاء الجلسة
               </button>
             </div>
           </div>
