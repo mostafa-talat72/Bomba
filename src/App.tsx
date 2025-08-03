@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
 import Login from './pages/Login';
@@ -72,15 +73,15 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
       } else {
         // إذا لم يكن لديه أي صلاحيات، اعرض رسالة خطأ
         return (
-          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
             <div className="text-center">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">لا توجد صلاحيات متاحة</h2>
-              <p className="text-gray-600 mb-4">لم يتم منحك أي صلاحيات للوصول إلى النظام</p>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">لا توجد صلاحيات متاحة</h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-4">لم يتم منحك أي صلاحيات للوصول إلى النظام</p>
               <button
                 onClick={() => window.location.reload()}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -108,10 +109,10 @@ const RouteHandler = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">جاري التحميل...</p>
+          <p className="text-gray-600 dark:text-gray-300">جاري التحميل...</p>
         </div>
       </div>
     );
@@ -204,11 +205,13 @@ const App = () => {
   return (
     <BrowserRouter>
       <AppProvider>
-        <ToastManager>
-          <div className="min-h-screen bg-gray-50 font-cairo container-responsive">
-            <RouteHandler />
-          </div>
-        </ToastManager>
+        <ThemeProvider>
+          <ToastManager>
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
+              <RouteHandler />
+            </div>
+          </ToastManager>
+        </ThemeProvider>
       </AppProvider>
     </BrowserRouter>
   );

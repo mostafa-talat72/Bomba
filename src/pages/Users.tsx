@@ -470,62 +470,62 @@ const Users = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <UsersIcon className="h-6 w-6 text-blue-600" />
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+              <UsersIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">إجمالي المستخدمين</p>
-              <p className="text-2xl font-bold text-blue-600">{formatDecimal(stats.totalUsers)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">إجمالي المستخدمين</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalUsers)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <Shield className="h-6 w-6 text-green-600" />
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+              <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">نشط</p>
-              <p className="text-2xl font-bold text-green-600">{formatDecimal(stats.activeUsers)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">نشط</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatDecimal(stats.activeUsers)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <Lock className="h-6 w-6 text-red-600" />
+            <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">
+              <Lock className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">غير نشط</p>
-              <p className="text-2xl font-bold text-red-600">{formatDecimal(stats.inactiveUsers)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">غير نشط</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatDecimal(stats.inactiveUsers)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Unlock className="h-6 w-6 text-yellow-600" />
+            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
+              <Unlock className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">معلق</p>
-              <p className="text-2xl font-bold text-yellow-600">{formatDecimal(stats.suspendedUsers)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">معلق</p>
+              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{formatDecimal(stats.suspendedUsers)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Crown className="h-6 w-6 text-purple-600" />
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
+              <Crown className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">المديرون</p>
-              <p className="text-2xl font-bold text-purple-600">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">المديرون</p>
+              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                 {formatDecimal(stats.roleStats.find(r => r.id === 'admin')?.count || 0)}
               </p>
             </div>
@@ -534,35 +534,35 @@ const Users = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">البحث والفلترة</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">البحث والفلترة</h3>
           <div className="flex items-center space-x-2 space-x-reverse">
-            <Filter className="h-5 w-5 text-gray-500" />
-            <span className="text-sm text-gray-500">فلترة متقدمة</span>
+            <Filter className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-500 dark:text-gray-400">فلترة متقدمة</span>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">البحث</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">البحث</label>
             <div className="relative">
-              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="البحث بالاسم أو البريد الإلكتروني أو الهاتف..."
-                className="w-full pr-10 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full pr-10 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">الدور</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الدور</label>
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               <option value="all">جميع الأدوار</option>
               {roles.map(role => (
@@ -572,11 +572,11 @@ const Users = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">الحالة</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الحالة</label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               <option value="all">جميع الحالات</option>
               <option value="active">نشط</option>
@@ -595,7 +595,7 @@ const Users = () => {
                 setFilterRole('all');
                 setFilterStatus('all');
               }}
-              className="px-3 py-1 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+              className="px-3 py-1 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
             >
               مسح الفلاتر
             </button>
@@ -653,14 +653,14 @@ const Users = () => {
             }
           }}
         >
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {showEditUser ? 'تعديل المستخدم' : 'إضافة مستخدم جديد'}
                 </h3>
                 <button
-                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => {
                     setShowAddUser(false);
                     setShowEditUser(false);
@@ -672,33 +672,33 @@ const Users = () => {
             <form onSubmit={handleSubmit} className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الاسم الكامل *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الاسم الكامل *</label>
                   <input
                     type="text"
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="أدخل الاسم الكامل"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">البريد الإلكتروني *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">البريد الإلكتروني *</label>
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="user@bomba.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     {showEditUser ? 'كلمة المرور الجديدة (اختياري)' : 'كلمة المرور *'}
                   </label>
                   <input
@@ -708,14 +708,14 @@ const Users = () => {
                     onChange={handleInputChange}
                     required={!showEditUser}
                     minLength={6}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder={showEditUser ? "اتركها فارغة إذا لم ترد تغييرها" : "كلمة المرور"}
                   />
                 </div>
 
                 {!showEditUser && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       تأكيد كلمة المرور *
                     </label>
                     <input
@@ -725,32 +725,32 @@ const Users = () => {
                       onChange={handleInputChange}
                       required
                       minLength={6}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                       placeholder="تأكيد كلمة المرور"
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">رقم الهاتف</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم الهاتف</label>
                   <input
                     type="tel"
                     name="phone"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="رقم الهاتف"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الدور *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الدور *</label>
                   <select
                     name="role"
                     value={formData.role}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   >
                     {roles.map(role => (
                       <option key={role.id} value={role.id}>{role.name}</option>
@@ -759,13 +759,13 @@ const Users = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الحالة *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الحالة *</label>
                   <select
                     name="status"
                     value={formData.status}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   >
                     <option value="active">نشط</option>
                     <option value="inactive">غير نشط</option>
@@ -776,25 +776,25 @@ const Users = () => {
                 {formData.role === 'owner' && (
                   <>
                     <div className="mb-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">اسم المنشأة *</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم المنشأة *</label>
                       <input
                         type="text"
                         name="businessName"
                         value={formData.businessName}
                         onChange={handleInputChange}
                         required
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل اسم المنشأة"
                       />
                     </div>
                     <div className="mb-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">نوع المنشأة *</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">نوع المنشأة *</label>
                       <select
                         name="businessType"
                         value={formData.businessType}
                         onChange={handleInputChange}
                         required
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="">اختر نوع المنشأة</option>
                         {businessTypes.map((type) => (
@@ -806,25 +806,25 @@ const Users = () => {
                 )}
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">العنوان</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">العنوان</label>
                   <textarea
                     name="address"
                     value={formData.address}
                     onChange={handleInputChange}
                     rows={2}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="العنوان"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     الصلاحيات <span className="text-red-500">*</span>
                   </label>
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
                       {permissions.map(permission => (
-                        <label key={permission.id} className="flex items-start p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+                        <label key={permission.id} className="flex items-start p-3 bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors cursor-pointer">
                           <input
                             type="checkbox"
                             checked={formData.permissions.includes(permission.id)}
@@ -832,34 +832,34 @@ const Users = () => {
                             className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                           />
                           <div className="mr-3 flex-1">
-                            <div className="text-sm font-medium text-gray-700">{permission.name}</div>
-                            <div className="text-xs text-gray-500 mt-1">{permission.description}</div>
+                            <div className="text-sm font-medium text-gray-700 dark:text-gray-200">{permission.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{permission.description}</div>
                           </div>
                         </label>
                       ))}
                     </div>
-                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
                       <div className="flex items-center">
                         <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
-                        <span className="text-xs text-blue-700">
+                        <span className="text-xs text-blue-700 dark:text-blue-300">
                           الصلاحيات المحددة: {formatDecimal(formData.permissions.length)} من {formatDecimal(permissions.length)}
                         </span>
                       </div>
                       {formData.permissions.includes('all') && (
-                        <div className="mt-2 text-xs text-green-600 font-medium">
+                        <div className="mt-2 text-xs text-green-600 dark:text-green-400 font-medium">
                           ✓ تم تحديد "جميع الصلاحيات" - سيتم تجاهل الصلاحيات الأخرى
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     * اختر الصلاحيات المطلوبة للمستخدم. اختيار "جميع الصلاحيات" يمنح صلاحيات كاملة
                   </div>
                 </div>
               </div>
             </form>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
               <button
                 onClick={() => {
                   setShowAddUser(false);
@@ -867,7 +867,7 @@ const Users = () => {
                   resetForm();
                   setSelectedUser(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
               >
                 إلغاء
               </button>
@@ -894,16 +894,16 @@ const Users = () => {
             }
           }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-primary-100 border-b border-gray-200 px-6 py-4 rounded-t-xl">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-primary-100 dark:from-primary-900 dark:to-primary-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-xl">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-900">تفاصيل المستخدم</h3>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">تفاصيل المستخدم</h3>
                 <button
                   onClick={() => {
                     setShowViewUser(false);
                     setSelectedUser(null);
                   }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 text-2xl font-bold"
+                  className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 text-2xl font-bold"
                 >×</button>
               </div>
             </div>
@@ -911,12 +911,12 @@ const Users = () => {
             <div className="p-6 space-y-6">
               {/* User Header */}
               <div className="flex items-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
-                  <User className="h-10 w-10 text-primary-600" />
+                <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-800 dark:to-primary-700 rounded-full flex items-center justify-center">
+                  <User className="h-10 w-10 text-primary-600 dark:text-primary-400" />
                 </div>
                 <div className="mr-4 flex-1">
-                  <h4 className="text-xl font-bold text-gray-900">{selectedUser.name}</h4>
-                  <p className="text-gray-500">{selectedUser.email}</p>
+                  <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100">{selectedUser.name}</h4>
+                  <p className="text-gray-500 dark:text-gray-400">{selectedUser.email}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(selectedUser.status)}`}>
                       {getStatusText(selectedUser.status)}
@@ -931,30 +931,30 @@ const Users = () => {
               {/* User Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h5 className="text-lg font-semibold text-gray-900 mb-3">معلومات المستخدم</h5>
+                  <h5 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">معلومات المستخدم</h5>
                   <div className="space-y-3">
                     <div className="flex items-center">
-                      <Phone className="h-4 w-4 text-gray-400 ml-2" />
-                      <span className="text-sm text-gray-600">
+                      <Phone className="h-4 w-4 text-gray-400 dark:text-gray-500 ml-2" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
                         {selectedUser.phone || 'غير محدد'}
                       </span>
                     </div>
                     <div className="flex items-center">
-                      <MapPin className="h-4 w-4 text-gray-400 ml-2" />
-                      <span className="text-sm text-gray-600">
+                      <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-500 ml-2" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
                         {selectedUser.address || 'غير محدد'}
                       </span>
                     </div>
                     <div className="flex items-center">
-                      <Calendar className="h-4 w-4 text-gray-400 ml-2" />
-                      <span className="text-sm text-gray-600">
+                      <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500 ml-2" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
                         انضم في: {new Date(selectedUser.createdAt).toLocaleDateString('ar-EG')}
                       </span>
                     </div>
                     {selectedUser.lastLogin && (
                       <div className="flex items-center">
-                        <RefreshCw className="h-4 w-4 text-gray-400 ml-2" />
-                        <span className="text-sm text-gray-600">
+                        <RefreshCw className="h-4 w-4 text-gray-400 dark:text-gray-500 ml-2" />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
                           آخر دخول: {new Date(selectedUser.lastLogin).toLocaleDateString('ar-EG')}
                         </span>
                       </div>
@@ -963,33 +963,33 @@ const Users = () => {
                 </div>
 
                 <div>
-                  <h5 className="text-lg font-semibold text-gray-900 mb-3">الصلاحيات</h5>
+                  <h5 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">الصلاحيات</h5>
                   <div className="space-y-2">
                     {selectedUser.permissions.includes('all') ? (
-                      <div className="flex items-center p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                        <Crown className="h-5 w-5 text-purple-600 ml-2" />
+                      <div className="flex items-center p-3 bg-purple-50 dark:bg-purple-900 border border-purple-200 dark:border-purple-700 rounded-lg">
+                        <Crown className="h-5 w-5 text-purple-600 dark:text-purple-400 ml-2" />
                         <div>
-                          <div className="text-sm font-medium text-purple-800">جميع الصلاحيات</div>
-                          <div className="text-xs text-purple-600">وصول كامل لجميع الميزات</div>
+                          <div className="text-sm font-medium text-purple-800 dark:text-purple-200">جميع الصلاحيات</div>
+                          <div className="text-xs text-purple-600 dark:text-purple-400">وصول كامل لجميع الميزات</div>
                         </div>
                       </div>
                     ) : selectedUser.permissions.length === 0 ? (
-                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                        <p className="text-sm text-gray-500">لا توجد صلاحيات محددة</p>
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">لا توجد صلاحيات محددة</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-2">
                         {selectedUser.permissions.map(permission => {
                           const permInfo = permissions.find(p => p.id === permission);
                           return (
-                            <div key={permission} className="flex items-center p-2 bg-green-50 border border-green-200 rounded-lg">
+                            <div key={permission} className="flex items-center p-2 bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg">
                               <div className="w-2 h-2 bg-green-500 rounded-full ml-2"></div>
                               <div>
-                                <div className="text-sm font-medium text-green-800">
+                                <div className="text-sm font-medium text-green-800 dark:text-green-200">
                                   {permInfo ? permInfo.name : permission}
                                 </div>
                                 {permInfo && (
-                                  <div className="text-xs text-green-600">{permInfo.description}</div>
+                                  <div className="text-xs text-green-600 dark:text-green-400">{permInfo.description}</div>
                                 )}
                               </div>
                             </div>
@@ -1003,27 +1003,27 @@ const Users = () => {
 
               {/* Accessible Pages */}
               <div>
-                <h5 className="text-lg font-semibold text-gray-900 mb-3">الصفحات المتاحة</h5>
+                <h5 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">الصفحات المتاحة</h5>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                   {getAccessiblePages(selectedUser.permissions).length > 0 ? (
                     getAccessiblePages(selectedUser.permissions).map(page => (
-                      <div key={page} className="flex items-center p-2 bg-green-50 border border-green-200 rounded-lg">
+                      <div key={page} className="flex items-center p-2 bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg">
                         <div className="w-2 h-2 bg-green-500 rounded-full ml-2"></div>
-                        <span className="text-sm text-green-700 font-medium">
+                        <span className="text-sm text-green-700 dark:text-green-300 font-medium">
                           {getPageDisplayName(page)}
                         </span>
                       </div>
                     ))
                   ) : (
-                    <div className="col-span-full p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <p className="text-sm text-gray-500 text-center">لا توجد صفحات متاحة</p>
+                    <div className="col-span-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 text-center">لا توجد صفحات متاحة</p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex justify-end gap-3">
               <button
                 onClick={() => handleEdit(selectedUser)}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
@@ -1035,7 +1035,7 @@ const Users = () => {
                   setShowViewUser(false);
                   setSelectedUser(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors duration-200"
               >
                 إغلاق
               </button>
@@ -1057,12 +1057,12 @@ const Users = () => {
             }
           }}
         >
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">تأكيد حذف المستخدم</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">تأكيد حذف المستخدم</h3>
                 <button
-                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => {
                     setShowDeleteModal(false);
                     setDeleteTarget(null);
@@ -1073,25 +1073,25 @@ const Users = () => {
               </div>
             </div>
             <div className="p-6 space-y-4">
-              <p className="text-gray-700">هل أنت متأكد أنك تريد حذف المستخدم <span className="font-bold text-red-600">{deleteTarget.name}</span>؟</p>
+              <p className="text-gray-700 dark:text-gray-300">هل أنت متأكد أنك تريد حذف المستخدم <span className="font-bold text-red-600 dark:text-red-400">{deleteTarget.name}</span>؟</p>
               {deleteTarget.role === 'admin' && (
                 <>
                   <input
                     type="password"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="أدخل كلمة المرور لتأكيد الحذف"
                     value={deletePassword}
                     onChange={e => setDeletePassword(e.target.value)}
                     autoFocus
                   />
-                  {deleteError && <div className="text-red-600 text-sm">{deleteError}</div>}
+                  {deleteError && <div className="text-red-600 dark:text-red-400 text-sm">{deleteError}</div>}
                 </>
               )}
             </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
               <button
                 onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); setDeletePassword(''); setDeleteError(''); }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
                 disabled={deleteLoading}
               >
                 إلغاء

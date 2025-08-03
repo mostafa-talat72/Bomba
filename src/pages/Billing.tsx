@@ -451,64 +451,64 @@ const Billing = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Receipt className="h-6 w-6 sm:h-8 sm:w-8 text-primary-600 ml-2 sm:ml-3" />
+          <Receipt className="h-6 w-6 sm:h-8 sm:w-8 text-primary-600 dark:text-primary-400 ml-2 sm:ml-3" />
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">إدارة الفواتير</h1>
-            <p className="text-sm sm:text-base text-gray-600">إنشاء وإدارة فواتير العملاء</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الفواتير</h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">إنشاء وإدارة فواتير العملاء</p>
           </div>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600">إجمالي الفواتير</p>
-              <p className="text-xl sm:text-2xl font-bold text-blue-600">{formatDecimal(bills.length)}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">إجمالي الفواتير</p>
+              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(bills.length)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600">المبلغ المحصل</p>
-              <p className="text-xl sm:text-2xl font-bold text-green-600">
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">المبلغ المحصل</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
                 {formatCurrency(bills.reduce((sum, bill) => sum + (bill.paid || 0), 0))}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
+              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600">المبلغ المتبقي</p>
-              <p className="text-xl sm:text-2xl font-bold text-red-600">
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">المبلغ المتبقي</p>
+              <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
                 {formatCurrency(bills.reduce((sum, bill) => sum + (bill.remaining || 0), 0))}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
+              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600">فواتير جزئية</p>
-              <p className="text-xl sm:text-2xl font-bold text-purple-600">
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">فواتير جزئية</p>
+              <p className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400">
                 {formatDecimal(bills.filter(b => b.status === 'partial').length)}
               </p>
             </div>
@@ -517,14 +517,14 @@ const Billing = () => {
       </div>
 
       {/* Filter */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
           <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
-            <h3 className="text-lg font-semibold text-gray-900">الفواتير الحالية</h3>
-            <div className="text-sm text-gray-600">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الفواتير الحالية</h3>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
               {filteredBills.length} من {bills.length} فاتورة
               {dateFilter && (
-                <span className="mr-2 text-blue-600">
+                <span className="mr-2 text-blue-600 dark:text-blue-400">
                   • التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}
                 </span>
               )}
@@ -532,18 +532,18 @@ const Billing = () => {
           </div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
             <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
-              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">التاريخ:</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">التاريخ:</label>
               <div className="flex items-center space-x-2 space-x-reverse w-full sm:w-auto">
                 <input
                   type="date"
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto"
+                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 />
                 {dateFilter && (
                   <button
                     onClick={() => setDateFilter('')}
-                    className="text-xs text-red-600 hover:text-red-800 whitespace-nowrap px-2 py-1 rounded hover:bg-red-50"
+                    className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 whitespace-nowrap px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900"
                   >
                     مسح التاريخ
                   </button>
@@ -551,11 +551,11 @@ const Billing = () => {
               </div>
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
-              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">فلترة حسب الحالة:</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">فلترة حسب الحالة:</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto"
+                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
                 <option value="all">جميع الفواتير</option>
                 <option value="draft">مسودة</option>
@@ -574,7 +574,7 @@ const Billing = () => {
         {filteredBills.map((bill: Bill) => (
           <div
             key={bill.id || bill._id}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 cursor-pointer relative"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200 cursor-pointer relative"
             onClick={() => handlePaymentClick(bill)}
           >
             {/* Unprepared Items Badge */}
@@ -584,7 +584,7 @@ const Billing = () => {
               </span>
             )}
             {/* Header */}
-            <div className="p-3 sm:p-4 border-b border-gray-100">
+            <div className="p-3 sm:p-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center">
                   <span className="text-xl sm:text-2xl mr-2">{getStatusIcon(bill.status)}</span>
@@ -592,15 +592,15 @@ const Billing = () => {
                     {getStatusText(bill.status)}
                   </span>
                 </div>
-                <span className="text-xs text-gray-500">#{safe(bill.billNumber, bill.id || bill._id)}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">#{safe(bill.billNumber, bill.id || bill._id)}</span>
               </div>
 
-              <div className="flex items-center text-xs sm:text-sm text-gray-600 mb-1">
+              <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300 mb-1">
                 <User className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                 <span className="truncate">{(getCustomerDisplay(bill as Bill) || 'عميل') as string}</span>
               </div>
 
-              <div className="flex items-center text-xs sm:text-sm text-gray-600">
+              <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
                 <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                 <span>{bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('ar-EG') : '-'}</span>
               </div>
@@ -610,30 +610,30 @@ const Billing = () => {
             <div className="p-3 sm:p-4">
               <div className="space-y-2 sm:space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs sm:text-sm text-gray-600">المبلغ الكلي:</span>
-                  <span className="font-semibold text-gray-900 text-sm sm:text-base">{formatCurrency(bill.total || 0)}</span>
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm sm:text-base">{formatCurrency(bill.total || 0)}</span>
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-xs sm:text-sm text-gray-600">المدفوع:</span>
-                  <span className="font-semibold text-green-600 text-sm sm:text-base">{formatCurrency(bill.paid || 0)}</span>
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">المدفوع:</span>
+                  <span className="font-semibold text-green-600 dark:text-green-400 text-sm sm:text-base">{formatCurrency(bill.paid || 0)}</span>
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-xs sm:text-sm text-gray-600">المتبقي:</span>
-                  <span className={`font-semibold text-sm sm:text-base ${(bill.remaining || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">المتبقي:</span>
+                  <span className={`font-semibold text-sm sm:text-base ${(bill.remaining || 0) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                     {formatCurrency(bill.remaining || 0)}
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center text-xs text-gray-500">
+                <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
                   <span>الطلبات: {formatDecimal(bill.orders?.length || 0)}</span>
                   <span className="flex items-center gap-1">
                     الجلسات: {formatDecimal(bill.sessions?.length || 0)}
                     {hasActiveSession(bill) && (
                       <div className="flex items-center gap-1">
                         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs text-red-600 font-bold">نشط</span>
+                        <span className="text-xs text-red-600 dark:text-red-400 font-bold">نشط</span>
                       </div>
                     )}
                   </span>
@@ -642,9 +642,9 @@ const Billing = () => {
             </div>
 
             {/* Footer */}
-            <div className={`p-3 sm:p-4 border-t border-gray-100 rounded-b-lg ${bill.status === 'paid' ? 'bg-green-50' : 'bg-gray-50'
+            <div className={`p-3 sm:p-4 border-t border-gray-100 dark:border-gray-700 rounded-b-lg ${bill.status === 'paid' ? 'bg-green-50 dark:bg-green-900' : 'bg-gray-50 dark:bg-gray-700'
               }`}>
-              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600' : 'text-primary-600'
+              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600 dark:text-green-400' : 'text-primary-600 dark:text-primary-400'
                 }`}>
                 {bill.status === 'paid' ? (
                   <>
@@ -666,9 +666,9 @@ const Billing = () => {
       {/* Empty State */}
       {filteredBills.length === 0 && (
         <div className="text-center py-12">
-          <Receipt className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">لا توجد فواتير</h3>
-          <p className="text-gray-600">
+          <Receipt className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">لا توجد فواتير</h3>
+          <p className="text-gray-600 dark:text-gray-300">
             {(() => {
               let message = '';
               if (statusFilter === 'all' && !dateFilter) {
@@ -689,43 +689,43 @@ const Billing = () => {
       {/* Payment Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">إدارة الدفع - فاتورة #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">إدارة الدفع - فاتورة #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</h3>
             </div>
 
             <div className="p-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Payment Section */}
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-4">معلومات الدفع</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">معلومات الدفع</h4>
 
                   {/* معلومات الفاتورة */}
-                  <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                    <h5 className="font-medium text-gray-900 mb-3">معلومات الفاتورة</h5>
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">معلومات الفاتورة</h5>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <span className="text-gray-600">رقم الفاتورة:</span>
-                        <span className="font-medium mr-2">#{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</span>
+                        <span className="text-gray-600 dark:text-gray-300">رقم الفاتورة:</span>
+                        <span className="font-medium mr-2 dark:text-gray-100">#{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</span>
                       </div>
                       <div>
-                        <span className="text-gray-600">العميل:</span>
-                        <span className="font-medium mr-2">{selectedBill && (getCustomerDisplay(selectedBill) as string)}</span>
+                        <span className="text-gray-600 dark:text-gray-300">العميل:</span>
+                        <span className="font-medium mr-2 dark:text-gray-100">{selectedBill && (getCustomerDisplay(selectedBill) as string)}</span>
                       </div>
                       <div>
-                        <span className="text-gray-600">المبلغ الكلي:</span>
-                        <span className="font-medium text-green-600 mr-2">{formatCurrency(selectedBill?.total || 0)}</span>
+                        <span className="text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
+                        <span className="font-medium text-green-600 dark:text-green-400 mr-2">{formatCurrency(selectedBill?.total || 0)}</span>
                       </div>
                       <div>
-                        <span className="text-gray-600">المدفوع مسبقاً:</span>
-                        <span className="font-medium text-blue-600 mr-2">{formatCurrency(selectedBill?.paid || 0)}</span>
+                        <span className="text-gray-600 dark:text-gray-300">المدفوع مسبقاً:</span>
+                        <span className="font-medium text-blue-600 dark:text-blue-400 mr-2">{formatCurrency(selectedBill?.paid || 0)}</span>
                       </div>
                       <div>
-                        <span className="text-gray-600">المتبقي:</span>
-                        <span className="font-medium text-red-600 mr-2">{formatCurrency(selectedBill?.remaining || 0)}</span>
+                        <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
+                        <span className="font-medium text-red-600 dark:text-red-400 mr-2">{formatCurrency(selectedBill?.remaining || 0)}</span>
                       </div>
                       <div>
-                        <span className="text-gray-600">الحالة:</span>
+                        <span className="text-gray-600 dark:text-gray-300">الحالة:</span>
                         <span className={`px-2 py-1 text-xs font-medium rounded-full mr-2 ${getStatusColor(selectedBill?.status || 'draft')}`}>
                           {getStatusText(selectedBill?.status || 'draft')}
                         </span>
@@ -735,21 +735,21 @@ const Billing = () => {
 
                   {/* تفاصيل الجهاز النشط */}
                   {selectedBill && hasActiveSession(selectedBill) && (
-                    <div className="bg-red-50 p-4 rounded-lg mb-6 border border-red-200">
-                      <h5 className="font-medium text-red-900 mb-3 flex items-center gap-2">
+                    <div className="bg-red-50 dark:bg-red-900 p-4 rounded-lg mb-6 border border-red-200 dark:border-red-700">
+                      <h5 className="font-medium text-red-900 dark:text-red-100 mb-3 flex items-center gap-2">
                         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
                         الجهاز النشط
                       </h5>
                       <div className="space-y-2 text-sm">
                         {selectedBill.sessions?.filter(s => s.status === 'active').map((session, index) => (
-                          <div key={index} className="bg-white p-3 rounded border border-red-100">
+                          <div key={index} className="bg-white dark:bg-gray-800 p-3 rounded border border-red-100 dark:border-red-700">
                             <div className="flex justify-between items-center mb-2">
-                              <span className="font-medium text-red-800">{session.deviceName}</span>
-                              <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                              <span className="font-medium text-red-800 dark:text-red-200">{session.deviceName}</span>
+                              <span className="text-xs text-red-600 dark:text-red-300 bg-red-100 dark:bg-red-800 px-2 py-1 rounded">
                                 {session.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
                               </span>
                             </div>
-                            <div className="text-xs text-red-700 mb-3">
+                            <div className="text-xs text-red-700 dark:text-red-300 mb-3">
                               <div>وقت البداية: {new Date(session.startTime).toLocaleTimeString('ar-EG')}</div>
                               <div>المدة: {(() => {
                                 const start = new Date(session.startTime);
@@ -779,8 +779,8 @@ const Billing = () => {
 
                   {/* المدفوعات الجزئية */}
                   {selectedBill?.partialPayments && selectedBill.partialPayments.length > 0 && (
-                    <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                      <h5 className="font-medium text-blue-900 mb-3">المدفوعات الجزئية السابقة</h5>
+                    <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg mb-6">
+                      <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-3">المدفوعات الجزئية السابقة</h5>
                       <div className="space-y-2">
                         {/* تجميع الأصناف حسب الاسم والسعر */}
                         {(() => {
@@ -803,9 +803,9 @@ const Billing = () => {
                             });
                           });
                           return Array.from(itemMap.values()).map((agg) => (
-                            <div key={agg.itemName + agg.price} className="flex justify-between text-sm bg-white p-3 rounded-lg border border-blue-100 mb-1">
-                              <span className="text-blue-800">{agg.itemName} × {formatDecimal(agg.totalQuantity)}</span>
-                              <span className="text-blue-700 font-medium">{formatCurrency(agg.totalAmount)}</span>
+                            <div key={agg.itemName + agg.price} className="flex justify-between text-sm bg-white dark:bg-gray-800 p-3 rounded-lg border border-blue-100 dark:border-blue-700 mb-1">
+                              <span className="text-blue-800 dark:text-blue-200">{agg.itemName} × {formatDecimal(agg.totalQuantity)}</span>
+                              <span className="text-blue-700 dark:text-blue-300 font-medium">{formatCurrency(agg.totalAmount)}</span>
                             </div>
                           ));
                         })()}
@@ -818,7 +818,7 @@ const Billing = () => {
                     <>
                       {/* أزرار الدفع - معطل إذا كانت هناك جلسات نشطة */}
                       <div className="mb-6">
-                        <h5 className="font-medium text-gray-900 mb-3">خيارات الدفع</h5>
+                        <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">خيارات الدفع</h5>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {/* زر دفع الفاتورة بالكامل */}
                           <button
@@ -831,15 +831,15 @@ const Billing = () => {
                             disabled={selectedBill ? hasActiveSession(selectedBill) : false}
                             className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 ${
                               selectedBill && hasActiveSession(selectedBill)
-                                ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-200 hover:border-gray-300'
+                                ? 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                             }`}
                           >
                             <div className="text-2xl mb-2">💰</div>
-                            <div className="font-medium">دفع الفاتورة بالكامل</div>
-                            <div className="text-sm text-gray-600">دفع المبلغ المتبقي بالكامل</div>
+                            <div className="font-medium dark:text-gray-100">دفع الفاتورة بالكامل</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-300">دفع المبلغ المتبقي بالكامل</div>
                             {selectedBill && hasActiveSession(selectedBill) && (
-                              <div className="text-xs text-red-500 mt-1">غير متاح - جلسة نشطة</div>
+                              <div className="text-xs text-red-500 dark:text-red-400 mt-1">غير متاح - جلسة نشطة</div>
                             )}
                           </button>
 
@@ -850,11 +850,11 @@ const Billing = () => {
                                 await handlePartialPayment(selectedBill);
                               }
                             }}
-                            className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 hover:border-gray-300`}
+                            className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500`}
                           >
                             <div className="text-2xl mb-2">🍹</div>
-                            <div className="font-medium">دفع مشروب معين</div>
-                            <div className="text-sm text-gray-600">اختيار مشروبات محددة للدفع</div>
+                            <div className="font-medium dark:text-gray-100">دفع مشروب معين</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-300">اختيار مشروبات محددة للدفع</div>
                           </button>
                         </div>
                       </div>
@@ -863,34 +863,34 @@ const Billing = () => {
                       {paymentAmount && (
                         <div className="space-y-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">مبلغ الدفع</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">مبلغ الدفع</label>
                             <input
                               type="text"
                               value={formatCurrency(parseFloat(paymentAmount))}
-                              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50"
+                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                               disabled
                             />
                           </div>
 
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">المبلغ المتبقي بعد الدفع</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المبلغ المتبقي بعد الدفع</label>
                             <input
                               type="text"
                               value={formatCurrency(Math.max(0, (selectedBill?.remaining || 0) - parseFloat(paymentAmount)))}
-                              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50"
+                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                               disabled
                             />
                           </div>
 
                           {/* مؤشر حالة الدفع */}
-                          <div className="p-3 rounded-lg border bg-green-50 border-green-200">
+                          <div className="p-3 rounded-lg border bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700">
                             <div className="flex items-center">
-                              <span className="text-lg mr-2 text-green-600">✅</span>
+                              <span className="text-lg mr-2 text-green-600 dark:text-green-400">✅</span>
                               <div>
-                                <p className="font-medium text-green-800">
+                                <p className="font-medium text-green-800 dark:text-green-200">
                                   ستصبح الفاتورة مدفوعة بالكامل!
                                 </p>
-                                <p className="text-sm text-green-600">
+                                <p className="text-sm text-green-600 dark:text-green-300">
                                   المبلغ المتبقي سيكون صفر
                                 </p>
                               </div>
@@ -901,9 +901,9 @@ const Billing = () => {
 
                       {/* ملاحظات */}
                       <div className="mt-6">
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <h5 className="font-medium text-blue-900 mb-2">ملاحظات مهمة:</h5>
-                          <ul className="text-sm text-blue-800 space-y-1">
+                        <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
+                          <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">ملاحظات مهمة:</h5>
+                          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
                             <li>• سيتم تحديث حالة الفاتورة تلقائياً بناءً على المبلغ المدفوع</li>
                             <li>• إذا كان المبلغ المتبقي صفر، ستتحول الحالة إلى "مدفوع بالكامل"</li>
                             <li>• إذا كان هناك مبلغ متبقي، ستتحول الحالة إلى "مدفوع جزئياً"</li>
@@ -915,24 +915,24 @@ const Billing = () => {
 
                   {/* رسالة للفواتير المدفوعة بالكامل */}
                   {selectedBill?.status === 'paid' && (
-                    <div className="bg-green-50 p-6 rounded-lg text-center">
+                    <div className="bg-green-50 dark:bg-green-900 p-6 rounded-lg text-center">
                       <div className="text-6xl mb-4">✅</div>
-                      <h5 className="font-medium text-green-900 mb-2">الفاتورة مدفوعة بالكامل!</h5>
-                      <p className="text-green-700 mb-4">
+                      <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">الفاتورة مدفوعة بالكامل!</h5>
+                      <p className="text-green-700 dark:text-green-300 mb-4">
                         تم دفع جميع المبالغ المطلوبة لهذه الفاتورة
                       </p>
-                      <div className="bg-white p-4 rounded-lg">
+                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg">
                         <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-600">المبلغ الكلي:</span>
-                          <span className="font-semibold text-green-600">{formatCurrency(selectedBill?.total || 0)}</span>
+                          <span className="text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
+                          <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.total || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-600">المدفوع:</span>
-                          <span className="font-semibold text-green-600">{formatCurrency(selectedBill?.paid || 0)}</span>
+                          <span className="text-gray-600 dark:text-gray-300">المدفوع:</span>
+                          <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.paid || 0)}</span>
                         </div>
-                        <div className="flex justify-between items-center mt-2 pt-2 border-t">
-                          <span className="text-gray-600">المتبقي:</span>
-                          <span className="font-semibold text-green-600">0.00 ج.م</span>
+                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                          <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
+                          <span className="font-semibold text-green-600 dark:text-green-400">0.00 ج.م</span>
                         </div>
                       </div>
                     </div>
@@ -941,20 +941,20 @@ const Billing = () => {
 
                 {/* QR Code Section */}
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-4">رمز QR للعميل</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">رمز QR للعميل</h4>
 
-                  <div className="bg-gray-50 p-6 rounded-lg text-center">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg text-center">
                     {selectedBill?.qrCode ? (
                       <div>
                         <img
                           src={selectedBill.qrCode}
                           alt="QR Code"
-                          className="mx-auto mb-4 w-48 h-48 border-4 border-white shadow-lg"
+                          className="mx-auto mb-4 w-48 h-48 border-4 border-white dark:border-gray-600 shadow-lg"
                         />
-                        <p className="text-sm text-gray-600 mb-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                           يمكن للعميل مسح هذا الرمز لمعرفة تفاصيل فاتورته
                         </p>
-                        <div className="text-xs text-gray-500 space-y-1 mb-4">
+                        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1 mb-4">
                           <p>• عرض جميع الطلبات والجلسات</p>
                           <p>• معرفة المبلغ المدفوع والمتبقي</p>
                           <p>• مراقبة حالة الفاتورة</p>
@@ -1016,49 +1016,49 @@ const Billing = () => {
                       </div>
                     ) : (
                       <div className="py-8">
-                        <QrCode className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                        <p className="text-gray-500">سيتم إنشاء رمز QR تلقائياً عند حفظ الفاتورة</p>
+                        <QrCode className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-500 dark:text-gray-400">سيتم إنشاء رمز QR تلقائياً عند حفظ الفاتورة</p>
                       </div>
                     )}
                   </div>
 
                   {/* Bill Summary */}
-                  <div className="mt-6 bg-white border border-gray-200 rounded-lg p-4">
-                    <h5 className="font-medium text-gray-900 mb-3">ملخص الفاتورة</h5>
+                  <div className="mt-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">ملخص الفاتورة</h5>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">عدد الطلبات:</span>
-                        <span className="font-medium">{formatDecimal(selectedBill?.orders?.length || 0)}</span>
+                        <span className="text-gray-600 dark:text-gray-300">عدد الطلبات:</span>
+                        <span className="font-medium dark:text-gray-100">{formatDecimal(selectedBill?.orders?.length || 0)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">عدد الجلسات:</span>
-                        <span className="font-medium flex items-center gap-1">
+                        <span className="text-gray-600 dark:text-gray-300">عدد الجلسات:</span>
+                        <span className="font-medium flex items-center gap-1 dark:text-gray-100">
                           {formatDecimal(selectedBill?.sessions?.length || 0)}
                           {selectedBill && hasActiveSession(selectedBill) && (
                             <>
                               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                              <span className="text-xs text-red-600 font-bold">نشط</span>
+                              <span className="text-xs text-red-600 dark:text-red-400 font-bold">نشط</span>
                             </>
                           )}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">تاريخ الإنشاء:</span>
-                        <span className="font-medium">
+                        <span className="text-gray-600 dark:text-gray-300">تاريخ الإنشاء:</span>
+                        <span className="font-medium dark:text-gray-100">
                           {selectedBill?.createdAt ? new Date(selectedBill.createdAt).toLocaleDateString('ar-EG') : '-'}
                         </span>
                       </div>
                     </div>
 
                     {selectedBill?.qrCodeUrl && (
-                      <div className="mt-4 pt-4 border-t">
-                        <h6 className="font-medium text-gray-900 mb-2">رابط الفاتورة للعميل:</h6>
+                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <h6 className="font-medium text-gray-900 dark:text-gray-100 mb-2">رابط الفاتورة للعميل:</h6>
                         <div className="flex items-center space-x-2 space-x-reverse">
                           <input
                             type="text"
                             value={selectedBill.qrCodeUrl}
                             readOnly
-                            className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1"
+                            className="flex-1 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-gray-900 dark:text-gray-100"
                           />
                           <button
                             onClick={() => {
@@ -1086,7 +1086,7 @@ const Billing = () => {
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-between">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
               {/* زر إلغاء الفاتورة - يظهر فقط إذا لم تكن مدفوعة بالكامل */}
               {selectedBill?.status !== 'paid' && (
                 <button
@@ -1116,7 +1116,7 @@ const Billing = () => {
                       }
                     }
                   }}
-                  className="px-4 py-2 text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors duration-200"
+                  className="px-4 py-2 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-colors duration-200"
                 >
                   إلغاء الفاتورة
                 </button>
@@ -1124,7 +1124,7 @@ const Billing = () => {
 
               {/* رسالة للفواتير المدفوعة */}
               {selectedBill?.status === 'paid' && (
-                <div className="flex items-center text-green-700">
+                <div className="flex items-center text-green-700 dark:text-green-300">
                   <CheckCircle className="h-5 w-5 mr-2" />
                   <span className="text-sm font-medium">الفاتورة مدفوعة بالكامل</span>
                 </div>
@@ -1133,7 +1133,7 @@ const Billing = () => {
               <div className="flex space-x-3 space-x-reverse">
                 <button
                   onClick={() => setShowPaymentModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
                 >
                   إغلاق
                 </button>
@@ -1161,15 +1161,15 @@ const Billing = () => {
       {/* Partial Payment Modal */}
       {showPartialPaymentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">دفع مشروبات محددة - فاتورة #{selectedBill?.billNumber}</h3>
-              <p className="text-sm text-gray-600 mt-1">اختر المشروبات المطلوب دفعها من هذه الفاتورة</p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">دفع مشروبات محددة - فاتورة #{selectedBill?.billNumber}</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">اختر المشروبات المطلوب دفعها من هذه الفاتورة</p>
             </div>
 
             <div className="p-6">
               <div className="mb-6">
-                <h4 className="font-medium text-gray-900 mb-4">اختر المشروبات المطلوب دفعها</h4>
+                <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر المشروبات المطلوب دفعها</h4>
 
                 {(() => {
                   const itemsWithRemaining = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
@@ -1178,10 +1178,10 @@ const Billing = () => {
 
                   if (itemsWithRemaining.length === 0) {
                     return (
-                      <div className="text-center py-8 bg-green-50 rounded-lg border border-green-200">
+                      <div className="text-center py-8 bg-green-50 dark:bg-green-900 rounded-lg border border-green-200 dark:border-green-700">
                         <div className="text-4xl mb-4">✅</div>
-                        <h5 className="font-medium text-green-900 mb-2">جميع العناصر مدفوعة بالكامل!</h5>
-                        <p className="text-green-700">
+                        <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">جميع العناصر مدفوعة بالكامل!</h5>
+                        <p className="text-green-700 dark:text-green-300">
                           لا توجد عناصر متبقية للدفع في هذه الفاتورة
                         </p>
                       </div>
@@ -1431,13 +1431,13 @@ const Billing = () => {
               )}
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-between">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
               <button
                 onClick={() => {
                   setShowPartialPaymentModal(false);
                   setSelectedItems({});
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
               >
                 إلغاء
               </button>
@@ -1462,9 +1462,9 @@ const Billing = () => {
       {/* Session End Confirmation Modal */}
       {showSessionEndModal && sessionToEnd && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md max-h-[80vh] overflow-y-auto p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">تأكيد إنهاء الجلسة</h3>
-            <p className="text-sm text-gray-700 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[80vh] overflow-y-auto p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">تأكيد إنهاء الجلسة</h3>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
               هل أنت متأكد من إنهاء هذه الجلسة؟ سيتم حساب التكلفة النهائية وإغلاق الجلسة.
             </p>
             <div className="flex justify-end space-x-3">
@@ -1473,7 +1473,7 @@ const Billing = () => {
                   setShowSessionEndModal(false);
                   setSessionToEnd(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
               >
                 إلغاء
               </button>

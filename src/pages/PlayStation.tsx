@@ -314,7 +314,7 @@ const PlayStation: React.FC = () => {
           <Gamepad2 className="h-8 w-8 text-primary-600 ml-3" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">إدارة البلايستيشن</h1>
-            <p className="text-gray-600">متابعة وإدارة جلسات البلايستيشن</p>
+            <p className="text-gray-600 dark:text-gray-300">متابعة وإدارة جلسات البلايستيشن</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -369,9 +369,9 @@ const PlayStation: React.FC = () => {
         {devices.filter(d => d.type === 'playstation').map((device) => {
           const activeSession = sessions.find(s => s.deviceNumber === device.number && s.status === 'active');
           return (
-                <div key={device.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col h-full">
+                <div key={device.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col h-full">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">{device.name}</h3>
+                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{device.name}</h3>
                 <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(device.status)}`}>{getStatusText(device.status)}</span>
               </div>
 

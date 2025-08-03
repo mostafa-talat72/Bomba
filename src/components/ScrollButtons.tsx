@@ -97,7 +97,7 @@ const ScrollButtons: React.FC<ScrollButtonsProps> = ({ mainContentRef }) => {
       {showTopButton && isPageVisible && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-20 left-4 z-50 p-3 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-all duration-200 hover:scale-110 lg:bottom-6 lg:left-6"
+          className="fixed bottom-20 left-4 z-50 p-3 bg-primary-600 dark:bg-primary-700 text-white rounded-full shadow-lg hover:bg-primary-700 dark:hover:bg-primary-800 transition-all duration-200 hover:scale-110 lg:bottom-6 lg:left-6"
           title="الصعود للأعلى"
         >
           <ChevronUp className="h-5 w-5" />
@@ -108,7 +108,7 @@ const ScrollButtons: React.FC<ScrollButtonsProps> = ({ mainContentRef }) => {
       {showBottomButton && isPageVisible && (
         <button
           onClick={scrollToBottom}
-          className="fixed bottom-4 left-4 z-50 p-3 bg-gray-600 text-white rounded-full shadow-lg hover:bg-gray-700 transition-all duration-200 hover:scale-110 lg:bottom-6 lg:left-20"
+          className="fixed bottom-4 left-4 z-50 p-3 bg-gray-600 dark:bg-gray-700 text-white rounded-full shadow-lg hover:bg-gray-700 dark:hover:bg-gray-800 transition-all duration-200 hover:scale-110 lg:bottom-6 lg:left-20"
           title="النزول للأسفل"
         >
           <ChevronDown className="h-5 w-5" />

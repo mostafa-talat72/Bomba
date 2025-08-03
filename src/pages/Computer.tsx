@@ -377,9 +377,9 @@ const Computer: React.FC = () => {
         {devices.map((device) => {
           const activeSession = sessions.find(s => s.deviceNumber === device.number && s.status === 'active');
           return (
-                <div key={device.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col h-full">
+                <div key={device.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col h-full">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">{device.name}</h3>
+                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{device.name}</h3>
                 <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(device.status)}`}>{getStatusText(device.status)}</span>
               </div>
 

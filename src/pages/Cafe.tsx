@@ -968,8 +968,8 @@ const Cafe: React.FC = () => {
         <div className="flex items-center">
           <ShoppingCart className="h-8 w-8 text-primary-600 ml-3" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">إدارة الطلبات</h1>
-            <p className="text-gray-600">طلبات المشروبات والأصناف للعملاء</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الطلبات</h1>
+            <p className="text-gray-600 dark:text-gray-400">طلبات المشروبات والأصناف للعملاء</p>
           </div>
         </div>
         <div className="flex items-center space-x-3 space-x-reverse">
@@ -980,7 +980,7 @@ const Cafe: React.FC = () => {
               fetchTodayStats();
               showNotification('تم تحديث البيانات', 'success');
             }}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
             title="تحديث البيانات"
           >
             <svg className="h-5 w-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1000,52 +1000,52 @@ const Cafe: React.FC = () => {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Clock className="h-6 w-6 text-yellow-600" />
+            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
+              <Clock className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">طلبات قيد التجهيز</p>
-              <p className="text-2xl font-bold text-yellow-600">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">طلبات قيد التجهيز</p>
+              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
                 {formatDecimal(incompleteOrders.length)}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="h-6 w-6 text-green-600" />
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">جاهز للتسليم</p>
-              <p className="text-2xl font-bold text-green-600">{formatDecimal(readyForDeliveryOrders.length)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">جاهز للتسليم</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatDecimal(readyForDeliveryOrders.length)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <ShoppingCart className="h-6 w-6 text-blue-600" />
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+              <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600">أصناف مجهزة</p>
-              <p className="text-2xl font-bold text-blue-600">{formatDecimal(preparedItems.length)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">أصناف مجهزة</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(preparedItems.length)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <ShoppingCart className="h-6 w-6 text-purple-600" />
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
+              <ShoppingCart className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600"> المبيعات اليوم</p>
-              <p className="text-2xl font-bold text-purple-600">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300"> المبيعات اليوم</p>
+              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                 {formatCurrency(todayStats.totalSales)}
               </p>
             </div>
@@ -1054,19 +1054,19 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Orders List */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">طلبات قيد التجهيز</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">طلبات قيد التجهيز</h3>
         </div>
         <div className="p-6">
           {incompleteOrders.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">لا توجد طلبات قيد التجهيز</p>
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد طلبات قيد التجهيز</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {incompleteOrders.map((order) => (
                 <div
                   key={order._id}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 relative pt-8"
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200 relative pt-8"
                 >
                   {/* زر الإلغاء أعلى الكارت */}
                   {(
@@ -1076,7 +1076,7 @@ const Cafe: React.FC = () => {
                     <>
                       <button
                         onClick={() => handleCancelOrder(order)}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-red-100 hover:bg-red-200 text-red-600 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-2 z-10"
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 text-red-600 dark:text-red-400 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-2 z-10"
                         title="إلغاء الطلب"
                       >
                         ×
@@ -1103,7 +1103,7 @@ const Cafe: React.FC = () => {
                           });
                           setShowEditOrder(true);
                         }}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-yellow-100 hover:bg-yellow-200 text-yellow-700 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-12 z-10"
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900 hover:bg-yellow-200 dark:hover:bg-yellow-800 text-yellow-700 dark:text-yellow-400 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-12 z-10"
                         title="تعديل الطلب"
                       >
                         <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-1.414.828l-4.243 1.414 1.414-4.243a4 4 0 01.828-1.414z" /></svg>
@@ -1111,7 +1111,7 @@ const Cafe: React.FC = () => {
                     </>
                   )}
                   {/* Header */}
-                  <div className="p-4 border-b border-gray-100">
+                  <div className="p-4 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center">
                         <span className="text-2xl mr-2">📋</span>
@@ -1119,15 +1119,15 @@ const Cafe: React.FC = () => {
                           {getStatusText(order.status)}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-500">#{order.orderNumber}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">#{order.orderNumber}</span>
                     </div>
 
-                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-1">
                       <User className="h-4 w-4 mr-1" />
                       <span className="truncate">{order.customerName || 'بدون اسم'}</span>
                     </div>
 
-                    <div className="flex items-center text-sm text-gray-600">
+                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                       <Clock className="h-4 w-4 mr-1" />
                       <span>{new Date(order.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
@@ -1138,13 +1138,13 @@ const Cafe: React.FC = () => {
                     <div className="space-y-3">
                       {/* عرض جميع الأصناف المطلوبة بدون أسعار */}
                       {order.items && order.items.length > 0 && (
-                        <div className="text-sm text-gray-700">
-                          <div className="font-medium mb-2 text-gray-900">الأصناف المطلوبة:</div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          <div className="font-medium mb-2 text-gray-900 dark:text-gray-100">الأصناف المطلوبة:</div>
                           {order.items.map((item, index) => (
-                            <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
+                            <div key={index} className="py-1 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
                               <div className="flex justify-between items-center">
                                 <span className="truncate">{item.name}</span>
-                                <span className="font-medium text-gray-900">{formatQuantity(item.quantity, 'قطعة')}</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">{formatQuantity(item.quantity, 'قطعة')}</span>
                               </div>
                               {/* ملاحظة لهذا المشروب: غير متوفرة */}
                             </div>
@@ -1153,7 +1153,7 @@ const Cafe: React.FC = () => {
                       )}
 
                       {order.bill && (
-                        <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700">
                           <span>فاتورة: {order.bill.billNumber}</span>
                         </div>
                       )}
@@ -1161,7 +1161,7 @@ const Cafe: React.FC = () => {
                   </div>
 
                   {/* Footer - أزرار التجهيز وأزرار التحكم */}
-                  <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-lg flex flex-col gap-2">
+                  <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 rounded-b-lg flex flex-col gap-2">
                     {/* أزرار التجهيز */}
                     {order.status === 'preparing' ? (
                       <button
@@ -1207,38 +1207,38 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Ready for Delivery Orders */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">طلبات جاهزة للتسليم</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">طلبات جاهزة للتسليم</h3>
         </div>
         <div className="p-6">
           {readyForDeliveryOrders.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">لا توجد طلبات جاهزة للتسليم</p>
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد طلبات جاهزة للتسليم</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {readyForDeliveryOrders.map((order) => (
                 <div
                   key={order._id}
-                  className="bg-white rounded-lg shadow-sm border border-green-200 hover:shadow-md transition-shadow duration-200"
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-green-200 dark:border-green-700 hover:shadow-md transition-shadow duration-200"
                 >
                   {/* Header */}
-                  <div className="p-4 border-b border-gray-100">
+                  <div className="p-4 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center">
                         <span className="text-2xl mr-2">✅</span>
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
                           جاهز للتسليم
                         </span>
                       </div>
-                      <span className="text-xs text-gray-500">#{order.orderNumber}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">#{order.orderNumber}</span>
                     </div>
 
-                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-1">
                       <User className="h-4 w-4 mr-1" />
                       <span className="truncate">{order.customerName || 'بدون اسم'}</span>
                     </div>
 
-                    <div className="flex items-center text-sm text-gray-600">
+                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                       <Clock className="h-4 w-4 mr-1" />
                       <span>{new Date(order.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
@@ -1248,19 +1248,19 @@ const Cafe: React.FC = () => {
                   <div className="p-4">
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">الأصناف الجاهزة:</span>
-                        <span className="font-semibold text-green-600">{order.items?.length || 0}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">الأصناف الجاهزة:</span>
+                        <span className="font-semibold text-green-600 dark:text-green-400">{order.items?.length || 0}</span>
                       </div>
 
                       {/* عرض الأصناف الجاهزة */}
                       {order.items && order.items.length > 0 && (
-                        <div className="text-xs text-gray-600">
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
                           <div className="font-medium mb-1">الأصناف الجاهزة:</div>
                           {order.items.map((item, index) => (
-                            <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
+                            <div key={index} className="py-1 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
                               <div className="flex justify-between items-center">
                                 <span className="truncate">{item.name}</span>
-                                <span className="text-green-600 font-medium">{formatQuantity(item.quantity, 'قطعة')} × {formatCurrency(item.price)}</span>
+                                <span className="text-green-600 dark:text-green-400 font-medium">{formatQuantity(item.quantity, 'قطعة')} × {formatCurrency(item.price)}</span>
                               </div>
                               {/* ملاحظة لهذا المشروب: غير متوفرة */}
                             </div>
@@ -1269,12 +1269,12 @@ const Cafe: React.FC = () => {
                       )}
 
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">إجمالي الطلب:</span>
-                        <span className="font-semibold text-gray-900">{formatCurrency(order.finalAmount || order.totalAmount)}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">إجمالي الطلب:</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(order.finalAmount || order.totalAmount)}</span>
                       </div>
 
                       {order.bill && (
-                        <div className="flex justify-between items-center text-xs text-gray-500">
+                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
                           <span>فاتورة: {order.bill.billNumber}</span>
                         </div>
                       )}
@@ -1282,11 +1282,11 @@ const Cafe: React.FC = () => {
                   </div>
 
                   {/* Footer */}
-                  <div className="p-4 border-t border-gray-100 bg-green-50 rounded-b-lg">
+                  <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-green-50 dark:bg-green-900 rounded-b-lg">
                     <div className="flex items-center justify-between">
                       <button
                         onClick={() => handleOrderClick(order)}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-700"
+                        className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                       >
                         <ShoppingCart className="h-4 w-4 mr-1 inline" />
                         عرض التفاصيل
@@ -1309,23 +1309,23 @@ const Cafe: React.FC = () => {
       {/* New Order Modal */}
       {showNewOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">طلب جديد</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">طلب جديد</h3>
             </div>
 
             <div className="p-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Menu Items for Order */}
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-4">اختر من القائمة</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر من القائمة</h4>
                   {/* فلتر الفئة */}
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">الفئة</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
                     <select
                       value={selectedCategory}
                       onChange={e => setSelectedCategory(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     >
                       <option value="all">جميع الفئات</option>
                       {categories.map(category => (
@@ -1336,7 +1336,7 @@ const Cafe: React.FC = () => {
                   {loading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-                      <p className="mt-2 text-gray-600">جاري تحميل القائمة...</p>
+                      <p className="mt-2 text-gray-600 dark:text-gray-400">جاري تحميل القائمة...</p>
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -1344,16 +1344,16 @@ const Cafe: React.FC = () => {
                         .filter(category => selectedCategory === 'all' || category === selectedCategory)
                         .map(category => (
                           <div key={category}>
-                            <h5 className="font-medium text-gray-700 mb-2">{category}</h5>
+                            <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">{category}</h5>
                             <div className="space-y-2">
                               {(menuItemsByCategory[category] || []).filter(item => item.isAvailable).map(item => (
                                 <button
                                   key={item.id}
                                   onClick={() => addToOrder(item)}
-                                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
                                 >
-                                  <span className="text-gray-900">{item.name}</span>
-                                  <span className="text-gray-600">{formatCurrency(item.price)}</span>
+                                  <span className="text-gray-900 dark:text-gray-100">{item.name}</span>
+                                  <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
                                 </button>
                               ))}
                             </div>
@@ -1366,17 +1366,17 @@ const Cafe: React.FC = () => {
                 {/* Order Details */}
                 <div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       اسم العميل
                       {billOption === 'existing' && selectedBill && (
-                        <span className="text-xs text-gray-500 mr-2">(من الفاتورة المختارة)</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">(من الفاتورة المختارة)</span>
                       )}
                     </label>
                     <input
                       type="text"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className={`w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${billOption === 'existing' && selectedBill ? 'bg-gray-100' : ''
+                      className={`w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${billOption === 'existing' && selectedBill ? 'bg-gray-100 dark:bg-gray-600' : ''
                         }`}
                       placeholder="أدخل اسم العميل"
                       readOnly={billOption === 'existing' && selectedBill}
@@ -1385,7 +1385,7 @@ const Cafe: React.FC = () => {
 
                   {/* اختيار الفاتورة */}
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">الفاتورة</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفاتورة</label>
                     <div className="space-y-2">
                       <label className="flex items-center">
                         <input
@@ -1396,7 +1396,7 @@ const Cafe: React.FC = () => {
                           onChange={(e) => handleBillOptionChange(e.target.value as 'new' | 'existing')}
                           className="ml-2"
                         />
-                        <span className="text-sm">فاتورة جديدة</span>
+                        <span className="text-sm dark:text-gray-300">فاتورة جديدة</span>
                       </label>
                       <label className="flex items-center">
                         <input
@@ -1407,7 +1407,7 @@ const Cafe: React.FC = () => {
                           onChange={(e) => handleBillOptionChange(e.target.value as 'new' | 'existing')}
                           className="ml-2"
                         />
-                        <span className="text-sm">فاتورة موجودة</span>
+                        <span className="text-sm dark:text-gray-300">فاتورة موجودة</span>
                       </label>
                     </div>
 
@@ -1418,7 +1418,7 @@ const Cafe: React.FC = () => {
                           placeholder="البحث عن فاتورة بالاسم..."
                           value={searchBill}
                           onChange={(e) => setSearchBill(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         />
                         <div className="mt-2 max-h-32 overflow-y-auto">
                           {openBills
@@ -1432,13 +1432,13 @@ const Cafe: React.FC = () => {
                             .map(bill => (
                               <div
                                 key={bill._id}
-                                className={`p-2 border rounded cursor-pointer text-sm ${selectedBillId === bill._id ? 'bg-primary-100 border-primary-500' : 'bg-gray-50 border-gray-200'
+                                className={`p-2 border rounded cursor-pointer text-sm ${selectedBillId === bill._id ? 'bg-primary-100 dark:bg-primary-900 border-primary-500 dark:border-primary-400' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
                                   }`}
                                 onClick={() => handleBillSelection(bill)}
                               >
-                                <div className="font-medium">{bill.customerName || 'بدون اسم'}</div>
-                                <div className="text-gray-600 text-xs">فاتورة رقم: {bill.billNumber}</div>
-                                <div className="text-gray-600 text-xs">المجموع: {formatCurrency(bill.total)}</div>
+                                <div className="font-medium dark:text-gray-100">{bill.customerName || 'بدون اسم'}</div>
+                                <div className="text-gray-600 dark:text-gray-400 text-xs">فاتورة رقم: {bill.billNumber}</div>
+                                <div className="text-gray-600 dark:text-gray-400 text-xs">المجموع: {formatCurrency(bill.total)}</div>
                               </div>
                             ))}
                         </div>
@@ -1446,15 +1446,15 @@ const Cafe: React.FC = () => {
                     )}
                   </div>
 
-                  <h4 className="font-medium text-gray-900 mb-4">تفاصيل الطلب</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">تفاصيل الطلب</h4>
                   <div className="space-y-3">
                     {currentOrder.length === 0 ? (
-                      <p className="text-gray-500 text-center py-4">لا توجد عناصر في الطلب</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-center py-4">لا توجد عناصر في الطلب</p>
                     ) : (
                       currentOrder.map((item, index) => (
-                        <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                        <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-gray-900">{item.name}</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{item.name}</span>
                             <button
                               onClick={() => removeFromOrder(item.menuItem)}
                               className="text-red-500 hover:text-red-700"
@@ -1465,21 +1465,21 @@ const Cafe: React.FC = () => {
                           <div className="flex items-center space-x-2 space-x-reverse mb-2">
                             <button
                               onClick={() => updateQuantity(item.menuItem, Math.max(0, item.quantity - 1))}
-                              className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
                             >
                               -
                             </button>
-                            <span className="w-8 text-center">{formatDecimal(item.quantity)}</span>
+                            <span className="w-8 text-center dark:text-gray-100">{formatDecimal(item.quantity)}</span>
                             <button
                               onClick={() => updateQuantity(item.menuItem, item.quantity + 1)}
-                              className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
                             >
                               +
                             </button>
-                            <span className="text-gray-600">{formatCurrency(item.price)}</span>
+                            <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
                           </div>
                           <div className="mb-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات هذا المشروب:</label>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">ملاحظات هذا المشروب:</label>
                             <textarea
                               value={item.notes || ''}
                               onChange={(e) => {
@@ -1487,7 +1487,7 @@ const Cafe: React.FC = () => {
                                 updatedOrder[index] = { ...item, notes: e.target.value };
                                 setCurrentOrder(updatedOrder);
                               }}
-                              className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                               rows={1}
                               placeholder="مثال: بدون سكر، مع حليب إضافي..."
                             />
@@ -1497,10 +1497,10 @@ const Cafe: React.FC = () => {
                     )}
 
                     {currentOrder.length > 0 && (
-                      <div className="border-t pt-3">
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
                         <div className="flex justify-between items-center font-bold text-lg">
-                          <span className="text-lg font-semibold text-gray-900">إجمالي الطلب: </span>
-                          <span className="text-green-600">
+                          <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">إجمالي الطلب: </span>
+                          <span className="text-green-600 dark:text-green-400">
                             {formatCurrency(calculateTotal())}
                           </span>
                         </div>
@@ -1540,15 +1540,15 @@ const Cafe: React.FC = () => {
       {/* Order Details Modal */}
       {showOrderDetails && selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   تفاصيل الطلب #{selectedOrder.orderNumber}
                 </h3>
                 <button
                   onClick={() => setShowOrderDetails(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   ✕
                 </button>
@@ -1557,50 +1557,50 @@ const Cafe: React.FC = () => {
 
             <div className="p-6">
               {/* Order Info */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <span className="text-sm text-gray-600">العميل:</span>
-                    <p className="font-medium">{selectedOrder.customerName || 'بدون اسم'}</p>
+                    <span className="text-sm text-gray-600 dark:text-gray-300">العميل:</span>
+                    <p className="font-medium dark:text-gray-100">{selectedOrder.customerName || 'بدون اسم'}</p>
                   </div>
                   <div>
-                    <span className="text-sm text-gray-600">الحالة:</span>
-                    <p className="font-medium">{getStatusText(selectedOrder.status)}</p>
+                    <span className="text-sm text-gray-600 dark:text-gray-300">الحالة:</span>
+                    <p className="font-medium dark:text-gray-100">{getStatusText(selectedOrder.status)}</p>
                   </div>
                   <div>
-                    <span className="text-sm text-gray-600">الوقت:</span>
-                    <p className="font-medium">
+                    <span className="text-sm text-gray-600 dark:text-gray-300">الوقت:</span>
+                    <p className="font-medium dark:text-gray-100">
                       {new Date(selectedOrder.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
 
                 {/* حالة الطلب الكلية */}
-                <div className="mt-4 p-3 bg-white rounded-lg border">
+                <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">حالة الطلب الكلية:</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">حالة الطلب الكلية:</span>
                     {hasAllItemsFullyPrepared(selectedOrder) ? (
                       <div className="flex items-center">
-                        <span className="text-green-600 text-sm font-medium mr-2">✓ جاهز للتحريك</span>
-                        <span className="text-xs text-gray-500">جميع الأصناف مجهزة بالكامل</span>
+                        <span className="text-green-600 dark:text-green-400 text-sm font-medium mr-2">✓ جاهز للتحريك</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">جميع الأصناف مجهزة بالكامل</span>
                       </div>
                     ) : hasAnyPreparedItems(selectedOrder) ? (
                         <div className="flex items-center">
-                          <span className="text-yellow-600 text-sm font-medium mr-2">⚠ جزئي</span>
-                          <span className="text-xs text-gray-500">
+                          <span className="text-yellow-600 dark:text-yellow-400 text-sm font-medium mr-2">⚠ جزئي</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                           {getUnpreparedItemsCount(selectedOrder)} صنف غير مجهز بالكامل
                           </span>
                         </div>
                       ) : (
                         <div className="flex items-center">
-                        <span className="text-red-600 text-sm font-medium mr-2">✗ غير مجهز</span>
-                        <span className="text-xs text-gray-500">لا توجد أصناف مجهزة</span>
+                        <span className="text-red-600 dark:text-red-400 text-sm font-medium mr-2">✗ غير مجهز</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">لا توجد أصناف مجهزة</span>
                       </div>
                     )}
                   </div>
 
                   {/* تفاصيل إضافية */}
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     <div className="flex justify-between">
                       <span>إجمالي الأصناف: {selectedOrder.items?.length || 0}</span>
                       <span>الأصناف المجهزة بالكامل: {(selectedOrder.items?.filter(item => (item.preparedCount || 0) >= (item.quantity || 0)).length || 0)}</span>
@@ -1612,7 +1612,7 @@ const Cafe: React.FC = () => {
 
               {/* Order Items */}
               <div className="space-y-4">
-                <h4 className="text-lg font-semibold text-gray-900">أصناف الطلب</h4>
+                <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">أصناف الطلب</h4>
                 {selectedOrder?.items?.map((item, index) => {
                     const preparedCount = item.preparedCount || 0;
                   const quantity = item.quantity || 0;
@@ -1625,16 +1625,16 @@ const Cafe: React.FC = () => {
                       key={index}
                       className={`p-4 rounded-lg border ${
                         isFullyPrepared
-                          ? 'border-green-200 bg-green-50'
+                          ? 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900'
                           : isPartiallyPrepared
-                          ? 'border-yellow-200 bg-yellow-50'
-                          : 'border-gray-200 bg-gray-50'
+                          ? 'border-yellow-200 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900'
+                          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
                       }`}
                     >
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h5 className="font-medium text-gray-900">{item.name}</h5>
-                          <p className="text-sm text-gray-600">
+                          <h5 className="font-medium text-gray-900 dark:text-gray-100">{item.name}</h5>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
                             {formatCurrency(item.price)} × {formatDecimal(quantity)} = {formatCurrency(item.price * quantity)}
                           </p>
                         </div>
@@ -1642,10 +1642,10 @@ const Cafe: React.FC = () => {
                           <span
                             className={`px-2 py-1 text-xs font-medium rounded-full ${
                               isFullyPrepared
-                                ? 'bg-green-100 text-green-800'
+                                ? 'bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200'
                                 : isPartiallyPrepared
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-gray-100 text-gray-800'
+                                ? 'bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-200'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                             }`}
                           >
                             {isFullyPrepared
@@ -1659,11 +1659,11 @@ const Cafe: React.FC = () => {
 
                         <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
-                            <span className="text-sm text-gray-600">
+                            <span className="text-sm text-gray-600 dark:text-gray-300">
                             مجهز: {preparedCount} / {quantity}
                             </span>
                             {isFullyPrepared && (
-                            <span className="text-sm text-green-600 font-medium">
+                            <span className="text-sm text-green-600 dark:text-green-400 font-medium">
                               ✓ جاهز للتسليم
                             </span>
                             )}
@@ -1684,7 +1684,7 @@ const Cafe: React.FC = () => {
                                 );
                                 updateItemPrepared(selectedOrder._id, index, newValue);
                               }}
-                              className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                               <button
                               onClick={() => updateItemPrepared(selectedOrder._id, index, quantity)}
@@ -1701,10 +1701,10 @@ const Cafe: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
                 <button
                   onClick={() => setShowOrderDetails(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
                 >
                   إغلاق
                 </button>
@@ -1729,7 +1729,7 @@ const Cafe: React.FC = () => {
                     fetchPendingOrders();
                     fetchReadyOrders();
                   }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200 flex items-center"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 flex items-center"
                   title="إعادة تحميل البيانات"
                 >
                   <svg className="h-4 w-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1768,22 +1768,22 @@ const Cafe: React.FC = () => {
 
       {showEditOrder && editOrderData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">تعديل الطلب #{editOrderData.orderNumber}</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">تعديل الطلب #{editOrderData.orderNumber}</h3>
             </div>
             <div className="p-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Menu Items for Order */}
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-4">اختر من القائمة</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر من القائمة</h4>
                   {/* فلتر الفئة */}
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">الفئة</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
                     <select
                       value={selectedCategory}
                       onChange={e => setSelectedCategory(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     >
                       <option value="all">جميع الفئات</option>
                       {categories.map(category => (
@@ -1794,7 +1794,7 @@ const Cafe: React.FC = () => {
                   {loading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-                      <p className="mt-2 text-gray-600">جاري تحميل القائمة...</p>
+                      <p className="mt-2 text-gray-600 dark:text-gray-400">جاري تحميل القائمة...</p>
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -1802,7 +1802,7 @@ const Cafe: React.FC = () => {
                         .filter(category => selectedCategory === 'all' || category === selectedCategory)
                         .map(category => (
                           <div key={category}>
-                            <h5 className="font-medium text-gray-700 mb-2">{category}</h5>
+                            <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">{category}</h5>
                             <div className="space-y-2">
                               {(menuItemsByCategory[category] || []).filter(item => item.isAvailable).map(item => (
                                 <button
@@ -1832,10 +1832,10 @@ const Cafe: React.FC = () => {
                                       setEditOrderData({ ...editOrderData, items });
                                     }
                                   }}
-                                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
                                 >
-                                  <span className="text-gray-900">{item.name}</span>
-                                  <span className="text-gray-600">{formatCurrency(item.price)}</span>
+                                  <span className="text-gray-900 dark:text-gray-100">{item.name}</span>
+                                  <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
                                 </button>
                               ))}
                             </div>
@@ -1848,23 +1848,23 @@ const Cafe: React.FC = () => {
                 {/* Order Details */}
                 <div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">اسم العميل</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم العميل</label>
                     <input
                       type="text"
                       value={editOrderData.customerName || ''}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-100"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       readOnly
                     />
                   </div>
-                  <h4 className="font-medium text-gray-900 mb-4">تفاصيل الطلب</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">تفاصيل الطلب</h4>
                   <div className="space-y-3">
                     {editOrderData.items.length === 0 ? (
-                      <p className="text-gray-500 text-center py-4">لا توجد عناصر في الطلب</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-center py-4">لا توجد عناصر في الطلب</p>
                     ) : (
                       editOrderData.items.map((item, index) => (
-                        <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                        <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-gray-900">{item.name}</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{item.name}</span>
                             <button
                               onClick={() => {
                                 const items = editOrderData.items.filter((_, i) => i !== index);
@@ -1882,25 +1882,25 @@ const Cafe: React.FC = () => {
                                 if (items[index].quantity > 1) items[index].quantity -= 1;
                                 setEditOrderData({ ...editOrderData, items });
                               }}
-                              className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
                             >
                               -
                             </button>
-                            <span className="w-8 text-center">{formatDecimal(item.quantity)}</span>
+                            <span className="w-8 text-center dark:text-gray-100">{formatDecimal(item.quantity)}</span>
                             <button
                               onClick={() => {
                                 const items = [...editOrderData.items];
                                 items[index].quantity += 1;
                                 setEditOrderData({ ...editOrderData, items });
                               }}
-                              className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
                             >
                               +
                             </button>
-                            <span className="text-gray-600">{formatCurrency(item.price)}</span>
+                            <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
                           </div>
                           <div className="mb-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات هذا المشروب:</label>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">ملاحظات هذا المشروب:</label>
                             <textarea
                               value={item.notes || ''}
                               onChange={e => {
@@ -1908,7 +1908,7 @@ const Cafe: React.FC = () => {
                                 items[index].notes = e.target.value;
                                 setEditOrderData({ ...editOrderData, items });
                               }}
-                              className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                               rows={1}
                               placeholder="مثال: بدون سكر، مع حليب إضافي..."
                             />
@@ -1917,10 +1917,10 @@ const Cafe: React.FC = () => {
                       ))
                     )}
                     {editOrderData.items.length > 0 && (
-                      <div className="border-t pt-3">
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
                         <div className="flex justify-between items-center font-bold text-lg">
-                          <span>الإجمالي:</span>
-                          <span className="text-green-600">
+                          <span className="dark:text-gray-100">الإجمالي:</span>
+                          <span className="text-green-600 dark:text-green-400">
                             {formatCurrency(calculateTotal())}
                           </span>
                         </div>
@@ -1930,10 +1930,10 @@ const Cafe: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
               <button
                 onClick={() => setShowEditOrder(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
               >إلغاء</button>
               <button
                 onClick={async () => {

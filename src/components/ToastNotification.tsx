@@ -62,28 +62,28 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
   const getBackgroundColor = () => {
     switch (type) {
       case 'success':
-        return 'bg-green-50 border-green-200';
+        return 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700';
       case 'error':
-        return 'bg-red-50 border-red-200';
+        return 'bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-700';
       case 'warning':
-        return 'bg-yellow-50 border-yellow-200';
+        return 'bg-yellow-50 dark:bg-yellow-900 border-yellow-200 dark:border-yellow-700';
       case 'session':
-        return 'bg-blue-50 border-blue-200';
+        return 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700';
       case 'order':
-        return 'bg-purple-50 border-purple-200';
+        return 'bg-purple-50 dark:bg-purple-900 border-purple-200 dark:border-purple-700';
       case 'inventory':
-        return 'bg-orange-50 border-orange-200';
+        return 'bg-orange-50 dark:bg-orange-900 border-orange-200 dark:border-orange-700';
       case 'billing':
-        return 'bg-green-50 border-green-200';
+        return 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700';
       default:
-        return 'bg-blue-50 border-blue-200';
+        return 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700';
     }
   };
 
   return (
     <div
       className={`
-        w-80 max-w-sm bg-white rounded-lg shadow-lg border-2 p-4 transition-all duration-300 ease-in-out
+        w-80 max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow-lg border-2 p-4 transition-all duration-300 ease-in-out
         ${getBackgroundColor()}
         ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
       `}
@@ -94,7 +94,7 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-gray-900" style={{ textAlign: 'right' }}>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100" style={{ textAlign: 'right' }}>
               {title}
             </h4>
             <button
@@ -102,13 +102,13 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
                 setIsVisible(false);
                 setTimeout(() => onClose(id), 300);
               }}
-              className="text-gray-400 hover:text-gray-600 transition-colors duration-200 mr-2"
+              className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 mr-2"
               title="إغلاق"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <p className="text-sm text-gray-600 mt-1" style={{ textAlign: 'right' }}>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1" style={{ textAlign: 'right' }}>
             {message}
           </p>
         </div>

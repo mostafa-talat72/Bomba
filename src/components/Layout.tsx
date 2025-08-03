@@ -17,9 +17,12 @@ import {
   LogOut,
   Utensils,
   Bell,
-  Server
+  Server,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useTheme } from '../context/ThemeContext';
 import NotificationCenter from './NotificationCenter';
 import PermissionGuard from './PermissionGuard';
 import ScrollButtons from './ScrollButtons';
@@ -34,6 +37,7 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { user, logout, sessions, orders, notifications } = useApp();
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const mainContentRef = useRef<HTMLElement>(null);
 
   // حساب عدد الجلسات النشطة لكل نوع
@@ -136,18 +140,18 @@ const Layout = () => {
   const [devicesOpen, setDevicesOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-gray-50 relative overflow-hidden container-responsive">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 relative overflow-hidden container-responsive">
       {/* Sidebar Overlay (Mobile) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black bg-opacity-50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black bg-opacity-50 dark:bg-opacity-70 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
       {/* Sidebar */}
       <div
         className={`
-          fixed inset-y-0 right-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out
+          fixed inset-y-0 right-0 z-40 w-64 bg-white dark:bg-gray-950 shadow-lg transform transition-transform duration-300 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
           lg:translate-x-0 lg:static lg:inset-0 lg:w-64 lg:z-10
         `}
@@ -163,33 +167,42 @@ const Layout = () => {
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden flex-shrink-0"
           >
-            <X className="h-6 w-6" />
+            <X className="h-6 w-6 text-white" />
           </button>
         </div>
         {/* User Info */}
-        <div className="p-3 sm:p-4 border-b border-gray-200 flex-shrink-0">
+        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center min-w-0">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center">
+                <User className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600 dark:text-primary-400" />
               </div>
             </div>
             <div className="mr-2 sm:mr-3 flex-1 min-w-0">
-              <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{user?.name}</p>
-              <p className="text-xs text-gray-500 truncate">
+              <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user?.name}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {user?.role === 'admin' ? 'مدير' :
                  user?.role === 'staff' ? 'موظف' :
                  user?.role === 'cashier' ? 'كاشير' :
                  user?.role === 'kitchen' ? 'مطبخ' : 'موظف'}
               </p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="p-1 text-gray-400 hover:text-red-600 transition-colors duration-200 flex-shrink-0"
-              title="تسجيل الخروج"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+            <div className="flex items-center space-x-1 space-x-reverse">
+              <button
+                onClick={toggleDarkMode}
+                className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-200 flex-shrink-0"
+                title={isDarkMode ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي"}
+              >
+                {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-1 text-gray-400 hover:text-red-600 transition-colors duration-200 flex-shrink-0"
+                title="تسجيل الخروج"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
         {/* Navigation */}
@@ -197,13 +210,13 @@ const Layout = () => {
           <div className="px-2 sm:px-3 space-y-1">
             {filteredNavigation.length === 0 ? (
               <div className="p-3 text-center">
-                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                   </svg>
                 </div>
-                <p className="text-xs text-red-600 font-medium">لا توجد صفحات متاحة</p>
-                <p className="text-xs text-gray-500 mt-1">لم يتم منحك أي صلاحيات</p>
+                <p className="text-xs text-red-600 dark:text-red-400 font-medium">لا توجد صفحات متاحة</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">لم يتم منحك أي صلاحيات</p>
               </div>
             ) : (
               filteredNavigation.map((item) => {
@@ -212,7 +225,7 @@ const Layout = () => {
                   return (
                     <div key={item.name}>
                       <button
-                        className={`group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-gray-700 hover:bg-gray-50 hover:text-gray-900 ${devicesOpen ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600' : ''}`}
+                        className={`group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 ${devicesOpen ? 'bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border-r-4 border-primary-600' : ''}`}
                         onClick={() => setDevicesOpen((open) => !open)}
                       >
                         <item.icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
@@ -231,14 +244,14 @@ const Layout = () => {
                               requiredPermissions={child.permissions}
                               showIfNoPermission={false}
                             >
-                              <Link
-                                to={child.href}
-                                className={`${isActive(child.href)
-                                  ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600'
-                                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                                  } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
-                                onClick={() => setSidebarOpen(false)}
-                              >
+                                                              <Link
+                                  to={child.href}
+                                  className={`${isActive(child.href)
+                                    ? 'bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border-r-4 border-primary-600'
+                                    : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                                    } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
+                                  onClick={() => setSidebarOpen(false)}
+                                >
                                 <child.icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                                 <span className="truncate">{child.name}</span>
                                 {(child.badge ?? 0) > 0 && (
@@ -265,8 +278,8 @@ const Layout = () => {
                     <Link
                       to={item.href}
                       className={`${isActive(item.href)
-                        ? 'bg-primary-50 text-primary-700 border-r-4 border-primary-600'
-                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border-r-4 border-primary-600'
+                        : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                         } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
                       onClick={() => setSidebarOpen(false)}
                     >
@@ -299,24 +312,24 @@ const Layout = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top Bar */}
-        <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0 fixed top-0 left-0 right-0 z-50 lg:static lg:z-auto">
+        <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 flex-shrink-0 fixed top-0 left-0 right-0 z-50 lg:static lg:z-auto">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6">
             <div className="flex items-center min-w-0">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-md hover:bg-gray-100 flex-shrink-0"
+                className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
               >
-                <Menu className="h-6 w-6" />
+                <Menu className="h-6 w-6 text-gray-900 dark:text-gray-100" />
               </button>
-              <h2 className="mr-2 sm:mr-4 text-lg sm:text-xl font-semibold text-gray-900 truncate">
+              <h2 className="mr-2 sm:mr-4 text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
                 {filteredNavigation.find(item => isActive(item.href))?.name ||
                  (filteredNavigation.length === 0 ? 'لا توجد صفحات متاحة' : 'لوحة التحكم')}
               </h2>
               {/* إشارة بصرية للسحب على الشاشات الصغيرة */}
               {showSwipeIndicator && (
-                <div className="lg:hidden flex items-center mr-2 text-xs text-gray-500">
+                <div className="lg:hidden flex items-center mr-2 text-xs text-gray-500 dark:text-gray-400">
                   <span className="mr-1">← اسحب لفتح القائمة</span>
-                  <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse"></div>
+                  <div className="w-1 h-1 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse"></div>
                 </div>
               )}
             </div>
@@ -325,7 +338,7 @@ const Layout = () => {
               <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
                 <NotificationCenter />
               </PermissionGuard>
-              <div className="hidden sm:block text-sm text-gray-500">
+              <div className="hidden sm:block text-sm text-gray-500 dark:text-gray-400">
                 {new Date().toLocaleDateString('ar-EG', {
                   weekday: 'long',
                   year: 'numeric',
@@ -340,7 +353,7 @@ const Layout = () => {
         {/* Page Content */}
         <main
           ref={mainContentRef}
-          className="flex-1 overflow-auto min-w-0 container-responsive lg:pt-0 pt-16"
+          className="flex-1 overflow-auto min-w-0 container-responsive lg:pt-0 pt-16 bg-gray-50 dark:bg-gray-900"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}

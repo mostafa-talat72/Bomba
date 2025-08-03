@@ -319,7 +319,7 @@ const NotificationCenter: React.FC = () => {
       {/* Notification Bell */}
       <button
         onClick={handleTogglePanel}
-        className="notification-bell relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+        className="notification-bell relative p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200"
       >
         <Bell className="h-6 w-6" />
         {unreadCount > 0 && (
@@ -352,10 +352,10 @@ const NotificationCenter: React.FC = () => {
               }
             }}
           />
-          <div className="notification-panel">
+          <div className="notification-panel bg-white dark:bg-gray-800">
           {/* Header */}
-          <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">الإشعارات</h3>
+          <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">الإشعارات</h3>
             <div className="flex items-center space-x-2 space-x-reverse">
               <button
                 onClick={handleMarkAllAsRead}
@@ -466,9 +466,9 @@ const NotificationCenter: React.FC = () => {
               filteredNotifications.map((notification) => (
                 <div
                   key={notification.id || notification._id || `notification-${Date.now()}-${Math.random()}`}
-                  className={`p-3 sm:p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors duration-200 ${
-                    isUnread(notification) ? 'bg-blue-50 border-r-4 border-r-blue-500' : 'bg-white border-r-4 border-r-green-500'
-                  } ${getPriorityColor(notification.priority)}`}
+                  className={`p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${
+  isUnread(notification) ? 'bg-blue-50 dark:bg-blue-900 border-r-4 border-r-blue-500' : 'bg-white dark:bg-gray-800 border-r-4 border-r-green-500'
+} ${getPriorityColor(notification.priority)}`}
                   onMouseEnter={() => handleNotificationHover(notification)}
                   onMouseLeave={handleNotificationLeave}
                 >
@@ -479,7 +479,7 @@ const NotificationCenter: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
                         <h4 className={`text-xs sm:text-sm font-medium ${
-                          isUnread(notification) ? 'text-gray-900' : 'text-gray-600'
+                          isUnread(notification) ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'
                         }`}>
                           {notification.title}
                           {isUnread(notification) && (
@@ -496,13 +496,13 @@ const NotificationCenter: React.FC = () => {
                           {isUnread(notification) ? (
                             <span className={`inline-flex items-center px-1 sm:px-2 py-1 rounded-full text-xs font-medium ${
                               hoveredNotification === (notification.id || notification._id)
-                                ? 'bg-yellow-100 text-yellow-700 animate-pulse'
-                                : 'bg-blue-100 text-blue-700'
+                                ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 animate-pulse'
+                                : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
                             }`}>
                               {hoveredNotification === (notification.id || notification._id) ? 'سيصبح مقروءاً...' : 'غير مقروء'}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-1 sm:px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                            <span className="inline-flex items-center px-1 sm:px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
                               <Check className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" /> مقروء
                             </span>
                           )}
@@ -511,7 +511,7 @@ const NotificationCenter: React.FC = () => {
                               const id = notification.id || notification._id;
                               if (id) handleMarkAsRead(id);
                             }}
-                            className="text-gray-400 hover:text-gray-600"
+                            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                             title="تحديد كمقروء"
                           >
                             <Check className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -521,7 +521,7 @@ const NotificationCenter: React.FC = () => {
                               const id = notification.id || notification._id;
                               if (id) handleDelete(id);
                             }}
-                            className="text-gray-400 hover:text-red-600"
+                            className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
                             title="حذف"
                           >
                             <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -529,7 +529,7 @@ const NotificationCenter: React.FC = () => {
                         </div>
                       </div>
                       <p className={`text-xs sm:text-sm mt-1 ${
-                        isUnread(notification) ? 'text-gray-900 font-medium' : 'text-gray-600'
+                        isUnread(notification) ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-400'
                       }`}>
                         {notification.message}
                       </p>
@@ -539,13 +539,13 @@ const NotificationCenter: React.FC = () => {
                             // Handle action navigation
                             window.location.href = notification.actionUrl!;
                           }}
-                          className="mt-2 text-xs sm:text-sm text-blue-600 hover:text-blue-800 font-medium"
+                          className="mt-2 text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
                         >
                           {notification.actionText}
                         </button>
                       )}
                       <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between mt-2 text-xs space-y-1 sm:space-y-0 ${
-                        isUnread(notification) ? 'text-gray-700' : 'text-gray-500'
+                        isUnread(notification) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         <span>{notification.createdBy?.name}</span>
                         <span>{new Date(notification.createdAt).toLocaleString('ar-EG')}</span>
@@ -558,7 +558,7 @@ const NotificationCenter: React.FC = () => {
           </div>
 
           {/* Footer */}
-          <div className="p-3 sm:p-4 border-t border-gray-200">
+          <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={async () => {
                 setIsOpen(false);
@@ -576,7 +576,7 @@ const NotificationCenter: React.FC = () => {
                   }
                 }
               }}
-              className="w-full text-center text-xs sm:text-sm text-gray-600 hover:text-gray-800"
+              className="w-full text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
               إغلاق
             </button>
