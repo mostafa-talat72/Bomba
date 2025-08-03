@@ -204,7 +204,7 @@ const NotificationManagement = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Bell className="h-8 w-8 text-primary-600 dark:text-primary-400 ml-3" />
+          <Bell className="h-8 w-8 text-orange-600 dark:text-orange-400 ml-3" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الإشعارات</h1>
             <p className="text-gray-600 dark:text-gray-400">عرض وإدارة الإشعارات حسب صلاحياتك</p>
@@ -214,7 +214,7 @@ const NotificationManagement = () => {
           <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
             <button
               onClick={handleMarkAllAsRead}
-              className="px-4 py-2 bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border border-primary-200 dark:border-primary-700 hover:bg-primary-100 dark:hover:bg-primary-700 rounded-lg transition-colors duration-200 shadow-sm"
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 shadow-sm"
             >
               تحديد الكل كمقروء
             </button>
@@ -227,7 +227,7 @@ const NotificationManagement = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200">
             <div className="flex items-center">
-              <Bell className="h-8 w-8 text-primary-600 dark:text-primary-400" />
+              <Bell className="h-8 w-8 text-orange-600 dark:text-orange-400" />
               <div className="mr-3">
                 <p className="text-sm text-gray-600 dark:text-gray-400">إجمالي الإشعارات</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal(stats.total)}</p>

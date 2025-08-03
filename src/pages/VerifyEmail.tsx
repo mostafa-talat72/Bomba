@@ -53,7 +53,7 @@ const VerifyEmail: React.FC = () => {
             </div>
             <h2 className="text-xl font-bold text-green-700 mb-2">تم تفعيل الحساب</h2>
             <p className="text-gray-700 mb-4">{message}</p>
-            <a href="/" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">تسجيل الدخول</a>
+            <a href="/" className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors">تسجيل الدخول</a>
           </>
         )}
         {status === 'error' && (
@@ -63,7 +63,7 @@ const VerifyEmail: React.FC = () => {
             </div>
             <h2 className="text-xl font-bold text-red-700 mb-2">فشل التفعيل</h2>
             <p className="text-gray-700 mb-4">{message}</p>
-            <a href="/" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">العودة للرئيسية</a>
+            <a href="/" className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors">العودة للرئيسية</a>
           </>
         )}
       </div>

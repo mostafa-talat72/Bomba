@@ -379,7 +379,7 @@ const Inventory = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Package className="h-8 w-8 text-primary-600 dark:text-primary-400 ml-3" />
+          <Package className="h-8 w-8 text-orange-600 dark:text-orange-400 ml-3" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة المخزون</h1>
             <p className="text-gray-600 dark:text-gray-400">متابعة المواد الخام والمنتجات</p>
@@ -387,7 +387,7 @@ const Inventory = () => {
         </div>
         <button
           onClick={openAddModal}
-          className="bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border border-primary-200 dark:border-primary-700 hover:bg-primary-100 dark:hover:bg-primary-700 px-4 py-2 rounded-lg flex items-center transition-colors duration-200 shadow-sm"
+          className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 shadow-sm"
         >
           <Plus className="h-5 w-5 ml-2" />
           إضافة مخزون
@@ -797,9 +797,9 @@ const Inventory = () => {
                   >عرض صفحة التكاليف</button>
                 </div>
               )}
-              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white py-2 rounded-lg font-bold transition-colors duration-200 shadow-sm" disabled={loading}>
-                {loading ? 'جاري الحفظ...' : 'حفظ'}
-              </button>
+                              <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 rounded-lg font-bold transition-colors duration-200 shadow-sm" disabled={loading}>
+                  {loading ? 'جاري الحفظ...' : 'حفظ'}
+                </button>
             </form>
             </div>
           </div>
@@ -868,7 +868,7 @@ const Inventory = () => {
               </div>
               {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
               {success && <div className="text-green-600 dark:text-green-400 text-sm">{success}</div>}
-              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white py-2 rounded-lg font-bold transition-colors duration-200 shadow-sm" disabled={loading}>
+              <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 rounded-lg font-bold transition-colors duration-200 shadow-sm" disabled={loading}>
                 {loading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
               </button>
             </form>
@@ -903,12 +903,12 @@ const Inventory = () => {
             {error && <div className="text-red-600 dark:text-red-400 text-sm mb-2">{error}</div>}
             <div className="flex gap-4 justify-center">
               <button
-                className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg font-bold transition-colors duration-200"
+                className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={loading}
               >إلغاء</button>
               <button
-                className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200"
+                className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200"
                 onClick={handleDelete}
                 disabled={loading}
               >{loading ? 'جاري الحذف...' : 'حذف'}</button>

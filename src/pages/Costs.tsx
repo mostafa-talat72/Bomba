@@ -396,19 +396,19 @@ const Costs = () => {
       {/* Header */}
       <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center">
-          <Wallet className="h-8 w-8 text-primary-600 dark:text-primary-400 ml-3" />
+          <Wallet className="h-8 w-8 text-orange-600 dark:text-orange-400 ml-3" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة التكاليف</h1>
             <p className="text-gray-600 dark:text-gray-400">متابعة وإدارة المصروفات والتكاليف</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowAddCost(true)}
-          className="bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border border-primary-200 dark:border-primary-700 hover:bg-primary-100 dark:hover:bg-primary-700 px-4 py-2 rounded-lg flex items-center transition-colors duration-200 shadow-sm"
-        >
-          <Plus className="h-5 w-5 ml-2" />
-          إضافة تكلفة
-        </button>
+                  <button
+            onClick={() => setShowAddCost(true)}
+            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 shadow-sm"
+          >
+            <Plus className="h-5 w-5 ml-2" />
+            إضافة تكلفة
+          </button>
       </div>
 
       {/* Filters */}
@@ -904,14 +904,14 @@ const Costs = () => {
                   resetForm();
                   setSelectedCost(null);
                 }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 shadow-sm"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 shadow-sm"
               >
                 {loading ? 'جاري الحفظ...' : (showEditCost ? 'تحديث التكلفة' : 'إضافة المصروف')}
               </button>

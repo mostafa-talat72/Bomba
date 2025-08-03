@@ -440,7 +440,7 @@ const Users = () => {
       {/* Header */}
       <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center">
-          <UsersIcon className="h-8 w-8 text-primary-600 dark:text-primary-400 ml-3" />
+          <UsersIcon className="h-8 w-8 text-orange-600 dark:text-orange-400 ml-3" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">إدارة المستخدمين</h1>
             <p className="text-gray-600 dark:text-gray-400">إدارة الحسابات والصلاحيات</p>
@@ -460,7 +460,7 @@ const Users = () => {
               resetForm();
               setShowAddUser(true);
             }}
-            className="bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 shadow-sm"
+            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 shadow-sm"
           >
             <Plus className="h-5 w-5 ml-2" />
             إضافة مستخدم
@@ -874,7 +874,7 @@ const Users = () => {
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded transition-colors duration-200 disabled:opacity-50 shadow-sm"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded transition-colors duration-200 disabled:opacity-50 shadow-sm"
               >
                 {loading ? 'جاري الحفظ...' : (showEditUser ? 'تحديث المستخدم' : 'إضافة المستخدم')}
               </button>
@@ -912,7 +912,7 @@ const Users = () => {
               {/* User Header */}
               <div className="flex items-center">
                 <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-800/20 dark:to-primary-700/20 rounded-full flex items-center justify-center">
-                  <User className="h-10 w-10 text-primary-600 dark:text-primary-400" />
+                  <User className="h-10 w-10 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div className="mr-4 flex-1">
                   <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100">{selectedUser.name}</h4>
@@ -1026,7 +1026,7 @@ const Users = () => {
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex justify-end gap-3">
               <button
                 onClick={() => handleEdit(selectedUser)}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded transition-colors duration-200 shadow-sm"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded transition-colors duration-200 shadow-sm"
               >
                 تعديل المستخدم
               </button>
@@ -1035,7 +1035,7 @@ const Users = () => {
                   setShowViewUser(false);
                   setSelectedUser(null);
                 }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors duration-200"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded transition-colors duration-200"
               >
                 إغلاق
               </button>
@@ -1091,14 +1091,14 @@ const Users = () => {
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
               <button
                 onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); setDeletePassword(''); setDeleteError(''); }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors duration-200"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded transition-colors duration-200"
                 disabled={deleteLoading}
               >
                 إلغاء
               </button>
               <button
                 onClick={confirmDelete}
-                className={`px-4 py-2 rounded transition-colors duration-200 disabled:opacity-50 shadow-sm ${deleteTarget.role === 'admin' ? 'bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white' : 'bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white'}`}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded transition-colors duration-200 disabled:opacity-50 shadow-sm"
                 disabled={deleteLoading}
               >
                 {deleteLoading ? 'جاري الحذف...' : (deleteTarget.role === 'admin' ? 'تأكيد الحذف' : 'نعم، احذف')}
