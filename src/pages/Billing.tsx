@@ -644,7 +644,7 @@ const Billing = () => {
             {/* Footer */}
             <div className={`p-3 sm:p-4 border-t border-gray-100 dark:border-gray-700 rounded-b-lg ${bill.status === 'paid' ? 'bg-green-50 dark:bg-green-900' : 'bg-gray-50 dark:bg-gray-700'
               }`}>
-              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600 dark:text-green-400' : 'text-primary-600 dark:text-primary-400'
+              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'
                 }`}>
                 {bill.status === 'paid' ? (
                   <>
@@ -1196,14 +1196,14 @@ const Billing = () => {
                     .join('|');
                     const itemKey = `${item.name}|${item.price}|${addonsKey}`;
                   return (
-                    <div key={itemKey} className="bg-gray-50 rounded-lg p-4 border flex flex-col gap-2">
+                    <div key={itemKey} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600 flex flex-col gap-2">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-bold text-primary-700">
-                            {item.name}
+                        <div className="flex items-center gap-2">
+                            <span className="text-base font-bold text-gray-900 dark:text-white">{item.name}</span>
                           {/* زر - للصنف الرئيسي */}
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100"
+                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
                             onClick={() => {
                               const newQty = Math.max(0, (itemQuantities[itemKey] || 0) - 1);
                               setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
@@ -1216,11 +1216,11 @@ const Billing = () => {
                             }}
                             disabled={(itemQuantities[itemKey] || 0) <= 0}
                           >-</button>
-                          <span className="mx-2 w-6 text-center select-none font-bold text-primary-700">{itemQuantities[itemKey] || 0}</span>
+                          <span className="mx-2 w-6 text-center select-none font-bold text-gray-900 dark:text-white text-base">{itemQuantities[itemKey] || 0}</span>
                           {/* زر + للصنف الرئيسي */}
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100"
+                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
                             onClick={() => {
                               const newQty = Math.min(item.remainingQuantity, (itemQuantities[itemKey] || 0) + 1);
                               setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
@@ -1231,7 +1231,7 @@ const Billing = () => {
                           {/* زر دفع الكمية بالكامل للصنف الرئيسي */}
                           <button
                             type="button"
-                            className="ml-2 px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs"
+                            className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs font-medium"
                             onClick={() => {
                               setItemQuantities({ ...itemQuantities, [itemKey]: item.remainingQuantity });
                               setSelectedItems(prev => ({ ...prev, [itemKey]: item.remainingQuantity > 0 }));
@@ -1239,18 +1239,18 @@ const Billing = () => {
                             disabled={(itemQuantities[itemKey] || 0) === item.remainingQuantity}
                           >دفع الكمية بالكامل</button>
                         </div>
-                        <div className="text-xs text-gray-500">{formatCurrency(item.price)}</div>
+                        <div className="text-sm text-gray-700 dark:text-gray-200 font-bold">{formatCurrency(item.price)}</div>
                       </div>
                       <div className="flex gap-4 text-sm">
-                        <div>الكمية: <span className="font-bold">{formatDecimal(item.totalQuantity)}</span></div>
-                        <div>المدفوع: <span className="text-green-700 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
-                        <div>المتبقي: <span className="text-yellow-700 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>
+                        <div className="text-gray-700 dark:text-gray-300">الكمية: <span className="font-bold text-gray-900 dark:text-white">{formatDecimal(item.totalQuantity)}</span></div>
+                        <div className="text-gray-700 dark:text-gray-300">المدفوع: <span className="text-green-600 dark:text-green-400 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
+                        <div className="text-gray-700 dark:text-gray-300">المتبقي: <span className="text-orange-600 dark:text-orange-400 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>
                       </div>
                       {/* اختيار الكمية للدفع */}
                       {/* تم نقل أزرار التحكم بجانب اسم الصنف في الأعلى ولن تتكرر هنا */}
                       {/* عرض الإضافات */}
                       {item.addons && item.addons.length > 0 && (
-                        <div className="mt-2 pl-4 border-r-2 border-yellow-200">
+                        <div className="mt-2 pl-4 border-r-2 border-orange-200 dark:border-orange-600">
                             {item.addons
                               .filter(addon => addon.remainingQuantity > 0) // عرض الإضافات التي لها كمية متبقية فقط
                               .map((addon) => {
@@ -1259,26 +1259,27 @@ const Billing = () => {
                             // إذا كانت الإضافة برسوم ثابتة، لا يوجد إدخال كمية
                             return (
                               <div key={addonKey} className="flex flex-col gap-1 mb-2">
-                                <div className="flex items-center gap-2 text-sm text-yellow-800">
-                                  <span>↳ إضافة: {addon.name}</span>
-                                  <span>({formatCurrency(addon.price)})</span>
-                                  <span>الكمية: <b>{formatDecimal(addon.totalQuantity)}</b></span>
-                                  <span>المدفوع: <b className="text-green-700">{formatDecimal(addon.paidQuantity)}</b></span>
-                                  <span>المتبقي: <b className="text-yellow-700">{formatDecimal(addon.remainingQuantity)}</b></span>
+                                <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                  <span className="font-medium">↳ إضافة: <span className="font-semibold text-gray-900 dark:text-white">{addon.name}</span></span>
+                                  <span className="font-medium">({formatCurrency(addon.price)})</span>
+                                  <span className="font-medium">الكمية: <b className="text-gray-900 dark:text-white">{formatDecimal(addon.totalQuantity)}</b></span>
+                                  <span className="font-medium">المدفوع: <b className="text-green-600 dark:text-green-400">{formatDecimal(addon.paidQuantity)}</b></span>
+                                  <span className="font-medium">المتبقي: <b className="text-orange-600 dark:text-orange-400">{formatDecimal(addon.remainingQuantity)}</b></span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <input
                                     type="checkbox"
                                     checked={isAddonSelected}
                                     onChange={e => setSelectedItems({ ...selectedItems, [addonKey]: e.target.checked })}
+                                    className="dark:bg-gray-700 dark:border-gray-500"
                                   />
                                     <div className="flex items-center justify-between gap-2 mt-2">
-                                      <div className="font-bold text-yellow-800 flex-1 text-right">{addon.name}</div>
-                                      <div className="text-xs text-gray-500 w-20 text-center">{formatCurrency(addon.price)}</div>
+                                      <div className="font-bold text-gray-900 dark:text-white flex-1 text-right text-base">{addon.name}</div>
+                                      <div className="text-sm text-gray-700 dark:text-gray-200 w-20 text-center font-bold">{formatCurrency(addon.price)}</div>
                                       <div className="flex items-center gap-2">
                                         <button
                                           type="button"
-                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100"
+                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
                                           onClick={() => {
                                             const newQty = Math.max(0, (itemQuantities[addonKey] || 0) - 1);
                                             setItemQuantities({ ...itemQuantities, [addonKey]: newQty });
@@ -1291,10 +1292,10 @@ const Billing = () => {
                                           }}
                                           disabled={(itemQuantities[addonKey] || 0) <= 0}
                                         >-</button>
-                                        <span className="mx-2 w-6 text-center select-none font-bold text-yellow-800">{itemQuantities[addonKey] || 0}</span>
+                                        <span className="mx-2 w-6 text-center select-none font-bold text-gray-900 dark:text-white text-base">{itemQuantities[addonKey] || 0}</span>
                                         <button
                                           type="button"
-                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100"
+                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
                                           onClick={() => {
                                             const newQty = Math.min(addon.remainingQuantity, (itemQuantities[addonKey] || 0) + 1);
                                             setItemQuantities({ ...itemQuantities, [addonKey]: newQty });
@@ -1304,7 +1305,7 @@ const Billing = () => {
                                         >+</button>
                                         <button
                                           type="button"
-                                          className="ml-2 px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs"
+                                          className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs font-medium"
                                           onClick={() => {
                                             setItemQuantities({ ...itemQuantities, [addonKey]: addon.remainingQuantity });
                                             setSelectedItems(prev => ({ ...prev, [addonKey]: addon.remainingQuantity > 0 }));
@@ -1331,31 +1332,31 @@ const Billing = () => {
                 return itemsWithRemaining.length > 0;
               })() && (
                 <div className="mb-6">
-                  <h4 className="font-medium text-gray-900 mb-4">طريقة الدفع</h4>
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4 text-base">طريقة الدفع</h4>
                   <div className="grid grid-cols-3 gap-3">
                     <button
                       onClick={() => setPartialPaymentMethod('cash')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'cash' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 hover:border-gray-300'
+                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'cash' ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-500 hover:border-gray-300 dark:hover:border-gray-400 bg-white dark:bg-gray-700'
                         }`}
                     >
                       <div className="text-2xl mb-1">💵</div>
-                      <div className="text-sm font-medium">نقداً</div>
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white">نقداً</div>
                     </button>
                     <button
                       onClick={() => setPartialPaymentMethod('card')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'card' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 hover:border-gray-300'
+                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'card' ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-500 hover:border-gray-300 dark:hover:border-gray-400 bg-white dark:bg-gray-700'
                         }`}
                     >
                       <div className="text-2xl mb-1">💳</div>
-                      <div className="text-sm font-medium">بطاقة</div>
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white">بطاقة</div>
                     </button>
                     <button
                       onClick={() => setPartialPaymentMethod('transfer')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'transfer' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 hover:border-gray-300'
+                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'transfer' ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-500 hover:border-gray-300 dark:hover:border-gray-400 bg-white dark:bg-gray-700'
                         }`}
                     >
                       <div className="text-2xl mb-1">📱</div>
-                      <div className="text-sm font-medium">تحويل</div>
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white">تحويل</div>
                     </button>
                   </div>
                 </div>
@@ -1363,8 +1364,8 @@ const Billing = () => {
 
               {/* ملخص الدفع */}
               {Object.keys(selectedItems).some(id => selectedItems[id]) && (
-                <div className="mb-6 bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900 mb-2">ملخص الدفع</h4>
+                <div className="mb-6 bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
+                  <h4 className="font-semibold text-blue-900 dark:text-white mb-2 text-base">ملخص الدفع</h4>
                   <div className="space-y-2">
                     {aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
                       .filter(item => {
@@ -1383,24 +1384,24 @@ const Billing = () => {
                         const itemKey = `${item.name}|${item.price}|${addonsKey}`;
                         const quantity = itemQuantities[itemKey] || 0;
                         return (
-                          <div key={index} className="flex flex-col text-sm mb-3 p-2 bg-blue-100 rounded">
-                            <span className="text-blue-800 font-medium">
+                          <div key={index} className="flex flex-col text-sm mb-3 p-2 bg-blue-100 dark:bg-blue-800 rounded">
+                            <span className="text-blue-800 dark:text-blue-200 font-semibold text-base">
                               {item.name}
                               {item.addons && item.addons.length > 0 && (
-                                <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                                <span className="ml-2 text-xs bg-orange-100 dark:bg-orange-800 text-orange-800 dark:text-orange-200 px-2 py-1 rounded-full font-medium">
                                   إضافات
                                 </span>
                               )}
                               {' '}× {formatDecimal(quantity)}
                             </span>
-                            <span className="font-bold text-blue-900 mt-1">
+                            <span className="font-bold text-blue-900 dark:text-blue-100 mt-1 text-base">
                               المجموع: {formatCurrency(item.price * quantity)}
                             </span>
                           </div>
                         );
                       })}
-                    <div className="border-t border-blue-200 pt-2 mt-2">
-                      <div className="flex justify-between font-medium text-blue-900">
+                    <div className="border-t border-blue-200 dark:border-blue-700 pt-2 mt-2">
+                      <div className="flex justify-between font-semibold text-blue-900 dark:text-white text-base">
                         <span>المجموع:</span>
                         <span>
                           {formatCurrency(

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MenuItem, InventoryItem } from '../services/api';
+import { MenuItem } from '../services/api';
 import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
 
 const Menu: React.FC = () => {
@@ -181,7 +181,7 @@ const Menu: React.FC = () => {
 	});
 
 	const getStatusColor = (isAvailable: boolean) => {
-		return isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+		return isAvailable ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
 	};
 
 	const getStatusText = (isAvailable: boolean) => {
@@ -307,26 +307,23 @@ const Menu: React.FC = () => {
 		}
 	};
 
-  const getIngredientDisplay = (ing: { item: string; quantity: number; unit: string }) => {
-    const ingredientItem = inventoryItems.find(item => item.id === ing.item);
-    return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
-  };
+
 
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
 			{/* Header */}
-			<div className="flex items-center justify-between">
+			<div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
 				<div className="flex items-center">
-					<Utensils className="h-8 w-8 text-primary-600 ml-3" />
+					<Utensils className="h-8 w-8 text-orange-600 dark:text-orange-400 ml-3" />
 					<div>
-						<h1 className="text-2xl font-bold text-gray-900">إدارة المنيو</h1>
-						<p className="text-gray-600">إدارة قائمة الطعام والمشروبات</p>
+						<h1 className="text-2xl font-bold text-gray-900 dark:text-white">إدارة المنيو</h1>
+						<p className="text-gray-600 dark:text-gray-400">إدارة قائمة الطعام والمشروبات</p>
 					</div>
 				</div>
 				<button
 					onClick={handleAddItem}
-					className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+					className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 font-medium"
 				>
 					<Plus className="h-5 w-5 ml-2" />
 					إضافة عنصر
@@ -334,27 +331,27 @@ const Menu: React.FC = () => {
 			</div>
 
 			{/* Search and Filter */}
-			<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+			<div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 					<div>
-						<label className="block text-sm font-medium text-gray-700 mb-2">البحث</label>
+						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">البحث</label>
 						<div className="relative">
-							<Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+							<Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
 							<input
 								type="text"
 								value={searchTerm}
 								onChange={(e) => setSearchTerm(e.target.value)}
 								placeholder="البحث في العناصر..."
-								className="w-full pr-10 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+								className="w-full pr-10 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 							/>
 						</div>
 					</div>
 					<div>
-						<label className="block text-sm font-medium text-gray-700 mb-2">الفئة</label>
+						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
 						<select
 							value={selectedCategory}
 							onChange={(e) => setSelectedCategory(e.target.value)}
-							className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+							className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 						>
 							<option value="all">جميع الفئات</option>
 							{categories.map(category => (
@@ -363,7 +360,7 @@ const Menu: React.FC = () => {
 						</select>
 					</div>
 					<div className="flex items-end">
-						<div className="text-sm text-gray-600">
+						<div className="text-sm text-gray-600 dark:text-gray-400">
 							إجمالي العناصر: {filteredItems.length}
 						</div>
 					</div>
@@ -373,30 +370,30 @@ const Menu: React.FC = () => {
 			{/* Menu Items Grid */}
 			{loading ? (
 				<div className="text-center py-8">
-					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-					<p className="mt-2 text-gray-600">جاري التحميل...</p>
+					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 dark:border-orange-400 mx-auto"></div>
+					<p className="mt-2 text-gray-600 dark:text-gray-400">جاري التحميل...</p>
 				</div>
 			) : (
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 					{filteredItems.map((item) => (
-						<div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+						<div key={item.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow duration-200">
 							<div className="flex items-start justify-between mb-4">
 								<div className="flex-1">
 									<div className="flex items-center gap-2 mb-1">
-										<h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
+										<h3 className="text-lg font-semibold text-gray-900 dark:text-white">{item.name}</h3>
 										{item.isNew && (
-											<span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">جديد</span>
+											<span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full">جديد</span>
 										)}
 										{item.isPopular && (
-											<Star className="h-4 w-4 text-yellow-500" />
+											<Star className="h-4 w-4 text-yellow-500 dark:text-yellow-400" />
 										)}
 									</div>
-									<p className="text-sm text-gray-600 mb-2">{item.category}</p>
+									<p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{item.category}</p>
 									{item.description && (
-										<p className="text-sm text-gray-500 mb-3">{item.description}</p>
+										<p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{item.description}</p>
 									)}
 									{item.ingredients && item.ingredients.length > 0 && (
-										<div className="text-xs text-blue-600 mb-2">
+										<div className="text-xs text-blue-600 dark:text-blue-400 mb-2">
 											الخامات: {item.ingredients.map(ing => {
 												const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
 												return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
@@ -411,13 +408,13 @@ const Menu: React.FC = () => {
 
 							<div className="space-y-2 mb-4">
 								<div className="flex items-center justify-between">
-									<span className="text-xl font-bold text-green-600">{formatCurrency(item.price)}</span>
-									<div className="flex items-center text-sm text-gray-500">
+									<span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(item.price)}</span>
+									<div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
 										<TrendingUp className="h-4 w-4 ml-1" />
 										{formatDecimal(item.orderCount)} طلب
 									</div>
 								</div>
-								<div className="flex items-center text-sm text-gray-500">
+								<div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
 									<Clock className="h-4 w-4 ml-1" />
 									{formatDecimal(item.preparationTime)} دقيقة للتحضير
 								</div>
@@ -426,14 +423,14 @@ const Menu: React.FC = () => {
 							<div className="flex items-center justify-end space-x-2 space-x-reverse">
 								<button
 									onClick={() => handleEditItem(item)}
-									className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+									className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors duration-200"
 									title="تعديل"
 								>
 									<Edit className="h-4 w-4" />
 								</button>
 								<button
 									onClick={() => handleDeleteItem(item.id)}
-									className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+									className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200"
 									title="حذف"
 								>
 									<Trash2 className="h-4 w-4" />
@@ -446,8 +443,8 @@ const Menu: React.FC = () => {
 
 			{!loading && filteredItems.length === 0 && (
 				<div className="text-center py-8">
-					<Utensils className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-					<p className="text-gray-500">لا توجد عناصر في القائمة</p>
+					<Utensils className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+					<p className="text-gray-500 dark:text-gray-400">لا توجد عناصر في القائمة</p>
 				</div>
 			)}
 
@@ -461,15 +458,15 @@ const Menu: React.FC = () => {
 						}
 					}}
 				>
-					<div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-						<div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
+						<div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
 							<div className="flex items-center justify-between">
-								<h3 className="text-lg font-semibold text-gray-900">
+								<h3 className="text-lg font-semibold text-gray-900 dark:text-white">
 									{editingItem ? 'تعديل العنصر' : 'إضافة عنصر جديد'}
 								</h3>
 								<button
 									onClick={() => setShowAddModal(false)}
-									className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+									className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
 								>
 									<X className="h-6 w-6" />
 								</button>
@@ -478,23 +475,23 @@ const Menu: React.FC = () => {
 						<div className="p-6">
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">اسم العنصر *</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم العنصر *</label>
 								<input
 									type="text"
 									value={formData.name}
 									onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 									placeholder="مثال: قهوة تركية"
 								/>
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">السعر (ج.م) *</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">السعر (ج.م) *</label>
 								<input
 									type="number"
 									value={formData.price}
 									onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 									placeholder="0.00"
 									min="0"
 									step="0.01"
@@ -502,11 +499,11 @@ const Menu: React.FC = () => {
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">الفئة *</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة *</label>
 								<select
 									value={formData.category}
 									onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 								>
 									<option value="">اختر الفئة</option>
 									{categories.map(category => (
@@ -516,12 +513,12 @@ const Menu: React.FC = () => {
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">وقت التحضير (دقيقة)</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">وقت التحضير (دقيقة)</label>
 								<input
 									type="number"
 									value={formData.preparationTime}
 									onChange={(e) => setFormData({ ...formData, preparationTime: e.target.value })}
-									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 									min="1"
 									max="60"
 								/>
@@ -533,36 +530,36 @@ const Menu: React.FC = () => {
 											type="checkbox"
 											checked={formData.isAvailable}
 											onChange={(e) => setFormData({ ...formData, isAvailable: e.target.checked })}
-											className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+											className="h-4 w-4 text-orange-600 dark:text-orange-400 focus:ring-orange-500 dark:focus:ring-orange-400 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
 										/>
-										<span className="mr-2 text-sm text-gray-700">متاح للطلب</span>
+										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">متاح للطلب</span>
 									</label>
 									<label className="flex items-center">
 								<input
 											type="checkbox"
 											checked={formData.isPopular}
 											onChange={(e) => setFormData({ ...formData, isPopular: e.target.checked })}
-											className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+											className="h-4 w-4 text-orange-600 dark:text-orange-400 focus:ring-orange-500 dark:focus:ring-orange-400 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
 										/>
-										<span className="mr-2 text-sm text-gray-700">شائع</span>
+										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">شائع</span>
 									</label>
 							</div>
 
 							<div className="md:col-span-2">
-								<label className="block text-sm font-medium text-gray-700 mb-2">الوصف</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
 								<textarea
 									value={formData.description}
 									onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-									className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 									rows={3}
 									placeholder="وصف مختصر للعنصر..."
 								/>
 							</div>
 
 							<div className="md:col-span-2">
-									<label className="block text-sm font-medium text-gray-700 mb-3">
+									<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
 										الخامات المرتبطة
-										<span className="text-xs text-gray-500 mr-2 font-normal">
+										<span className="text-xs text-gray-500 dark:text-gray-400 mr-2 font-normal">
 											({(() => {
 												const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
 												const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
@@ -574,7 +571,7 @@ const Menu: React.FC = () => {
 											<button
 												type="button"
 												onClick={() => fetchInventoryItems()}
-												className="text-xs text-blue-600 hover:text-blue-800 mr-2"
+												className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 mr-2"
 											>
 												تحديث الخامات
 											</button>
@@ -583,25 +580,25 @@ const Menu: React.FC = () => {
 
 									{/* تحذير إذا لم تكن هناك خامات مضافة */}
 									{formData.ingredients.length === 0 && (
-										<div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+										<div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-3">
 											<div className="flex items-center">
-												<svg className="h-4 w-4 text-red-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<svg className="h-4 w-4 text-red-600 dark:text-red-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 													<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
 												</svg>
-												<span className="text-red-800 text-sm font-medium">يجب إضافة خامة واحدة على الأقل</span>
+												<span className="text-red-800 dark:text-red-300 text-sm font-medium">يجب إضافة خامة واحدة على الأقل</span>
 											</div>
 										</div>
 									)}
 
 									<div className="space-y-3 max-h-60 overflow-y-auto">
 									{formData.ingredients.map((ingredient, index) => (
-											<div key={index} className="flex items-center gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+											<div key={index} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
 											<div className="flex-1">
-													<label className="block text-xs text-gray-600 mb-1">الخامة</label>
+													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">الخامة</label>
 												<select
 													value={ingredient.item}
 													onChange={(e) => updateIngredient(index, 'item', e.target.value)}
-														className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+														className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 												>
 													<option value="">اختر الخامة</option>
 													{inventoryItems && inventoryItems.length > 0 ? (
@@ -636,31 +633,31 @@ const Menu: React.FC = () => {
 												</select>
 											</div>
 											<div className="w-24">
-													<label className="block text-xs text-gray-600 mb-1">الكمية</label>
+													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">الكمية</label>
 												<input
 													type="number"
 													value={ingredient.quantity}
 													onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
-														className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+														className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 														placeholder="0"
 													min="0"
 													step="0.1"
 												/>
 											</div>
 											<div className="w-24">
-													<label className="block text-xs text-gray-600 mb-1">
+													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
 														الوحدة
 														{(() => {
 															const selectedInventoryItem = inventoryItems.find(item => item.id === ingredient.item);
 															return selectedInventoryItem ? (
-																<span className="text-blue-600 font-medium"> ({selectedInventoryItem.unit})</span>
+																<span className="text-orange-600 dark:text-orange-400 font-medium"> ({selectedInventoryItem.unit})</span>
 															) : '';
 														})()}
 													</label>
 												<select
 													value={ingredient.unit}
 													onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
-														className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+														className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-orange-500 dark:focus:border-orange-400 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
 													>
 														{(() => {
 															const selectedInventoryItem = inventoryItems.find(item => item.id === ingredient.item);
@@ -679,7 +676,7 @@ const Menu: React.FC = () => {
 											<button
 												type="button"
 												onClick={() => removeIngredient(index)}
-													className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200 self-end"
+													className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200 self-end"
 											>
 												<Trash2 className="h-4 w-4" />
 											</button>
@@ -693,26 +690,26 @@ const Menu: React.FC = () => {
 
 											if (availableItems.length === 0 && availableRawMaterials.length > 0) {
 												return (
-													<div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+													<div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-center">
 														<div className="flex items-center justify-center mb-2">
-															<svg className="h-5 w-5 text-yellow-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<svg className="h-5 w-5 text-yellow-600 dark:text-yellow-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
 															</svg>
-															<span className="text-yellow-800 font-medium">جميع الخامات مختارة بالفعل</span>
+															<span className="text-yellow-800 dark:text-yellow-300 font-medium">جميع الخامات مختارة بالفعل</span>
 														</div>
-														<p className="text-sm text-yellow-700">لا يمكن إضافة المزيد من الخامات</p>
+														<p className="text-sm text-yellow-700 dark:text-yellow-400">لا يمكن إضافة المزيد من الخامات</p>
 													</div>
 												);
 											} else if (availableRawMaterials.length === 0 && inventoryItems.length > 0) {
 												return (
-													<div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+													<div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center">
 														<div className="flex items-center justify-center mb-2">
-															<svg className="h-5 w-5 text-blue-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<svg className="h-5 w-5 text-blue-600 dark:text-blue-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 															</svg>
-															<span className="text-blue-800 font-medium">لا توجد خامات متاحة</span>
+															<span className="text-blue-800 dark:text-blue-300 font-medium">لا توجد خامات متاحة</span>
 														</div>
-														<p className="text-sm text-blue-700">يجب إضافة خامات في المخزون أولاً</p>
+														<p className="text-sm text-blue-700 dark:text-blue-400">يجب إضافة خامات في المخزون أولاً</p>
 													</div>
 												);
 											} else {
@@ -720,7 +717,7 @@ const Menu: React.FC = () => {
 											<button
 												type="button"
 												onClick={addIngredient}
-														className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-500 hover:text-primary-600 transition-colors duration-200 flex items-center justify-center"
+														className="w-full p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:border-orange-500 dark:hover:border-orange-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors duration-200 flex items-center justify-center"
 													>
 														<Plus className="h-4 w-4 ml-2" />
 														إضافة خامة
@@ -736,7 +733,7 @@ const Menu: React.FC = () => {
 							<button
 									type="button"
 								onClick={() => setShowAddModal(false)}
-								className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+								className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200 font-medium"
 							>
 								إلغاء
 							</button>
@@ -744,7 +741,7 @@ const Menu: React.FC = () => {
 									type="button"
 								onClick={handleSaveItem}
 								disabled={loading}
-									className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+									className="px-6 py-2 bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center font-medium"
 								>
 									{loading ? (
 										<>
