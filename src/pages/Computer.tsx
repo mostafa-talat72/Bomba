@@ -340,12 +340,12 @@ const Computer: React.FC = () => {
 
       {/* Loading State */}
       {isInitialLoading && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-6 text-center">
+        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-6 text-center">
           <div className="flex items-center justify-center mb-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 dark:border-orange-400"></div>
           </div>
-          <p className="text-blue-800 dark:text-blue-200 font-medium">جاري تحميل البيانات...</p>
-          <p className="text-blue-600 dark:text-blue-300 text-sm">يرجى الانتظار قليلاً</p>
+          <p className="text-orange-800 dark:text-orange-200 font-medium">جاري تحميل البيانات...</p>
+          <p className="text-orange-600 dark:text-orange-300 text-sm">يرجى الانتظار قليلاً</p>
         </div>
       )}
 
