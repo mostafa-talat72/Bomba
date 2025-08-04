@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target } from 'lucide-react';
+import { TrendingUp, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, BarChart3 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
@@ -183,7 +183,7 @@ const Reports = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400"></div>
       </div>
     );
   }
@@ -192,15 +192,18 @@ const Reports = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">التقارير والإحصائيات</h1>
-          <p className="text-gray-600 dark:text-gray-300">مراقبة أداء الأعمال والإحصائيات</p>
+        <div className="flex items-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <BarChart3 className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+            التقارير والإحصائيات
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mr-4">مراقبة أداء الأعمال والإحصائيات</p>
         </div>
         <div className="flex items-center space-x-3 space-x-reverse">
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
             <option value="today">اليوم</option>
             <option value="week">الأسبوع</option>
@@ -209,7 +212,7 @@ const Reports = () => {
           </select>
           <button
             onClick={loadReports}
-            className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
+            className="p-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200"
           >
             <RefreshCw className="h-5 w-5" />
           </button>
@@ -314,14 +317,14 @@ const Reports = () => {
             <div className="flex space-x-2 space-x-reverse">
               <button
                 onClick={() => handleExportExcel('sales')}
-                className="text-primary-600 hover:text-primary-700 text-sm p-1"
+                className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 text-sm p-1"
                 title="تصدير Excel"
               >
                 <Download className="h-4 w-4" />
               </button>
               <button
                 onClick={() => handleExportPDF('sales')}
-                className="text-blue-600 hover:text-blue-700 text-sm p-1"
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm p-1"
                 title="تصدير PDF"
               >
                 <Printer className="h-4 w-4" />
@@ -354,14 +357,14 @@ const Reports = () => {
             <div className="flex space-x-2 space-x-reverse">
               <button
                 onClick={() => handleExportExcel('sessions')}
-                className="text-primary-600 hover:text-primary-700 text-sm p-1"
+                className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 text-sm p-1"
                 title="تصدير Excel"
               >
                 <Download className="h-4 w-4" />
               </button>
               <button
                 onClick={() => handleExportPDF('sessions')}
-                className="text-blue-600 hover:text-blue-700 text-sm p-1"
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm p-1"
                 title="تصدير PDF"
               >
                 <Printer className="h-4 w-4" />
@@ -413,14 +416,14 @@ const Reports = () => {
           <div className="flex space-x-2 space-x-reverse">
             <button
               onClick={() => handleExportExcel('financial')}
-              className="text-primary-600 hover:text-primary-700 text-sm p-1"
+              className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 text-sm p-1"
               title="تصدير Excel"
             >
               <Download className="h-4 w-4" />
             </button>
             <button
               onClick={() => handleExportPDF('financial')}
-              className="text-blue-600 hover:text-blue-700 text-sm p-1"
+              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm p-1"
               title="تصدير PDF"
             >
               <Printer className="h-4 w-4" />
@@ -464,14 +467,14 @@ const Reports = () => {
           <div className="flex space-x-2 space-x-reverse">
             <button
               onClick={() => handleExportExcel('inventory')}
-              className="text-primary-600 hover:text-primary-700 text-sm p-1"
+              className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 text-sm p-1"
               title="تصدير Excel"
             >
               <Download className="h-4 w-4" />
             </button>
             <button
               onClick={() => handleExportPDF('inventory')}
-              className="text-blue-600 hover:text-blue-700 text-sm p-1"
+              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm p-1"
               title="تصدير PDF"
             >
               <Printer className="h-4 w-4" />

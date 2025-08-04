@@ -158,7 +158,7 @@ const Layout = () => {
         style={{ direction: 'rtl' }}
       >
         {/* Sidebar Header */}
-        <div className="flex items-center justify-between h-16 px-4 sm:px-6 bg-primary-600 text-white flex-shrink-0">
+        <div className="flex items-center justify-between h-16 px-4 sm:px-6 bg-orange-600 dark:bg-orange-700 text-white flex-shrink-0">
           <div className="flex items-center min-w-0">
             <ShoppingCart className="h-6 w-6 sm:h-8 sm:w-8 mr-2 sm:mr-3 flex-shrink-0" />
             <h1 className="text-lg sm:text-xl font-bold truncate">Bomba</h1>
@@ -173,11 +173,11 @@ const Layout = () => {
         {/* User Info */}
         <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center min-w-0">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600 dark:text-primary-400" />
+                          <div className="flex-shrink-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center">
+                  <User className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
+                </div>
               </div>
-            </div>
             <div className="mr-2 sm:mr-3 flex-1 min-w-0">
               <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user?.name}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -190,14 +190,14 @@ const Layout = () => {
             <div className="flex items-center space-x-1 space-x-reverse">
               <button
                 onClick={toggleDarkMode}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-200 flex-shrink-0"
+                className="p-1 text-gray-400 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300 transition-colors duration-200 flex-shrink-0"
                 title={isDarkMode ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي"}
               >
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
               <button
                 onClick={handleLogout}
-                className="p-1 text-gray-400 hover:text-red-600 transition-colors duration-200 flex-shrink-0"
+                className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200 flex-shrink-0"
                 title="تسجيل الخروج"
               >
                 <LogOut className="h-4 w-4" />
@@ -225,7 +225,7 @@ const Layout = () => {
                   return (
                     <div key={item.name}>
                       <button
-                        className={`group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 ${devicesOpen ? 'bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border-r-4 border-primary-600' : ''}`}
+                        className={`group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 ${devicesOpen ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-r-4 border-orange-600' : ''}`}
                         onClick={() => setDevicesOpen((open) => !open)}
                       >
                         <item.icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
@@ -247,7 +247,7 @@ const Layout = () => {
                                                               <Link
                                   to={child.href}
                                   className={`${isActive(child.href)
-                                    ? 'bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border-r-4 border-primary-600'
+                                    ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-r-4 border-orange-600'
                                     : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                                     } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
                                   onClick={() => setSidebarOpen(false)}
@@ -278,7 +278,7 @@ const Layout = () => {
                     <Link
                       to={item.href}
                       className={`${isActive(item.href)
-                        ? 'bg-primary-50 dark:bg-primary-800 text-primary-700 dark:text-primary-100 border-r-4 border-primary-600'
+                        ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-r-4 border-orange-600'
                         : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                         } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
                       onClick={() => setSidebarOpen(false)}
@@ -317,7 +317,7 @@ const Layout = () => {
             <div className="flex items-center min-w-0">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
+                className="lg:hidden p-2 rounded-md hover:bg-orange-50 dark:hover:bg-orange-900/20 flex-shrink-0"
               >
                 <Menu className="h-6 w-6 text-gray-900 dark:text-gray-100" />
               </button>

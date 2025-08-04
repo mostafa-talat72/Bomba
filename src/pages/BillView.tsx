@@ -392,7 +392,7 @@ const BillView = () => {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
-					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
 					<p className="text-gray-600">جاري تحميل الفاتورة...</p>
 				</div>
 			</div>
@@ -429,7 +429,7 @@ const BillView = () => {
 							{/* زر عرض الطلبات */}
 							{bill.orders && bill.orders.length > 0 && (
 								<button
-									className="mt-2 px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 text-xs"
+									                className="mt-2 px-3 py-1 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded text-xs"
 									onClick={() => setShowOrdersModal(true)}
 								>
 									عرض جميع الطلبات
@@ -473,7 +473,7 @@ const BillView = () => {
 							{/* Orders Total */}
 							<div className="mt-4 flex justify-between items-center">
 								<span className="text-gray-700 font-medium">إجمالي تكلفة الطلبات:</span>
-								<span className="font-bold text-primary-700">
+								<span className="font-bold text-orange-600 dark:text-orange-400">
 									{formatCurrency(getOrdersTotal(bill.orders))}
 								</span>
 							</div>
@@ -500,7 +500,7 @@ const BillView = () => {
 									<div key={session._id} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
 										<div className="flex justify-between items-center mb-2">
 											<div>
-												<span className="font-bold text-primary-700">{session.deviceName}</span>
+												<span className="font-bold text-orange-600 dark:text-orange-400">{session.deviceName}</span>
 												<span className="text-xs text-gray-500 ml-2">({session.deviceType === 'playstation' ? 'بلايستيشن' : session.deviceType === 'computer' ? 'كمبيوتر' : session.deviceType})</span>
 											</div>
 											<div className={`px-2 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${session.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
@@ -694,39 +694,39 @@ const BillView = () => {
 										) : null}
 										{/* إجمالي تكلفة الجلسة - تظهر فقط بعد انتهاء الجلسة */}
 										{session.status !== 'active' && (
-										<div className="flex justify-between items-center mt-2">
+																				<div className="flex justify-between items-center mt-2">
 											<span className="text-gray-700 font-medium">إجمالي تكلفة الجلسة:</span>
-											<span className="font-bold text-primary-700">
-													{(() => {
-														// حساب التكلفة الإجمالية من البيانات التفصيلية
-														let totalCost = 0;
+											<span className="font-bold text-orange-600 dark:text-orange-400">
+												{(() => {
+													// حساب التكلفة الإجمالية من البيانات التفصيلية
+													let totalCost = 0;
 
-														// إذا كان هناك controllersHistoryBreakdown، استخدمه
-														if (Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0) {
-															totalCost = session.controllersHistoryBreakdown.reduce((sum, period) => sum + period.cost, 0);
-														}
-														// وإلا استخدم controllersHistory لحساب التكلفة
-														else if (session.controllersHistory && session.controllersHistory.length > 0) {
-															totalCost = session.controllersHistory.reduce((sum, period) => {
-																if (period.from && period.to) {
-																	const from = new Date(period.from);
-																	const to = new Date(period.to);
-																	const diffMs = to.getTime() - from.getTime();
-																	const minutes = diffMs / (1000 * 60);
-																	const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
-																	const minuteRate = hourlyRate / 60;
-																	return sum + (minutes * minuteRate);
-																}
-																return sum;
-															}, 0);
-														}
-														// وإلا استخدم session.finalCost
-														else {
-															totalCost = session.finalCost || 0;
-														}
+													// إذا كان هناك controllersHistoryBreakdown، استخدمه
+													if (Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0) {
+														totalCost = session.controllersHistoryBreakdown.reduce((sum, period) => sum + period.cost, 0);
+													}
+													// وإلا استخدم controllersHistory لحساب التكلفة
+													else if (session.controllersHistory && session.controllersHistory.length > 0) {
+														totalCost = session.controllersHistory.reduce((sum, period) => {
+															if (period.from && period.to) {
+																const from = new Date(period.from);
+																const to = new Date(period.to);
+																const diffMs = to.getTime() - from.getTime();
+																const minutes = diffMs / (1000 * 60);
+																const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
+																const minuteRate = hourlyRate / 60;
+																return sum + (minutes * minuteRate);
+															}
+															return sum;
+														}, 0);
+													}
+													// وإلا استخدم session.finalCost
+													else {
+														totalCost = session.finalCost || 0;
+													}
 
-														return formatCurrency(totalCost);
-													})()}
+													return formatCurrency(totalCost);
+												})()}
 											</span>
 										</div>
 										)}
@@ -846,7 +846,7 @@ const BillView = () => {
 							{bill.orders?.map((order) => (
 								<div key={order._id} className="bg-gray-50 rounded-lg shadow border p-4 flex flex-col gap-2">
 									<div className="flex items-center justify-between mb-2">
-										<span className="font-bold text-primary-700">طلب #{order.orderNumber}</span>
+										<span className="font-bold text-orange-600 dark:text-orange-400">طلب #{order.orderNumber}</span>
 										<span className={`px-2 py-1 rounded text-xs font-medium ${getOrderStatusColor(order.status)}`}>{getOrderStatusText(order.status)}</span>
 									</div>
 									{order.customerName && <div className="text-gray-600 text-xs">{order.customerName}</div>}
@@ -863,7 +863,7 @@ const BillView = () => {
 									</div>
 									{order.notes && <div className="text-xs text-gray-500 mt-2">ملاحظات: {order.notes}</div>}
 									<div className="mt-2 flex justify-between items-center">
-										<span className="text-xs text-gray-600">الإجمالي: <span className="font-bold text-primary-700">{formatCurrency(order.finalAmount ?? order.totalAmount ?? 0)}</span></span>
+										<span className="text-xs text-gray-600">الإجمالي: <span className="font-bold text-orange-600 dark:text-orange-400">{formatCurrency(order.finalAmount ?? order.totalAmount ?? 0)}</span></span>
 									</div>
 								</div>
 							))}

@@ -48,7 +48,7 @@ const HomeRedirect: React.FC = () => {
           <p className="text-gray-600 mb-4">لم يتم منحك أي صلاحيات للوصول إلى النظام</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
           >
             إعادة المحاولة
           </button>

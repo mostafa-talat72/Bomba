@@ -440,11 +440,11 @@ const Users = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <UsersIcon className="h-8 w-8 text-primary-600 ml-3" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">إدارة المستخدمين</h1>
-            <p className="text-gray-600">إدارة الحسابات والصلاحيات</p>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <UsersIcon className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+            إدارة المستخدمين
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mr-4">إدارة الحسابات والصلاحيات</p>
         </div>
         <div className="flex items-center space-x-3 space-x-reverse">
           <button
@@ -460,7 +460,7 @@ const Users = () => {
               resetForm();
               setShowAddUser(true);
             }}
-            className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
           >
             <Plus className="h-5 w-5 ml-2" />
             إضافة مستخدم
@@ -552,7 +552,7 @@ const Users = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="البحث بالاسم أو البريد الإلكتروني أو الهاتف..."
-                className="w-full pr-10 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                className="w-full pr-10 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
@@ -562,7 +562,7 @@ const Users = () => {
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               <option value="all">جميع الأدوار</option>
               {roles.map(role => (
@@ -576,7 +576,7 @@ const Users = () => {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               <option value="all">جميع الحالات</option>
               <option value="active">نشط</option>
@@ -619,7 +619,7 @@ const Users = () => {
             ) : (
               <button
                 onClick={() => setShowAddUser(true)}
-                className="text-primary-600 hover:text-primary-700 text-sm font-medium mt-2"
+                className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 text-sm font-medium mt-2"
               >
                 إضافة أول مستخدم
               </button>
@@ -679,7 +679,7 @@ const Users = () => {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="أدخل الاسم الكامل"
                   />
                 </div>
@@ -692,7 +692,7 @@ const Users = () => {
                     value={formData.email}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="user@bomba.com"
                   />
                 </div>
@@ -708,7 +708,7 @@ const Users = () => {
                     onChange={handleInputChange}
                     required={!showEditUser}
                     minLength={6}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder={showEditUser ? "اتركها فارغة إذا لم ترد تغييرها" : "كلمة المرور"}
                   />
                 </div>
@@ -725,7 +725,7 @@ const Users = () => {
                       onChange={handleInputChange}
                       required
                       minLength={6}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                       placeholder="تأكيد كلمة المرور"
                     />
                   </div>
@@ -738,7 +738,7 @@ const Users = () => {
                     name="phone"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="رقم الهاتف"
                   />
                 </div>
@@ -750,7 +750,7 @@ const Users = () => {
                     value={formData.role}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   >
                     {roles.map(role => (
                       <option key={role.id} value={role.id}>{role.name}</option>
@@ -765,7 +765,7 @@ const Users = () => {
                     value={formData.status}
                     onChange={handleInputChange}
                     required
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   >
                     <option value="active">نشط</option>
                     <option value="inactive">غير نشط</option>
@@ -783,7 +783,7 @@ const Users = () => {
                         value={formData.businessName}
                         onChange={handleInputChange}
                         required
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل اسم المنشأة"
                       />
                     </div>
@@ -794,7 +794,7 @@ const Users = () => {
                         value={formData.businessType}
                         onChange={handleInputChange}
                         required
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="">اختر نوع المنشأة</option>
                         {businessTypes.map((type) => (
@@ -812,7 +812,7 @@ const Users = () => {
                     value={formData.address}
                     onChange={handleInputChange}
                     rows={2}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="العنوان"
                   />
                 </div>
@@ -829,7 +829,7 @@ const Users = () => {
                             type="checkbox"
                             checked={formData.permissions.includes(permission.id)}
                             onChange={(e) => handlePermissionChange(permission.id, e.target.checked)}
-                            className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            className="mt-1 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                           />
                           <div className="mr-3 flex-1">
                             <div className="text-sm font-medium text-gray-700 dark:text-gray-200">{permission.name}</div>
@@ -874,7 +874,7 @@ const Users = () => {
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
               >
                 {loading ? 'جاري الحفظ...' : (showEditUser ? 'تحديث المستخدم' : 'إضافة المستخدم')}
               </button>
@@ -895,7 +895,7 @@ const Users = () => {
           }}
         >
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-primary-100 dark:from-primary-900 dark:to-primary-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-xl">
+            <div className="sticky top-0 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900 dark:to-orange-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-xl">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">تفاصيل المستخدم</h3>
                 <button
@@ -911,8 +911,8 @@ const Users = () => {
             <div className="p-6 space-y-6">
               {/* User Header */}
               <div className="flex items-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-800 dark:to-primary-700 rounded-full flex items-center justify-center">
-                  <User className="h-10 w-10 text-primary-600 dark:text-primary-400" />
+                <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-800 dark:to-orange-700 rounded-full flex items-center justify-center">
+                  <User className="h-10 w-10 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div className="mr-4 flex-1">
                   <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100">{selectedUser.name}</h4>
@@ -1026,7 +1026,7 @@ const Users = () => {
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex justify-end gap-3">
               <button
                 onClick={() => handleEdit(selectedUser)}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200"
               >
                 تعديل المستخدم
               </button>
@@ -1078,7 +1078,7 @@ const Users = () => {
                 <>
                   <input
                     type="password"
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                     placeholder="أدخل كلمة المرور لتأكيد الحذف"
                     value={deletePassword}
                     onChange={e => setDeletePassword(e.target.value)}
@@ -1098,7 +1098,7 @@ const Users = () => {
               </button>
               <button
                 onClick={confirmDelete}
-                className={`px-4 py-2 rounded-lg transition-colors duration-200 disabled:opacity-50 ${deleteTarget.role === 'admin' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-primary-600 hover:bg-primary-700 text-white'}`}
+                className={`px-4 py-2 rounded-lg transition-colors duration-200 disabled:opacity-50 ${deleteTarget.role === 'admin' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white'}`}
                 disabled={deleteLoading}
               >
                 {deleteLoading ? 'جاري الحذف...' : (deleteTarget.role === 'admin' ? 'تأكيد الحذف' : 'نعم، احذف')}

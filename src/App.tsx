@@ -84,7 +84,7 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
               <p className="text-gray-600 dark:text-gray-300 mb-4">لم يتم منحك أي صلاحيات للوصول إلى النظام</p>
               <button
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
               >
                 إعادة المحاولة
               </button>
@@ -111,7 +111,7 @@ const RouteHandler = () => {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-orange-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600 dark:text-gray-300">جاري التحميل...</p>
         </div>
       </div>

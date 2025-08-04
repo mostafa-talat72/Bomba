@@ -81,9 +81,9 @@ const UserCard: React.FC<UserCardProps> = ({
       <div className="p-4 pt-10">
         {/* User Header */}
         <div className="flex items-start mb-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900 dark:to-primary-800 rounded-full flex items-center justify-center flex-shrink-0">
-            <User className="h-6 w-6 text-primary-600 dark:text-primary-400" />
-          </div>
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900 dark:to-orange-800 rounded-full flex items-center justify-center flex-shrink-0">
+          <User className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+        </div>
           <div className="mr-3 flex-1 min-w-0">
             <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 truncate">{user.name}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
@@ -164,7 +164,7 @@ const UserCard: React.FC<UserCardProps> = ({
       </div>
 
       {/* Hover Effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-primary-500/5 dark:from-primary-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 dark:from-orange-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
     </div>
   );
 };

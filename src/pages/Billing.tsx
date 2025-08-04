@@ -451,11 +451,11 @@ const Billing = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Receipt className="h-6 w-6 sm:h-8 sm:w-8 text-primary-600 dark:text-primary-400 ml-2 sm:ml-3" />
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الفواتير</h1>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">إنشاء وإدارة فواتير العملاء</p>
-          </div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ml-2" />
+            إدارة الفواتير
+          </h1>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mr-4">إنشاء وإدارة فواتير العملاء</p>
         </div>
       </div>
 
@@ -538,7 +538,7 @@ const Billing = () => {
                   type="date"
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 />
                 {dateFilter && (
                   <button
@@ -555,7 +555,7 @@ const Billing = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
                 <option value="all">جميع الفواتير</option>
                 <option value="draft">مسودة</option>
@@ -644,7 +644,7 @@ const Billing = () => {
             {/* Footer */}
             <div className={`p-3 sm:p-4 border-t border-gray-100 dark:border-gray-700 rounded-b-lg ${bill.status === 'paid' ? 'bg-green-50 dark:bg-green-900' : 'bg-gray-50 dark:bg-gray-700'
               }`}>
-              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600 dark:text-green-400' : 'text-primary-600 dark:text-primary-400'
+              <div className={`flex items-center justify-center text-xs sm:text-sm font-medium ${bill.status === 'paid' ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'
                 }`}>
                 {bill.status === 'paid' ? (
                   <>
@@ -1146,7 +1146,7 @@ const Billing = () => {
                     className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
                       selectedBill && hasActiveSession(selectedBill)
                         ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                        : 'bg-primary-600 hover:bg-primary-700 text-white'
+                        : 'bg-orange-600 hover:bg-orange-700 text-white'
                     }`}
                   >
                     {selectedBill && hasActiveSession(selectedBill) ? 'لا يمكن الدفع - جلسة نشطة' : 'دفع الفاتورة بالكامل'}
@@ -1198,7 +1198,7 @@ const Billing = () => {
                   return (
                     <div key={itemKey} className="bg-gray-50 rounded-lg p-4 border flex flex-col gap-2">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-bold text-primary-700">
+                        <div className="flex items-center gap-2 font-bold text-orange-700">
                             {item.name}
                           {/* زر - للصنف الرئيسي */}
                           <button
@@ -1216,7 +1216,7 @@ const Billing = () => {
                             }}
                             disabled={(itemQuantities[itemKey] || 0) <= 0}
                           >-</button>
-                          <span className="mx-2 w-6 text-center select-none font-bold text-primary-700">{itemQuantities[itemKey] || 0}</span>
+                                                      <span className="mx-2 w-6 text-center select-none font-bold text-orange-700">{itemQuantities[itemKey] || 0}</span>
                           {/* زر + للصنف الرئيسي */}
                           <button
                             type="button"
@@ -1231,7 +1231,7 @@ const Billing = () => {
                           {/* زر دفع الكمية بالكامل للصنف الرئيسي */}
                           <button
                             type="button"
-                            className="ml-2 px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs"
+                            className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs"
                             onClick={() => {
                               setItemQuantities({ ...itemQuantities, [itemKey]: item.remainingQuantity });
                               setSelectedItems(prev => ({ ...prev, [itemKey]: item.remainingQuantity > 0 }));
@@ -1304,7 +1304,7 @@ const Billing = () => {
                                         >+</button>
                                         <button
                                           type="button"
-                                          className="ml-2 px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs"
+                                          className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs"
                                           onClick={() => {
                                             setItemQuantities({ ...itemQuantities, [addonKey]: addon.remainingQuantity });
                                             setSelectedItems(prev => ({ ...prev, [addonKey]: addon.remainingQuantity > 0 }));
@@ -1335,7 +1335,7 @@ const Billing = () => {
                   <div className="grid grid-cols-3 gap-3">
                     <button
                       onClick={() => setPartialPaymentMethod('cash')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'cash' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 hover:border-gray-300'
+                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'cash' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 hover:border-gray-300'
                         }`}
                     >
                       <div className="text-2xl mb-1">💵</div>
@@ -1343,7 +1343,7 @@ const Billing = () => {
                     </button>
                     <button
                       onClick={() => setPartialPaymentMethod('card')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'card' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 hover:border-gray-300'
+                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'card' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 hover:border-gray-300'
                         }`}
                     >
                       <div className="text-2xl mb-1">💳</div>
@@ -1351,7 +1351,7 @@ const Billing = () => {
                     </button>
                     <button
                       onClick={() => setPartialPaymentMethod('transfer')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'transfer' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 hover:border-gray-300'
+                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'transfer' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 hover:border-gray-300'
                         }`}
                     >
                       <div className="text-2xl mb-1">📱</div>
@@ -1450,7 +1450,7 @@ const Billing = () => {
                     return selectedItems[id] && (itemQuantities[id] || 0) > 0;
                   })
                 }
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
+                                    className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
               >
                 تأكيد الدفع الجزئي
               </button>

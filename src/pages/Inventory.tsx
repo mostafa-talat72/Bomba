@@ -379,15 +379,15 @@ const Inventory = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Package className="h-8 w-8 text-primary-600 ml-3" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة المخزون</h1>
-            <p className="text-gray-600 dark:text-gray-300">متابعة المواد الخام والمنتجات</p>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <Package className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+            إدارة المخزون
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mr-4">متابعة المواد الخام والمنتجات</p>
         </div>
         <button
           onClick={openAddModal}
-          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+          className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
         >
           <Plus className="h-5 w-5 ml-2" />
           إضافة مخزون
@@ -455,16 +455,16 @@ const Inventory = () => {
 
       {/* Low Stock Alert */}
       {lowStockItems.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
           <div className="flex items-center mb-3">
-            <AlertTriangle className="h-5 w-5 text-red-600 ml-2" />
-            <h3 className="text-lg font-semibold text-red-800">تنبيه: منتجات منخفضة المخزون</h3>
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 ml-2" />
+            <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">تنبيه: منتجات منخفضة المخزون</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {lowStockItems.map(item => (
-              <div key={item.id || item._id} className="bg-white rounded-lg p-3 border border-red-200">
-                <p className="font-medium text-gray-900">{item.name}</p>
-                <p className="text-sm text-red-600">
+              <div key={item.id || item._id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-red-200 dark:border-red-600">
+                <p className="font-medium text-gray-900 dark:text-gray-100">{item.name}</p>
+                <p className="text-sm text-red-600 dark:text-red-400">
                   متبقي: {formatQuantity(item.currentStock, item.unit)} (الحد الأدنى: {formatQuantity(item.minStock, item.unit)})
                 </p>
               </div>
@@ -474,59 +474,59 @@ const Inventory = () => {
       )}
 
       {/* Inventory Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">جرد المخزون</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-600">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">جرد المخزون</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المنتج</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">النوع</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الفئة</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المخزون الحالي</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحد الأدنى</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الوحدة</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">السعر</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">القيمة الإجمالية</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المورد</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">المنتج</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">النوع</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الفئة</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">المخزون الحالي</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الحد الأدنى</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الوحدة</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">السعر</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">القيمة الإجمالية</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">المورد</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الإجراءات</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {inventoryItems.map((item) => {
                 const stockStatus = getStockStatus(item.currentStock, item.minStock);
                 return (
-                  <tr key={item.id || item._id} className="hover:bg-gray-50">
+                  <tr key={item.id || item._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{item.name}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         item.isRawMaterial
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-800'
+                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
                       }`}>
                         {item.isRawMaterial ? 'خامة' : 'منتج'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.category}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.category}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stockStatus.bgColor} ${stockStatus.color}`}>
                         {formatQuantity(item.currentStock, item.unit)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatQuantity(item.minStock, item.unit)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.unit}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(item.price)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency(item.currentStock * item.price)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.supplier}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatQuantity(item.minStock, item.unit)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.unit}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatCurrency(item.price)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(item.currentStock * item.price)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.supplier}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 space-x-reverse">
-                      <button className="text-blue-600 hover:text-blue-800" onClick={() => openEditModal(item)}>
+                      <button className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" onClick={() => openEditModal(item)}>
                         <Edit className="h-4 w-4" />
                       </button>
-                      <button className="text-red-600 hover:text-red-800" onClick={() => openDeleteModal(item)}>
+                      <button className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" onClick={() => openDeleteModal(item)}>
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </td>
@@ -548,22 +548,22 @@ const Inventory = () => {
             }
           }}
         >
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">إضافة مخزون</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">إضافة مخزون</h2>
                 <button
-                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => setShowAddModal(false)}
                 >×</button>
               </div>
             </div>
             <div className="p-6">
-            <h2 className="text-xl font-bold mb-4 text-center">إضافة مخزون</h2>
+            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-gray-100">إضافة مخزون</h2>
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">نوع الإضافة</label>
-                <select name="addType" value={addType} onChange={handleAddTypeChange} className="w-full border rounded px-3 py-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نوع الإضافة</label>
+                <select name="addType" value={addType} onChange={handleAddTypeChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100">
                   <option value="existing">إضافة كمية لمنتج موجود</option>
                   <option value="new">إضافة منتج جديد</option>
                 </select>
@@ -571,8 +571,8 @@ const Inventory = () => {
               {addType === 'existing' ? (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">اختر المنتج</label>
-                    <select name="productId" value={addForm.productId} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اختر المنتج</label>
+                    <select name="productId" value={addForm.productId} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                       <option value="">اختر المنتج</option>
                       {inventoryItems.map(item => (
                         <option key={item.id || item._id} value={item.id || item._id}>{item.name}</option>
@@ -580,28 +580,28 @@ const Inventory = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">الكمية</label>
-                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="1" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الكمية</label>
+                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="1" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">السعر للوحدة</label>
-                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">السعر للوحدة</label>
+                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
-                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المورد</label>
+                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ الإضافة</label>
-                    <input type="date" name="date" value={addForm.date} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاريخ الإضافة</label>
+                    <input type="date" name="date" value={addForm.date} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">حالة الدفع</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">حالة الدفع</label>
                     <select
                       name="costStatus"
                       value={addForm.costStatus}
                       onChange={handleFormChange}
-                      className="w-full border rounded px-3 py-2"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                     >
                       {costStatusOptions.map(option => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -657,7 +657,7 @@ const Inventory = () => {
               ) : (
                 <>
                   {/* رسالة مفيدة حول قاعدة التسمية */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-3 mb-4">
                     <div className="flex items-start">
                       <div className="flex-shrink-0">
                         <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -665,8 +665,8 @@ const Inventory = () => {
                         </svg>
                       </div>
                       <div className="mr-3">
-                        <h3 className="text-sm font-medium text-blue-800">ملاحظة مهمة</h3>
-                        <div className="mt-1 text-sm text-blue-700">
+                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">ملاحظة مهمة</h3>
+                        <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
                           <p>• لا يمكن إضافة منتج بنفس الاسم لمنشأة واحدة</p>
                           <p>• إذا كان المنتج موجود، استخدم "إضافة كمية لمنتج موجود"</p>
                           <p>• يمكن إضافة منتجات بنفس الاسم في منشآت مختلفة</p>
@@ -675,12 +675,12 @@ const Inventory = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">اسم المنتج</label>
-                    <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اسم المنتج</label>
+                    <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">الفئة</label>
-                    <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الفئة</label>
+                    <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                       <option value="">اختر الفئة</option>
                       {categoryOptions.map(option => (
                         <option key={option} value={option}>{option}</option>
@@ -688,12 +688,12 @@ const Inventory = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">الكمية</label>
-                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الكمية</label>
+                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">الوحدة</label>
-                    <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الوحدة</label>
+                    <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
                       <option value="">اختر الوحدة</option>
                       {unitOptions.map(option => (
                         <option key={option} value={option}>{option}</option>
@@ -701,16 +701,16 @@ const Inventory = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">الحد الأدنى</label>
-                    <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الحد الأدنى</label>
+                    <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">السعر للوحدة</label>
-                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">السعر للوحدة</label>
+                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
-                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المورد</label>
+                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
                   </div>
                   <div className="md:col-span-2">
                     <label className="flex items-center">
@@ -719,19 +719,19 @@ const Inventory = () => {
                         name="isRawMaterial"
                         checked={addForm.isRawMaterial}
                         onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
                       />
-                      <span className="mr-2 text-sm text-gray-700">خامة (مادة خام)</span>
+                      <span className="mr-2 text-sm text-gray-700 dark:text-gray-300">خامة (مادة خام)</span>
                     </label>
-                    <p className="text-xs text-gray-500 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">حالة الدفع</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">حالة الدفع</label>
                     <select
                       name="costStatus"
                       value={addForm.costStatus}
                       onChange={handleFormChange}
-                      className="w-full border rounded px-3 py-2"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                     >
                       {costStatusOptions.map(option => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -785,19 +785,19 @@ const Inventory = () => {
                   )}
                 </>
               )}
-              {error && <div className="text-red-600 text-sm">{error}</div>}
+              {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
               {success !== '' && (
-                <div className="text-green-600 text-sm flex flex-col gap-2">
+                <div className="text-green-600 dark:text-green-400 text-sm flex flex-col gap-2">
                   <span>{success}</span>
                   <span>تم تسجيل هذه العملية أيضًا ضمن التكاليف تلقائيًا.</span>
                   <button
                     type="button"
-                    className="underline text-blue-700 hover:text-blue-900 w-fit self-end"
+                    className="underline text-blue-700 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 w-fit self-end"
                     onClick={() => navigate('/costs')}
                   >عرض صفحة التكاليف</button>
                 </div>
               )}
-              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
+              <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
                 {loading ? 'جاري الحفظ...' : 'حفظ'}
               </button>
             </form>
@@ -816,42 +816,42 @@ const Inventory = () => {
             }
           }}
         >
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">تعديل منتج</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">تعديل منتج</h2>
                 <button
-                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => setShowEditModal(false)}
                 >×</button>
               </div>
             </div>
             <div className="p-6">
-            <h2 className="text-xl font-bold mb-4 text-center">تعديل منتج</h2>
+            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-gray-100">تعديل منتج</h2>
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">اسم المنتج</label>
-                <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اسم المنتج</label>
+                <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">الفئة</label>
-                <input type="text" name="category" value={addForm.category} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الفئة</label>
+                <input type="text" name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">الوحدة</label>
-                <input type="text" name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الوحدة</label>
+                <input type="text" name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">الحد الأدنى</label>
-                <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الحد الأدنى</label>
+                <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">السعر للوحدة</label>
-                <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border rounded px-3 py-2" required min="0" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">السعر للوحدة</label>
+                <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">المورد</label>
-                <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border rounded px-3 py-2" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المورد</label>
+                <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
               </div>
               <div>
                 <label className="flex items-center">
@@ -860,15 +860,15 @@ const Inventory = () => {
                     name="isRawMaterial"
                     checked={addForm.isRawMaterial}
                     onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
                   />
-                  <span className="mr-2 text-sm text-gray-700">خامة (مادة خام)</span>
+                  <span className="mr-2 text-sm text-gray-700 dark:text-gray-300">خامة (مادة خام)</span>
                 </label>
-                <p className="text-xs text-gray-500 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
               </div>
-              {error && <div className="text-red-600 text-sm">{error}</div>}
-              {success && <div className="text-green-600 text-sm">{success}</div>}
-              <button type="submit" className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
+              {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
+              {success && <div className="text-green-600 dark:text-green-400 text-sm">{success}</div>}
+              <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
                 {loading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
               </button>
             </form>
@@ -887,28 +887,28 @@ const Inventory = () => {
             }
           }}
         >
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">تأكيد حذف المنتج</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">تأكيد حذف المنتج</h2>
                 <button
-                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition-colors duration-200"
+                  className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => setShowDeleteModal(false)}
                 >×</button>
               </div>
             </div>
             <div className="p-6 text-center">
-            <h2 className="text-xl font-bold mb-4">تأكيد حذف المنتج</h2>
-            <p className="mb-6">هل أنت متأكد أنك تريد حذف المنتج <span className="font-bold text-red-600">{deleteTarget?.name}</span>؟ لا يمكن التراجع عن هذه العملية.</p>
-            {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
+            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">تأكيد حذف المنتج</h2>
+            <p className="mb-6 text-gray-700 dark:text-gray-300">هل أنت متأكد أنك تريد حذف المنتج <span className="font-bold text-red-600 dark:text-red-400">{deleteTarget?.name}</span>؟ لا يمكن التراجع عن هذه العملية.</p>
+            {error && <div className="text-red-600 dark:text-red-400 text-sm mb-2">{error}</div>}
             <div className="flex gap-4 justify-center">
               <button
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-bold transition-colors duration-200"
+                className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-bold transition-colors duration-200"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={loading}
               >إلغاء</button>
               <button
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200"
+                className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200"
                 onClick={handleDelete}
                 disabled={loading}
               >{loading ? 'جاري الحذف...' : 'حذف'}</button>

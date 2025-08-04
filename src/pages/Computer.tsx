@@ -319,17 +319,17 @@ const Computer: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Monitor className="h-8 w-8 text-primary-600 ml-3" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">إدارة أجهزة الكمبيوتر</h1>
-            <p className="text-gray-600">متابعة وإدارة جلسات الكمبيوتر</p>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <Monitor className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+            إدارة أجهزة الكمبيوتر
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mr-4">متابعة وإدارة جلسات الكمبيوتر</p>
         </div>
         <div className="flex items-center gap-2">
           {user?.role === 'admin' && (
             <button
               onClick={() => setShowAddDevice(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+              className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
             >
               <Plus className="h-5 w-5 ml-2" />
               إضافة جهاز
@@ -340,27 +340,27 @@ const Computer: React.FC = () => {
 
       {/* Loading State */}
       {isInitialLoading && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-6 text-center">
           <div className="flex items-center justify-center mb-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 dark:border-orange-400"></div>
           </div>
-          <p className="text-blue-800 font-medium">جاري تحميل البيانات...</p>
-          <p className="text-blue-600 text-sm">يرجى الانتظار قليلاً</p>
+          <p className="text-blue-800 dark:text-blue-200 font-medium">جاري تحميل البيانات...</p>
+          <p className="text-blue-600 dark:text-blue-300 text-sm">يرجى الانتظار قليلاً</p>
         </div>
       )}
 
       {/* Error State */}
       {loadingError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
           <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-red-600 dark:text-red-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-red-800 font-medium">{loadingError}</p>
+            <p className="text-red-800 dark:text-red-200 font-medium">{loadingError}</p>
           </div>
           <button
             onClick={() => window.location.reload()}
-            className="mt-2 text-red-600 hover:text-red-800 text-sm underline"
+            className="mt-2 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 text-sm underline"
           >
             إعادة المحاولة
           </button>
@@ -386,11 +386,11 @@ const Computer: React.FC = () => {
                   <div className="flex-1">
               {activeSession ? (
                 <div className="space-y-3">
-                  <div className="flex items-center text-sm text-gray-600">
+                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
                     <Clock className="h-4 w-4 ml-1" />
                     بدأت: {new Date(activeSession.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                   </div>
-                  <div className="flex items-center text-sm text-gray-600">
+                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
                     <DollarSign className="h-4 w-4 ml-1" />
                     {device.hourlyRate ? `${device.hourlyRate} ج.م/ساعة` : '-'}
                   </div>
@@ -398,7 +398,7 @@ const Computer: React.FC = () => {
                     ) : (
                       <div className="text-center py-4">
                         {device.status === 'maintenance' && (
-                          <p className="text-gray-500 text-sm">الجهاز في الصيانة</p>
+                          <p className="text-gray-500 dark:text-gray-400 text-sm">الجهاز في الصيانة</p>
                         )}
                       </div>
                     )}
@@ -409,7 +409,7 @@ const Computer: React.FC = () => {
                     {activeSession ? (
                   <button
                     onClick={() => handleEndSession(activeSession.id)}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
+                    className="w-full bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
                   >
                     <Square className="h-4 w-4 ml-2" />
                     إنهاء الجلسة
@@ -417,13 +417,13 @@ const Computer: React.FC = () => {
                     ) : device.status === 'available' ? (
                     <button
                       onClick={() => openSessionModal(device)}
-                      className="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
+                      className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
                     >
                       <Play className="h-4 w-4 ml-2" />
                       بدء الجلسة
                     </button>
                   ) : (
-                      <div className="w-full py-2 px-4 rounded-lg bg-gray-100 text-gray-500 text-center text-sm">
+                      <div className="w-full py-2 px-4 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm">
                         غير متاح
                 </div>
               )}
@@ -434,9 +434,9 @@ const Computer: React.FC = () => {
       </div>
 
       {/* Active Sessions */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">الجلسات النشطة</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-600">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الجلسات النشطة</h3>
         </div>
         <div className="p-6">
           {sessions.filter(
@@ -444,7 +444,7 @@ const Computer: React.FC = () => {
               s.deviceType === 'computer' &&
               devices.some(d => d.number === s.deviceNumber)
           ).length === 0 ? (
-            <p className="text-gray-500 text-center py-8">لا توجد جلسات نشطة حالياً</p>
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد جلسات نشطة حالياً</p>
           ) : (
             <div className="space-y-4">
               {sessions.filter(
@@ -452,20 +452,20 @@ const Computer: React.FC = () => {
                   s.deviceType === 'computer' &&
                   devices.some(d => d.number === s.deviceNumber)
               ).map((session) => (
-                <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Monitor className="h-6 w-6 text-blue-600" />
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                      <Monitor className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="mr-4">
-                      <p className="font-medium text-gray-900">{devices.find(d => d.number === session.deviceNumber)?.name || session.deviceName}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">{devices.find(d => d.number === session.deviceNumber)?.name || session.deviceName}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         بدأت: {new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                           {/* عرض رقم الفاتورة المرتبطة */}
                           {session.bill && (
                             <div className="mt-2">
-                              <span className="text-sm text-green-600 font-medium">
+                              <span className="text-sm text-green-600 dark:text-green-400 font-medium">
                                 فاتورة: {session.bill.billNumber}
                               </span>
                             </div>
@@ -474,11 +474,11 @@ const Computer: React.FC = () => {
                   </div>
                   <div className="flex items-center space-x-3 space-x-reverse">
                     <div className="text-left">
-                      <p className="font-bold text-green-600">{devices.find(d => d.number === session.deviceNumber)?.hourlyRate ? `${devices.find(d => d.number === session.deviceNumber)?.hourlyRate} ج.م/ساعة` : '-'}</p>
+                      <p className="font-bold text-green-600 dark:text-green-400">{devices.find(d => d.number === session.deviceNumber)?.hourlyRate ? `${devices.find(d => d.number === session.deviceNumber)?.hourlyRate} ج.م/ساعة` : '-'}</p>
                     </div>
                     <button
                       onClick={() => handleEndSession(session.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+                      className="bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
                     >
                       <Square className="h-4 w-4 ml-1" />
                       إنهاء
@@ -496,16 +496,16 @@ const Computer: React.FC = () => {
       {/* نافذة بدء جلسة جديدة */}
       {showNewSession && selectedDevice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4 text-center">بدء جلسة جديدة لجهاز {selectedDevice.name}</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-gray-100">بدء جلسة جديدة لجهاز {selectedDevice.name}</h2>
             {/* خيارات ربط الفاتورة */}
               <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">ربط الجلسة بفاتورة</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ربط الجلسة بفاتورة</label>
               <div className="grid grid-cols-2 gap-2 mb-2">
                   <button
                     type="button"
                   onClick={() => setBillOption('new')}
-                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'new' ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
+                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'new' ? 'bg-orange-100 dark:bg-orange-900/20 border-orange-500 text-orange-700 dark:text-orange-300' : 'bg-white dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-500 text-gray-900 dark:text-gray-100'}`}
                   >
                     <div className="text-lg mb-1">🆕</div>
                     <div className="text-sm font-medium">فاتورة جديدة</div>
@@ -513,7 +513,7 @@ const Computer: React.FC = () => {
                   <button
                     type="button"
                   onClick={() => setBillOption('existing')}
-                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'existing' ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white hover:bg-primary-50 hover:border-primary-500 text-gray-900'}`}
+                    className={`p-3 rounded-lg border text-center transition-colors duration-200 ${billOption === 'existing' ? 'bg-orange-100 dark:bg-orange-900/20 border-orange-500 text-orange-700 dark:text-orange-300' : 'bg-white dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-500 text-gray-900 dark:text-gray-100'}`}
                   >
                     <div className="text-lg mb-1">🔗</div>
                     <div className="text-sm font-medium">فاتورة موجودة</div>
@@ -521,19 +521,19 @@ const Computer: React.FC = () => {
                 </div>
               {billOption === 'existing' && (
                 <div className="mb-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">اختر الفاتورة</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">اختر الفاتورة</label>
                   <input
                     type="text"
                     placeholder="ابحث عن فاتورة..."
                     value={searchBill}
                     onChange={e => setSearchBill(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
                   />
                   {filteredAvailableBills.filter(bill =>
                     bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
                     bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
                   ).length > 0 && (
-                    <div className="mt-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg">
+                    <div className="mt-2 max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg">
                       {filteredAvailableBills.filter(bill =>
                         bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
                         bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
@@ -542,10 +542,10 @@ const Computer: React.FC = () => {
                           key={bill._id}
                           type="button"
                           onClick={() => setSelectedBillId(bill._id)}
-                          className={`w-full p-2 text-right text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${selectedBillId === bill._id ? 'bg-primary-50 text-primary-700' : 'text-gray-700'}`}
+                          className={`w-full p-2 text-right text-sm hover:bg-gray-50 dark:hover:bg-gray-600 border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${selectedBillId === bill._id ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300' : 'text-gray-700 dark:text-gray-300'}`}
                         >
                           <div className="font-medium">#{bill.billNumber}</div>
-                          <div className="text-xs text-gray-500">{bill.customerName || 'بدون اسم'}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{bill.customerName || 'بدون اسم'}</div>
                         </button>
                       ))}
                     </div>
@@ -554,18 +554,18 @@ const Computer: React.FC = () => {
                     bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()) ||
                     bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())
                   ).length === 0 && (
-                    <div className="mt-2 text-sm text-gray-500 text-center">لا توجد فواتير مطابقة</div>
+                    <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 text-center">لا توجد فواتير مطابقة</div>
                   )}
                   {selectedBillId && (
-                    <div className="mt-2 p-2 bg-gray-50 border border-primary-200 rounded">
+                    <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700 border border-orange-200 dark:border-orange-600 rounded">
                       {(() => {
                         const bill = availableBills.find(b => b._id === selectedBillId);
                         if (!bill) return null;
                         return (
                           <div>
-                            <div className="font-bold text-primary-700">فاتورة #{bill.billNumber}</div>
-                            <div className="text-sm text-gray-700">العميل: {bill.customerName || 'بدون اسم'}</div>
-                            <div className="text-xs text-gray-500">الإجمالي: {bill.total} ج.م</div>
+                            <div className="font-bold text-orange-700 dark:text-orange-300">فاتورة #{bill.billNumber}</div>
+                            <div className="text-sm text-gray-700 dark:text-gray-300">العميل: {bill.customerName || 'بدون اسم'}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">الإجمالي: {bill.total} ج.م</div>
                           </div>
                         );
                       })()}
@@ -576,11 +576,11 @@ const Computer: React.FC = () => {
             </div>
             {/* عرض سعر الساعة */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">سعر الساعة</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">سعر الساعة</label>
               <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
-                  className={`p-3 rounded-lg border text-center transition-colors duration-200 bg-primary-100 border-primary-500 text-primary-700`}
+                  className={`p-3 rounded-lg border text-center transition-colors duration-200 bg-orange-100 dark:bg-orange-900/20 border-orange-500 text-orange-700 dark:text-orange-300`}
                   disabled
                 >
                   <Monitor className="h-5 w-5 mx-auto mb-1" />
@@ -588,10 +588,10 @@ const Computer: React.FC = () => {
                 </button>
               </div>
             </div>
-            {sessionError && <div className="text-red-600 mb-2 text-sm">{sessionError}</div>}
+            {sessionError && <div className="text-red-600 dark:text-red-400 mb-2 text-sm">{sessionError}</div>}
             <div className="flex justify-between mt-6">
-              <button type="button" onClick={() => setShowNewSession(false)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">إلغاء</button>
-              <button type="button" onClick={handleStartSession} className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700" disabled={loadingSession || (billOption === 'existing' && !selectedBillId)}>بدء الجلسة</button>
+              <button type="button" onClick={() => setShowNewSession(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100">إلغاء</button>
+              <button type="button" onClick={handleStartSession} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded" disabled={loadingSession || (billOption === 'existing' && !selectedBillId)}>بدء الجلسة</button>
             </div>
           </div>
         </div>
@@ -600,24 +600,24 @@ const Computer: React.FC = () => {
       {/* Add Device Modal */}
       {showAddDevice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <form onSubmit={handleAddDevice} className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4 text-center">إضافة جهاز كمبيوتر جديد</h2>
+          <form onSubmit={handleAddDevice} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-gray-100">إضافة جهاز كمبيوتر جديد</h2>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">اسم الجهاز</label>
-              <input type="text" value={newDevice.name} onChange={e => setNewDevice({ ...newDevice, name: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2" required />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اسم الجهاز</label>
+              <input type="text" value={newDevice.name} onChange={e => setNewDevice({ ...newDevice, name: e.target.value })} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
               </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">رقم الجهاز</label>
-              <input type="number" value={newDevice.number} onChange={e => setNewDevice({ ...newDevice, number: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2" required min="1" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رقم الجهاز</label>
+              <input type="number" value={newDevice.number} onChange={e => setNewDevice({ ...newDevice, number: e.target.value })} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="1" />
               </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">سعر الساعة (ج.م)</label>
-              <input type="number" value={newDevice.hourlyRate} onChange={e => setNewDevice({ ...newDevice, hourlyRate: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2" required min="0" step="0.01" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">سعر الساعة (ج.م)</label>
+              <input type="number" value={newDevice.hourlyRate} onChange={e => setNewDevice({ ...newDevice, hourlyRate: e.target.value })} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" step="0.01" />
             </div>
-            {addDeviceError && <div className="text-red-600 mb-2 text-sm">{addDeviceError}</div>}
+            {addDeviceError && <div className="text-red-600 dark:text-red-400 mb-2 text-sm">{addDeviceError}</div>}
             <div className="flex justify-between mt-6">
-              <button type="button" onClick={() => setShowAddDevice(false)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">إلغاء</button>
-              <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">إضافة</button>
+              <button type="button" onClick={() => setShowAddDevice(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100">إلغاء</button>
+              <button type="submit" className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded">إضافة</button>
             </div>
           </form>
         </div>

@@ -144,8 +144,8 @@ const Settings = () => {
   return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">جاري التحميل...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">جاري التحميل...</p>
         </div>
       </div>
     );
@@ -156,8 +156,13 @@ const Settings = () => {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">الإعدادات</h1>
-          <p className="text-gray-600 dark:text-gray-300">إدارة إعدادات حسابك وتفضيلاتك</p>
+          <div className="flex items-center">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
+              <SettingsIcon className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+              الإعدادات
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300 mr-4">إدارة إعدادات حسابك وتفضيلاتك</p>
+          </div>
       </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
@@ -172,7 +177,7 @@ const Settings = () => {
                     onClick={() => setActiveTab(tab.id)}
                     className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
                       activeTab === tab.id
-                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                        ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
@@ -200,7 +205,7 @@ const Settings = () => {
                         type="text"
                         value={profile.name}
                         onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل اسمك الكامل"
                       />
                     </div>
@@ -212,7 +217,7 @@ const Settings = () => {
                         type="email"
                         value={profile.email}
                         onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل بريدك الإلكتروني"
                       />
                     </div>
@@ -224,7 +229,7 @@ const Settings = () => {
                         type="tel"
                         value={profile.phone}
                         onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل رقم هاتفك"
                       />
                     </div>
@@ -236,7 +241,7 @@ const Settings = () => {
                         type="text"
                         value={profile.address}
                         onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                         placeholder="أدخل عنوانك"
                       />
                     </div>
@@ -245,7 +250,7 @@ const Settings = () => {
                     <button
                       onClick={handleProfileUpdate}
                       disabled={saving}
-                      className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                      className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
                     >
                       <Save className="h-4 w-4" />
                       <span>{saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}</span>
@@ -270,7 +275,7 @@ const Settings = () => {
                           type={showPasswords.current ? 'text' : 'password'}
                           value={passwordData.currentPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                           placeholder="أدخل كلمة المرور الحالية"
                         />
                         <button
@@ -291,7 +296,7 @@ const Settings = () => {
                           type={showPasswords.new ? 'text' : 'password'}
                           value={passwordData.newPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                           placeholder="أدخل كلمة المرور الجديدة"
                         />
                         <button
@@ -312,7 +317,7 @@ const Settings = () => {
                           type={showPasswords.confirm ? 'text' : 'password'}
                           value={passwordData.confirmPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                           placeholder="أعد إدخال كلمة المرور الجديدة"
                         />
                         <button
@@ -328,7 +333,7 @@ const Settings = () => {
                       <button
                         onClick={handlePasswordChange}
                         disabled={saving}
-                        className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50"
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
                       >
                         <Lock className="h-4 w-4" />
                         <span>{saving ? 'جاري التغيير...' : 'تغيير كلمة المرور'}</span>
@@ -477,7 +482,7 @@ const Settings = () => {
                       <button
                         onClick={handleNotificationSettingsUpdate}
                         disabled={saving}
-                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
                       >
                         <Save className="h-4 w-4" />
                         <span>{saving ? 'جاري الحفظ...' : 'حفظ إعدادات الإشعارات'}</span>
@@ -501,7 +506,7 @@ const Settings = () => {
                       <select
                         value={generalSettings.theme}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, theme: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="light">فاتح</option>
                         <option value="dark">داكن</option>
@@ -516,7 +521,7 @@ const Settings = () => {
                       <select
                         value={generalSettings.language}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, language: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="ar">العربية</option>
                         <option value="en">English</option>
@@ -530,7 +535,7 @@ const Settings = () => {
                       <select
                         value={generalSettings.timezone}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, timezone: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="Africa/Cairo">القاهرة (GMT+2)</option>
                         <option value="Asia/Riyadh">الرياض (GMT+3)</option>
@@ -545,7 +550,7 @@ const Settings = () => {
                       <select
                         value={generalSettings.currency}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, currency: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="EGP">جنيه مصري (EGP)</option>
                         <option value="SAR">ريال سعودي (SAR)</option>
@@ -558,7 +563,7 @@ const Settings = () => {
                       <button
                         onClick={handleGeneralSettingsUpdate}
                         disabled={saving}
-                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
                       >
                         <Save className="h-4 w-4" />
                         <span>{saving ? 'جاري الحفظ...' : 'حفظ الإعدادات العامة'}</span>
