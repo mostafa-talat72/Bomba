@@ -168,7 +168,7 @@ const Dashboard = () => {
 
   const stats = [
     {
-      name: 'الجلسات النشطة',
+      name: 'جلسات نشطة',
       value: formatDecimal(realTimeActiveSessions),
       icon: Clock,
       color: 'bg-blue-500',
@@ -179,7 +179,7 @@ const Dashboard = () => {
       description: 'جلسات حالية'
     },
     {
-      name: 'الطلبات المعلقة',
+      name: 'طلبات معلقة',
       value: formatDecimal(realTimePendingOrders),
       icon: ShoppingCart,
       color: 'bg-orange-500',
@@ -276,83 +276,37 @@ const Dashboard = () => {
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-white bg-opacity-10 rounded-full translate-y-12 -translate-x-12"></div>
 
         <div className="relative z-10">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mr-4">
-                  <Award className="h-7 w-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-4xl font-bold mb-2">
-                    مرحباً بك في نظام Bomba
-                  </h1>
-                  <p className="text-orange-100 text-lg font-medium">لوحة تحكم شاملة لإدارة الطلبات والبلايستيشن</p>
-                </div>
-              </div>
-
-              {/* Quick Stats Row */}
-              <div className="grid grid-cols-3 gap-4 mt-6">
-                <div className="bg-white bg-opacity-20 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold">{formatDecimal(realTimeActiveSessions)}</div>
-                  <div className="text-orange-100 text-sm">جلسات نشطة</div>
-                </div>
-                <div className="bg-white bg-opacity-20 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold">{formatDecimal(realTimePendingOrders)}</div>
-                  <div className="text-orange-100 text-sm">طلبات معلقة</div>
-                </div>
-                <div className="bg-white bg-opacity-20 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold">{formatCurrency(todayRevenue)}</div>
-                  <div className="text-orange-100 text-sm">مبيعات اليوم</div>
-                </div>
-              </div>
+          <div className="flex items-center mb-4">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">
+                مرحباً بك في نظام Bomba
+              </h1>
+              <p className="text-orange-100 text-lg font-medium">لوحة تحكم شاملة لإدارة الطلبات والبلايستيشن</p>
             </div>
+          </div>
+        </div>
 
-            <div className="hidden lg:flex items-center space-x-4 space-x-reverse">
-              <div className="flex items-center space-x-4 space-x-reverse">
-                <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
-                  <Calendar className="h-5 w-5 ml-2" />
-                  <span className="text-orange-100 font-medium">
-                    {new Date().toLocaleDateString('ar-EG', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </span>
-                </div>
-                <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
-                  <Clock className="h-5 w-5 ml-2" />
-                  <span className="text-orange-100 font-medium">
-                    {new Date().toLocaleTimeString('ar-EG', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex space-x-3 space-x-reverse">
-                <button
-                  onClick={cleanData}
-                  disabled={loading}
-                  className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 space-x-reverse hover:scale-105"
-                >
-                  <div className={`w-4 h-4 border-2 border-white border-t-transparent rounded-full ${loading ? 'animate-spin' : ''}`}></div>
-                  <span>تنظيف البيانات</span>
-                </button>
-                <button
-                  onClick={refreshDashboardData}
-                  disabled={loading}
-                  className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 space-x-reverse hover:scale-105"
-                >
-                  <div className={`w-4 h-4 border-2 border-white border-t-transparent rounded-full ${loading ? 'animate-spin' : ''}`}></div>
-                  <span>تحديث البيانات</span>
-                </button>
-              </div>
-
-              <div className="w-20 h-20 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center">
-                <BarChart3 className="h-10 w-10 text-white" />
-              </div>
+        <div className="hidden lg:flex items-center space-x-4 space-x-reverse">
+          <div className="flex items-center space-x-4 space-x-reverse">
+            <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
+              <Calendar className="h-5 w-5 ml-2" />
+              <span className="text-orange-100 font-medium">
+                {new Date().toLocaleDateString('ar-EG', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </span>
+            </div>
+            <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
+              <Clock className="h-5 w-5 ml-2" />
+              <span className="text-orange-100 font-medium">
+                {new Date().toLocaleTimeString('ar-EG', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
             </div>
           </div>
         </div>
