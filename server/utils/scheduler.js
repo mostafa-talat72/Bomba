@@ -702,17 +702,17 @@ export const initializeScheduler = () => {
     Logger.info("✅ Daily report scheduled: every day at 5:00 AM (Egypt time)");
 
     // For testing: also run daily report every hour (only in development)
-    if (process.env.NODE_ENV === "development") {
-        cron.schedule("0 * * * *", () => {
-            Logger.info(
-                "🧪 Development mode: Running daily report every hour for testing"
-            );
-            generateDailyReport();
-        });
-        Logger.info(
-            "✅ Development mode: Daily report also scheduled every hour for testing"
-        );
-    }
+    // if (process.env.NODE_ENV === "development") {
+    //     cron.schedule("0 * * * *", () => {
+    //         Logger.info(
+    //             "🧪 Development mode: Running daily report every hour for testing"
+    //         );
+    //         generateDailyReport();
+    //     });
+    //     Logger.info(
+    //         "✅ Development mode: Daily report also scheduled every hour for testing"
+    //     );
+    // }
 
     // Generate monthly report at 11:59 PM on the last day of the month
     cron.schedule("59 23 28-31 * *", () => {
