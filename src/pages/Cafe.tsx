@@ -354,6 +354,9 @@ const Cafe: React.FC = () => {
   };
 
   const handleCreateOrder = async () => {
+    console.log('🚀 === بداية إنشاء الطلب ===');
+    console.log('الطلبات الحالية:', JSON.stringify(currentOrder, null, 2));
+
     if (currentOrder.length === 0) {
       showNotification('يرجى إضافة عناصر للطلب', 'error');
       return;
@@ -361,8 +364,9 @@ const Cafe: React.FC = () => {
 
     // تحقق صارم من كل عنصر
     if (currentOrder.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
+      console.error('❌ عنصر غير صحيح في الطلب:', currentOrder);
       showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
-    return;
+      return;
     }
 
     if (!customerName.trim()) {
@@ -370,14 +374,14 @@ const Cafe: React.FC = () => {
       return;
     }
 
-
     setLoading(true);
 
     try {
+      // التحقق من المخزون قبل إنشاء الطلب
       const orderData = {
         customerName: customerName.trim(),
         items: currentOrder.map(item => ({
-          menuItem: item.menuItem, // إضافة menuItem
+          menuItem: item.menuItem,
           name: item.name,
           price: item.price,
           quantity: item.quantity,
@@ -386,6 +390,31 @@ const Cafe: React.FC = () => {
         notes: orderNotes
       };
 
+      console.log('📦 بيانات الطلب المرسلة:', JSON.stringify(orderData, null, 2));
+
+      // التحقق من المخزون أولاً
+      console.log('🔍 بداية فحص المخزون...');
+      const inventoryCheck = await api.calculateOrderRequirements(orderData);
+      console.log('📊 نتيجة فحص المخزون:', JSON.stringify(inventoryCheck, null, 2));
+
+      if (!inventoryCheck.success) {
+        console.error('❌ فشل فحص المخزون:', inventoryCheck);
+        showNotification('خطأ في التحقق من المخزون', 'error');
+        setLoading(false);
+        return;
+      }
+
+      // إذا كان هناك أخطاء في المخزون، اعرضها للمستخدم
+      if (inventoryCheck.data && inventoryCheck.data.validationErrors && inventoryCheck.data.validationErrors.length > 0) {
+        console.error('❌ أخطاء في المخزون:', inventoryCheck.data.validationErrors);
+        const errorMessage = inventoryCheck.data.validationErrors.join('\n');
+        showNotification(`المخزون غير كافي:\n${errorMessage}`, 'error');
+        setLoading(false);
+        return;
+      }
+
+      // إذا كان المخزون متوفر، تابع إنشاء الطلب
+      console.log('✅ فحص المخزون نجح - متابعة إنشاء الطلب');
 
       let response;
       if (billOption === 'new') {
@@ -426,6 +455,7 @@ const Cafe: React.FC = () => {
       }
 
       if (response && response.success) {
+        console.log('✅ تم إنشاء الطلب بنجاح:', response.data);
         showNotification('تم إنشاء الطلب بنجاح', 'success');
         setShowNewOrder(false);
         setCustomerName('');
@@ -438,12 +468,24 @@ const Cafe: React.FC = () => {
 
         // إعادة تحميل البيانات
         setTimeout(() => {
-        fetchPendingOrders();
+          fetchPendingOrders();
           fetchReadyOrders();
           fetchOpenBills();
         }, 1000);
       } else {
-        const errorMessage = response?.message || 'خطأ في إنشاء الطلب';
+        console.error('❌ فشل إنشاء الطلب:', response);
+        let errorMessage = 'خطأ في إنشاء الطلب';
+
+        // Handle specific inventory errors
+        if (response?.errors && Array.isArray(response.errors)) {
+          errorMessage = `المخزون غير كافي:\n${response.errors.join('\n')}`;
+        } else if (response?.details) {
+          errorMessage = response.details;
+        } else if (response?.message) {
+          errorMessage = response.message;
+        }
+
+        console.error('رسالة الخطأ النهائية:', errorMessage);
         showNotification(errorMessage, 'error');
       }
     } catch (error) {
@@ -1516,6 +1558,8 @@ const Cafe: React.FC = () => {
                 onClick={() => {
                   setShowNewOrder(false);
                   setCustomerName('');
+                  setOrderNotes('');
+                  setCurrentOrder([]);
                   setBillOption('new');
                   setSelectedBillId('');
                   setSelectedBill(null);

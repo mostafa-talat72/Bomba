@@ -757,6 +757,19 @@ class ApiClient {
     return response;
   }
 
+  async calculateOrderRequirements(orderData: {
+    customerName: string;
+    items: OrderItem[];
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    const response = await this.request<any>('/orders/calculate', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+
+    return response;
+  }
+
   async updateOrder(id: string, updates: Partial<Order>): Promise<ApiResponse<Order>> {
     try {
       const response = await this.request<Order>(`/orders/${id}`, {

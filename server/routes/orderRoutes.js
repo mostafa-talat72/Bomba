@@ -13,6 +13,7 @@ import {
     deliverItem,
     updateOrder,
     deleteOrder,
+    calculateOrderRequirements,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
 import { validateOrder, validateRequest } from "../middleware/validation.js";
@@ -38,6 +39,14 @@ router.delete("/:id", authorize("cafe", "menu", "all"), deleteOrder);
 
 // إضافة مسار تحديث الطلبات
 router.patch("/:id", authorize("cafe", "menu", "all"), updateOrder);
+
+// Calculate order requirements (cafe and menu permissions)
+router.post(
+    "/calculate",
+    authorize("cafe", "menu", "all"),
+    validateRequest,
+    calculateOrderRequirements
+);
 
 // Create order (cafe and menu permissions)
 router.post(
