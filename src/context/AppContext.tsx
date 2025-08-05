@@ -346,7 +346,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
               }
             } catch (refreshError) {
-              console.log('فشل في تجديد التوكن:', refreshError);
+              // تجاهل الأخطاء
             }
           }
           // إذا فشل التجديد أو لم يوجد refreshToken

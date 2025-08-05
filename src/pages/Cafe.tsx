@@ -96,7 +96,6 @@ const Cafe: React.FC = () => {
       fetchPendingOrders();
       fetchReadyOrders();
     } catch (error) {
-      console.error('Error preparing order complete:', error);
       showNotification('خطأ في تجهيز الطلب', 'error');
     }
   };
@@ -148,7 +147,6 @@ const Cafe: React.FC = () => {
         return newState;
       });
     } catch (error) {
-      console.error('Error applying prepared input:', error);
       showNotification('خطأ في تحديث عدد التجهيز', 'error');
     }
   };
@@ -215,7 +213,7 @@ const Cafe: React.FC = () => {
         setCategories(uniqueCategories);
       }
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      // تجاهل الأخطاء
     }
   };
 
@@ -361,9 +359,6 @@ const Cafe: React.FC = () => {
   };
 
   const handleCreateOrder = async () => {
-    console.log('🚀 === بداية إنشاء الطلب ===');
-    console.log('الطلبات الحالية:', JSON.stringify(currentOrder, null, 2));
-
     if (currentOrder.length === 0) {
       showNotification('يرجى إضافة عناصر للطلب', 'error');
       return;
@@ -371,7 +366,6 @@ const Cafe: React.FC = () => {
 
     // تحقق صارم من كل عنصر
     if (currentOrder.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
-      console.error('❌ عنصر غير صحيح في الطلب:', currentOrder);
       showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
       return;
     }
@@ -397,15 +391,10 @@ const Cafe: React.FC = () => {
         notes: orderNotes
       };
 
-      console.log('📦 بيانات الطلب المرسلة:', JSON.stringify(orderData, null, 2));
-
       // التحقق من المخزون أولاً
-      console.log('🔍 بداية فحص المخزون...');
       const inventoryCheck = await api.calculateOrderRequirements(orderData);
-      console.log('📊 نتيجة فحص المخزون:', JSON.stringify(inventoryCheck, null, 2));
 
       if (!inventoryCheck.success) {
-        console.error('❌ فشل فحص المخزون:', inventoryCheck);
         // إذا كان هناك تفاصيل ناقصة في المخزون، اعرضها بشكل واضح
         if (
           inventoryCheck.data &&
@@ -430,7 +419,6 @@ const Cafe: React.FC = () => {
 
       // تحقق من وجود تفاصيل المكونات الناقصة حتى لو كان الفحص ناجح
       if (inventoryCheck.data && inventoryCheck.data.details && inventoryCheck.data.details.length > 0) {
-        console.error('❌ تفاصيل المكونات الناقصة:', inventoryCheck.data.details);
         const detailsMessage = inventoryCheck.data.details
           .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
           .join('\n');
@@ -440,7 +428,6 @@ const Cafe: React.FC = () => {
       }
 
       // إذا كان المخزون متوفر، تابع إنشاء الطلب
-      console.log('✅ فحص المخزون نجح - متابعة إنشاء الطلب');
 
       let response;
       if (billOption === 'new') {
@@ -481,7 +468,6 @@ const Cafe: React.FC = () => {
       }
 
       if (response && response.success) {
-        console.log('✅ تم إنشاء الطلب بنجاح:', response.data);
         showNotification('تم إنشاء الطلب بنجاح', 'success');
         setShowNewOrder(false);
         setCustomerName('');
@@ -499,7 +485,6 @@ const Cafe: React.FC = () => {
           fetchOpenBills();
         }, 1000);
       } else {
-        console.error('❌ فشل إنشاء الطلب:', response);
         let errorMessage = 'خطأ في إنشاء الطلب';
 
         // Handle specific inventory errors
@@ -511,7 +496,6 @@ const Cafe: React.FC = () => {
           errorMessage = response.message;
         }
 
-        console.error('رسالة الخطأ النهائية:', errorMessage);
         showNotification(errorMessage, 'error');
       }
     } catch (error) {
@@ -2008,9 +1992,6 @@ const Cafe: React.FC = () => {
               <button
                 onClick={async () => {
                   try {
-                    console.log('🚀 === بداية تحديث الطلب ===');
-                    console.log('بيانات الطلب المرسلة:', JSON.stringify(editOrderData, null, 2));
-
                     if (editOrderData.items.length === 0) {
                       showNotification('يرجى إضافة عناصر للطلب', 'error');
                       return;
@@ -2018,7 +1999,6 @@ const Cafe: React.FC = () => {
 
                     // تحقق صارم من كل عنصر
                     if (editOrderData.items.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
-                      console.error('❌ عنصر غير صحيح في الطلب:', editOrderData.items);
                       showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
                       return;
                     }
@@ -2036,15 +2016,10 @@ const Cafe: React.FC = () => {
                       notes: editOrderData.notes
                     };
 
-                    console.log('📦 بيانات الطلب المرسلة للتحقق:', JSON.stringify(orderData, null, 2));
-
                     // التحقق من المخزون أولاً
-                    console.log('🔍 بداية فحص المخزون في تعديل الطلب...');
                     const inventoryCheck = await api.calculateOrderRequirements(orderData);
-                    console.log('📊 نتيجة فحص المخزون في تعديل الطلب:', JSON.stringify(inventoryCheck, null, 2));
 
                     if (!inventoryCheck.success) {
-                      console.error('❌ فشل فحص المخزون في تعديل الطلب:', inventoryCheck);
                       // إذا كان هناك تفاصيل ناقصة في المخزون، اعرضها بشكل واضح
                       if (
                         inventoryCheck.data &&
@@ -2068,7 +2043,6 @@ const Cafe: React.FC = () => {
 
                     // تحقق من وجود تفاصيل المكونات الناقصة حتى لو كان الفحص ناجح
                     if (inventoryCheck.data && inventoryCheck.data.details && inventoryCheck.data.details.length > 0) {
-                      console.error('❌ تفاصيل المكونات الناقصة في تعديل الطلب:', inventoryCheck.data.details);
                       const detailsMessage = inventoryCheck.data.details
                         .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
                         .join('\n');
@@ -2077,7 +2051,6 @@ const Cafe: React.FC = () => {
                     }
 
                     // إذا كان المخزون متوفر، تابع تحديث الطلب
-                    console.log('✅ فحص المخزون نجح في تعديل الطلب - متابعة تحديث الطلب');
 
                     const updatedOrder = {
                       customerName: editOrderData.customerName,
@@ -2094,7 +2067,6 @@ const Cafe: React.FC = () => {
 
                     // Check if the response indicates an error
                     if (response && !response.success) {
-                      console.error('❌ فشل تحديث الطلب:', response);
 
                       // Handle detailed inventory insufficiency messages
                       if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
@@ -2116,7 +2088,7 @@ const Cafe: React.FC = () => {
                     fetchReadyOrders();
                     showNotification('تم تحديث الطلب بنجاح', 'success');
                   } catch (err) {
-                    console.error('❌ خطأ في تحديث الطلب:', err);
+                    // تجاهل الأخطاء
                     showNotification('حدث خطأ أثناء تحديث الطلب', 'error');
                   }
                 }}

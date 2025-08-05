@@ -105,34 +105,20 @@ export const calculateOrderRequirements = async (req, res) => {
     try {
         const { items } = req.body;
 
-        console.log("🔍 === بداية حساب متطلبات الطلب ===");
-        console.log("بيانات الطلب المرسلة:", JSON.stringify(req.body, null, 2));
-
         if (!items || !Array.isArray(items) || items.length === 0) {
-            console.error("❌ مصفوفة العناصر غير صحيحة");
             return res.status(400).json({
                 success: false,
                 message: "يجب إضافة عنصر واحد على الأقل للطلب",
             });
         }
 
-        console.log("📦 عدد العناصر:", items.length);
-        console.log("📦 العناصر:", JSON.stringify(items, null, 2));
-
         // حساب المخزون المطلوب والتكلفة
-        console.log("🧮 بداية حساب المخزون المطلوب...");
         const inventoryNeeded = await calculateTotalInventoryNeeded(items);
-        console.log("💰 بداية حساب التكلفة الإجمالية...");
         const totalCost = await calculateOrderTotalCost(items);
 
         // التحقق من توفر المخزون
-        console.log("✅ بداية التحقق من توفر المخزون...");
         const { errors: validationErrors, details: insufficientDetails } =
             await validateInventoryAvailability(inventoryNeeded);
-
-        console.log("📊 عدد أخطاء التحقق:", validationErrors.length);
-        console.log("📊 أخطاء التحقق:", validationErrors);
-        console.log("📊 تفاصيل المخزون الناقص:", insufficientDetails);
 
         // جلب تفاصيل المخزون المطلوب
         const InventoryItem = (await import("../models/InventoryItem.js"))
@@ -193,15 +179,6 @@ export const calculateOrderRequirements = async (req, res) => {
             },
         };
 
-        console.log("📤 === بيانات الاستجابة ===");
-        console.log("النجاح:", response.success);
-        console.log("المخزون متوفر:", response.data.isInventoryAvailable);
-        console.log("عدد أخطاء التحقق:", response.data.validationErrors.length);
-        console.log("التكلفة الإجمالية:", response.data.totalCost);
-        console.log("الإيرادات الإجمالية:", response.data.totalRevenue);
-        console.log("الربح:", response.data.profit);
-        console.log("=== نهاية حساب متطلبات الطلب ===\n");
-
         res.json(response);
     } catch (error) {
         console.error("Error in calculateOrderRequirements:", error);
@@ -221,38 +198,22 @@ export const createOrder = async (req, res) => {
         const { tableNumber, customerName, customerPhone, items, notes, bill } =
             req.body;
 
-        console.log("🚀 === بداية إنشاء الطلب ===");
-        console.log("بيانات الطلب المرسلة:", JSON.stringify(req.body, null, 2));
-
         // Validate items
         if (!items || !Array.isArray(items) || items.length === 0) {
-            console.error("❌ مصفوفة العناصر غير صحيحة");
             return res.status(400).json({
                 success: false,
                 message: "يجب إضافة عنصر واحد على الأقل للطلب",
             });
         }
 
-        console.log("📦 عدد العناصر:", items.length);
-        console.log("📦 العناصر:", JSON.stringify(items, null, 2));
-
         // حساب المخزون المطلوب لجميع الأصناف
-        console.log("🧮 === بداية فحص المخزون في إنشاء الطلب ===");
         const inventoryNeeded = await calculateTotalInventoryNeeded(items);
 
         // التحقق من توفر المخزون
-        console.log("✅ بداية التحقق من توفر المخزون...");
         const { errors: validationErrors, details: insufficientDetails } =
             await validateInventoryAvailability(inventoryNeeded);
 
-        console.log("📊 === نتائج فحص المخزون في إنشاء الطلب ===");
-        console.log("عدد أخطاء التحقق:", validationErrors.length);
-        console.log("أخطاء التحقق:", validationErrors);
-        console.log("تفاصيل المخزون الناقص:", insufficientDetails);
-
         if (validationErrors.length > 0) {
-            console.error("❌ فشل فحص المخزون - تم منع إنشاء الطلب");
-            console.error("أخطاء التحقق:", validationErrors);
             return res.status(400).json({
                 success: false,
                 message: "المخزون غير كافي لإنشاء الطلب - راجع التفاصيل أدناه",
@@ -261,8 +222,6 @@ export const createOrder = async (req, res) => {
                 inventoryErrors: validationErrors,
             });
         }
-
-        console.log("✅ نجح فحص المخزون - متابعة إنشاء الطلب");
 
         // Process items and calculate totals
         const processedItems = [];
@@ -355,15 +314,9 @@ export const createOrder = async (req, res) => {
             "0"
         )}`;
 
-        console.log("=== CREATING ORDER WITH DATA ===");
-        console.log("Order data:", JSON.stringify(orderData, null, 2));
-
         const order = new Order(orderData);
 
         await order.save();
-
-        console.log("✅ ORDER CREATED SUCCESSFULLY");
-        console.log("Order ID:", order._id);
 
         // Populate the order with related data for response
         const populatedOrder = await Order.findById(order._id)
@@ -397,8 +350,6 @@ export const createOrder = async (req, res) => {
         } catch (notificationError) {
             //
         }
-
-        console.log("✅ تم إنشاء الطلب بنجاح - معرف الطلب:", order._id);
 
         res.status(201).json({
             success: true,
@@ -447,30 +398,17 @@ export const updateOrder = async (req, res) => {
 
         // حساب التكلفة الإجمالية دائماً (حتى لو لم يتم تمرير items)
         if (items && Array.isArray(items) && items.length > 0) {
-            console.log("🔄 === بداية فحص المخزون في تعديل الطلب ===");
-            console.log("العناصر المحدثة:", JSON.stringify(items, null, 2));
-
             // حساب المخزون المطلوب لجميع الأصناف
             const inventoryNeeded = await calculateTotalInventoryNeeded(items);
 
             // حساب التكلفة الإجمالية
-            console.log("💰 بداية حساب التكلفة الإجمالية...");
             calculatedTotalCost = await calculateOrderTotalCost(items);
 
             // التحقق من توفر المخزون
-            console.log("✅ بداية التحقق من توفر المخزون...");
             const { errors: validationErrors, details: insufficientDetails } =
                 await validateInventoryAvailability(inventoryNeeded);
 
-            console.log("📊 === نتائج فحص المخزون في تعديل الطلب ===");
-            console.log("عدد أخطاء التحقق:", validationErrors.length);
-            console.log("أخطاء التحقق:", validationErrors);
-            console.log("تفاصيل المخزون الناقص:", insufficientDetails);
-            console.log("التكلفة الإجمالية:", calculatedTotalCost);
-
             if (validationErrors.length > 0) {
-                console.error("❌ فشل فحص المخزون - تم منع تعديل الطلب");
-                console.error("أخطاء التحقق:", validationErrors);
                 return res.status(400).json({
                     success: false,
                     message:
@@ -480,15 +418,8 @@ export const updateOrder = async (req, res) => {
                     inventoryErrors: validationErrors,
                 });
             }
-
-            console.log("✅ نجح فحص المخزون - متابعة تعديل الطلب");
         } else {
             // حساب التكلفة من عناصر الطلب الحالية إذا لم يتم تمرير items
-            console.log("💰 === حساب التكلفة من عناصر الطلب الحالية ===");
-            console.log(
-                "عناصر الطلب الحالية:",
-                JSON.stringify(order.items, null, 2)
-            );
 
             const currentItems = order.items.map((item) => ({
                 menuItem: item.menuItem,
@@ -498,16 +429,7 @@ export const updateOrder = async (req, res) => {
                 notes: item.notes,
             }));
 
-            console.log(
-                "عناصر الطلب المحولة:",
-                JSON.stringify(currentItems, null, 2)
-            );
-
             calculatedTotalCost = await calculateOrderTotalCost(currentItems);
-            console.log(
-                "💰 التكلفة المحسوبة من العناصر الحالية:",
-                calculatedTotalCost
-            );
         }
 
         // Update fields
@@ -610,14 +532,9 @@ export const updateOrder = async (req, res) => {
             // حساب التكلفة الإجمالية للطلب
             if (calculatedTotalCost > 0) {
                 order.totalCost = calculatedTotalCost;
-                console.log(
-                    "💰 تم تحديث التكلفة الإجمالية في الطلب:",
-                    calculatedTotalCost
-                );
             } else if (items && Array.isArray(items) && items.length > 0) {
                 const totalCost = await calculateOrderTotalCost(items);
                 order.totalCost = totalCost;
-                console.log("💰 تم حساب التكلفة الإجمالية للطلب:", totalCost);
             } else {
                 // حساب التكلفة من عناصر الطلب الحالية
                 const currentItems = order.items.map((item) => ({
@@ -629,16 +546,10 @@ export const updateOrder = async (req, res) => {
                 }));
                 const totalCost = await calculateOrderTotalCost(currentItems);
                 order.totalCost = totalCost;
-                console.log(
-                    "💰 تم حساب التكلفة الإجمالية من عناصر الطلب الحالية:",
-                    totalCost
-                );
             }
         }
 
         await order.save();
-
-        console.log("💰 التكلفة النهائية المحفوظة في الطلب:", order.totalCost);
 
         // Populate the order with related data for response
         const updatedOrder = await Order.findById(order._id)
@@ -647,8 +558,6 @@ export const updateOrder = async (req, res) => {
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
-
-        console.log("💰 التكلفة في الطلب المحدث:", updatedOrder.totalCost);
 
         // Update bill totals if order is linked to a bill
         if (order.bill) {
