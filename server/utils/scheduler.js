@@ -16,6 +16,59 @@ import NotificationService from "../services/notificationService.js";
 import Subscription from "../models/Subscription.js";
 import { sendSubscriptionNotification } from "../controllers/notificationController.js";
 import Organization from "../models/Organization.js";
+import { runCleanup } from "./notificationCleanup.js";
+
+/**
+ * إعداد الجدولة التلقائية لحذف الإشعارات القديمة
+ */
+const setupNotificationCleanupScheduler = () => {
+    // تشغيل كل يوم في الساعة 2:00 صباحاً
+    cron.schedule(
+        "0 2 * * *",
+        async () => {
+            try {
+                Logger.info("⏰ تشغيل جدولة تنظيف الإشعارات...");
+                await runCleanup();
+                Logger.info("✅ تم الانتهاء من جدولة تنظيف الإشعارات");
+            } catch (error) {
+                Logger.error("❌ خطأ في جدولة تنظيف الإشعارات:", error);
+            }
+        },
+        {
+            scheduled: true,
+            timezone: "Asia/Riyadh", // توقيت السعودية
+        }
+    );
+
+    Logger.info("✅ تم إعداد جدولة تنظيف الإشعارات (كل يوم في 2:00 صباحاً)");
+};
+
+/**
+ * تشغيل تنظيف فوري (للتجربة)
+ */
+const runImmediateCleanup = async () => {
+    try {
+        Logger.info("🔄 تشغيل تنظيف فوري للإشعارات...");
+        const deletedCount = await runCleanup();
+        Logger.info(
+            `✅ تم الانتهاء من التنظيف الفوري. المحذوف: ${deletedCount}`
+        );
+        return deletedCount;
+    } catch (error) {
+        Logger.error("❌ خطأ في التنظيف الفوري:", error);
+        throw error;
+    }
+};
+
+/**
+ * إيقاف جميع الجداول
+ */
+const stopAllSchedulers = () => {
+    cron.getTasks().forEach((task) => {
+        task.stop();
+    });
+    Logger.info("⏹️ تم إيقاف جميع الجداول");
+};
 
 // Check for low stock items and send alerts
 const checkLowStock = async () => {
@@ -710,34 +763,9 @@ export const initializeScheduler = () => {
         "✅ Subscription expiry notifications scheduled: every 24 hours"
     );
 
-    Logger.info("🎯 All scheduled tasks initialized successfully!");
-};
+    // إضافة جدولة تنظيف الإشعارات القديمة
+    setupNotificationCleanupScheduler();
+    Logger.info("✅ Notification cleanup scheduler initialized");
 
-// Manual task execution (for testing)
-export const runTask = async (taskName) => {
-    switch (taskName) {
-        case "lowStock":
-            await checkLowStock();
-            break;
-        case "dailyReport":
-            await generateDailyReport();
-            break;
-        case "monthlyReport":
-            await generateMonthlyReport();
-            break;
-        case "updateOverdue":
-            await updateOverdueItems();
-            break;
-        case "recurringCosts":
-            await createRecurringCosts();
-            break;
-        case "backup":
-            await createDatabaseBackup();
-            break;
-        case "cleanNotifications":
-            await NotificationService.cleanExpiredNotifications();
-            break;
-        default:
-            throw new Error("Unknown task name");
-    }
+    Logger.info("🎯 All scheduled tasks initialized successfully!");
 };
