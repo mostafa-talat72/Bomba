@@ -281,7 +281,7 @@ const Dashboard = () => {
               <h1 className="text-4xl font-bold mb-2">
                 مرحباً بك في نظام Bomba
               </h1>
-              <p className="text-orange-100 text-lg font-medium">لوحة تحكم شاملة لإدارة الطلبات والبلايستيشن</p>
+              <p className="text-orange-100 text-lg font-medium">منصة إدارة ذكية للكافيهات والمطاعم والترفيه</p>
             </div>
           </div>
         </div>
