@@ -83,22 +83,27 @@ const generateDailyReport = async () => {
     try {
         Logger.info("Starting daily report generation...");
 
-        const today = new Date();
-        const startOfDay = new Date(
-            today.getFullYear(),
-            today.getMonth(),
-            today.getDate()
+        const now = new Date();
+
+        // Calculate the report period: from 5 AM yesterday to 5 AM today
+        const today5AM = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            5,
+            0,
+            0
         );
-        const endOfDay = new Date(
-            today.getFullYear(),
-            today.getMonth(),
-            today.getDate() + 1
-        );
+        const yesterday5AM = new Date(today5AM.getTime() - 24 * 60 * 60 * 1000);
+
+        const startOfReport = yesterday5AM;
+        const endOfReport = today5AM;
 
         Logger.info("Daily report date range:", {
-            today: today.toISOString(),
-            startOfDay: startOfDay.toISOString(),
-            endOfDay: endOfDay.toISOString(),
+            now: now.toISOString(),
+            startOfReport: startOfReport.toISOString(),
+            endOfReport: endOfReport.toISOString(),
+            reportPeriod: "5 AM yesterday to 5 AM today",
         });
 
         // Get all organizations
@@ -113,20 +118,20 @@ const generateDailyReport = async () => {
                 // Get daily statistics for this organization
                 const [bills, orders, sessions, costs] = await Promise.all([
                     Bill.find({
-                        createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        createdAt: { $gte: startOfReport, $lt: endOfReport },
                         status: { $in: ["partial", "paid"] },
                         organization: organization._id,
                     }),
                     Order.find({
-                        createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        createdAt: { $gte: startOfReport, $lt: endOfReport },
                         organization: organization._id,
                     }),
                     Session.find({
-                        startTime: { $gte: startOfDay, $lt: endOfDay },
+                        startTime: { $gte: startOfReport, $lt: endOfReport },
                         organization: organization._id,
                     }),
                     Cost.find({
-                        date: { $gte: startOfDay, $lt: endOfDay },
+                        date: { $gte: startOfReport, $lt: endOfReport },
                         organization: organization._id,
                     }),
                 ]);
@@ -145,7 +150,10 @@ const generateDailyReport = async () => {
                 const topProducts = await Order.aggregate([
                     {
                         $match: {
-                            createdAt: { $gte: startOfDay, $lt: endOfDay },
+                            createdAt: {
+                                $gte: startOfReport,
+                                $lt: endOfReport,
+                            },
                             status: "delivered",
                             organization: organization._id,
                         },
@@ -170,7 +178,7 @@ const generateDailyReport = async () => {
                 ]);
 
                 const reportData = {
-                    date: today.toLocaleDateString("ar-EG"),
+                    date: yesterday5AM.toLocaleDateString("ar-EG"),
                     organizationName: organization.name,
                     totalRevenue,
                     totalCosts,
@@ -182,6 +190,8 @@ const generateDailyReport = async () => {
                         name: p._id,
                         quantity: p.quantity,
                     })),
+                    reportPeriod:
+                        "من الساعة 5 صباحاً أمس إلى الساعة 5 صباحاً اليوم",
                 };
 
                 // Get admin emails for this organization
@@ -622,11 +632,11 @@ export const initializeScheduler = () => {
     cron.schedule("0 * * * *", checkLowStock);
     Logger.info("✅ Low stock check scheduled: every hour at minute 0");
 
-    // Generate daily report at 11:59 PM (Egypt time)
-    cron.schedule("59 23 * * *", () => {
+    // Generate daily report at 5:00 AM (Egypt time)
+    cron.schedule("0 5 * * *", () => {
         const now = new Date();
         Logger.info(
-            "🕐 Daily report scheduled task triggered at 11:59 PM (Egypt time)",
+            "🕐 Daily report scheduled task triggered at 5:00 AM (Egypt time)",
             {
                 currentTime: now.toLocaleString("ar-EG"),
                 egyptTime: now.toLocaleString("ar-EG", {
@@ -636,9 +646,7 @@ export const initializeScheduler = () => {
         );
         generateDailyReport();
     });
-    Logger.info(
-        "✅ Daily report scheduled: every day at 11:59 PM (Egypt time)"
-    );
+    Logger.info("✅ Daily report scheduled: every day at 5:00 AM (Egypt time)");
 
     // For testing: also run daily report every hour (only in development)
     if (process.env.NODE_ENV === "development") {
