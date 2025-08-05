@@ -258,7 +258,7 @@ body {
 .slider::-webkit-slider-thumb {
 	-webkit-appearance: none;
 	appearance: none;
-	background: #3b82f6;
+	background: #ea580c;
 	border-radius: 50%;
 	height: 1.25rem;
 	width: 1.25rem;
@@ -267,7 +267,7 @@ body {
 }
 
 .slider::-webkit-slider-thumb:hover {
-	background: #2563eb;
+	background: #dc2626;
 	transform: scale(1.1);
 }
 
@@ -279,7 +279,7 @@ body {
 }
 
 .slider::-moz-range-thumb {
-	background: #3b82f6;
+	background: #ea580c;
 	border-radius: 50%;
 	height: 1.25rem;
 	width: 1.25rem;
@@ -289,6 +289,91 @@ body {
 }
 
 .slider::-moz-range-thumb:hover {
-	background: #2563eb;
+	background: #dc2626;
 	transform: scale(1.1);
+}
+
+/* Custom Scrollbar Styles - Light Mode */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: #f1f5f9;
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+	background: #ea580c;
+	border-radius: 4px;
+	transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: #dc2626;
+}
+
+::-webkit-scrollbar-corner {
+	background: #f1f5f9;
+}
+
+/* Custom Scrollbar Styles - Dark Mode */
+.dark ::-webkit-scrollbar-track {
+	background: #1e293b;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+	background: #ea580c;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+	background: #dc2626;
+}
+
+.dark ::-webkit-scrollbar-corner {
+	background: #1e293b;
+}
+
+/* Firefox Scrollbar Styles - Light Mode */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: #ea580c #f1f5f9;
+}
+
+/* Firefox Scrollbar Styles - Dark Mode */
+.dark * {
+	scrollbar-color: #ea580c #1e293b;
+}
+
+/* Additional scrollbar styles for specific elements */
+.overflow-y-auto::-webkit-scrollbar {
+	width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+	background: #f1f5f9;
+	border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+	background: #ea580c;
+	border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+	background: #dc2626;
+}
+
+/* Dark mode for overflow-y-auto elements */
+.dark .overflow-y-auto::-webkit-scrollbar-track {
+	background: #1e293b;
+}
+
+.dark .overflow-y-auto::-webkit-scrollbar-thumb {
+	background: #ea580c;
+}
+
+.dark .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+	background: #dc2626;
 }
