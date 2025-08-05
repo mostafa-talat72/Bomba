@@ -5,352 +5,14 @@ import Bill from "../models/Bill.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import mongoose from "mongoose";
-
-// دالة مساعدة لتحويل الوحدات
-const convertQuantity = (quantity, fromUnit, toUnit) => {
-    const conversions = {
-        // تحويلات الحجم
-        لتر: { مل: 1000, لتر: 1 },
-        مل: { لتر: 0.001, مل: 1 },
-        // تحويلات الوزن
-        كيلو: { جرام: 1000, كيلو: 1 },
-        جرام: { كيلو: 0.001, جرام: 1 },
-        كيلوغرام: { جرام: 1000, كيلوغرام: 1, كيلو: 1 },
-        غرام: { كيلوغرام: 0.001, غرام: 1, كيلو: 0.001 },
-        // الوحدات الأخرى
-        قطعة: { قطعة: 1 },
-        علبة: { علبة: 1 },
-        كيس: { كيس: 1 },
-        زجاجة: { زجاجة: 1 },
-        كوب: { كوب: 1 },
-        حبة: { حبة: 1 },
-        ملعقة: { ملعقة: 1 },
-    };
-
-    // إذا كانت الوحدات متطابقة، إرجاع الكمية كما هي
-    if (fromUnit === toUnit) {
-        return quantity;
-    }
-
-    const conversionRate = conversions[fromUnit]?.[toUnit];
-    if (conversionRate) {
-        console.log(
-            `    Converting ${quantity} ${fromUnit} to ${
-                quantity * conversionRate
-            } ${toUnit}`
-        );
-        return quantity * conversionRate;
-    } else {
-        console.log(
-            `    No conversion found from ${fromUnit} to ${toUnit}, returning original quantity`
-        );
-        return quantity;
-    }
-};
-
-// دالة مساعدة لحساب المخزون المطلوب لجميع الأصناف
-const calculateTotalInventoryNeeded = async (orderItems) => {
-    const inventoryNeeded = new Map(); // Map<inventoryItemId, { quantity, unit }>
-
-    console.log("=== STARTING INVENTORY CALCULATION ===");
-    console.log("Input orderItems:", JSON.stringify(orderItems, null, 2));
-
-    // تجميع جميع المكونات المطلوبة أولاً
-    const allIngredients = [];
-
-    for (const item of orderItems) {
-        if (item.menuItem) {
-            const menuItem = await MenuItem.findById(item.menuItem);
-            if (menuItem && menuItem.ingredients) {
-                for (const ingredient of menuItem.ingredients) {
-                    allIngredients.push({
-                        inventoryItemId: ingredient.item,
-                        quantity: ingredient.quantity * item.quantity,
-                        unit: ingredient.unit,
-                        itemName: item.name,
-                    });
-                }
-            }
-        }
-    }
-
-    console.log(
-        "All ingredients collected:",
-        allIngredients.map(
-            (i) =>
-                `${i.itemName}: ${i.quantity} ${i.unit} of ${i.inventoryItemId}`
-        )
-    );
-
-    for (const item of orderItems) {
-        console.log(`\n--- Processing item: ${item.name || "Unknown"} ---`);
-        console.log("Item data:", JSON.stringify(item, null, 2));
-
-        if (item.menuItem) {
-            console.log(`Looking up menuItem with ID: ${item.menuItem}`);
-            const menuItem = await MenuItem.findById(item.menuItem);
-            if (!menuItem) {
-                console.error(`Menu item not found: ${item.menuItem}`);
-                throw new Error(`عنصر القائمة غير موجود: ${item.menuItem}`);
-            }
-            if (!menuItem.isAvailable) {
-                console.error(`Menu item not available: ${menuItem.name}`);
-                throw new Error(`العنصر غير متاح: ${menuItem.name}`);
-            }
-
-            console.log(`Found menu item: ${menuItem.name}`);
-            console.log(
-                `Menu item ingredients:`,
-                JSON.stringify(menuItem.ingredients, null, 2)
-            );
-
-            if (menuItem.ingredients && menuItem.ingredients.length > 0) {
-                for (const ingredient of menuItem.ingredients) {
-                    const requiredQuantityForItem =
-                        ingredient.quantity * item.quantity;
-
-                    console.log(`  Processing ingredient: ${ingredient.item}`);
-                    console.log(
-                        `  Required quantity for this item: ${requiredQuantityForItem} ${ingredient.unit}`
-                    );
-
-                    if (inventoryNeeded.has(ingredient.item)) {
-                        const prev = inventoryNeeded.get(ingredient.item);
-                        console.log(
-                            `    Previous quantity for ${ingredient.item}: ${prev.quantity} ${prev.unit}`
-                        );
-
-                        // تحويل الوحدات إلى نفس الوحدة للجمع
-                        let totalQuantity;
-                        let baseUnit = ingredient.unit;
-
-                        if (prev.unit !== ingredient.unit) {
-                            // تحويل الكمية السابقة إلى وحدة المكون الحالي
-                            const prevConverted = convertQuantity(
-                                prev.quantity,
-                                prev.unit,
-                                ingredient.unit
-                            );
-                            totalQuantity =
-                                prevConverted + requiredQuantityForItem;
-                            console.log(
-                                `    Converting ${prev.quantity} ${prev.unit} to ${prevConverted} ${ingredient.unit}`
-                            );
-                            console.log(
-                                `    Adding ${requiredQuantityForItem} ${ingredient.unit} = ${totalQuantity} ${ingredient.unit}`
-                            );
-                        } else {
-                            totalQuantity =
-                                prev.quantity + requiredQuantityForItem;
-                            console.log(
-                                `    Adding ${prev.quantity} + ${requiredQuantityForItem} = ${totalQuantity} ${ingredient.unit}`
-                            );
-                        }
-
-                        inventoryNeeded.set(ingredient.item, {
-                            quantity: totalQuantity,
-                            unit: baseUnit,
-                        });
-                        console.log(
-                            `    Updated total for ${ingredient.item}: ${totalQuantity} ${baseUnit}`
-                        );
-                    } else {
-                        inventoryNeeded.set(ingredient.item, {
-                            quantity: requiredQuantityForItem,
-                            unit: ingredient.unit,
-                        });
-                        console.log(
-                            `    First time for ${ingredient.item}: ${requiredQuantityForItem} ${ingredient.unit}`
-                        );
-                    }
-                }
-            } else {
-                console.log(
-                    `  No ingredients found for menu item: ${menuItem.name}`
-                );
-            }
-        } else {
-            console.log(`  Item has no menuItem field: ${item.name}`);
-        }
-    }
-
-    // إعادة حساب المخزون المطلوب من جميع المكونات المجمعة
-    const consolidatedInventory = new Map();
-
-    for (const ingredient of allIngredients) {
-        const { inventoryItemId, quantity, unit } = ingredient;
-
-        if (consolidatedInventory.has(inventoryItemId)) {
-            const existing = consolidatedInventory.get(inventoryItemId);
-            console.log(
-                `    Consolidating ${inventoryItemId}: existing ${existing.quantity} ${existing.unit} + new ${quantity} ${unit}`
-            );
-
-            let totalQuantity;
-            let baseUnit = existing.unit;
-
-            if (existing.unit !== unit) {
-                const convertedQuantity = convertQuantity(
-                    quantity,
-                    unit,
-                    existing.unit
-                );
-                totalQuantity = existing.quantity + convertedQuantity;
-                console.log(
-                    `    Converted ${quantity} ${unit} to ${convertedQuantity} ${existing.unit}`
-                );
-            } else {
-                totalQuantity = existing.quantity + quantity;
-            }
-
-            consolidatedInventory.set(inventoryItemId, {
-                quantity: totalQuantity,
-                unit: baseUnit,
-            });
-            console.log(
-                `    Updated total for ${inventoryItemId}: ${totalQuantity} ${baseUnit}`
-            );
-        } else {
-            consolidatedInventory.set(inventoryItemId, { quantity, unit });
-            console.log(
-                `    First time for ${inventoryItemId}: ${quantity} ${unit}`
-            );
-        }
-    }
-
-    // استبدال النتيجة الأصلية بالنتيجة المجمعة
-    inventoryNeeded.clear();
-    for (const [id, data] of consolidatedInventory) {
-        inventoryNeeded.set(id, data);
-    }
-
-    console.log("\n=== FINAL INVENTORY NEEDED ===");
-    console.log(Array.from(inventoryNeeded.entries()));
-
-    // التحقق من أن جميع المكونات المتشابهة تم جمعها بشكل صحيح
-    const finalInventoryNeeded = new Map();
-    const processedItems = new Set(); // لتتبع العناصر المعالجة
-
-    for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
-        if (processedItems.has(inventoryItemId.toString())) {
-            console.log(
-                `    Skipping duplicate ${inventoryItemId} - already processed`
-            );
-            continue;
-        }
-
-        // البحث عن جميع الإدخالات لهذا العنصر
-        let totalQuantity = quantity;
-        let baseUnit = unit;
-
-        for (const [
-            otherId,
-            { quantity: otherQuantity, unit: otherUnit },
-        ] of inventoryNeeded) {
-            if (
-                otherId.toString() === inventoryItemId.toString() &&
-                otherId !== inventoryItemId
-            ) {
-                console.log(
-                    `    Found duplicate for ${inventoryItemId}: ${otherQuantity} ${otherUnit}`
-                );
-
-                if (otherUnit !== baseUnit) {
-                    const convertedQuantity = convertQuantity(
-                        otherQuantity,
-                        otherUnit,
-                        baseUnit
-                    );
-                    totalQuantity += convertedQuantity;
-                    console.log(
-                        `    Converted ${otherQuantity} ${otherUnit} to ${convertedQuantity} ${baseUnit}`
-                    );
-                } else {
-                    totalQuantity += otherQuantity;
-                }
-                console.log(
-                    `    Updated total for ${inventoryItemId}: ${totalQuantity} ${baseUnit}`
-                );
-            }
-        }
-
-        finalInventoryNeeded.set(inventoryItemId, {
-            quantity: totalQuantity,
-            unit: baseUnit,
-        });
-        processedItems.add(inventoryItemId.toString());
-        console.log(
-            `    Final consolidated for ${inventoryItemId}: ${totalQuantity} ${baseUnit}`
-        );
-    }
-
-    console.log("=== CONSOLIDATED INVENTORY NEEDED ===");
-    console.log(Array.from(finalInventoryNeeded.entries()));
-    console.log("=== END INVENTORY CALCULATION ===\n");
-
-    return finalInventoryNeeded;
-};
-
-// دالة مساعدة للتحقق من توفر المخزون
-const validateInventoryAvailability = async (inventoryNeeded) => {
-    const validationErrors = [];
-
-    console.log("=== STARTING INVENTORY VALIDATION ===");
-    console.log("Inventory needed:", Array.from(inventoryNeeded.entries()));
-
-    for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
-        console.log(`\n--- Validating inventory item: ${inventoryItemId} ---`);
-        console.log(`Required: ${quantity} ${unit}`);
-
-        const inventoryItem = await InventoryItem.findById(inventoryItemId);
-        if (!inventoryItem) {
-            console.error(`Inventory item not found: ${inventoryItemId}`);
-            validationErrors.push(
-                `الخامة ${inventoryItemId} غير موجودة في المخزون`
-            );
-            continue;
-        }
-
-        console.log(`Found inventory item: ${inventoryItem.name}`);
-        console.log(`Inventory item unit: ${inventoryItem.unit}`);
-        console.log(
-            `Available stock: ${inventoryItem.currentStock} ${inventoryItem.unit}`
-        );
-
-        // تحويل الكمية المطلوبة من وحدة المكون إلى وحدة المخزون
-        const convertedQuantityNeeded = convertQuantity(
-            quantity,
-            unit,
-            inventoryItem.unit
-        );
-
-        console.log(
-            `Converted required quantity: ${convertedQuantityNeeded} ${inventoryItem.unit}`
-        );
-        console.log(
-            `Available: ${inventoryItem.currentStock} ${inventoryItem.unit}`
-        );
-        console.log(
-            `Is sufficient: ${
-                inventoryItem.currentStock >= convertedQuantityNeeded
-            }`
-        );
-
-        if (inventoryItem.currentStock < convertedQuantityNeeded) {
-            const errorMsg = `${inventoryItem.name}: المطلوب ${convertedQuantityNeeded} ${inventoryItem.unit}، المتوفر ${inventoryItem.currentStock} ${inventoryItem.unit}`;
-            console.error(`INSUFFICIENT STOCK: ${errorMsg}`);
-            validationErrors.push(errorMsg);
-        } else {
-            console.log(`✓ Sufficient stock for ${inventoryItem.name}`);
-        }
-    }
-
-    console.log("\n=== VALIDATION ERRORS ===");
-    console.log(validationErrors);
-    console.log("=== END INVENTORY VALIDATION ===\n");
-
-    return validationErrors;
-};
+import {
+    convertQuantity,
+    calculateTotalInventoryNeeded,
+    validateInventoryAvailability,
+    calculateOrderTotalCost,
+    createOrderErrorMessages,
+    createOrderSuccessMessages,
+} from "../utils/orderUtils.js";
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -436,227 +98,6 @@ export const getOrder = async (req, res) => {
     }
 };
 
-// دالة لحساب التكلفة الإجمالية للطلب
-const calculateOrderTotalCost = async (orderItems) => {
-    let totalCost = 0;
-    const InventoryItem = (await import("../models/InventoryItem.js")).default;
-
-    console.log("💰 === حساب التكلفة الإجمالية ===");
-    console.log("عناصر الطلب المدخلة:", JSON.stringify(orderItems, null, 2));
-
-    // استخدام نفس منطق جمع المكونات المتشابهة
-    const inventoryNeeded = await calculateTotalInventoryNeeded(orderItems);
-
-    console.log("المكونات المطلوبة:", Array.from(inventoryNeeded.entries()));
-
-    if (inventoryNeeded.size === 0) {
-        console.log("⚠️ تحذير: لا توجد مكونات مطلوبة!");
-        return totalCost;
-    }
-
-    for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
-        const inventoryItem = await InventoryItem.findById(inventoryItemId);
-        if (inventoryItem) {
-            // تحويل الكمية المطلوبة من وحدة المكون إلى وحدة المخزون
-            const convertedQuantityNeeded = convertQuantity(
-                quantity,
-                unit,
-                inventoryItem.unit
-            );
-
-            // حساب التكلفة لهذا المكون
-            const ingredientCost =
-                (inventoryItem.cost || 0) * convertedQuantityNeeded;
-            totalCost += ingredientCost;
-
-            console.log(
-                `    ${inventoryItem.name}: ${convertedQuantityNeeded} ${
-                    inventoryItem.unit
-                } × ${inventoryItem.cost || 0} = ${ingredientCost}`
-            );
-
-            // تحقق من قيمة التكلفة
-            if (
-                inventoryItem.cost === undefined ||
-                inventoryItem.cost === null ||
-                inventoryItem.cost === 0
-            ) {
-                console.log(
-                    `    ⚠️ تحذير: ${inventoryItem.name} لا يحتوي على قيمة تكلفة صحيحة (${inventoryItem.cost})`
-                );
-            }
-        } else {
-            console.log(
-                `    ❌ خطأ: لم يتم العثور على عنصر المخزون ${inventoryItemId}`
-            );
-        }
-    }
-
-    console.log(`💰 التكلفة الإجمالية: ${totalCost}`);
-    console.log("=== نهاية حساب التكلفة ===\n");
-
-    return totalCost;
-};
-
-// دالة مساعدة للتحقق من قيم التكلفة في عناصر المخزون
-const checkInventoryCosts = async () => {
-    const InventoryItem = (await import("../models/InventoryItem.js")).default;
-    const items = await InventoryItem.find({});
-
-    console.log("🔍 === فحص قيم التكلفة في عناصر المخزون ===");
-    let itemsWithoutCost = 0;
-    let totalItems = items.length;
-
-    console.log(`📊 إجمالي عناصر المخزون: ${totalItems}`);
-
-    for (const item of items) {
-        if (item.cost === undefined || item.cost === null || item.cost === 0) {
-            console.log(
-                `    ⚠️ ${item.name}: لا يحتوي على قيمة تكلفة (${item.cost})`
-            );
-            itemsWithoutCost++;
-        } else {
-            console.log(`    ✅ ${item.name}: تكلفة = ${item.cost}`);
-        }
-    }
-
-    console.log(
-        `📊 إجمالي العناصر بدون تكلفة: ${itemsWithoutCost} من ${totalItems}`
-    );
-    
-    if (itemsWithoutCost > 0) {
-        console.log("🚨 تحذير: يجب تحديث قيم التكلفة في عناصر المخزون!");
-    }
-    
-    console.log("=== نهاية فحص التكلفة ===\n");
-
-    return itemsWithoutCost;
-};
-
-// دالة مشتركة لمعالجة عناصر الطلب (إنشاء وتعديل)
-const processOrderItems = async (items, operation = 'create') => {
-    try {
-        console.log(`🔄 === بداية معالجة عناصر الطلب (${operation}) ===`);
-        console.log("📦 عدد العناصر:", items.length);
-        console.log("📦 العناصر:", JSON.stringify(items, null, 2));
-
-        // حساب المخزون المطلوب لجميع الأصناف
-        console.log("🧮 بداية حساب المخزون المطلوب...");
-        const inventoryNeeded = await calculateTotalInventoryNeeded(items);
-
-        // حساب التكلفة الإجمالية
-        console.log("💰 بداية حساب التكلفة الإجمالية...");
-        const totalCost = await calculateOrderTotalCost(items);
-
-        // التحقق من توفر المخزون
-        console.log("✅ بداية التحقق من توفر المخزون...");
-        const validationErrors = await validateInventoryAvailability(
-            inventoryNeeded
-        );
-
-        console.log(`📊 === نتائج فحص المخزون في ${operation} الطلب ===`);
-        console.log("عدد أخطاء التحقق:", validationErrors.length);
-        console.log("أخطاء التحقق:", validationErrors);
-        console.log("التكلفة الإجمالية:", totalCost);
-
-        if (validationErrors.length > 0) {
-            console.error(`❌ فشل فحص المخزون - تم منع ${operation} الطلب`);
-            console.error("أخطاء التحقق:", validationErrors);
-            return {
-                success: false,
-                status: 400,
-                data: {
-                    success: false,
-                    message: `المخزون غير كافي ل${operation} الطلب - راجع التفاصيل أدناه`,
-                    errors: validationErrors,
-                    details: validationErrors.join(" | "),
-                    inventoryErrors: validationErrors,
-                }
-            };
-        }
-
-        console.log(`✅ نجح فحص المخزون - متابعة ${operation} الطلب`);
-
-        // معالجة العناصر وحساب المجاميع
-        const processedItems = [];
-        let subtotal = 0;
-
-        for (const item of items) {
-            if (item.menuItem) {
-                const menuItem = await MenuItem.findById(item.menuItem);
-                if (!menuItem) {
-                    return {
-                        success: false,
-                        status: 400,
-                        data: {
-                            success: false,
-                            message: `عنصر القائمة غير موجود: ${item.menuItem}`,
-                        }
-                    };
-                }
-                if (!menuItem.isAvailable) {
-                    return {
-                        success: false,
-                        status: 400,
-                        data: {
-                            success: false,
-                            message: `العنصر غير متاح: ${menuItem.name}`,
-                        }
-                    };
-                }
-
-                // Calculate item total
-                const itemTotal = menuItem.price * item.quantity;
-                subtotal += itemTotal;
-                processedItems.push({
-                    menuItem: menuItem._id,
-                    name: menuItem.name,
-                    arabicName: menuItem.arabicName || menuItem.name,
-                    price: menuItem.price,
-                    quantity: item.quantity,
-                    itemTotal,
-                    notes: item.notes,
-                    preparationTime: menuItem.preparationTime,
-                });
-            } else {
-                // إذا لم يوجد menuItem، استخدم بيانات العنصر كما هي
-                const itemTotal = item.price * item.quantity;
-                subtotal += itemTotal;
-                processedItems.push({
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    itemTotal,
-                    notes: item.notes,
-                    preparationTime: item.preparationTime || 0,
-                });
-            }
-        }
-
-        return {
-            success: true,
-            data: {
-                processedItems,
-                subtotal,
-                totalCost,
-                inventoryNeeded
-            }
-        };
-
-    } catch (error) {
-        console.error(`❌ خطأ في معالجة عناصر الطلب (${operation}):`, error);
-        return {
-            success: false,
-            status: 500,
-            data: {
-                success: false,
-                message: `خطأ في ${operation} الطلب`,
-                error: error.message,
-            }
-        };
-    }
-};
-
 // @desc    Calculate inventory requirements and total cost for order items
 // @route   POST /api/orders/calculate
 // @access  Private
@@ -686,12 +127,12 @@ export const calculateOrderRequirements = async (req, res) => {
 
         // التحقق من توفر المخزون
         console.log("✅ بداية التحقق من توفر المخزون...");
-        const validationErrors = await validateInventoryAvailability(
-            inventoryNeeded
-        );
+        const { errors: validationErrors, details: insufficientDetails } =
+            await validateInventoryAvailability(inventoryNeeded);
 
         console.log("📊 عدد أخطاء التحقق:", validationErrors.length);
         console.log("📊 أخطاء التحقق:", validationErrors);
+        console.log("📊 تفاصيل المخزون الناقص:", insufficientDetails);
 
         // جلب تفاصيل المخزون المطلوب
         const InventoryItem = (await import("../models/InventoryItem.js"))
@@ -748,6 +189,7 @@ export const calculateOrderRequirements = async (req, res) => {
                     (item) => item.isAvailable
                 ),
                 validationErrors: validationErrors,
+                details: insufficientDetails, // تفاصيل المكونات الناقصة
             },
         };
 
@@ -800,13 +242,13 @@ export const createOrder = async (req, res) => {
 
         // التحقق من توفر المخزون
         console.log("✅ بداية التحقق من توفر المخزون...");
-        const validationErrors = await validateInventoryAvailability(
-            inventoryNeeded
-        );
+        const { errors: validationErrors, details: insufficientDetails } =
+            await validateInventoryAvailability(inventoryNeeded);
 
         console.log("📊 === نتائج فحص المخزون في إنشاء الطلب ===");
         console.log("عدد أخطاء التحقق:", validationErrors.length);
         console.log("أخطاء التحقق:", validationErrors);
+        console.log("تفاصيل المخزون الناقص:", insufficientDetails);
 
         if (validationErrors.length > 0) {
             console.error("❌ فشل فحص المخزون - تم منع إنشاء الطلب");
@@ -815,7 +257,7 @@ export const createOrder = async (req, res) => {
                 success: false,
                 message: "المخزون غير كافي لإنشاء الطلب - راجع التفاصيل أدناه",
                 errors: validationErrors,
-                details: validationErrors.join(" | "),
+                details: insufficientDetails,
                 inventoryErrors: validationErrors,
             });
         }
@@ -1003,9 +445,6 @@ export const updateOrder = async (req, res) => {
         // إذا تم تحديث العناصر، تحقق من المخزون
         let calculatedTotalCost = 0; // متغير لتخزين التكلفة المحسوبة
 
-        // فحص قيم التكلفة في عناصر المخزون للتشخيص
-        await checkInventoryCosts();
-
         // حساب التكلفة الإجمالية دائماً (حتى لو لم يتم تمرير items)
         if (items && Array.isArray(items) && items.length > 0) {
             console.log("🔄 === بداية فحص المخزون في تعديل الطلب ===");
@@ -1020,13 +459,13 @@ export const updateOrder = async (req, res) => {
 
             // التحقق من توفر المخزون
             console.log("✅ بداية التحقق من توفر المخزون...");
-            const validationErrors = await validateInventoryAvailability(
-                inventoryNeeded
-            );
+            const { errors: validationErrors, details: insufficientDetails } =
+                await validateInventoryAvailability(inventoryNeeded);
 
             console.log("📊 === نتائج فحص المخزون في تعديل الطلب ===");
             console.log("عدد أخطاء التحقق:", validationErrors.length);
             console.log("أخطاء التحقق:", validationErrors);
+            console.log("تفاصيل المخزون الناقص:", insufficientDetails);
             console.log("التكلفة الإجمالية:", calculatedTotalCost);
 
             if (validationErrors.length > 0) {
@@ -1037,7 +476,7 @@ export const updateOrder = async (req, res) => {
                     message:
                         "المخزون غير كافي لتعديل الطلب - راجع التفاصيل أدناه",
                     errors: validationErrors,
-                    details: validationErrors.join(" | "),
+                    details: insufficientDetails,
                     inventoryErrors: validationErrors,
                 });
             }

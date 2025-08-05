@@ -74,6 +74,7 @@ export interface Order {
   subtotal?: number;
   discount?: number;
   finalAmount?: number;
+  totalCost?: number;
   notes?: string;
   preparationTime?: number;
   estimatedReadyTime?: Date;

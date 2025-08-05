@@ -353,6 +353,13 @@ const Cafe: React.FC = () => {
     }, 0);
   };
 
+  const calculateEditOrderTotal = () => {
+    if (!editOrderData || !editOrderData.items) return 0;
+    return editOrderData.items.reduce((total, item) => {
+      return total + (item.price * item.quantity);
+    }, 0);
+  };
+
   const handleCreateOrder = async () => {
     console.log('🚀 === بداية إنشاء الطلب ===');
     console.log('الطلبات الحالية:', JSON.stringify(currentOrder, null, 2));
@@ -399,16 +406,35 @@ const Cafe: React.FC = () => {
 
       if (!inventoryCheck.success) {
         console.error('❌ فشل فحص المخزون:', inventoryCheck);
-        showNotification('خطأ في التحقق من المخزون', 'error');
+        // إذا كان هناك تفاصيل ناقصة في المخزون، اعرضها بشكل واضح
+        if (
+          inventoryCheck.data &&
+          Array.isArray(inventoryCheck.data.details) &&
+          inventoryCheck.data.details.length > 0
+        ) {
+          const detailsTable = inventoryCheck.data.details
+            .map(
+              (d) =>
+                `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`
+            )
+            .join('\n');
+          showNotification(`المخزون غير كافي:\n${detailsTable}`, 'error');
+        } else if (inventoryCheck.data && Array.isArray(inventoryCheck.data.errors) && inventoryCheck.data.errors.length > 0) {
+          showNotification(`المخزون غير كافي:\n${inventoryCheck.data.errors.join('\n')}`, 'error');
+        } else {
+          showNotification('خطأ في التحقق من المخزون', 'error');
+        }
         setLoading(false);
         return;
       }
 
-      // إذا كان هناك أخطاء في المخزون، اعرضها للمستخدم
-      if (inventoryCheck.data && inventoryCheck.data.validationErrors && inventoryCheck.data.validationErrors.length > 0) {
-        console.error('❌ أخطاء في المخزون:', inventoryCheck.data.validationErrors);
-        const errorMessage = inventoryCheck.data.validationErrors.join('\n');
-        showNotification(`المخزون غير كافي:\n${errorMessage}`, 'error');
+      // تحقق من وجود تفاصيل المكونات الناقصة حتى لو كان الفحص ناجح
+      if (inventoryCheck.data && inventoryCheck.data.details && inventoryCheck.data.details.length > 0) {
+        console.error('❌ تفاصيل المكونات الناقصة:', inventoryCheck.data.details);
+        const detailsMessage = inventoryCheck.data.details
+          .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+          .join('\n');
+        showNotification(`المخزون غير كافي:\n${detailsMessage}`, 'error');
         setLoading(false);
         return;
       }
@@ -1965,7 +1991,7 @@ const Cafe: React.FC = () => {
                         <div className="flex justify-between items-center font-bold text-lg">
                           <span className="dark:text-gray-100">الإجمالي:</span>
                           <span className="text-green-600 dark:text-green-400">
-                            {formatCurrency(calculateTotal())}
+                            {formatCurrency(calculateEditOrderTotal())}
                           </span>
                         </div>
                       </div>
@@ -1982,6 +2008,77 @@ const Cafe: React.FC = () => {
               <button
                 onClick={async () => {
                   try {
+                    console.log('🚀 === بداية تحديث الطلب ===');
+                    console.log('بيانات الطلب المرسلة:', JSON.stringify(editOrderData, null, 2));
+
+                    if (editOrderData.items.length === 0) {
+                      showNotification('يرجى إضافة عناصر للطلب', 'error');
+                      return;
+                    }
+
+                    // تحقق صارم من كل عنصر
+                    if (editOrderData.items.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
+                      console.error('❌ عنصر غير صحيح في الطلب:', editOrderData.items);
+                      showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
+                      return;
+                    }
+
+                    // التحقق من المخزون قبل تحديث الطلب
+                    const orderData = {
+                      customerName: editOrderData.customerName,
+                      items: editOrderData.items.map(item => ({
+                        menuItem: item.menuItem,
+                        name: item.name,
+                        price: item.price,
+                        quantity: item.quantity,
+                        notes: item.notes,
+                      })),
+                      notes: editOrderData.notes
+                    };
+
+                    console.log('📦 بيانات الطلب المرسلة للتحقق:', JSON.stringify(orderData, null, 2));
+
+                    // التحقق من المخزون أولاً
+                    console.log('🔍 بداية فحص المخزون في تعديل الطلب...');
+                    const inventoryCheck = await api.calculateOrderRequirements(orderData);
+                    console.log('📊 نتيجة فحص المخزون في تعديل الطلب:', JSON.stringify(inventoryCheck, null, 2));
+
+                    if (!inventoryCheck.success) {
+                      console.error('❌ فشل فحص المخزون في تعديل الطلب:', inventoryCheck);
+                      // إذا كان هناك تفاصيل ناقصة في المخزون، اعرضها بشكل واضح
+                      if (
+                        inventoryCheck.data &&
+                        Array.isArray(inventoryCheck.data.details) &&
+                        inventoryCheck.data.details.length > 0
+                      ) {
+                        const detailsTable = inventoryCheck.data.details
+                          .map(
+                            (d) =>
+                              `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`
+                          )
+                          .join('\n');
+                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsTable}`, 'error');
+                      } else if (inventoryCheck.data && Array.isArray(inventoryCheck.data.errors) && inventoryCheck.data.errors.length > 0) {
+                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${inventoryCheck.data.errors.join('\n')}`, 'error');
+                      } else {
+                        showNotification('خطأ في التحقق من المخزون', 'error');
+                      }
+                      return;
+                    }
+
+                    // تحقق من وجود تفاصيل المكونات الناقصة حتى لو كان الفحص ناجح
+                    if (inventoryCheck.data && inventoryCheck.data.details && inventoryCheck.data.details.length > 0) {
+                      console.error('❌ تفاصيل المكونات الناقصة في تعديل الطلب:', inventoryCheck.data.details);
+                      const detailsMessage = inventoryCheck.data.details
+                        .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+                        .join('\n');
+                      showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
+                      return;
+                    }
+
+                    // إذا كان المخزون متوفر، تابع تحديث الطلب
+                    console.log('✅ فحص المخزون نجح في تعديل الطلب - متابعة تحديث الطلب');
+
                     const updatedOrder = {
                       customerName: editOrderData.customerName,
                       notes: editOrderData.notes,
@@ -1993,12 +2090,33 @@ const Cafe: React.FC = () => {
                         notes: item.notes || ''
                       }))
                     };
-                    await updateOrder(editOrderData._id, updatedOrder);
+                    const response = await updateOrder(editOrderData._id, updatedOrder);
+
+                    // Check if the response indicates an error
+                    if (response && !response.success) {
+                      console.error('❌ فشل تحديث الطلب:', response);
+
+                      // Handle detailed inventory insufficiency messages
+                      if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
+                        const detailsMessage = response.data.details
+                          .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+                          .join('\n');
+                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
+                      } else if (response.data && Array.isArray(response.data.errors) && response.data.errors.length > 0) {
+                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${response.data.errors.join('\n')}`, 'error');
+                      } else {
+                        showNotification(response.message || 'حدث خطأ أثناء تحديث الطلب', 'error');
+                      }
+                      return;
+                    }
+
                     setShowEditOrder(false);
                     setEditOrderData(null);
                     fetchPendingOrders();
                     fetchReadyOrders();
+                    showNotification('تم تحديث الطلب بنجاح', 'success');
                   } catch (err) {
+                    console.error('❌ خطأ في تحديث الطلب:', err);
                     showNotification('حدث خطأ أثناء تحديث الطلب', 'error');
                   }
                 }}
