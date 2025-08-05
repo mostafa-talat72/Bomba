@@ -3,6 +3,7 @@ import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, Check
 import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
+import ConfirmModal from '../components/ConfirmModal';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -20,8 +21,12 @@ const Billing = () => {
   const [itemQuantities, setItemQuantities] = useState<{ [key: string]: number }>({});
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState<string>('');
+  const [dateFilter, setDateFilter] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
   const [paymentReference, setPaymentReference] = useState('');
+  const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
 
   useEffect(() => {
     fetchBills();
@@ -400,6 +405,53 @@ const Billing = () => {
     return hasActive;
   };
 
+  const handleCancelBill = async () => {
+    if (!selectedBill) return;
+
+    try {
+      const result = await cancelBill(selectedBill._id || selectedBill.id);
+
+      if (result) {
+        showNotification('تم إلغاء الفاتورة بنجاح');
+        setShowPaymentModal(false);
+        setShowCancelConfirmModal(false);
+
+        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
+        await updateBillStatus(selectedBill._id || selectedBill.id);
+      } else {
+        showNotification('فشل في إلغاء الفاتورة');
+      }
+    } catch (error) {
+      console.error('❌ Billing: Error cancelling bill:', error);
+      showNotification('حدث خطأ في إلغاء الفاتورة');
+    }
+  };
+
+  // دالة لحساب الإحصائيات المفلترة
+  const getFilteredStats = () => {
+    const filteredBills = bills.filter(bill => {
+      const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
+
+      if (!statusMatch) return false;
+
+      if (dateFilter) {
+        const billDate = new Date(bill.createdAt);
+        const filterDate = new Date(dateFilter);
+        return billDate.toDateString() === filterDate.toDateString();
+      }
+
+      return true;
+    });
+
+    return {
+      totalBills: filteredBills.length,
+      totalPaid: filteredBills.reduce((sum, bill) => sum + (bill.paid || 0), 0),
+      totalRemaining: filteredBills.reduce((sum, bill) => sum + (bill.remaining || 0), 0),
+      partialBills: filteredBills.filter(b => b.status === 'partial').length,
+      totalAmount: filteredBills.reduce((sum, bill) => sum + (bill.total || 0), 0)
+    };
+  };
+
   // دالة لتجميع الأصناف والإضافات مع حساب الكمية والمدفوع والمتبقي (نفس منطق BillView)
   function aggregateItemsWithPayments(orders: Order[], partialPayments: Bill['partialPayments']) {
     type AggregatedItem = {
@@ -476,8 +528,12 @@ const Billing = () => {
               <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">إجمالي الفواتير</p>
-              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(bills.length)}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                إجمالي الفواتير
+              </p>
+              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {formatDecimal(getFilteredStats().totalBills)}
+              </p>
             </div>
           </div>
         </div>
@@ -488,9 +544,11 @@ const Billing = () => {
               <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">المبلغ المحصل</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                المبلغ المحصل
+              </p>
               <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
-                {formatCurrency(bills.reduce((sum, bill) => sum + (bill.paid || 0), 0))}
+                {formatCurrency(getFilteredStats().totalPaid)}
               </p>
             </div>
           </div>
@@ -502,9 +560,11 @@ const Billing = () => {
               <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">المبلغ المتبقي</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                المبلغ المتبقي
+              </p>
               <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
-                {formatCurrency(bills.reduce((sum, bill) => sum + (bill.remaining || 0), 0))}
+                {formatCurrency(getFilteredStats().totalRemaining)}
               </p>
             </div>
           </div>
@@ -516,9 +576,11 @@ const Billing = () => {
               <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">فواتير جزئية</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                فواتير جزئية
+              </p>
               <p className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {formatDecimal(bills.filter(b => b.status === 'partial').length)}
+                {formatDecimal(getFilteredStats().partialBills)}
               </p>
             </div>
           </div>
@@ -527,18 +589,18 @@ const Billing = () => {
 
       {/* Filter */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الفواتير الحالية</h3>
-            <div className="text-sm text-gray-600 dark:text-gray-300">
-              {filteredBills.length} من {bills.length} فاتورة
-              {dateFilter && (
-                <span className="mr-2 text-blue-600 dark:text-blue-400">
-                  • التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}
-                </span>
-              )}
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الفواتير الحالية</h3>
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                {getFilteredStats().totalBills} من {bills.length} فاتورة
+                {dateFilter && (
+                  <div className="text-blue-600 dark:text-blue-400 mt-1">
+                    التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
             <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">التاريخ:</label>
@@ -574,6 +636,17 @@ const Billing = () => {
                 <option value="cancelled">ملغية</option>
               </select>
             </div>
+            {(statusFilter !== 'all' || dateFilter) && (
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setDateFilter('');
+                }}
+                className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 whitespace-nowrap px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors duration-200"
+              >
+                إعادة تعيين الفلترة
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1099,32 +1172,7 @@ const Billing = () => {
               {/* زر إلغاء الفاتورة - يظهر فقط إذا لم تكن مدفوعة بالكامل */}
               {selectedBill?.status !== 'paid' && (
                 <button
-                  onClick={async () => {
-                    if (!selectedBill) return;
-
-
-
-                    if (confirm('هل أنت متأكد من إلغاء هذه الفاتورة؟')) {
-                      try {
-
-                        const result = await cancelBill(selectedBill._id || selectedBill.id);
-
-
-                        if (result) {
-                          showNotification('تم إلغاء الفاتورة بنجاح');
-                          setShowPaymentModal(false);
-
-                          // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-                          await updateBillStatus(selectedBill._id || selectedBill.id);
-                        } else {
-                          showNotification('فشل في إلغاء الفاتورة');
-                        }
-                      } catch (error) {
-                        console.error('❌ Billing: Error cancelling bill:', error);
-                        showNotification('حدث خطأ في إلغاء الفاتورة');
-                      }
-                    }
-                  }}
+                  onClick={() => setShowCancelConfirmModal(true)}
                   className="px-4 py-2 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-colors duration-200"
                 >
                   إلغاء الفاتورة
@@ -1468,6 +1516,18 @@ const Billing = () => {
           </div>
         </div>
       )}
+
+      {/* Cancel Bill Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showCancelConfirmModal}
+        onClose={() => setShowCancelConfirmModal(false)}
+        onConfirm={handleCancelBill}
+        title="تأكيد إلغاء الفاتورة"
+        message={`هل أنت متأكد من إلغاء فاتورة رقم #${selectedBill?.billNumber}؟\n\n⚠️ هذا الإجراء لا يمكن التراجع عنه.`}
+        confirmText="تأكيد الإلغاء"
+        cancelText="إلغاء"
+        confirmColor="bg-red-600 hover:bg-red-700"
+      />
 
       {/* Session End Confirmation Modal */}
       {showSessionEndModal && sessionToEnd && (
