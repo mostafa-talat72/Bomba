@@ -14,6 +14,7 @@ import {
     updateOrder,
     deleteOrder,
     calculateOrderRequirements,
+    deductOrderInventory,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
 import { validateOrder, validateRequest } from "../middleware/validation.js";
@@ -76,6 +77,13 @@ router.put(
     "/:orderId/items/:itemIndex/prepared",
     authorize("cafe", "menu", "all"),
     updateOrderItemPrepared
+);
+
+// Deduct all inventory for order preparation (cafe and menu permissions)
+router.post(
+    "/:orderId/deduct-inventory",
+    authorize("cafe", "menu", "all"),
+    deductOrderInventory
 );
 
 // Deliver specific item in order (cafe and menu permissions)

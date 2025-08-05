@@ -790,6 +790,12 @@ class ApiClient {
     });
   }
 
+  async deductOrderInventory(orderId: string): Promise<ApiResponse<Order>> {
+    return this.request<Order>(`/orders/${orderId}/deduct-inventory`, {
+      method: 'POST',
+    });
+  }
+
   async updateOrderStatus(orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'): Promise<ApiResponse<Order>> {
     return this.request<Order>(`/orders/${orderId}/status`, {
       method: 'PUT',

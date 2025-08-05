@@ -1204,6 +1204,178 @@ export const updateOrderItemPrepared = async (req, res) => {
     }
 };
 
+// @desc    Deduct all inventory for order preparation
+// @route   POST /api/orders/:orderId/deduct-inventory
+// @access  Private
+export const deductOrderInventory = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const order = await Order.findOne({
+            _id: orderId,
+            organization: req.user.organization,
+        });
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: "الطلب غير موجود",
+            });
+        }
+
+        // تجميع جميع المكونات المطلوبة من جميع الأصناف
+        const allIngredientsNeeded = new Map(); // Map<inventoryItemId, { quantity, unit, itemName }>
+
+        for (const item of order.items) {
+            if (item.menuItem) {
+                const menuItem = await MenuItem.findById(item.menuItem);
+                if (
+                    menuItem &&
+                    menuItem.ingredients &&
+                    menuItem.ingredients.length > 0
+                ) {
+                    for (const ingredient of menuItem.ingredients) {
+                        const key = ingredient.item.toString();
+                        const currentQuantity =
+                            allIngredientsNeeded.get(key)?.quantity || 0;
+                        const totalQuantity =
+                            currentQuantity +
+                            ingredient.quantity * item.quantity;
+
+                        allIngredientsNeeded.set(key, {
+                            quantity: totalQuantity,
+                            unit: ingredient.unit,
+                            itemName: menuItem.name,
+                        });
+                    }
+                }
+            }
+        }
+
+        // التحقق من توفر المخزون لجميع المكونات
+        const insufficientItems = [];
+
+        for (const [inventoryItemId, ingredientData] of allIngredientsNeeded) {
+            const inventoryItem = await InventoryItem.findById(inventoryItemId);
+            if (!inventoryItem) {
+                insufficientItems.push({
+                    name: ingredientData.itemName,
+                    required: ingredientData.quantity,
+                    available: 0,
+                    unit: ingredientData.unit,
+                });
+                continue;
+            }
+
+            // تحويل الوحدات
+            const convertedQuantityNeeded = convertQuantity(
+                ingredientData.quantity,
+                ingredientData.unit,
+                inventoryItem.unit
+            );
+
+            if (inventoryItem.currentStock < convertedQuantityNeeded) {
+                insufficientItems.push({
+                    name: inventoryItem.name,
+                    required: convertedQuantityNeeded,
+                    available: inventoryItem.currentStock,
+                    unit: inventoryItem.unit,
+                });
+            }
+        }
+
+        // إذا كان هناك مكونات ناقصة، إرجاع الخطأ
+        if (insufficientItems.length > 0) {
+            const errorMessage = insufficientItems
+                .map(
+                    (item) =>
+                        `• ${item.name}: المطلوب ${item.required} ${item.unit}، المتوفر ${item.available} ${item.unit}`
+                )
+                .join("\n");
+
+            return res.status(400).json({
+                success: false,
+                message: "المخزون غير كافي لتجهيز الطلب",
+                details: insufficientItems,
+                errorMessage,
+            });
+        }
+
+        // خصم جميع المكونات دفعة واحدة
+        const deductionPromises = [];
+
+        for (const [inventoryItemId, ingredientData] of allIngredientsNeeded) {
+            const inventoryItem = await InventoryItem.findById(inventoryItemId);
+            if (inventoryItem) {
+                const convertedQuantityNeeded = convertQuantity(
+                    ingredientData.quantity,
+                    ingredientData.unit,
+                    inventoryItem.unit
+                );
+
+                const deductionPromise = inventoryItem.addStockMovement(
+                    "out",
+                    convertedQuantityNeeded,
+                    `استهلاك لتحضير طلب رقم ${order.orderNumber} - ${ingredientData.itemName}`,
+                    req.user._id,
+                    order._id.toString()
+                );
+
+                deductionPromises.push(deductionPromise);
+            }
+        }
+
+        // انتظار اكتمال جميع عمليات الخصم
+        await Promise.all(deductionPromises);
+
+        // تحديث حالة جميع الأصناف إلى مجهزة بالكامل
+        for (let i = 0; i < order.items.length; i++) {
+            order.items[i].preparedCount = order.items[i].quantity;
+            order.items[i].isReady = true;
+            order.items[i].wasEverReady = true;
+        }
+
+        // تحديث حالة الطلب
+        order.status = "ready";
+        order.preparedAt = new Date();
+        order.preparedBy = req.user._id;
+
+        await order.save();
+
+        // Populate the order with related data for response
+        const updatedOrder = await Order.findById(order._id)
+            .populate("items.menuItem", "name arabicName")
+            .populate("bill", "billNumber customerName")
+            .populate("createdBy", "name")
+            .populate("preparedBy", "name")
+            .populate("deliveredBy", "name");
+
+        // Create notification for order status change
+        try {
+            await NotificationService.createOrderNotification(
+                "ready",
+                updatedOrder,
+                req.user._id
+            );
+        } catch (notificationError) {
+            //
+        }
+
+        res.json({
+            success: true,
+            message: "تم خصم المخزون وتجهيز الطلب بنجاح",
+            data: updatedOrder,
+        });
+    } catch (error) {
+        console.error("Error deducting order inventory:", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في خصم المخزون",
+            error: error.message,
+        });
+    }
+};
+
 // @desc    Get today's orders statistics
 // @route   GET /api/orders/today-stats
 // @access  Private

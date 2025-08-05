@@ -75,26 +75,33 @@ const Cafe: React.FC = () => {
         return;
       }
 
-      // تجهيز جميع الأصناف بالكامل
-      const updatePromises = order.items.map((item, index) => {
-        const quantity = item.quantity || 0;
-        return updateItemPrepared(orderId, index, quantity);
-      });
+      // استخدام الدالة الجديدة لخصم جميع المكونات دفعة واحدة
+      const response = await api.deductOrderInventory(orderId);
 
-      await Promise.all(updatePromises);
+      if (response.success) {
+        // إزالة حالة التجهيز
+        setPreparingOrders(prev => {
+          const newState = { ...prev };
+          delete newState[orderId];
+          return newState;
+        });
 
-      // إزالة حالة التجهيز
-      setPreparingOrders(prev => {
-        const newState = { ...prev };
-        delete newState[orderId];
-        return newState;
-      });
+        showNotification('تم تجهيز الطلب بالكامل', 'success');
 
-      showNotification('تم تجهيز الطلب بالكامل', 'success');
-
-      // إعادة تحميل البيانات
-      fetchPendingOrders();
-      fetchReadyOrders();
+        // إعادة تحميل البيانات
+        fetchPendingOrders();
+        fetchReadyOrders();
+      } else {
+        // عرض رسائل الخطأ التفصيلية
+        if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
+          const detailsMessage = response.data.details
+            .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+            .join('\n');
+          showNotification(`المخزون غير كافي لتجهيز الطلب:\n${detailsMessage}`, 'error');
+        } else {
+          showNotification(response.message || 'خطأ في تجهيز الطلب', 'error');
+        }
+      }
     } catch (error) {
       showNotification('خطأ في تجهيز الطلب', 'error');
     }
