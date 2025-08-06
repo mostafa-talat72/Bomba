@@ -25,6 +25,19 @@ const Billing = () => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
+
+  // تحديد الحد الأدنى للتاريخ (اليوم السابق)
+  const minDate = (() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split('T')[0];
+  })();
+
+  // تحديد الحد الأقصى للتاريخ (اليوم الحالي)
+  const maxDate = (() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  })();
   const [paymentReference, setPaymentReference] = useState('');
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
 
@@ -609,14 +622,19 @@ const Billing = () => {
                   type="date"
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
+                  min={minDate}
+                  max={maxDate}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 />
                 {dateFilter && (
                   <button
-                    onClick={() => setDateFilter('')}
-                    className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 whitespace-nowrap px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900"
+                    onClick={() => {
+                      const today = new Date();
+                      setDateFilter(today.toISOString().split('T')[0]);
+                    }}
+                    className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 whitespace-nowrap px-2 py-1 rounded hover:bg-orange-50 dark:hover:bg-orange-900"
                   >
-                    مسح التاريخ
+                    اليوم الحالي
                   </button>
                 )}
               </div>
@@ -636,11 +654,12 @@ const Billing = () => {
                 <option value="cancelled">ملغية</option>
               </select>
             </div>
-            {(statusFilter !== 'all' || dateFilter) && (
+            {(statusFilter !== 'all' || dateFilter !== maxDate) && (
               <button
                 onClick={() => {
                   setStatusFilter('all');
-                  setDateFilter('');
+                  const today = new Date();
+                  setDateFilter(today.toISOString().split('T')[0]);
                 }}
                 className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 whitespace-nowrap px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors duration-200"
               >
