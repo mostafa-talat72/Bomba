@@ -9,7 +9,36 @@ import ConfirmModal from '../components/ConfirmModal';
 type Interval = ReturnType<typeof setInterval>;
 
 const Billing = () => {
-  const { bills, fetchBills, cancelBill, addPartialPayment, showNotification } = useApp();
+  const { bills, fetchBills, cancelBill, addPartialPayment, showNotification, user } = useApp();
+
+  // دالة للتحقق من نوع المستخدم
+  const checkUserRole = () => {
+    // التحقق من الدور
+    if (user?.role === 'manager' || user?.role === 'owner' || user?.role === 'admin') {
+      return true; // مدير
+    }
+
+    // التحقق من الصلاحيات
+    if (user?.permissions?.includes('view_all_bills') ||
+        user?.permissions?.includes('admin') ||
+        user?.permissions?.includes('all')) {
+      return true; // مدير
+    }
+
+    // التحقق من اسم المستخدم (للتجربة)
+    if (user?.email === 'admin@example.com' || user?.name === 'Admin') {
+      return true; // مدير
+    }
+
+    // للتجربة - يمكن تغيير هذه القيمة يدوياً
+    // return true; // لجعل الجميع مديرين
+    // return false; // لجعل الجميع موظفين
+
+    // افتراضياً - موظف
+    return false;
+  };
+
+  const isManagerOrOwner = checkUserRole();
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showPartialPaymentModal, setShowPartialPaymentModal] = useState(false);
@@ -22,19 +51,34 @@ const Billing = () => {
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState<string>(() => {
+    if (isManagerOrOwner) {
+      // للمديرين وصاحب المنشأة - لا يوجد تاريخ افتراضي (جميع الفواتير)
+      return '';
+    }
+    // للموظفين - تاريخ اليوم الحالي
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
 
-  // تحديد الحد الأدنى للتاريخ (اليوم السابق)
+
+
+  // تحديد الحد الأدنى للتاريخ (اليوم السابق للموظفين فقط)
   const minDate = (() => {
+    if (isManagerOrOwner) {
+      // للمديرين وصاحب المنشأة - لا يوجد حد أدنى
+      return '';
+    }
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     return yesterday.toISOString().split('T')[0];
   })();
 
-  // تحديد الحد الأقصى للتاريخ (اليوم الحالي)
+  // تحديد الحد الأقصى للتاريخ (اليوم الحالي للموظفين فقط)
   const maxDate = (() => {
+    if (isManagerOrOwner) {
+      // للمديرين وصاحب المنشأة - لا يوجد حد أقصى
+      return '';
+    }
     const today = new Date();
     return today.toISOString().split('T')[0];
   })();
@@ -187,7 +231,22 @@ const Billing = () => {
       return bill.customerName || 'عميل';
   };
 
-  const filteredBills = bills.filter(bill => {
+  // فلترة الفواتير المتاحة للموظفين
+  let availableBills = bills;
+  if (!isManagerOrOwner) {
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    availableBills = bills.filter((bill: Bill) => {
+      if (!bill.createdAt) return false;
+      const billDate = new Date(bill.createdAt);
+      return billDate.toDateString() === today.toDateString() ||
+             billDate.toDateString() === yesterday.toDateString();
+    });
+  }
+
+  const filteredBills = availableBills.filter(bill => {
     // فلترة حسب الحالة
     const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
 
@@ -442,7 +501,22 @@ const Billing = () => {
 
   // دالة لحساب الإحصائيات المفلترة
   const getFilteredStats = () => {
-    const filteredBills = bills.filter(bill => {
+    // للموظفين - فلترة إضافية على التواريخ
+    let availableBills = bills;
+    if (!isManagerOrOwner) {
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      availableBills = bills.filter((bill: Bill) => {
+        if (!bill.createdAt) return false;
+        const billDate = new Date(bill.createdAt);
+        return billDate.toDateString() === today.toDateString() ||
+               billDate.toDateString() === yesterday.toDateString();
+      });
+    }
+
+    const filteredBills = availableBills.filter(bill => {
       const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
 
       if (!statusMatch) return false;
@@ -606,7 +680,7 @@ const Billing = () => {
             <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الفواتير الحالية</h3>
               <div className="text-sm text-gray-600 dark:text-gray-300">
-                {getFilteredStats().totalBills} من {bills.length} فاتورة
+                {getFilteredStats().totalBills} {isManagerOrOwner ? `من ${bills.length} فاتورة` : 'فاتورة'}
                 {dateFilter && (
                   <div className="text-blue-600 dark:text-blue-400 mt-1">
                     التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}
@@ -626,17 +700,15 @@ const Billing = () => {
                   max={maxDate}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 />
-                {dateFilter && (
-                  <button
-                    onClick={() => {
-                      const today = new Date();
-                      setDateFilter(today.toISOString().split('T')[0]);
-                    }}
-                    className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 whitespace-nowrap px-2 py-1 rounded hover:bg-orange-50 dark:hover:bg-orange-900"
-                  >
-                    اليوم الحالي
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    const today = new Date();
+                    setDateFilter(today.toISOString().split('T')[0]);
+                  }}
+                  className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 whitespace-nowrap px-2 py-1 rounded hover:bg-orange-50 dark:hover:bg-orange-900"
+                >
+                  اليوم الحالي
+                </button>
               </div>
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:space-x-reverse w-full sm:w-auto">
@@ -654,12 +726,18 @@ const Billing = () => {
                 <option value="cancelled">ملغية</option>
               </select>
             </div>
-            {(statusFilter !== 'all' || dateFilter !== maxDate) && (
+            {(statusFilter !== 'all' || (isManagerOrOwner ? dateFilter : dateFilter !== maxDate)) && (
               <button
                 onClick={() => {
                   setStatusFilter('all');
-                  const today = new Date();
-                  setDateFilter(today.toISOString().split('T')[0]);
+                  if (isManagerOrOwner) {
+                    // للمديرين - مسح التاريخ تماماً (جميع الفواتير)
+                    setDateFilter('');
+                  } else {
+                    // للموظفين - إعادة إلى اليوم الحالي
+                    const today = new Date();
+                    setDateFilter(today.toISOString().split('T')[0]);
+                  }
                 }}
                 className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 whitespace-nowrap px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors duration-200"
               >
