@@ -313,15 +313,17 @@ const Layout = () => {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top Bar */}
         <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 flex-shrink-0 fixed top-0 left-0 right-0 z-50 lg:static lg:z-auto">
-          <div className="flex items-center justify-between h-16 px-4 sm:px-6">
-            <div className="flex items-center min-w-0">
+          <div
+            className="flex items-center justify-between h-16 px-4 sm:px-6 flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:h-auto"
+          >
+            <div className="flex items-center min-w-0 xs:w-full xs:mb-2 xs:justify-between">
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="lg:hidden p-2 rounded-md hover:bg-orange-50 dark:hover:bg-orange-900/20 flex-shrink-0"
               >
                 <Menu className="h-6 w-6 text-gray-900 dark:text-gray-100" />
               </button>
-              <h2 className="mr-2 sm:mr-4 text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
+              <h2 className="mr-2 sm:mr-4 text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate xs:text-base xs:mr-0 xs:w-full xs:text-center">
                 {filteredNavigation.find(item => isActive(item.href))?.name ||
                  (filteredNavigation.length === 0 ? 'لا توجد صفحات متاحة' : 'لوحة التحكم')}
               </h2>
@@ -334,7 +336,7 @@ const Layout = () => {
               )}
             </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-4 space-x-reverse flex-shrink-0">
+            <div className="flex items-center space-x-2 sm:space-x-4 space-x-reverse flex-shrink-0 xs:w-full xs:justify-center xs:mt-2">
               <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
                 <NotificationCenter />
               </PermissionGuard>

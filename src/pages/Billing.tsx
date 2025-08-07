@@ -597,13 +597,16 @@ const Billing = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-            <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ml-2" />
+      <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
+        <div className="flex items-center xs:w-full xs:justify-between">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
+            <Receipt className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
             إدارة الفواتير
           </h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mr-4">إنشاء وإدارة فواتير العملاء</p>
+          <p className="text-gray-600 dark:text-gray-400 mr-4 xs:mr-0 xs:w-full xs:text-center">متابعة الفواتير والمدفوعات</p>
+        </div>
+        <div className="flex items-center gap-2 xs:w-full xs:justify-center xs:mt-2">
+          {/* ضع هنا أزرار الإجراءات مثل الفلترة أو إضافة فاتورة */}
         </div>
       </div>
 

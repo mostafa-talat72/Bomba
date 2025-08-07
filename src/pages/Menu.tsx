@@ -316,17 +316,17 @@ const Menu: React.FC = () => {
 	return (
 		<div className="space-y-6">
 			{/* Header */}
-			<div className="flex items-center justify-between">
-				<div className="flex items-center">
-					<h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+			<div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
+				<div className="flex items-center xs:w-full xs:justify-between">
+					<h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
 						<Utensils className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
 						إدارة المنيو
 					</h1>
-					<p className="text-gray-600 dark:text-gray-300 mr-4">إدارة قائمة الطعام والمشروبات</p>
+					<p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">إدارة قائمة الطعام والمشروبات</p>
 				</div>
 				<button
 					onClick={handleAddItem}
-					className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+					className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center xs:mt-2"
 				>
 					<Plus className="h-5 w-5 ml-2" />
 					إضافة عنصر

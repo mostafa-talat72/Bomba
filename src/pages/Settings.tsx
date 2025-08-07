@@ -155,15 +155,18 @@ const Settings = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
+        <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
+          <div className="flex items-center xs:w-full xs:justify-between">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
               <SettingsIcon className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
               الإعدادات
             </h1>
-            <p className="text-gray-600 dark:text-gray-300 mr-4">إدارة إعدادات حسابك وتفضيلاتك</p>
+            <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">ضبط إعدادات النظام والصلاحيات</p>
           </div>
-      </div>
+          <div className="flex items-center gap-2 xs:w-full xs:justify-center xs:mt-2">
+            {/* ضع هنا أزرار الإجراءات مثل حفظ الإعدادات */}
+          </div>
+        </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
           {/* Tabs */}
