@@ -394,19 +394,19 @@ const Costs = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+      <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
+        <div className="flex items-center xs:w-full xs:justify-between">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
             <Wallet className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
             إدارة التكاليف
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 mr-4">متابعة وتحليل المصروفات والتكاليف</p>
+          <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">متابعة وتحليل المصروفات والتكاليف</p>
         </div>
-        <div className="flex items-center space-x-3 space-x-reverse">
+        <div className="flex items-center space-x-3 space-x-reverse xs:w-full xs:justify-center xs:mt-2">
           <button
             onClick={loadCosts}
             disabled={loading}
-            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 disabled:opacity-50"
+            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 disabled:opacity-50 xs:w-full xs:justify-center"
           >
             <Calendar className="h-5 w-5 ml-2" />
             تحديث
@@ -416,7 +416,7 @@ const Costs = () => {
               resetForm();
               setShowAddCost(true);
             }}
-            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
           >
             <Plus className="h-5 w-5 ml-2" />
             إضافة مصروف
