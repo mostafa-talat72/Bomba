@@ -147,6 +147,7 @@ const Billing = () => {
       case 'paid': return 'bg-green-100 text-green-800';
       case 'overdue': return 'bg-red-100 text-red-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
+      case 'unpaid': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -158,6 +159,7 @@ const Billing = () => {
       case 'paid': return 'مدفوع بالكامل';
       case 'overdue': return 'متأخر';
       case 'cancelled': return 'ملغية';
+      case 'unpaid': return 'غير مدفوع';
       default: return 'غير معروف';
     }
   };
@@ -169,6 +171,7 @@ const Billing = () => {
       case 'paid': return '✅';
       case 'overdue': return '⚠️';
       case 'cancelled': return '❌';
+      case 'unpaid': return '💳';
       default: return '📄';
     }
   };
@@ -248,7 +251,15 @@ const Billing = () => {
 
   const filteredBills = availableBills.filter(bill => {
     // فلترة حسب الحالة
-    const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
+    let statusMatch = false;
+    if (statusFilter === 'all') {
+      statusMatch = true;
+    } else if (statusFilter === 'unpaid') {
+      // دمج المسودة والمدفوع جزئياً تحت "غير مدفوع"
+      statusMatch = bill.status === 'draft' || bill.status === 'partial';
+    } else {
+      statusMatch = bill.status === statusFilter;
+    }
 
     // فلترة حسب التاريخ
     let dateMatch = true;
@@ -722,8 +733,7 @@ const Billing = () => {
                 className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full sm:w-auto bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
                 <option value="all">جميع الفواتير</option>
-                <option value="draft">مسودة</option>
-                <option value="partial">مدفوع جزئياً</option>
+                <option value="unpaid">غير مدفوع</option>
                 <option value="paid">مدفوع بالكامل</option>
                 <option value="overdue">متأخر</option>
                 <option value="cancelled">ملغية</option>
@@ -856,11 +866,19 @@ const Billing = () => {
               if (statusFilter === 'all' && !dateFilter) {
                 message = 'لم يتم إنشاء أي فواتير بعد';
               } else if (statusFilter !== 'all' && !dateFilter) {
-                message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}"`;
+                if (statusFilter === 'unpaid') {
+                  message = 'لا توجد فواتير غير مدفوعة (مسودة أو مدفوع جزئياً)';
+                } else {
+                  message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}"`;
+                }
               } else if (statusFilter === 'all' && dateFilter) {
                 message = `لا توجد فواتير بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
               } else {
-                message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}" بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
+                if (statusFilter === 'unpaid') {
+                  message = `لا توجد فواتير غير مدفوعة (مسودة أو مدفوع جزئياً) بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
+                } else {
+                  message = `لا توجد فواتير بحالة "${getStatusText(statusFilter)}" بتاريخ ${new Date(dateFilter).toLocaleDateString('ar-EG')}`;
+                }
               }
               return message;
             })()}
