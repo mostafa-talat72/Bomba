@@ -9,6 +9,12 @@ import User from "../models/User.js";
 import { sendSubscriptionNotification } from "./notificationController.js";
 import { createFawryPayment } from "../services/fawryService.js";
 
+// دالة لتحويل الأرقام الإنجليزية إلى العربية
+const convertToArabicNumbers = (str) => {
+    const arabicNumbers = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+    return str.replace(/[0-9]/g, (match) => arabicNumbers[parseInt(match)]);
+};
+
 // @desc    Get all bills
 // @route   GET /api/bills
 // @access  Private

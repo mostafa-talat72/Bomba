@@ -680,7 +680,7 @@ const Billing = () => {
             <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 sm:space-x-reverse">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الفواتير الحالية</h3>
               <div className="text-sm text-gray-600 dark:text-gray-300">
-                {getFilteredStats().totalBills} {isManagerOrOwner ? `من ${bills.length} فاتورة` : 'فاتورة'}
+                {formatDecimal(getFilteredStats().totalBills)} {isManagerOrOwner ? `من ${formatDecimal(bills.length)} فاتورة` : 'فاتورة'}
                 {dateFilter && (
                   <div className="text-blue-600 dark:text-blue-400 mt-1">
                     التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}
@@ -1111,7 +1111,7 @@ const Billing = () => {
                         </div>
                         <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                           <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
-                          <span className="font-semibold text-green-600 dark:text-green-400">0.00 ج.م</span>
+                          <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.remaining || 0)}</span>
                         </div>
                       </div>
                     </div>
@@ -1370,7 +1370,7 @@ const Billing = () => {
                             }}
                             disabled={(itemQuantities[itemKey] || 0) <= 0}
                           >-</button>
-                                                      <span className="mx-2 w-6 text-center select-none font-bold text-orange-700 dark:text-orange-400">{itemQuantities[itemKey] || 0}</span>
+                                                      <span className="mx-2 w-6 text-center select-none font-bold text-orange-700 dark:text-orange-400">{formatDecimal(itemQuantities[itemKey] || 0)}</span>
                           {/* زر + للصنف الرئيسي */}
                           <button
                             type="button"
@@ -1446,7 +1446,7 @@ const Billing = () => {
                                           }}
                                           disabled={(itemQuantities[addonKey] || 0) <= 0}
                                         >-</button>
-                                        <span className="mx-2 w-6 text-center select-none font-bold text-yellow-800 dark:text-yellow-300">{itemQuantities[addonKey] || 0}</span>
+                                        <span className="mx-2 w-6 text-center select-none font-bold text-yellow-800 dark:text-yellow-300">{formatDecimal(itemQuantities[addonKey] || 0)}</span>
                                         <button
                                           type="button"
                                           className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-600 hover:bg-gray-100 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300"

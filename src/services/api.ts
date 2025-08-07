@@ -773,10 +773,13 @@ class ApiClient {
 
   async updateOrder(id: string, updates: Partial<Order>): Promise<ApiResponse<Order>> {
     try {
+      console.log("API updateOrder called with:", { id, updates });
+      console.log("API updateOrder URL:", `/orders/${id}`);
       const response = await this.request<Order>(`/orders/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(updates)
       });
+      console.log("API updateOrder response:", response);
       return response;
     } catch (error: unknown) {
       throw new Error(error instanceof Error ? error.message : 'فشل في تحديث الطلب');

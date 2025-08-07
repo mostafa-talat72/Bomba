@@ -745,6 +745,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateOrder = async (id: string, updates: any): Promise<Order | null> => {
     try {
+      console.log("AppContext updateOrder called with:", { id, updates });
+      console.log("AppContext updateOrder ID type:", typeof id);
+      console.log("AppContext updateOrder ID value:", id);
       const response = await api.updateOrder(id, updates);
       if (response.success && response.data) {
         setOrders(prev => prev.map(order =>
@@ -753,6 +756,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         showNotification('تم تحديث الطلب بنجاح', 'success');
         return response.data;
       }
+
+      // Handle error response from backend
+      if (response && !response.success) {
+        // Handle detailed inventory insufficiency messages
+        if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
+          const detailsMessage = response.data.details
+            .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+            .join('\n');
+          showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
+        } else if (response.data && Array.isArray(response.data.errors) && response.data.errors.length > 0) {
+          showNotification(`المخزون غير كافي لتحديث الطلب:\n${response.data.errors.join('\n')}`, 'error');
+        } else {
+          showNotification(response.message || 'حدث خطأ أثناء تحديث الطلب', 'error');
+        }
+        return null;
+      }
+
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };

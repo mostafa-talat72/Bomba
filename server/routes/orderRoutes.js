@@ -17,7 +17,11 @@ import {
     deductOrderInventory,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
-import { validateOrder, validateRequest } from "../middleware/validation.js";
+import {
+    validateOrder,
+    validateOrderUpdate,
+    validateRequest,
+} from "../middleware/validation.js";
 
 const router = express.Router();
 
@@ -39,7 +43,13 @@ router.get("/:id", authorize("cafe", "menu", "all"), getOrder);
 router.delete("/:id", authorize("cafe", "menu", "all"), deleteOrder);
 
 // إضافة مسار تحديث الطلبات
-router.patch("/:id", authorize("cafe", "menu", "all"), updateOrder);
+router.patch(
+    "/:id",
+    authorize("cafe", "menu", "all"),
+    validateOrderUpdate,
+    validateRequest,
+    updateOrder
+);
 
 // Calculate order requirements (cafe and menu permissions)
 router.post(

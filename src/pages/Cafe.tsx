@@ -1308,7 +1308,7 @@ const Cafe: React.FC = () => {
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600 dark:text-gray-400">الأصناف الجاهزة:</span>
-                        <span className="font-semibold text-green-600 dark:text-green-400">{order.items?.length || 0}</span>
+                        <span className="font-semibold text-green-600 dark:text-green-400">{formatDecimal(order.items?.length || 0)}</span>
                       </div>
 
                       {/* عرض الأصناف الجاهزة */}
@@ -1663,9 +1663,9 @@ const Cafe: React.FC = () => {
                   {/* تفاصيل إضافية */}
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     <div className="flex justify-between">
-                      <span>إجمالي الأصناف: {selectedOrder.items?.length || 0}</span>
-                      <span>الأصناف المجهزة بالكامل: {(selectedOrder.items?.filter(item => (item.preparedCount || 0) >= (item.quantity || 0)).length || 0)}</span>
-                      <span>الأصناف الجزئية: {(selectedOrder.items?.filter(item => (item.preparedCount || 0) > 0 && (item.preparedCount || 0) < (item.quantity || 0)).length || 0)}</span>
+                                              <span>إجمالي الأصناف: {formatDecimal(selectedOrder.items?.length || 0)}</span>
+                                              <span>الأصناف المجهزة بالكامل: {formatDecimal((selectedOrder.items?.filter(item => (item.preparedCount || 0) >= (item.quantity || 0)).length || 0))}</span>
+                        <span>الأصناف الجزئية: {formatDecimal((selectedOrder.items?.filter(item => (item.preparedCount || 0) > 0 && (item.preparedCount || 0) < (item.quantity || 0)).length || 0))}</span>
                     </div>
                   </div>
                 </div>
@@ -2070,30 +2070,25 @@ const Cafe: React.FC = () => {
                         notes: item.notes || ''
                       }))
                     };
-                    const response = await updateOrder(editOrderData._id, updatedOrder);
+                    console.log("Sending update request with order ID:", editOrderData._id);
+                    console.log("EditOrderData object:", editOrderData);
+                    console.log("Updated order data:", updatedOrder);
+                    console.log("Available orders in state:", pendingOrders.map(o => ({ id: o._id, orderNumber: o.orderNumber })));
 
-                    // Check if the response indicates an error
-                    if (response && !response.success) {
-
-                      // Handle detailed inventory insufficiency messages
-                      if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
-                        const detailsMessage = response.data.details
-                          .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
-                          .join('\n');
-                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
-                      } else if (response.data && Array.isArray(response.data.errors) && response.data.errors.length > 0) {
-                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${response.data.errors.join('\n')}`, 'error');
-                      } else {
-                        showNotification(response.message || 'حدث خطأ أثناء تحديث الطلب', 'error');
-                      }
+                    if (!editOrderData._id) {
+                      console.error("Order ID is missing!");
+                      showNotification('خطأ: معرف الطلب مفقود', 'error');
                       return;
                     }
 
-                    setShowEditOrder(false);
-                    setEditOrderData(null);
-                    fetchPendingOrders();
-                    fetchReadyOrders();
-                    showNotification('تم تحديث الطلب بنجاح', 'success');
+                    const response = await updateOrder(editOrderData._id, updatedOrder);
+
+                    if (response) {
+                      setShowEditOrder(false);
+                      setEditOrderData(null);
+                      fetchPendingOrders();
+                      fetchReadyOrders();
+                    }
                   } catch (err) {
                     // تجاهل الأخطاء
                     showNotification('حدث خطأ أثناء تحديث الطلب', 'error');
