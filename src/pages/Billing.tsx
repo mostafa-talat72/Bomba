@@ -1081,17 +1081,7 @@ const Billing = () => {
                         </div>
                       )}
 
-                      {/* ملاحظات */}
-                      <div className="mt-6">
-                        <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
-                          <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">ملاحظات مهمة:</h5>
-                          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                            <li>• سيتم تحديث حالة الفاتورة تلقائياً بناءً على المبلغ المدفوع</li>
-                            <li>• إذا كان المبلغ المتبقي صفر، ستتحول الحالة إلى "مدفوع بالكامل"</li>
-                            <li>• إذا كان هناك مبلغ متبقي، ستتحول الحالة إلى "مدفوع جزئياً"</li>
-                          </ul>
-                        </div>
-                      </div>
+
                     </>
                   )}
 
