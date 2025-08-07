@@ -1197,30 +1197,34 @@ const Billing = () => {
                   {/* Bill Summary */}
                   <div className="mt-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                     <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">ملخص الفاتورة</h5>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">عدد الطلبات:</span>
-                        <span className="font-medium dark:text-gray-100">{formatDecimal(selectedBill?.orders?.length || 0)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">عدد الجلسات:</span>
-                        <span className="font-medium flex items-center gap-1 dark:text-gray-100">
-                          {formatDecimal(selectedBill?.sessions?.length || 0)}
-                          {selectedBill && hasActiveSession(selectedBill) && (
-                            <>
-                              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                              <span className="text-xs text-red-600 dark:text-red-400 font-bold">نشط</span>
-                            </>
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">تاريخ الإنشاء:</span>
-                        <span className="font-medium dark:text-gray-100">
-                          {selectedBill?.createdAt ? new Date(selectedBill.createdAt).toLocaleDateString('ar-EG') : '-'}
-                        </span>
-                      </div>
-                    </div>
+                    <table className="w-full text-sm">
+                      <tbody>
+                        <tr>
+                          <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
+                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">عدد الطلبات</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatDecimal(selectedBill?.orders?.length || 0)}</div>
+                          </td>
+                          <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
+                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">عدد الجلسات</div>
+                            <div className="text-lg font-bold flex items-center justify-center gap-1 text-gray-900 dark:text-gray-100">
+                              {formatDecimal(selectedBill?.sessions?.length || 0)}
+                              {selectedBill && hasActiveSession(selectedBill) && (
+                                <>
+                                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                                  <span className="text-xs text-red-600 dark:text-red-400 font-bold">نشط</span>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
+                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">تاريخ الإنشاء</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                              {selectedBill?.createdAt ? new Date(selectedBill.createdAt).toLocaleDateString('ar-EG') : '-'}
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
 
                     {selectedBill?.qrCodeUrl && (
                       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
