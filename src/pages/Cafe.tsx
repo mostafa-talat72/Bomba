@@ -27,6 +27,7 @@ const Cafe: React.FC = () => {
   const [customerName, setCustomerName] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [updatingOrder, setUpdatingOrder] = useState(false);
   const [activeTab, setActiveTab] = useState<'menu' | 'orders' | 'kitchen'>('menu');
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -42,6 +43,8 @@ const Cafe: React.FC = () => {
   const [selectedBill, setSelectedBill] = useState<any>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [showEditOrder, setShowEditOrder] = useState(false);
+  const [editOrderData, setEditOrderData] = useState<any>(null);
   const [todayStats, setTodayStats] = useState<{
     totalOrders: number;
     totalSales: number;
@@ -1016,9 +1019,6 @@ const Cafe: React.FC = () => {
       showNotification('حدث خطأ أثناء إلغاء الطلب', 'error');
     }
   };
-
-  const [showEditOrder, setShowEditOrder] = useState(false);
-  const [editOrderData, setEditOrderData] = useState<any>(null);
 
   return (
     <div className="space-y-6">
@@ -1999,14 +1999,18 @@ const Cafe: React.FC = () => {
               <button
                 onClick={async () => {
                   try {
+                    setUpdatingOrder(true);
+
                     if (editOrderData.items.length === 0) {
                       showNotification('يرجى إضافة عناصر للطلب', 'error');
+                      setUpdatingOrder(false);
                       return;
                     }
 
                     // تحقق صارم من كل عنصر
                     if (editOrderData.items.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
                       showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
+                      setUpdatingOrder(false);
                       return;
                     }
 
@@ -2045,6 +2049,7 @@ const Cafe: React.FC = () => {
                       } else {
                         showNotification('خطأ في التحقق من المخزون', 'error');
                       }
+                      setUpdatingOrder(false);
                       return;
                     }
 
@@ -2054,6 +2059,7 @@ const Cafe: React.FC = () => {
                         .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
                         .join('\n');
                       showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
+                      setUpdatingOrder(false);
                       return;
                     }
 
@@ -2070,14 +2076,12 @@ const Cafe: React.FC = () => {
                         notes: item.notes || ''
                       }))
                     };
-                    console.log("Sending update request with order ID:", editOrderData._id);
-                    console.log("EditOrderData object:", editOrderData);
-                    console.log("Updated order data:", updatedOrder);
-                    console.log("Available orders in state:", pendingOrders.map(o => ({ id: o._id, orderNumber: o.orderNumber })));
+
 
                     if (!editOrderData._id) {
                       console.error("Order ID is missing!");
                       showNotification('خطأ: معرف الطلب مفقود', 'error');
+                      setUpdatingOrder(false);
                       return;
                     }
 
@@ -2092,10 +2096,19 @@ const Cafe: React.FC = () => {
                   } catch (err) {
                     // تجاهل الأخطاء
                     showNotification('حدث خطأ أثناء تحديث الطلب', 'error');
+                  } finally {
+                    setUpdatingOrder(false);
                   }
                 }}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200"
-              >حفظ التعديلات</button>
+                disabled={updatingOrder}
+                className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
+                  updatingOrder
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'
+                } text-white`}
+              >
+                {updatingOrder ? 'جارى حفظ التعديلات...' : 'حفظ التعديلات'}
+              </button>
             </div>
           </div>
         </div>

@@ -379,46 +379,19 @@ export const createOrder = async (req, res) => {
 // @access  Private
 export const updateOrder = async (req, res) => {
     try {
-        console.log("Update order request body:", req.body);
-        console.log("Update order ID from params:", req.params.id);
         const { status, notes, preparedBy, deliveredBy, items } = req.body;
-
-        console.log("Looking for order with ID:", req.params.id);
-        console.log("User organization:", req.user.organization);
-        console.log("User ID:", req.user._id);
-        console.log("User email:", req.user.email);
-        console.log("ID type:", typeof req.params.id);
-        console.log("ID length:", req.params.id.length);
 
         // Check if the ID is a valid MongoDB ObjectId
         const mongoose = await import("mongoose");
         const isValidObjectId = mongoose.Types.ObjectId.isValid(req.params.id);
-        console.log("Is valid ObjectId:", isValidObjectId);
 
         // First check if the order exists without organization filter
         const orderWithoutOrg = await Order.findById(req.params.id);
-        console.log(
-            "Order found without org filter:",
-            orderWithoutOrg ? "Yes" : "No"
-        );
-        if (orderWithoutOrg) {
-            console.log("Order without org - ID:", orderWithoutOrg._id);
-            console.log(
-                "Order without org - organization:",
-                orderWithoutOrg.organization
-            );
-        }
 
         const order = await Order.findOne({
             _id: req.params.id,
             organization: req.user.organization,
         });
-
-        console.log("Order found with org filter:", order ? "Yes" : "No");
-        if (order) {
-            console.log("Order ID:", order._id);
-            console.log("Order organization:", order.organization);
-        }
 
         if (!order) {
             return res.status(404).json({
@@ -480,21 +453,6 @@ export const updateOrder = async (req, res) => {
 
         // تحديث أصناف الطلب بالكامل (إضافة/تعديل/حذف)
         if (Array.isArray(items)) {
-            console.log(
-                "Current order items before update:",
-                order.items.map((item) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                }))
-            );
-            console.log(
-                "New items to update:",
-                items.map((item) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                }))
-            );
-
             // 1. حذف الأصناف التي لم تعد موجودة في الطلب الجديد
             const itemsToKeep = [];
             for (const existingItem of order.items) {
@@ -521,22 +479,11 @@ export const updateOrder = async (req, res) => {
 
                 if (shouldKeep) {
                     itemsToKeep.push(existingItem);
-                } else {
-                    console.log(
-                        `Removing item: ${existingItem.name} (quantity: ${existingItem.quantity})`
-                    );
                 }
             }
 
             // استبدال قائمة الأصناف بالأصناف المتبقية
             order.items = itemsToKeep;
-            console.log(
-                "Items after removal:",
-                order.items.map((item) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                }))
-            );
 
             // 2. تحديث أو إضافة الأصناف الجديدة
             for (let i = 0; i < items.length; i++) {
@@ -569,9 +516,6 @@ export const updateOrder = async (req, res) => {
                     orderItem.menuItem = updatedItem.menuItem;
                     // أعد حساب itemTotal
                     orderItem.itemTotal = orderItem.price * orderItem.quantity;
-                    console.log(
-                        `Updated item: ${orderItem.name} (quantity: ${orderItem.quantity})`
-                    );
                 } else {
                     // إضافة صنف جديد
                     if (updatedItem.menuItem) {
@@ -602,9 +546,6 @@ export const updateOrder = async (req, res) => {
                             notes: updatedItem.notes,
                             preparationTime: menuItem.preparationTime,
                         });
-                        console.log(
-                            `Added new item: ${menuItem.name} (quantity: ${updatedItem.quantity})`
-                        );
                     } else {
                         const itemTotal =
                             updatedItem.price * updatedItem.quantity;
@@ -616,20 +557,9 @@ export const updateOrder = async (req, res) => {
                             notes: updatedItem.notes,
                             preparationTime: updatedItem.preparationTime || 0,
                         });
-                        console.log(
-                            `Added new custom item: ${updatedItem.name} (quantity: ${updatedItem.quantity})`
-                        );
                     }
                 }
             }
-
-            console.log(
-                "Final order items after update:",
-                order.items.map((item) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                }))
-            );
 
             // 2. إعادة حساب المجموع
             order.subtotal = order.items.reduce(

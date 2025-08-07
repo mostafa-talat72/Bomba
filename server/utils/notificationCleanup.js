@@ -12,9 +12,6 @@ export const cleanupOldNotifications = async () => {
             createdAt: { $lt: oneWeekAgo },
         });
 
-        console.log(
-            `✅ تم حذف ${result.deletedCount} إشعار قديم (أسبوع أو أكثر)`
-        );
         return result.deletedCount;
     } catch (error) {
         console.error("❌ خطأ في حذف الإشعارات القديمة:", error);
@@ -35,9 +32,6 @@ export const cleanupOldReadNotifications = async () => {
             "readBy.0": { $exists: true }, // إشعارات مقروءة
         });
 
-        console.log(
-            `✅ تم حذف ${result.deletedCount} إشعار مقروء قديم (أسبوع أو أكثر)`
-        );
         return result.deletedCount;
     } catch (error) {
         console.error("❌ خطأ في حذف الإشعارات المقروءة القديمة:", error);
@@ -58,9 +52,6 @@ export const cleanupOldUnreadNotifications = async () => {
             readBy: { $size: 0 }, // إشعارات غير مقروءة
         });
 
-        console.log(
-            `✅ تم حذف ${result.deletedCount} إشعار غير مقروء قديم (أسبوعين أو أكثر)`
-        );
         return result.deletedCount;
     } catch (error) {
         console.error("❌ خطأ في حذف الإشعارات غير المقروءة القديمة:", error);
@@ -73,15 +64,10 @@ export const cleanupOldUnreadNotifications = async () => {
  */
 export const runCleanup = async () => {
     try {
-        console.log("🔄 بدء عملية تنظيف الإشعارات القديمة...");
-
         const readDeleted = await cleanupOldReadNotifications();
         const unreadDeleted = await cleanupOldUnreadNotifications();
 
         const totalDeleted = readDeleted + unreadDeleted;
-        console.log(
-            `✅ تم الانتهاء من تنظيف الإشعارات. إجمالي المحذوف: ${totalDeleted}`
-        );
 
         return totalDeleted;
     } catch (error) {

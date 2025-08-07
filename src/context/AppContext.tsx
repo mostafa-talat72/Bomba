@@ -745,9 +745,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateOrder = async (id: string, updates: any): Promise<Order | null> => {
     try {
-      console.log("AppContext updateOrder called with:", { id, updates });
-      console.log("AppContext updateOrder ID type:", typeof id);
-      console.log("AppContext updateOrder ID value:", id);
+
       const response = await api.updateOrder(id, updates);
       if (response.success && response.data) {
         setOrders(prev => prev.map(order =>
