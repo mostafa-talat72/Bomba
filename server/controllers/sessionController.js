@@ -595,9 +595,18 @@ const sessionController = {
             await session.save();
             await session.populate(["createdBy", "bill"], "name");
 
-            // Add session to bill
+            // Add session to bill without updating customer name
             bill.sessions.push(session._id);
-            await bill.save();
+            
+            // Save bill without modifying customer name
+            await Bill.findByIdAndUpdate(
+                bill._id,
+                { 
+                    $addToSet: { sessions: session._id },
+                    // لا نقوم بتحديث customerName هنا للحفاظ على القيمة الأصلية
+                },
+                { new: true }
+            );
             await bill.populate(["sessions", "createdBy"], "name");
 
             // إرسال إشعار بدء الجلسة
