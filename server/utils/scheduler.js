@@ -138,19 +138,15 @@ const generateDailyReport = async () => {
 
         const now = new Date();
 
-        // Calculate the report period: from 5 AM yesterday to 5 AM today
-        const today5AM = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate(),
-            5,
-            0,
-            0
-        );
-        const yesterday5AM = new Date(today5AM.getTime() - 24 * 60 * 60 * 1000);
-
-        const startOfReport = yesterday5AM;
-        const endOfReport = today5AM;
+        // Calculate the report period: from beginning of yesterday to beginning of today
+        const today = new Date(now);
+        today.setHours(0, 0, 0, 0); // Start of today
+        
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1); // Start of yesterday
+        
+        const startOfReport = yesterday;
+        const endOfReport = today;
 
         Logger.info("Daily report date range:", {
             now: now.toISOString(),
@@ -169,6 +165,12 @@ const generateDailyReport = async () => {
         for (const organization of organizations) {
             try {
                 // Get daily statistics for this organization
+                Logger.info(`Fetching data for organization: ${organization.name}`, {
+                    startOfReport: startOfReport.toISOString(),
+                    endOfReport: endOfReport.toISOString(),
+                    organizationId: organization._id
+                });
+
                 const [bills, orders, sessions, costs] = await Promise.all([
                     Bill.find({
                         createdAt: { $gte: startOfReport, $lt: endOfReport },
@@ -230,21 +232,32 @@ const generateDailyReport = async () => {
                     { $limit: 5 },
                 ]);
 
-                const reportData = {
-                    date: yesterday5AM.toLocaleDateString("ar-EG"),
-                    organizationName: organization.name,
+                // Log the data being used for the report
+                Logger.info(`Data for organization ${organization.name}:`, {
+                    billsCount: bills.length,
+                    ordersCount: orders.length,
+                    sessionsCount: sessions.length,
+                    costsCount: costs.length,
                     totalRevenue,
                     totalCosts,
-                    netProfit: totalRevenue - totalCosts,
-                    totalBills: bills.length,
-                    totalOrders: orders.length,
-                    totalSessions: sessions.length,
+                    topProducts: topProducts.length
+                });
+
+                const reportData = {
+                    date: startOfReport.toLocaleDateString("ar-EG"),
+                    organizationName: organization.name,
+                    totalRevenue: totalRevenue || 0,
+                    totalCosts: totalCosts || 0,
+                    netProfit: (totalRevenue || 0) - (totalCosts || 0),
+                    totalBills: bills.length || 0,
+                    totalOrders: orders.length || 0,
+                    totalSessions: sessions.length || 0,
                     topProducts: topProducts.map((p) => ({
                         name: p._id,
-                        quantity: p.quantity,
+                        quantity: p.quantity || 0,
                     })),
-                    reportPeriod:
-                        "من الساعة 5 صباحاً أمس إلى الساعة 5 صباحاً اليوم",
+                    reportPeriod: `من ${startOfReport.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})} يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long'})} 
+                                 إلى ${endOfReport.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})} يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long'})}`,
                 };
 
                 // Get admin emails for this organization
