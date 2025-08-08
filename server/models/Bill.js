@@ -189,30 +189,26 @@ const billSchema = new mongoose.Schema(
     }
 );
 
-// Generate bill number
+// Generate bill number with full timestamp
 billSchema.pre("save", async function (next) {
     if (this.isNew && !this.billNumber) {
         try {
-            const today = new Date();
-            const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
-            const count = await this.constructor.countDocuments({
-                createdAt: {
-                    $gte: new Date(
-                        today.getFullYear(),
-                        today.getMonth(),
-                        today.getDate()
-                    ),
-                    $lt: new Date(
-                        today.getFullYear(),
-                        today.getMonth(),
-                        today.getDate() + 1
-                    ),
-                },
-            });
-            this.billNumber = `INV-${dateStr}-${String(count + 1).padStart(
-                3,
-                "0"
-            )}`;
+            const now = new Date();
+            
+            // Format date and time components
+            const year = now.getFullYear().toString().slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+            
+            // Create a unique identifier using the full timestamp
+            const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}${milliseconds}`;
+            
+            // Create bill number using the timestamp
+            this.billNumber = `BILL-${timestamp}`;
         } catch (error) {
             console.error("❌ Error generating bill number:", error);
             // Fallback bill number

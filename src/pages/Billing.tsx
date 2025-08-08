@@ -86,7 +86,19 @@ const Billing = () => {
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
 
   useEffect(() => {
+    // تحميل البيانات الأولية
     fetchBills();
+
+    // إعداد التحديث التلقائي كل 5 ثوانٍ
+    const intervalId = setInterval(() => {
+      console.log('تحديث قائمة الفواتير تلقائياً...');
+      fetchBills();
+    }, 5000); // 5000 مللي ثانية = 5 ثوانٍ
+
+    // تنظيف المؤقت عند إلغاء تحميل المكون
+    return () => {
+      clearInterval(intervalId);
+    };
   }, []);
 
   // مراقبة تغييرات bills وتحديث selectedBill تلقائياً

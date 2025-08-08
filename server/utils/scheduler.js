@@ -36,7 +36,7 @@ const setupNotificationCleanupScheduler = () => {
         },
         {
             scheduled: true,
-            timezone: "Asia/Riyadh", // توقيت السعودية
+            timezone: "Africa/Cairo", // توقيت القاهرة
         }
     );
 

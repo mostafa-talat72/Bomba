@@ -148,31 +148,39 @@ const orderSchema = new mongoose.Schema(
     }
 );
 
+// Create a unique index on orderNumber to prevent duplicates
+orderSchema.index({ orderNumber: 1 }, { unique: true });
+
+// Add pre-validate hook to ensure order number is set before validation
+orderSchema.pre('validate', function(next) {
+    if (!this.orderNumber) {
+        // Set a temporary value to pass validation
+        this.orderNumber = 'TEMP';
+    }
+    next();
+});
+
 // Combined pre-save hook for all operations
 orderSchema.pre("save", async function (next) {
     try {
-        // Generate order number if new
-        if (this.isNew) {
-            const today = new Date();
-            const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
-            const count = await this.constructor.countDocuments({
-                createdAt: {
-                    $gte: new Date(
-                        today.getFullYear(),
-                        today.getMonth(),
-                        today.getDate()
-                    ),
-                    $lt: new Date(
-                        today.getFullYear(),
-                        today.getMonth(),
-                        today.getDate() + 1
-                    ),
-                },
-            });
-            this.orderNumber = `ORD-${dateStr}-${String(count + 1).padStart(
-                3,
-                "0"
-            )}`;
+        // Generate order number if new or if it's temporary
+        if (this.isNew || this.orderNumber === 'TEMP') {
+            const now = new Date();
+            
+            // Format date and time
+            const year = now.getFullYear().toString().slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+            
+            // Create a unique identifier using the full timestamp
+            const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}${milliseconds}`;
+            
+            // Create order number using the timestamp
+            this.orderNumber = `ORD-${timestamp}`;
         }
 
         // Calculate item totals and subtotal

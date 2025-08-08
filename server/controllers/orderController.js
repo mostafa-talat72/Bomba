@@ -244,53 +244,54 @@ export const createOrder = async (req, res) => {
                 }
 
                 // Calculate item total
-                const itemTotal = menuItem.price * item.quantity;
+                const itemTotal = (menuItem.price || 0) * (item.quantity || 1);
                 subtotal += itemTotal;
                 processedItems.push({
                     menuItem: menuItem._id,
                     name: menuItem.name,
                     arabicName: menuItem.arabicName || menuItem.name,
-                    price: menuItem.price,
-                    quantity: item.quantity,
-                    itemTotal,
+                    price: menuItem.price || 0,
+                    quantity: item.quantity || 1,
+                    itemTotal: itemTotal,
                     notes: item.notes,
-                    preparationTime: menuItem.preparationTime,
+                    preparationTime: menuItem.preparationTime || 5,
                 });
             } else {
                 // إذا لم يوجد menuItem، استخدم بيانات العنصر كما هي
-                const itemTotal = item.price * item.quantity;
+                const itemPrice = parseFloat(item.price) || 0;
+                const itemQuantity = parseInt(item.quantity) || 1;
+                const itemTotal = itemPrice * itemQuantity;
                 subtotal += itemTotal;
                 processedItems.push({
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    itemTotal,
+                    name: item.name || 'عنصر غير محدد',
+                    price: itemPrice,
+                    quantity: itemQuantity,
+                    itemTotal: itemTotal,
                     notes: item.notes,
-                    preparationTime: item.preparationTime || 0,
+                    preparationTime: item.preparationTime || 5,
                 });
             }
         }
 
         // Create order
         const orderData = {
-            tableNumber,
-            customerName,
-            customerPhone,
-            items: processedItems,
-            subtotal,
-            finalAmount: subtotal, // No discount initially
-            notes,
-            bill,
-            createdBy: req.user.id,
+            ...req.body,
+            items: processedItems, // استخدام العناصر المعالجة
+            subtotal: subtotal, // تعيين القيمة المحسوبة
+            finalAmount: subtotal - (req.body.discount || 0), // حساب المبلغ النهائي
             organization: req.user.organization,
+            createdBy: req.user._id,
+            status: 'pending',
+            // سيتم إنشاء رقم الطلب تلقائيًا في الخطاف pre-save
         };
 
-        // حساب التكلفة الإجمالية للطلب
-        const totalCost = await calculateOrderTotalCost(items);
-        orderData.totalCost = totalCost;
+        // التأكد من عدم وجود حقول غير مرغوب فيها
+        delete orderData.orderNumber;
+        delete orderData._id;
 
-        // Manual calculation as fallback
-        orderData.finalAmount = orderData.subtotal - (orderData.discount || 0);
+        // حساب التكلفة الإجمالية للطلب
+        const totalCost = await calculateOrderTotalCost(processedItems);
+        orderData.totalCost = totalCost;
 
         // Generate order number manually
         const today = new Date();
