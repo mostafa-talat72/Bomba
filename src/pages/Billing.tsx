@@ -528,10 +528,16 @@ const Billing = () => {
     }
 
     const filteredBills = availableBills.filter(bill => {
-      const statusMatch = statusFilter === 'all' || bill.status === statusFilter;
+      // إذا كان الفلتر "غير مدفوع"، نضمّن الحالات التالية:
+      if (statusFilter === 'unpaid') {
+        if (!['draft', 'partial', 'unpaid'].includes(bill.status)) return false;
+      } 
+      // التصفية العادية للحالات الأخرى
+      else if (statusFilter !== 'all' && bill.status !== statusFilter) {
+        return false;
+      }
 
-      if (!statusMatch) return false;
-
+      // تصفية التاريخ إذا كان محددًا
       if (dateFilter) {
         const billDate = new Date(bill.createdAt);
         const filterDate = new Date(dateFilter);
@@ -541,13 +547,28 @@ const Billing = () => {
       return true;
     });
 
-    return {
-      totalBills: filteredBills.length,
-      totalPaid: filteredBills.reduce((sum, bill) => sum + (bill.paid || 0), 0),
-      totalRemaining: filteredBills.reduce((sum, bill) => sum + (bill.remaining || 0), 0),
-      partialBills: filteredBills.filter(b => b.status === 'partial').length,
-      totalAmount: filteredBills.reduce((sum, bill) => sum + (bill.total || 0), 0)
-    };
+    // حساب الإحصائيات
+    const stats = filteredBills.reduce((acc, bill) => {
+      const total = Number(bill.total) || 0;
+      const paid = Number(bill.paid) || 0;
+      const remaining = total - paid;
+      
+      return {
+        totalBills: acc.totalBills + 1,
+        totalPaid: acc.totalPaid + paid,
+        totalRemaining: acc.totalRemaining + remaining,
+        partialBills: acc.partialBills + (bill.status === 'partial' ? 1 : 0),
+        totalAmount: acc.totalAmount + total
+      };
+    }, {
+      totalBills: 0,
+      totalPaid: 0,
+      totalRemaining: 0,
+      partialBills: 0,
+      totalAmount: 0
+    });
+
+    return stats;
   };
 
   // دالة لتجميع الأصناف والإضافات مع حساب الكمية والمدفوع والمتبقي (نفس منطق BillView)
