@@ -91,7 +91,7 @@ const Billing = () => {
 
     // إعداد التحديث التلقائي كل 5 ثوانٍ
     const intervalId = setInterval(() => {
-      console.log('تحديث قائمة الفواتير تلقائياً...');
+
       fetchBills();
     }, 5000); // 5000 مللي ثانية = 5 ثوانٍ
 
@@ -543,7 +543,7 @@ const Billing = () => {
       // إذا كان الفلتر "غير مدفوع"، نضمّن الحالات التالية:
       if (statusFilter === 'unpaid') {
         if (!['draft', 'partial', 'unpaid'].includes(bill.status)) return false;
-      } 
+      }
       // التصفية العادية للحالات الأخرى
       else if (statusFilter !== 'all' && bill.status !== statusFilter) {
         return false;
@@ -564,7 +564,7 @@ const Billing = () => {
       const total = Number(bill.total) || 0;
       const paid = Number(bill.paid) || 0;
       const remaining = total - paid;
-      
+
       return {
         totalBills: acc.totalBills + 1,
         totalPaid: acc.totalPaid + paid,

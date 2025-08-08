@@ -1622,7 +1622,7 @@ class ApiClient {
 
   async markAllNotificationsAsRead(): Promise<ApiResponse<any>> {
     return this.request('/notifications/read-all', {
-      method: 'PUT'
+      method: 'POST'  // Changed from PUT to POST to match backend route
     });
   }
 
