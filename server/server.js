@@ -81,9 +81,11 @@ const allowedOrigins =
     process.env.NODE_ENV === "production"
         ? [
               process.env.FRONTEND_URL,
-              "https://*.zeabur.app",
+              "https://bomba.zeabur.app",
+              "https://bomba-backend.zeabur.app",
               "https://*.vercel.app",
               "https://*.netlify.app",
+              /^https?:\/\/([a-z0-9-]+\.)*zeabur\.app$/, // السماح بجميع النطاقات الفرعية من zeabur.app
           ]
         : [
               "http://localhost:3000",
@@ -93,12 +95,34 @@ const allowedOrigins =
               process.env.FRONTEND_URL || "http://localhost:3000",
           ];
 
+// إزالة القيم الفارغة من المصفوفة
+const filteredOrigins = allowedOrigins.filter(Boolean);
+
 app.use(
     cors({
-        origin: allowedOrigins,
+        origin: function (origin, callback) {
+            // السماح بطلبات بدون origin (مثل الطلبات من تطبيقات الجوال)
+            if (!origin) return callback(null, true);
+            
+            // التحقق مما إذا كان origin مسموحاً به
+            if (filteredOrigins.some(allowedOrigin => {
+                if (typeof allowedOrigin === 'string') {
+                    return origin === allowedOrigin;
+                } else if (allowedOrigin instanceof RegExp) {
+                    return allowedOrigin.test(origin);
+                }
+                return false;
+            })) {
+                return callback(null, true);
+            }
+            
+            // إذا لم يتم العثور على origin مسموح به
+            return callback(new Error('Not allowed by CORS'));
+        },
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allowedHeaders: ["Content-Type", "Authorization"],
+        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+        exposedHeaders: ["Content-Range", "X-Total-Count"],
     })
 );
 
