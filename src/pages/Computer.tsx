@@ -35,6 +35,8 @@ const Computer: React.FC = () => {
   const [loadingSession, setLoadingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [addDeviceError, setAddDeviceError] = useState<string | null>(null);
+  const [isAddingDevice, setIsAddingDevice] = useState(false);
+  const [endingSessions, setEndingSessions] = useState<Record<string, boolean>>({});
   const [newDevice, setNewDevice] = useState({ name: '', number: '', hourlyRate: '' });
 
   // Bill linking state - matching PlayStation style
@@ -159,6 +161,7 @@ const Computer: React.FC = () => {
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setIsAddingDevice(true);
       setAddDeviceError(null);
       const response = await api.createDevice({
         name: newDevice.name,
@@ -172,11 +175,16 @@ const Computer: React.FC = () => {
         setShowAddDevice(false);
         setNewDevice({ name: '', number: '', hourlyRate: '' });
         await loadDevices();
+        showNotification('تمت إضافة الجهاز بنجاح', 'success');
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } }; message?: string };
-      setAddDeviceError(error?.response?.data?.error || error?.message || 'حدث خطأ غير متوقع.');
+      const errorMessage = error?.response?.data?.error || error?.message || 'حدث خطأ غير متوقع.';
+      setAddDeviceError(errorMessage);
+      showNotification(errorMessage, 'error');
       console.error('addDevice error:', err);
+    } finally {
+      setIsAddingDevice(false);
     }
   };
 
@@ -287,6 +295,7 @@ const Computer: React.FC = () => {
 
   const handleEndSession = async (sessionId: string) => {
     try {
+      setEndingSessions(prev => ({ ...prev, [sessionId]: true }));
       const result = await endSession(sessionId);
 
       // Show success message with bill info if available
@@ -302,6 +311,9 @@ const Computer: React.FC = () => {
       await fetchSessions();
     } catch (error) {
       console.error('Error ending session:', error);
+      showNotification('حدث خطأ أثناء إنهاء الجلسة', 'error');
+    } finally {
+      setEndingSessions(prev => ({ ...prev, [sessionId]: false }));
     }
   };
 
@@ -419,18 +431,44 @@ const Computer: React.FC = () => {
                     {activeSession ? (
                   <button
                     onClick={() => handleEndSession(activeSession.id)}
-                    className="w-full bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
+                    disabled={endingSessions[activeSession.id]}
+                    className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'} text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200`}
                   >
-                    <Square className="h-4 w-4 ml-2" />
-                    إنهاء الجلسة
+                    {endingSessions[activeSession.id] ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        جاري الإنهاء...
+                      </>
+                    ) : (
+                      <>
+                        <Square className="h-4 w-4 ml-2" />
+                        إنهاء الجلسة
+                      </>
+                    )}
                   </button>
                     ) : device.status === 'available' ? (
                     <button
                       onClick={() => openSessionModal(device)}
-                      className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
+                      disabled={loadingSession}
+                      className={`w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200`}
                     >
-                      <Play className="h-4 w-4 ml-2" />
-                      بدء الجلسة
+                      {loadingSession ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          جاري البدء...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 ml-2" />
+                          بدء الجلسة
+                        </>
+                      )}
                     </button>
                   ) : (
                       <div className="w-full py-2 px-4 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm">
@@ -488,10 +526,23 @@ const Computer: React.FC = () => {
                     </div>
                     <button
                       onClick={() => handleEndSession(session.id)}
-                      className="bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+                      disabled={endingSessions[session.id]}
+                      className={`w-full ${endingSessions[session.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'} text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200`}
                     >
-                      <Square className="h-4 w-4 ml-1" />
-                      إنهاء
+                      {endingSessions[session.id] ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          جاري الإنهاء
+                        </>
+                      ) : (
+                        <>
+                          <Square className="h-4 w-4 ml-2" />
+                          إنهاء الجلسة
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -604,7 +655,7 @@ const Computer: React.FC = () => {
               <button 
                 type="button" 
                 onClick={handleStartSession} 
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded flex items-center justify-center min-w-32" 
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded flex items-center justify-center min-w-32"
                 disabled={loadingSession || (billOption === 'existing' && !selectedBillId)}
               >
                 {loadingSession ? (
@@ -613,7 +664,7 @@ const Computer: React.FC = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    جاري البدء...
+                    جاري التأكيد...
                   </>
                 ) : 'بدء الجلسة'}
               </button>
@@ -642,7 +693,21 @@ const Computer: React.FC = () => {
             {addDeviceError && <div className="text-red-600 dark:text-red-400 mb-2 text-sm">{addDeviceError}</div>}
             <div className="flex justify-between mt-6">
               <button type="button" onClick={() => setShowAddDevice(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100">إلغاء</button>
-              <button type="submit" className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded">إضافة</button>
+              <button 
+                type="submit" 
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded flex items-center justify-center min-w-20"
+                disabled={isAddingDevice}
+              >
+                {isAddingDevice ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الحفظ...
+                  </>
+                ) : 'إضافة'}
+              </button>
             </div>
           </form>
         </div>
