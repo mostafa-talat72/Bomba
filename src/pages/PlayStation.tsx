@@ -127,15 +127,16 @@ const PlayStation: React.FC = () => {
     const existingDevice = devices.find(d => d.number === Number(newDevice.number));
     if (existingDevice) {
       setAddDeviceError(`رقم الجهاز ${newDevice.number} مستخدم بالفعل`);
+      setIsAddingDevice(false);
       return;
     }
 
     // تجهيز playstationRates كأرقام
     const playstationRates = {
-      1: parseFloat(newDevice.playstationRates[1]),
-      2: parseFloat(newDevice.playstationRates[2]),
-      3: parseFloat(newDevice.playstationRates[3]),
-      4: parseFloat(newDevice.playstationRates[4])
+      1: parseFloat(newDevice.playstationRates[1]) || 0,
+      2: parseFloat(newDevice.playstationRates[2]) || 0,
+      3: parseFloat(newDevice.playstationRates[3]) || 0,
+      4: parseFloat(newDevice.playstationRates[4]) || 0
     };
 
     const deviceData = {
@@ -150,16 +151,21 @@ const PlayStation: React.FC = () => {
     try {
       const device = await createDevice(deviceData);
       if (device) {
+        // تحديث قائمة الأجهزة مباشرة في الواجهة
+        setDevices(prevDevices => [...prevDevices, device]);
         setShowAddDevice(false);
         setNewDevice({ name: '', number: '', controllers: 2, playstationRates: { 1: '', 2: '', 3: '', 4: '' } });
+        showNotification('تمت إضافة الجهاز بنجاح', 'success');
       } else {
         setAddDeviceError('حدث خطأ أثناء إضافة الجهاز.');
       }
-      setIsAddingDevice(false);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } }; message?: string };
-      setAddDeviceError(error?.response?.data?.error || error?.message || 'حدث خطأ غير متوقع.');
-      showNotification('addDevice error:', 'error');
+      const errorMessage = error?.response?.data?.error || error?.message || 'حدث خطأ غير متوقع';
+      setAddDeviceError(errorMessage);
+      showNotification(`خطأ في إضافة الجهاز: ${errorMessage}`, 'error');
+    } finally {
+      setIsAddingDevice(false);
     }
   };
 
