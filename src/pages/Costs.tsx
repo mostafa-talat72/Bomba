@@ -15,6 +15,9 @@ const Costs = () => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [costToDelete, setCostToDelete] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     category: '',
     description: '',
@@ -335,20 +338,32 @@ const Costs = () => {
     setShowEditCost(true);
   };
 
-  const handleDelete = async (costId: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذه التكلفة؟')) {
-      try {
-        setLoading(true);
-        await deleteCost(costId);
-        showNotification('تم حذف التكلفة بنجاح', 'success');
-        await loadCosts();
-      } catch (error) {
-        console.error('Error deleting cost:', error);
-        showNotification('خطأ في حذف التكلفة', 'error');
-      } finally {
-        setLoading(false);
-      }
+  const handleDeleteClick = (costId: string) => {
+    setCostToDelete(costId);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!costToDelete) return;
+    
+    try {
+      setDeleteLoading(true);
+      await deleteCost(costToDelete);
+      showNotification('تم حذف التكلفة بنجاح', 'success');
+      await loadCosts();
+    } catch (error) {
+      console.error('Error deleting cost:', error);
+      showNotification('خطأ في حذف التكلفة', 'error');
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+      setCostToDelete(null);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setCostToDelete(null);
   };
 
   const getCategoryName = (categoryId: string) => {
@@ -722,11 +737,22 @@ const Costs = () => {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(cost.id)}
-                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1"
+                          onClick={() => handleDeleteClick(cost.id)}
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1 disabled:opacity-50"
                           title="حذف"
+                          disabled={deleteLoading}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {deleteLoading && costToDelete === cost.id ? (
+                            <span className="inline-flex items-center">
+                              <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-red-600 dark:text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              جاري الحذف...
+                            </span>
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                     </td>
@@ -945,9 +971,51 @@ const Costs = () => {
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center justify-center min-w-24"
               >
-                {loading ? 'جاري الحفظ...' : (showEditCost ? 'تحديث التكلفة' : 'إضافة المصروف')}
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {showEditCost ? 'جاري التحديث...' : 'جاري الحفظ...'}
+                  </>
+                ) : showEditCost ? 'تحديث التكلفة' : 'إضافة المصروف'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">تأكيد الحذف</h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-6">هل أنت متأكد من حذف هذه التكلفة؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <div className="flex justify-end space-x-3 space-x-reverse">
+              <button
+                onClick={handleCancelDelete}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200 disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteLoading}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center justify-center min-w-24"
+              >
+                {deleteLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الحذف...
+                  </>
+                ) : 'حذف'}
               </button>
             </div>
           </div>
