@@ -1,14 +1,72 @@
-import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff } from 'lucide-react';
+import { useState, useEffect, FC } from 'react';
+import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, LucideIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
-const Settings = () => {
-  const { user, showNotification, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings } = useApp();
-  const [activeTab, setActiveTab] = useState('profile');
-  const [saving, setSaving] = useState(false);
+// Type for alert messages
+type AlertType = 'success' | 'error' | 'info' | 'warning';
 
+interface TabType {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+}
+
+interface PasswordData {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+interface ShowPasswords {
+  current: boolean;
+  new: boolean;
+  confirm: boolean;
+}
+
+interface NotificationSettings {
+  sessionNotifications: boolean;
+  orderNotifications: boolean;
+  inventoryNotifications: boolean;
+  billingNotifications: boolean;
+  soundEnabled: boolean;
+  emailNotifications: boolean;
+  showNotificationCount: boolean;
+  autoMarkAsRead: boolean;
+}
+
+interface GeneralSettings {
+  theme: string;
+  language: string;
+  timezone: string;
+  currency: string;
+}
+
+interface ProfileData {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
+const Settings: FC = () => {
+  const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings } = useApp();
+  
+  // UI State
+  const [activeTab, setActiveTab] = useState('profile');
+  
+  // Loading states
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [notificationsSaving, setNotificationsSaving] = useState(false);
+  const [generalSaving, setGeneralSaving] = useState(false);
+  
+  // Alert state
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<AlertType>('info');
+  
   // Profile state
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState<ProfileData>({
     name: user?.name || '',
     email: user?.email || '',
     phone: user?.phone || '',
@@ -16,19 +74,20 @@ const Settings = () => {
   });
 
   // Password change state
-  const [passwordData, setPasswordData] = useState({
+  const [passwordData, setPasswordData] = useState<PasswordData>({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
-  const [showPasswords, setShowPasswords] = useState({
+  
+  const [showPasswords, setShowPasswords] = useState<ShowPasswords>({
     current: false,
     new: false,
     confirm: false,
   });
 
   // Notification settings state
-  const [notificationSettings, setNotificationSettings] = useState({
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
     sessionNotifications: true,
     orderNotifications: true,
     inventoryNotifications: true,
@@ -40,100 +99,140 @@ const Settings = () => {
   });
 
   // General settings state
-  const [generalSettings, setGeneralSettings] = useState({
+  const [generalSettings, setGeneralSettings] = useState<GeneralSettings>({
     theme: 'light',
     language: 'ar',
     timezone: 'Africa/Cairo',
     currency: 'EGP',
   });
 
+  // Show alert function
+  const showAlertMessage = (message: string, type: AlertType = 'success') => {
+    setAlertMessage(message);
+    setAlertType(type);
+    setShowAlert(true);
+    setTimeout(() => setShowAlert(false), 5000);
+  };
+
+  // Update profile when user data is loaded
   useEffect(() => {
     if (user) {
-      setProfile({
+      setProfile(prev => ({
+        ...prev,
         name: user.name || '',
         email: user.email || '',
         phone: user.phone || '',
         address: user.address || '',
-      });
+      }));
     }
   }, [user]);
 
+  // Show loading state if user is not loaded yet
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">جاري التحميل...</p>
+        </div>
+      </div>
+    );
+  }
+
   const handleProfileUpdate = async () => {
     if (!profile.name.trim() || !profile.email.trim()) {
-      showNotification('الاسم والبريد الإلكتروني مطلوبان', 'error');
+      showAlertMessage('الاسم والبريد الإلكتروني مطلوبان', 'error');
       return;
     }
 
-    setSaving(true);
+    setProfileSaving(true);
     try {
       const success = await updateUserProfile(profile);
       if (success) {
-        // تحديث بيانات المستخدم في الواجهة
-        // يمكن إضافة منطق إضافي هنا
+        showAlertMessage('تم تحديث الملف الشخصي بنجاح');
+      } else {
+        showAlertMessage('حدث خطأ أثناء تحديث الملف الشخصي', 'error');
       }
-    } catch {
-      // تم التعامل مع الخطأ في الدالة
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      showAlertMessage('حدث خطأ غير متوقع أثناء تحديث الملف الشخصي', 'error');
     } finally {
-      setSaving(false);
+      setProfileSaving(false);
     }
   };
 
   const handlePasswordChange = async () => {
     if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      showNotification('جميع الحقول مطلوبة', 'error');
+      showAlertMessage('جميع الحقول مطلوبة', 'error');
       return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      showNotification('كلمة المرور الجديدة غير متطابقة', 'error');
+      showAlertMessage('كلمة المرور الجديدة غير متطابقة', 'error');
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      showNotification('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error');
+      showAlertMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error');
       return;
     }
 
-    setSaving(true);
+    setPasswordSaving(true);
     try {
       const success = await changePassword(passwordData);
       if (success) {
+        showAlertMessage('تم تغيير كلمة المرور بنجاح');
         setPasswordData({
           currentPassword: '',
           newPassword: '',
           confirmPassword: '',
         });
+      } else {
+        showAlertMessage('فشل تغيير كلمة المرور. يرجى التحقق من كلمة المرور الحالية', 'error');
       }
-    } catch {
-      // تم التعامل مع الخطأ في الدالة
+    } catch (error) {
+      console.error('Error changing password:', error);
+      showAlertMessage('حدث خطأ أثناء تغيير كلمة المرور', 'error');
     } finally {
-      setSaving(false);
+      setPasswordSaving(false);
     }
   };
 
   const handleNotificationSettingsUpdate = async () => {
-    setSaving(true);
+    setNotificationsSaving(true);
     try {
-      await updateNotificationSettings(notificationSettings);
-    } catch {
-      // تم التعامل مع الخطأ في الدالة
+      const success = await updateNotificationSettings(notificationSettings);
+      if (success) {
+        showAlertMessage('تم حفظ إعدادات الإشعارات بنجاح');
+      } else {
+        showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating notification settings:', error);
+      showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
     } finally {
-      setSaving(false);
+      setNotificationsSaving(false);
     }
   };
 
   const handleGeneralSettingsUpdate = async () => {
-    setSaving(true);
+    setGeneralSaving(true);
     try {
-      await updateGeneralSettings(generalSettings);
-    } catch {
-      // تم التعامل مع الخطأ في الدالة
+      const success = await updateGeneralSettings(generalSettings);
+      if (success) {
+        showAlertMessage('تم حفظ الإعدادات العامة بنجاح');
+      } else {
+        showAlertMessage('حدث خطأ أثناء حفظ الإعدادات العامة', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating general settings:', error);
+      showAlertMessage('حدث خطأ أثناء حفظ الإعدادات العامة', 'error');
     } finally {
-      setSaving(false);
+      setGeneralSaving(false);
     }
   };
 
-  const tabs = [
+  const tabs: TabType[] = [
     { id: 'profile', name: 'الملف الشخصي', icon: User },
     { id: 'password', name: 'كلمة المرور', icon: Lock },
     { id: 'notifications', name: 'الإشعارات', icon: Bell },
@@ -152,7 +251,6 @@ const Settings = () => {
   }
 
   return (
-    <>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
@@ -253,11 +351,23 @@ const Settings = () => {
                   <div className="mt-6">
                     <button
                       onClick={handleProfileUpdate}
-                      disabled={saving}
-                      className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
+                      disabled={profileSaving}
+                      className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-32 justify-center"
                     >
-                      <Save className="h-4 w-4" />
-                      <span>{saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}</span>
+                      {profileSaving ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>جاري الحفظ...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          <span>حفظ التغييرات</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -336,11 +446,23 @@ const Settings = () => {
                     <div className="mt-6">
                       <button
                         onClick={handlePasswordChange}
-                        disabled={saving}
-                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
+                        disabled={passwordSaving}
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
                       >
-                        <Lock className="h-4 w-4" />
-                        <span>{saving ? 'جاري التغيير...' : 'تغيير كلمة المرور'}</span>
+                        {passwordSaving ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>جاري التغيير...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-4 w-4" />
+                            <span>تغيير كلمة المرور</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -485,11 +607,23 @@ const Settings = () => {
                     <div className="mt-6">
                       <button
                         onClick={handleNotificationSettingsUpdate}
-                        disabled={saving}
-                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
+                        disabled={notificationsSaving}
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-48 justify-center"
                       >
-                        <Save className="h-4 w-4" />
-                        <span>{saving ? 'جاري الحفظ...' : 'حفظ إعدادات الإشعارات'}</span>
+                        {notificationsSaving ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>جاري الحفظ...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4" />
+                            <span>حفظ إعدادات الإشعارات</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -566,11 +700,23 @@ const Settings = () => {
                     <div className="mt-6">
                       <button
                         onClick={handleGeneralSettingsUpdate}
-                        disabled={saving}
-                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
+                        disabled={generalSaving}
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-40 justify-center"
                       >
-                        <Save className="h-4 w-4" />
-                        <span>{saving ? 'جاري الحفظ...' : 'حفظ الإعدادات العامة'}</span>
+                        {generalSaving ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>جاري الحفظ...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4" />
+                            <span>حفظ الإعدادات العامة</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -580,8 +726,26 @@ const Settings = () => {
           </div>
         </div>
       </div>
+      
+      {/* Alert Notification */}
+      {showAlert && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className={`${alertType === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white px-6 py-4 rounded-lg shadow-lg flex items-center justify-between min-w-64`}>
+            <div className="flex-1">
+              <p className="text-sm">{alertMessage}</p>
+            </div>
+            <button 
+              onClick={() => setShowAlert(false)}
+              className="text-white hover:text-gray-200 ml-4"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-    </>
   );
 };
 
