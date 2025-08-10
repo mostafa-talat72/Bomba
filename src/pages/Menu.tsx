@@ -20,6 +20,7 @@ const Menu: React.FC = () => {
 	const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
 	const [deletingItems, setDeletingItems] = useState<Record<string, boolean>>({});
 	const [savingItem, setSavingItem] = useState(false);
+	const [showDeleteModal, setShowDeleteModal] = useState<{show: boolean, itemId: string | null}>({show: false, itemId: null});
 	const [searchTerm, setSearchTerm] = useState('');
 	const [selectedCategory, setSelectedCategory] = useState('all');
 
@@ -113,21 +114,31 @@ const Menu: React.FC = () => {
 		setShowAddModal(true);
 	};
 
-	const handleDeleteItem = async (id: string) => {
-		if (window.confirm('هل أنت متأكد من حذف هذا العنصر؟')) {
-			try {
-				setDeletingItems(prev => ({ ...prev, [id]: true }));
-				const success = await deleteMenuItem(id);
-				if (success) {
-					await loadMenuItems();
-					showNotification('تم حذف العنصر بنجاح', 'success');
-				}
-			} catch (error) {
-				showNotification('حدث خطأ أثناء حذف العنصر', 'error');
-			} finally {
-				setDeletingItems(prev => ({ ...prev, [id]: false }));
+	const handleDeleteItem = async () => {
+		const { itemId } = showDeleteModal;
+		if (!itemId) return;
+		
+		try {
+			setDeletingItems(prev => ({ ...prev, [itemId]: true }));
+			const success = await deleteMenuItem(itemId);
+			if (success) {
+				await loadMenuItems();
+				showNotification('تم حذف العنصر بنجاح', 'success');
+				setShowDeleteModal({show: false, itemId: null});
 			}
+		} catch (error) {
+			showNotification('حدث خطأ أثناء حذف العنصر', 'error');
+		} finally {
+			setDeletingItems(prev => ({ ...prev, [itemId]: false }));
 		}
+	};
+
+	const openDeleteModal = (itemId: string) => {
+		setShowDeleteModal({show: true, itemId});
+	};
+
+	const closeDeleteModal = () => {
+		setShowDeleteModal({show: false, itemId: null});
 	};
 
 	const handleSaveItem = async () => {
@@ -452,10 +463,10 @@ const Menu: React.FC = () => {
 									<Edit className="h-4 w-4" />
 								</button>
 								<button
-									onClick={() => handleDeleteItem(item.id)}
+									onClick={() => openDeleteModal(item.id)}
 									disabled={deletingItems[item.id]}
 									className={`p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200 ${deletingItems[item.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-									title={deletingItems[item.id] ? 'جاري الحذف...' : 'حذف'}
+									title="حذف"
 								>
 									{deletingItems[item.id] ? (
 										<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 dark:border-red-400"></div>
@@ -783,6 +794,57 @@ const Menu: React.FC = () => {
 										</>
 									)}
 							</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Delete Confirmation Modal */}
+			{showDeleteModal.show && (
+				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+						<div className="p-6">
+							<div className="flex items-center justify-between mb-4">
+								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">تأكيد الحذف</h3>
+								<button
+									onClick={closeDeleteModal}
+									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+									disabled={deletingItems[showDeleteModal.itemId || '']}
+								>
+									<X className="h-6 w-6" />
+								</button>
+							</div>
+
+							<p className="text-gray-600 dark:text-gray-300 mb-6">
+								هل أنت متأكد من رغبتك في حذف هذا العنصر؟ لا يمكن التراجع عن هذه العملية.
+							</p>
+
+							<div className="flex justify-end space-x-3 space-x-reverse">
+								<button
+									onClick={closeDeleteModal}
+									disabled={deletingItems[showDeleteModal.itemId || '']}
+									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200 disabled:opacity-50"
+								>
+									إلغاء
+								</button>
+								<button
+									onClick={handleDeleteItem}
+									disabled={deletingItems[showDeleteModal.itemId || '']}
+									className="px-6 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center"
+								>
+									{deletingItems[showDeleteModal.itemId || ''] ? (
+										<>
+											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
+											جاري الحذف...
+										</>
+									) : (
+										<>
+											<Trash2 className="h-4 w-4 ml-2" />
+											حذف
+										</>
+									)}
+								</button>
 							</div>
 						</div>
 					</div>
