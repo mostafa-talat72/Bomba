@@ -12,9 +12,13 @@ const Users = () => {
   const [showViewUser, setShowViewUser] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error'>('success');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -150,7 +154,9 @@ const Users = () => {
       setLoading(true);
       await fetchUsers();
     } catch {
-      showNotification('خطأ في تحميل المستخدمين', 'error');
+      setAlertMessage('خطأ في تحميل المستخدمين');
+      setAlertType('error');
+      setShowAlert(true);
     } finally {
       setLoading(false);
     }
@@ -254,23 +260,29 @@ const Users = () => {
 
     // التحقق من صحة البيانات
     if (!showEditUser && formData.password !== formData.confirmPassword) {
-      showNotification('كلمات المرور غير متطابقة', 'error');
+      setAlertMessage('كلمات المرور غير متطابقة');
+      setAlertType('error');
+      setShowAlert(true);
       return;
     }
 
     if (!showEditUser && formData.password.length < 6) {
-      showNotification('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error');
+      setAlertMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      setAlertType('error');
+      setShowAlert(true);
       return;
     }
 
     // التحقق من الصلاحيات
     if (formData.permissions.length === 0) {
-      showNotification('يجب تحديد صلاحية واحدة على الأقل', 'error');
+      setAlertMessage('يجب تحديد صلاحية واحدة على الأقل');
+      setAlertType('error');
+      setShowAlert(true);
       return;
     }
 
     try {
-      setLoading(true);
+      setSaveLoading(true);
 
       const userData: {
         name: string;
@@ -303,17 +315,20 @@ const Users = () => {
       } else {
         userData.password = formData.password;
         const user = await createUser(userData);
-        setLoading(false);
         if (user) {
           if (formData.role === 'owner') {
-            showNotification('تم إرسال رسالة تأكيد إلى بريدك الإلكتروني. يرجى تفعيل الحساب من الإيميل ثم تسجيل الدخول.', 'success');
+            setAlertMessage('تم إرسال رسالة تأكيد إلى بريدك الإلكتروني. يرجى تفعيل الحساب من الإيميل ثم تسجيل الدخول.');
+            setAlertType('success');
+            setShowAlert(true);
             setTimeout(() => {
               resetForm();
               setShowAddUser(false);
               window.location.href = '/login';
             }, 3000);
           } else {
-            showNotification('تم إضافة المستخدم بنجاح', 'success');
+            setAlertMessage('تم إضافة المستخدم بنجاح');
+            setAlertType('success');
+            setShowAlert(true);
             setShowAddUser(false);
             resetForm();
           }
@@ -325,9 +340,11 @@ const Users = () => {
       await loadUsers();
 
     } catch {
-      showNotification('خطأ في حفظ المستخدم', 'error');
+      setAlertMessage('خطأ في حفظ المستخدم');
+      setAlertType('error');
+      setShowAlert(true);
     } finally {
-      setLoading(false);
+      setSaveLoading(false);
     }
   };
 
@@ -872,11 +889,19 @@ const Users = () => {
                 إلغاء
               </button>
               <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50"
+                type="submit"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 flex items-center justify-center min-w-32"
+                disabled={saveLoading}
               >
-                {loading ? 'جاري الحفظ...' : (showEditUser ? 'تحديث المستخدم' : 'إضافة المستخدم')}
+                {saveLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {showEditUser ? 'جاري التحديث...' : 'جاري الحفظ...'}
+                  </>
+                ) : showEditUser ? 'تحديث المستخدم' : 'إضافة مستخدم'}
               </button>
             </div>
           </div>
@@ -1104,6 +1129,25 @@ const Users = () => {
                 {deleteLoading ? 'جاري الحذف...' : (deleteTarget.role === 'admin' ? 'تأكيد الحذف' : 'نعم، احذف')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Notification */}
+      {showAlert && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className={`${alertType === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white px-6 py-4 rounded-lg shadow-lg flex items-center justify-between min-w-64`}>
+            <div className="flex-1">
+              <p className="text-sm">{alertMessage}</p>
+            </div>
+            <button 
+              onClick={() => setShowAlert(false)}
+              className="text-white hover:text-gray-200 ml-4"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}
