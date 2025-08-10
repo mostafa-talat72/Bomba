@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Package, Plus, AlertTriangle, Edit, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { InventoryItem } from '../services/api';
+import { InventoryItem, MenuItem } from '../services/api';
+type IngredientItem = string | { _id?: string; id?: string };
+type Ingredient = { item: IngredientItem; quantity: number; unit: string; };
 import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDecimal, formatQuantity } from '../utils/formatters';
@@ -124,6 +126,7 @@ const Inventory = () => {
   // مراقبة تغييرات السعر والكمية والمبلغ المدفوع
   useEffect(() => {
     updatePaymentStatus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addForm.price, addForm.quantity, addForm.paidAmount]);
 
   // فتح نافذة إضافة مخزون
@@ -306,7 +309,8 @@ const Inventory = () => {
           setError('حدث خطأ أثناء إضافة المنتج');
         }
       }
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as Error;
       if (error?.message?.includes('موجود بالفعل')) {
         setError(error.message);
       } else {
@@ -353,19 +357,78 @@ const Inventory = () => {
       } else {
         setError('حدث خطأ أثناء التعديل');
       }
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as Error;
       if (error?.message?.includes('موجود بالفعل')) {
         setError(error.message);
       } else {
         setError('حدث خطأ أثناء العملية');
       }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  // التحقق مما إذا كان المنتج مستخدماً في قائمة الطعام
+  const isItemUsedInMenu = async (itemId: string): Promise<{isUsed: boolean; menuItems?: Array<{name: string}>, itemName: string}> => {
+    try {
+      // جلب جميع عناصر القائمة مع تفاصيل المكونات
+      const response = await api.getMenuItems({ 
+        limit: 1000 // جلب عدد أكبر من العناصر للتأكد
+      });
+      
+      if (response.success && response.data) {
+        // البحث في كل عنصر في القائمة
+        const itemName = inventoryItems.find(item => item.id === itemId || item._id === itemId)?.name || 'هذا المنتج';
+        const menuItems = response.data.filter((menuItem: MenuItem) => {
+          // التحقق من وجود مكونات للعنصر
+          if (!menuItem.ingredients || !Array.isArray(menuItem.ingredients)) {
+            return false;
+          }
+          // البحث عن المكون في قائمة المكونات
+          return menuItem.ingredients.some((ing: Ingredient) => {
+            // التحقق من أن المكون موجود وأن المعرف متطابق
+            const item = typeof ing.item === 'string' 
+              ? ing.item 
+              : (ing.item as { _id?: string; id?: string })?.id || (ing.item as { _id?: string; id?: string })?._id;
+            return item === itemId;
+          });
+        });
+        
+        const isUsed = menuItems.length > 0;
+        console.log(`المنتج ${itemName} ${isUsed ? 'مستخدم' : 'غير مستخدم'} في القائمة`);
+        return {
+          isUsed,
+          menuItems: menuItems.map((item: MenuItem) => ({ name: item.name })),
+          itemName
+        };
+      }
+      return { isUsed: false, itemName: 'هذا المنتج' };
+    } catch (err) {
+      console.error('خطأ في التحقق من استخدام المنتج في القائمة:', err);
+      return { isUsed: true, itemName: 'هذا المنتج' }; // في حالة الخطأ، نمنع الحذف كإجراء احترازي
+    }
   };
 
   // حذف منتج
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    
+    // التحقق مما إذا كان المنتج مستخدماً في قائمة الطعام
+    const { isUsed, menuItems, itemName } = await isItemUsedInMenu(deleteTarget.id || deleteTarget._id);
+    if (isUsed && menuItems && menuItems.length > 0) {
+      const menuItemsList = menuItems.map(item => `- ${item.name}`).join('\n');
+      const errorMsg = `
+        لا يمكن حذف ${itemName} لأنه مستخدم في الأصناف التالية:\n\n${menuItemsList}
+        \n\nالرجاء إزالة المنتج من هذه الأصناف أولاً.`;
+      
+      setError(errorMsg);
+      showAlertMessage(`لا يمكن حذف ${itemName} لأنه مستخدم في ${menuItems.length} صنف في القائمة`, 'error');
+      setLoading(false);
+      setShowDeleteModal(false);
+      return;
+    }
+    
     setLoading(true);
     setError('');
     try {
@@ -380,10 +443,10 @@ const Inventory = () => {
         setError(errorMsg);
         showAlertMessage(errorMsg, 'error');
       }
-    } catch (error) {
-      const errorMsg = 'حدث خطأ أثناء حذف المنتج';
-      setError(errorMsg);
-      showAlertMessage(errorMsg, 'error');
+    } catch (err) {
+      console.error('خطأ في حذف المنتج:', err);
+      setError('حدث خطأ أثناء حذف المنتج');
+      showAlertMessage('حدث خطأ أثناء حذف المنتج', 'error');
     } finally {
       setLoading(false);
     }
