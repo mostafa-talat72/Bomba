@@ -727,6 +727,8 @@ const Cafe: React.FC = () => {
 
   // Function to update item prepared count
   const updateItemPrepared = async (orderId: string, itemIndex: number, preparedCount: number) => {
+    const updateKey = `${orderId}-${itemIndex}`;
+    setIsUpdatingItem({orderId, itemIndex});
     try {
       const order = pendingOrders.find((o: any) => o._id === orderId) || readyOrders.find((o: any) => o._id === orderId);
       if (!order) {
@@ -760,11 +762,14 @@ const Cafe: React.FC = () => {
     } catch (error) {
       console.error('Error updating item prepared:', error);
       showNotification('خطأ في تحديث حالة التجهيز', 'error');
+    } finally {
+      setIsUpdatingItem(null);
     }
   };
 
   // Function to move order to ready manually
   const moveOrderToReady = async (orderId: string) => {
+    setIsMovingToReady(orderId);
     try {
       // البحث عن الطلب
       const order = pendingOrders.find(o => o._id === orderId);
@@ -793,6 +798,8 @@ const Cafe: React.FC = () => {
     } catch (error) {
       console.error('❌ Error moving order to ready:', error);
       showNotification('خطأ في تحريك الطلب', 'error');
+    } finally {
+      setIsMovingToReady(null);
     }
   };
 
@@ -998,6 +1005,9 @@ const Cafe: React.FC = () => {
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState<any>(null);
+  const [isCancelingOrder, setIsCancelingOrder] = useState(false);
+  const [isMovingToReady, setIsMovingToReady] = useState<string | null>(null);
+  const [isUpdatingItem, setIsUpdatingItem] = useState<{orderId: string, itemIndex: number} | null>(null);
 
   const handleCancelOrder = (order: any) => {
     setOrderToCancel(order);
@@ -1006,6 +1016,7 @@ const Cafe: React.FC = () => {
 
   const confirmCancelOrder = async () => {
     if (!orderToCancel) return;
+    setIsCancelingOrder(true);
     try {
       const response = await api.cancelOrder(orderToCancel._id);
       if (response && response.success) {
@@ -1017,6 +1028,8 @@ const Cafe: React.FC = () => {
       }
     } catch (err) {
       showNotification('حدث خطأ أثناء إلغاء الطلب', 'error');
+    } finally {
+      setIsCancelingOrder(false);
     }
   };
 
@@ -1593,9 +1606,21 @@ const Cafe: React.FC = () => {
               <button
                 onClick={handleCreateOrder}
                 disabled={loading || currentOrder.length === 0}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 disabled:bg-gray-300 text-white rounded-lg transition-colors duration-200"
+                className={`px-4 py-2 text-white rounded-lg transition-colors duration-200 flex items-center justify-center min-w-[120px] ${
+                  loading
+                    ? 'bg-orange-700 dark:bg-orange-600 cursor-not-allowed'
+                    : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'
+                } ${currentOrder.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                {loading ? 'جاري إنشاء الطلب...' : 'إنشاء الطلب'}
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الإنشاء...
+                  </>
+                ) : 'إنشاء الطلب'}
               </button>
             </div>
           </div>
@@ -1752,10 +1777,23 @@ const Cafe: React.FC = () => {
                               className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             />
                               <button
-                              onClick={() => updateItemPrepared(selectedOrder._id, index, quantity)}
-                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                onClick={() => updateItemPrepared(selectedOrder._id, index, quantity)}
+                                disabled={isUpdatingItem?.orderId === selectedOrder._id && isUpdatingItem?.itemIndex === index}
+                                className={`px-3 py-1 text-xs text-white rounded transition-colors flex items-center justify-center min-w-[80px] ${
+                                  isUpdatingItem?.orderId === selectedOrder._id && isUpdatingItem?.itemIndex === index
+                                    ? 'bg-green-700 cursor-not-allowed'
+                                    : 'bg-green-600 hover:bg-green-700'
+                                }`}
                               >
-                              تجهيز كامل
+                                {isUpdatingItem?.orderId === selectedOrder._id && isUpdatingItem?.itemIndex === index ? (
+                                  <>
+                                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    جاري التجهيز...
+                                  </>
+                                ) : 'تجهيز كامل'}
                               </button>
                           </div>
                         )}
@@ -1781,10 +1819,27 @@ const Cafe: React.FC = () => {
                       moveOrderToReady(selectedOrder._id);
                       setShowOrderDetails(false);
                     }}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 flex items-center"
+                    disabled={isMovingToReady === selectedOrder._id}
+                    className={`px-4 py-2 text-white rounded-lg transition-colors duration-200 flex items-center ${
+                      isMovingToReady === selectedOrder._id
+                        ? 'bg-green-700 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
                   >
-                    <CheckCircle className="h-4 w-4 ml-2" />
-                    تحريك إلى الجاهزة
+                    {isMovingToReady === selectedOrder._id ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        جاري التحريك...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 ml-2" />
+                        تحريك إلى الجاهزة
+                      </>
+                    )}
                   </button>
                 )}
 
@@ -1809,23 +1864,49 @@ const Cafe: React.FC = () => {
       )}
 
       {showCancelModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative text-center">
+        <div className="fixed inset-0 bg-black bg-opacity-40 dark:bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full p-6 relative text-center">
             <button
-              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl font-bold transition-colors"
               onClick={() => setShowCancelModal(false)}
-            >×</button>
-            <h2 className="text-xl font-bold mb-4">تأكيد إلغاء الطلب</h2>
-            <p className="mb-6">هل أنت متأكد أنك تريد إلغاء الطلب رقم <span className="font-bold text-red-600">#{orderToCancel?.orderNumber}</span>؟</p>
+              aria-label="إغلاق"
+            >
+              ×
+            </button>
+            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">تأكيد إلغاء الطلب</h2>
+            <p className="mb-6 text-gray-700 dark:text-gray-300">
+              هل أنت متأكد أنك تريد إلغاء الطلب رقم{' '}
+              <span className="font-bold text-red-600 dark:text-red-400">#{orderToCancel?.orderNumber}</span>؟
+            </p>
             <div className="flex gap-4 justify-center">
               <button
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-bold"
+                className="px-4 py-2 rounded-lg font-bold transition-colors
+                  bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600
+                  text-gray-800 dark:text-gray-200"
                 onClick={() => setShowCancelModal(false)}
-              >تراجع</button>
+                disabled={isCancelingOrder}
+              >
+                تراجع
+              </button>
               <button
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold"
+                className={`px-4 py-2 rounded-lg font-bold text-white flex items-center justify-center min-w-[120px] transition-colors ${
+                  isCancelingOrder
+                    ? 'bg-red-700 dark:bg-red-800 cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700'
+                }`}
                 onClick={confirmCancelOrder}
-              >تأكيد الإلغاء</button>
+                disabled={isCancelingOrder}
+              >
+                {isCancelingOrder ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الإلغاء...
+                  </>
+                ) : 'تأكيد الإلغاء'}
+              </button>
             </div>
           </div>
         </div>

@@ -288,7 +288,6 @@ const sessionController = {
             }).populate("bill");
 
             if (!session) {
-                Logger.error("❌ Session not found:", id);
                 return res.status(404).json({
                     success: false,
                     message: "الجلسة غير موجودة",
@@ -297,7 +296,6 @@ const sessionController = {
             }
 
             if (session.status !== "active") {
-                Logger.error("❌ Session is not active:", session.status);
                 return res.status(400).json({
                     success: false,
                     message: "لا يمكن تحديث تكلفة جلسة غير نشطة",
@@ -370,7 +368,6 @@ const sessionController = {
             }
 
             if (session.status !== "active") {
-                Logger.error("❌ Session is not active:", session.status);
                 return res.status(400).json({
                     success: false,
                     message: "الجلسة غير نشطة",
@@ -597,11 +594,11 @@ const sessionController = {
 
             // Add session to bill without updating customer name
             bill.sessions.push(session._id);
-            
+
             // Save bill without modifying customer name
             await Bill.findByIdAndUpdate(
                 bill._id,
-                { 
+                {
                     $addToSet: { sessions: session._id },
                     // لا نقوم بتحديث customerName هنا للحفاظ على القيمة الأصلية
                 },
