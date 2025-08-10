@@ -493,7 +493,7 @@ const Users = () => {
               <UsersIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">إجمالي المستخدمين</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">المستخدمين</p>
               <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalUsers)}</p>
             </div>
           </div>
@@ -1140,7 +1140,7 @@ const Users = () => {
             <div className="flex-1">
               <p className="text-sm">{alertMessage}</p>
             </div>
-            <button 
+            <button
               onClick={() => setShowAlert(false)}
               className="text-white hover:text-gray-200 ml-4"
             >
