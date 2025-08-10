@@ -42,6 +42,9 @@ const Inventory = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error'>('success');
 
   // القيم المسموحة للفئة والوحدة
   const categoryOptions = ['مشروبات ساخنة', 'مشروبات باردة', 'طعام', 'حلويات', 'مواد خام', 'أخرى'];
@@ -230,6 +233,19 @@ const Inventory = () => {
     }
   };
 
+  // إظهار نافذة التنبيه
+  const showAlertMessage = (message: string, type: 'success' | 'error' = 'success') => {
+    setAlertMessage(message);
+    setAlertType(type);
+    setShowAlert(true);
+    setTimeout(() => setShowAlert(false), 5000);
+  };
+
+  // إغلاق نافذة التنبيه
+  const closeAlert = () => {
+    setShowAlert(false);
+  };
+
   // إضافة كمية جديدة أو منتج جديد
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +256,7 @@ const Inventory = () => {
       if (addType === 'existing') {
         if (!addForm.productId || !addForm.quantity || !addForm.price) {
           setError('يرجى اختيار المنتج وإدخال الكمية والسعر.');
+          showAlertMessage('يرجى تعبئة جميع الحقول المطلوبة', 'error');
           setLoading(false);
           return;
         }
@@ -306,9 +323,16 @@ const Inventory = () => {
     setError('');
     setSuccess('');
     try {
-      if (!selectedItem) return;
+      if (!selectedItem) {
+        setError('لم يتم تحديد منتج للتعديل');
+        showAlertMessage('لم يتم تحديد منتج للتعديل', 'error');
+        setLoading(false);
+        return;
+      }
       if (!addForm.name || !addForm.category || !addForm.price || !addForm.unit || !addForm.minStock) {
-        setError('يرجى إدخال جميع الحقول المطلوبة.');
+        const errorMsg = 'يرجى إدخال جميع الحقول المطلوبة';
+        setError(errorMsg);
+        showAlertMessage(errorMsg, 'error');
         setLoading(false);
         return;
       }
@@ -348,15 +372,21 @@ const Inventory = () => {
       const res = await deleteInventoryItemApi(deleteTarget.id || deleteTarget._id);
       if (res) {
         showNotification('تم حذف المنتج بنجاح', 'success');
+        showAlertMessage('تم حذف المنتج بنجاح', 'success');
         fetchInventoryItems();
         setShowDeleteModal(false);
       } else {
-        setError('حدث خطأ أثناء الحذف');
+        const errorMsg = 'حدث خطأ أثناء حذف المنتج';
+        setError(errorMsg);
+        showAlertMessage(errorMsg, 'error');
       }
-    } catch {
-      setError('حدث خطأ أثناء الحذف');
+    } catch (error) {
+      const errorMsg = 'حدث خطأ أثناء حذف المنتج';
+      setError(errorMsg);
+      showAlertMessage(errorMsg, 'error');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // أضف دالة حذف المنتج من المخزون
@@ -797,8 +827,20 @@ const Inventory = () => {
                   >عرض صفحة التكاليف</button>
                 </div>
               )}
-              <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
-                {loading ? 'جاري الحفظ...' : 'حفظ'}
+              <button 
+                type="submit" 
+                className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-500' : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'} text-white py-2 rounded-lg font-bold transition-colors duration-200`} 
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الحفظ...
+                  </>
+                ) : 'حفظ'}
               </button>
             </form>
             </div>
@@ -868,10 +910,39 @@ const Inventory = () => {
               </div>
               {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
               {success && <div className="text-green-600 dark:text-green-400 text-sm">{success}</div>}
-              <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 rounded-lg font-bold transition-colors duration-200" disabled={loading}>
-                {loading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+              <button 
+                type="submit" 
+                className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-500' : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'} text-white py-2 rounded-lg font-bold transition-colors duration-200`} 
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري التحديث...
+                  </>
+                ) : 'حفظ التعديلات'}
               </button>
             </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة التنبيه */}
+      {showAlert && (
+        <div className="fixed top-4 right-4 z-50 transition-all duration-300 ease-in-out">
+          <div className={`px-6 py-4 rounded-lg shadow-lg ${alertType === 'success' ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'}`}>
+            <div className="flex items-center justify-between">
+              <p>{alertMessage}</p>
+              <button 
+                onClick={closeAlert}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 ml-4"
+              >
+                ×
+              </button>
             </div>
           </div>
         </div>
@@ -903,15 +974,27 @@ const Inventory = () => {
             {error && <div className="text-red-600 dark:text-red-400 text-sm mb-2">{error}</div>}
             <div className="flex gap-4 justify-center">
               <button
-                className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-bold transition-colors duration-200"
+                className={`${loading ? 'opacity-50 cursor-not-allowed' : ''} bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-bold transition-colors duration-200`}
                 onClick={() => setShowDeleteModal(false)}
                 disabled={loading}
-              >إلغاء</button>
+              >
+                إلغاء
+              </button>
               <button
-                className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200"
+                className={`flex items-center justify-center gap-2 ${loading ? 'bg-red-500' : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700'} text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200`}
                 onClick={handleDelete}
                 disabled={loading}
-              >{loading ? 'جاري الحذف...' : 'حذف'}</button>
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الحذف...
+                  </>
+                ) : 'حذف'}
+              </button>
             </div>
             </div>
           </div>
