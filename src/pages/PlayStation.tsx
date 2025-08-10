@@ -51,6 +51,9 @@ const PlayStation: React.FC = () => {
 
   const [loadingSession, setLoadingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [endingSessions, setEndingSessions] = useState<Record<string, boolean>>({});
+  const [updatingControllers, setUpdatingControllers] = useState<Record<string, boolean>>({});
+  const [isAddingDevice, setIsAddingDevice] = useState(false);
 
   // Loading states for better UX
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -118,6 +121,7 @@ const PlayStation: React.FC = () => {
     e.preventDefault();
     setAddDeviceError(null);
     if (!newDevice.name || !newDevice.number) return;
+    setIsAddingDevice(true);
 
     // فحص عدم تكرار رقم الجهاز في الواجهة
     const existingDevice = devices.find(d => d.number === Number(newDevice.number));
@@ -151,6 +155,7 @@ const PlayStation: React.FC = () => {
       } else {
         setAddDeviceError('حدث خطأ أثناء إضافة الجهاز.');
       }
+      setIsAddingDevice(false);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } }; message?: string };
       setAddDeviceError(error?.response?.data?.error || error?.message || 'حدث خطأ غير متوقع.');
@@ -269,6 +274,7 @@ const PlayStation: React.FC = () => {
 
   const handleEndSession = async (sessionId: string) => {
     try {
+      setEndingSessions(prev => ({ ...prev, [sessionId]: true }));
       const result = await endSession(sessionId);
 
       // Show success message with bill info if available
@@ -281,10 +287,11 @@ const PlayStation: React.FC = () => {
       }
 
       // Refresh data after ending session
-      await loadDevices();
-      await fetchBills();
+      await Promise.all([loadDevices(), fetchBills()]);
+      setEndingSessions(prev => ({ ...prev, [sessionId]: false }));
     } catch {
       showNotification('Error ending session:', 'error');
+      setEndingSessions(prev => ({ ...prev, [sessionId]: false }));
     }
   };
 
@@ -393,28 +400,50 @@ const PlayStation: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50"
-                      disabled={(activeSession.controllers ?? 1) <= 1}
+                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 flex items-center justify-center min-w-[24px]"
+                      disabled={(activeSession.controllers ?? 1) <= 1 || updatingControllers[activeSession.id]}
                       onClick={async () => {
                         const newCount = (activeSession.controllers ?? 1) - 1;
-                        const res = await api.updateSessionControllers(activeSession.id, newCount);
-                        if (res.success && res.data) {
-                          // No need to fetchSessions here, as sessions are managed by useApp
+                        setUpdatingControllers(prev => ({ ...prev, [activeSession.id]: true }));
+                        try {
+                          const res = await api.updateSessionControllers(activeSession.id, newCount);
+                          if (res.success && res.data) {
+                            // No need to fetchSessions here, as sessions are managed by useApp
+                          }
+                        } finally {
+                          setUpdatingControllers(prev => ({ ...prev, [activeSession.id]: false }));
                         }
                       }}
-                    >-</button>
+                    >
+                      {updatingControllers[activeSession.id] ? (
+                        <div className="h-3 w-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        '-'
+                      )}
+                    </button>
                     <span className="mx-2 font-bold text-gray-900 dark:text-gray-100">{activeSession.controllers ?? 1} دراع</span>
                     <button
-                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50"
-                      disabled={(activeSession.controllers ?? 1) >= 4}
+                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 flex items-center justify-center min-w-[24px]"
+                      disabled={(activeSession.controllers ?? 1) >= 4 || updatingControllers[activeSession.id]}
                       onClick={async () => {
                         const newCount = (activeSession.controllers ?? 1) + 1;
-                        const res = await api.updateSessionControllers(activeSession.id, newCount);
-                        if (res.success && res.data) {
-                          // No need to fetchSessions here, as sessions are managed by useApp
+                        setUpdatingControllers(prev => ({ ...prev, [activeSession.id]: true }));
+                        try {
+                          const res = await api.updateSessionControllers(activeSession.id, newCount);
+                          if (res.success && res.data) {
+                            // No need to fetchSessions here, as sessions are managed by useApp
+                          }
+                        } finally {
+                          setUpdatingControllers(prev => ({ ...prev, [activeSession.id]: false }));
                         }
                       }}
-                    >+</button>
+                    >
+                      {updatingControllers[activeSession.id] ? (
+                        <div className="h-3 w-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        '+'
+                      )}
+                    </button>
                   </div>
                       </div>
                     ) : (
@@ -431,10 +460,23 @@ const PlayStation: React.FC = () => {
                     {activeSession ? (
                   <button
                     onClick={() => handleEndSession(activeSession.id)}
-                    className="w-full bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200"
+                    disabled={endingSessions[activeSession.id]}
+                    className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'} text-white py-2 px-4 rounded-lg flex items-center justify-center transition-colors duration-200`}
                   >
-                    <Square className="h-4 w-4 ml-2" />
-                    إنهاء الجلسة
+                    {endingSessions[activeSession.id] ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        جاري الإنهاء...
+                      </>
+                    ) : (
+                      <>
+                        <Square className="h-4 w-4 ml-2" />
+                        إنهاء الجلسة
+                      </>
+                    )}
                   </button>
                     ) : device.status === 'available' ? (
                     <button
@@ -497,28 +539,46 @@ const PlayStation: React.FC = () => {
                   <div className="flex items-center space-x-3 space-x-reverse">
                     <div className="flex items-center gap-2">
                       <button
-                        className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50"
-                        disabled={(session.controllers ?? 1) <= 1}
+                        className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 flex items-center justify-center min-w-[24px]"
+                        disabled={(session.controllers ?? 1) <= 1 || updatingControllers[session.id]}
                         onClick={async () => {
                           const newCount = (session.controllers ?? 1) - 1;
-                          const res = await api.updateSessionControllers(session.id, newCount);
-                          if (res.success && res.data) {
-                            // No need to fetchSessions here, as sessions are managed by useApp
+                          setUpdatingControllers(prev => ({ ...prev, [session.id]: true }));
+                          try {
+                            const res = await api.updateSessionControllers(session.id, newCount);
+                            if (res.success && res.data) {
+                              // No need to fetchSessions here, as sessions are managed by useApp
+                            }
+                          } finally {
+                            setUpdatingControllers(prev => ({ ...prev, [session.id]: false }));
                           }
                         }}
-                      >-</button>
+                      >
+                        {updatingControllers[session.id] ? (
+                          <div className="h-3 w-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+                        ) : '-'}
+                      </button>
                       <span className="mx-2 font-bold text-gray-900 dark:text-gray-100">{session.controllers ?? 1} دراع</span>
                       <button
-                        className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50"
-                        disabled={(session.controllers ?? 1) >= 4}
+                        className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 flex items-center justify-center min-w-[24px]"
+                        disabled={(session.controllers ?? 1) >= 4 || updatingControllers[session.id]}
                         onClick={async () => {
                           const newCount = (session.controllers ?? 1) + 1;
-                          const res = await api.updateSessionControllers(session.id, newCount);
-                          if (res.success && res.data) {
-                            // No need to fetchSessions here, as sessions are managed by useApp
+                          setUpdatingControllers(prev => ({ ...prev, [session.id]: true }));
+                          try {
+                            const res = await api.updateSessionControllers(session.id, newCount);
+                            if (res.success && res.data) {
+                              // No need to fetchSessions here, as sessions are managed by useApp
+                            }
+                          } finally {
+                            setUpdatingControllers(prev => ({ ...prev, [session.id]: false }));
                           }
                         }}
-                      >+</button>
+                      >
+                        {updatingControllers[session.id] ? (
+                          <div className="h-3 w-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+                        ) : '+'}
+                      </button>
                     </div>
                     <div className="text-left">
                       <p className="font-bold text-green-600 dark:text-green-400">{getPlayStationHourlyRate(devices.find(d => d.number === session.deviceNumber) || null, session.controllers ?? 1)} ج.م/ساعة</p>
@@ -526,10 +586,20 @@ const PlayStation: React.FC = () => {
                     </div>
                     <button
                       onClick={() => handleEndSession(session.id)}
-                      className="bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+                      disabled={endingSessions[session.id]}
+                      className={`${endingSessions[session.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'} text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 min-w-[80px] justify-center`}
                     >
-                      <Square className="h-4 w-4 ml-1" />
-                      إنهاء
+                      {endingSessions[session.id] ? (
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <>
+                          <Square className="h-4 w-4 ml-1" />
+                          إنهاء
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -702,7 +772,21 @@ const PlayStation: React.FC = () => {
             {addDeviceError && <div className="text-red-600 dark:text-red-400 mb-2 text-sm">{addDeviceError}</div>}
             <div className="flex justify-between mt-6">
               <button type="button" onClick={() => setShowAddDevice(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100">إلغاء</button>
-              <button type="submit" className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded">إضافة</button>
+              <button 
+                type="submit" 
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded flex items-center justify-center min-w-[80px]"
+                disabled={isAddingDevice}
+              >
+                {isAddingDevice ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الإضافة...
+                  </>
+                ) : 'إضافة'}
+              </button>
             </div>
           </form>
         </div>
