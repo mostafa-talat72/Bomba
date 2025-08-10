@@ -60,8 +60,6 @@ const Billing = () => {
     return today.toISOString().split('T')[0];
   });
 
-
-
   // تحديد الحد الأدنى للتاريخ (اليوم السابق للموظفين فقط)
   const minDate = (() => {
     if (isManagerOrOwner) {
@@ -84,6 +82,10 @@ const Billing = () => {
   })();
   const [paymentReference, setPaymentReference] = useState('');
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  const [isCancelingBill, setIsCancelingBill] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isProcessingPartialPayment, setIsProcessingPartialPayment] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
 
   useEffect(() => {
     // تحميل البيانات الأولية
@@ -210,6 +212,7 @@ const Billing = () => {
     }
 
     try {
+      setIsProcessingPayment(true);
       const result = await api.updatePayment(selectedBill.id || selectedBill._id, {
         paid: selectedBill.paid || 0,
         remaining: selectedBill.remaining || 0,
@@ -235,6 +238,8 @@ const Billing = () => {
     } catch (error) {
       console.error('Failed to update payment:', error);
       showNotification('فشل في تسجيل الدفع');
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -243,7 +248,7 @@ const Billing = () => {
   };
 
   const getCustomerDisplay = (bill: Bill) => {
-      return bill.customerName || 'عميل';
+    return bill.customerName || 'عميل';
   };
 
   // فلترة الفواتير المتاحة للموظفين
@@ -410,6 +415,7 @@ const Billing = () => {
     }
 
     try {
+      setIsProcessingPartialPayment(true);
       const result = await addPartialPayment(selectedBill.id || selectedBill._id, {
         orderId: firstItem.orderId,
         items: itemsToPay.map(item => ({
@@ -440,10 +446,12 @@ const Billing = () => {
     } catch (error) {
       console.error('Failed to add partial payment:', error);
       showNotification('فشل في تسجيل الدفع الجزئي');
+    } finally {
+      setIsProcessingPartialPayment(false);
     }
   };
 
-    // دالة إنهاء الجلسة
+  // دالة إنهاء الجلسة
   const handleEndSession = async (sessionId: string) => {
     setSessionToEnd(sessionId);
     setShowSessionEndModal(true);
@@ -451,6 +459,8 @@ const Billing = () => {
 
   const confirmSessionEnd = async () => {
     if (!sessionToEnd) return;
+    
+    setIsEndingSession(true);
 
     try {
       const result = await api.endSession(sessionToEnd);
@@ -478,6 +488,7 @@ const Billing = () => {
       console.error('Failed to end session:', error);
       showNotification('حدث خطأ في إنهاء الجلسة');
     } finally {
+      setIsEndingSession(false);
       setSessionToEnd(null);
       setShowSessionEndModal(false);
     }
@@ -502,23 +513,19 @@ const Billing = () => {
 
   const handleCancelBill = async () => {
     if (!selectedBill) return;
-
+    
     try {
-      const result = await cancelBill(selectedBill._id || selectedBill.id);
-
-      if (result) {
-        showNotification('تم إلغاء الفاتورة بنجاح');
-        setShowPaymentModal(false);
-        setShowCancelConfirmModal(false);
-
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-        await updateBillStatus(selectedBill._id || selectedBill.id);
-      } else {
-        showNotification('فشل في إلغاء الفاتورة');
-      }
+      setIsCancelingBill(true);
+      const result = await api.cancelBill(selectedBill._id);
+      showNotification('تم إلغاء الفاتورة بنجاح', 'success');
+      setShowCancelConfirmModal(false);
+      setShowPaymentModal(false);
+      await fetchBills();
+      setSelectedBill(null);
     } catch (error) {
-      console.error('❌ Billing: Error cancelling bill:', error);
-      showNotification('حدث خطأ في إلغاء الفاتورة');
+      showNotification('حدث خطأ أثناء إلغاء الفاتورة', 'error');
+    } finally {
+      setIsCancelingBill(false);
     }
   };
 
@@ -1344,14 +1351,26 @@ const Billing = () => {
                 {selectedBill?.status !== 'paid' && paymentAmount && (
                   <button
                     onClick={handlePaymentSubmit}
-                    disabled={selectedBill ? hasActiveSession(selectedBill) : false}
-                    className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
-                      selectedBill && hasActiveSession(selectedBill)
+                    disabled={selectedBill ? (hasActiveSession(selectedBill) || isProcessingPayment) : false}
+                    className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 min-w-[180px] ${
+                      selectedBill && (hasActiveSession(selectedBill) || isProcessingPayment)
                         ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                         : 'bg-orange-600 hover:bg-orange-700 text-white'
                     }`}
                   >
-                    {selectedBill && hasActiveSession(selectedBill) ? 'لا يمكن الدفع - جلسة نشطة' : 'دفع الفاتورة بالكامل'}
+                    {isProcessingPayment ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        جاري الدفع...
+                      </>
+                    ) : selectedBill && hasActiveSession(selectedBill) ? (
+                      'لا يمكن الدفع - جلسة نشطة'
+                    ) : (
+                      'دفع الفاتورة بالكامل'
+                    )}
                   </button>
                 )}
               </div>
@@ -1653,9 +1672,19 @@ const Billing = () => {
                     return selectedItems[id] && (itemQuantities[id] || 0) > 0;
                   })
                 }
-                                    className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
+                className={`px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200`}
               >
-                تأكيد الدفع الجزئي
+                {isProcessingPartialPayment ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الدفع...
+                  </>
+                ) : (
+                  'تأكيد الدفع الجزئي'
+                )}
               </button>
             </div>
           </div>
@@ -1665,13 +1694,14 @@ const Billing = () => {
       {/* Cancel Bill Confirmation Modal */}
       <ConfirmModal
         isOpen={showCancelConfirmModal}
-        onClose={() => setShowCancelConfirmModal(false)}
+        onClose={() => !isCancelingBill && setShowCancelConfirmModal(false)}
         onConfirm={handleCancelBill}
         title="تأكيد إلغاء الفاتورة"
         message={`هل أنت متأكد من إلغاء فاتورة رقم #${selectedBill?.billNumber}؟\n\n⚠️ هذا الإجراء لا يمكن التراجع عنه.`}
-        confirmText="تأكيد الإلغاء"
-        cancelText="إلغاء"
+        confirmText={isCancelingBill ? 'جاري الإلغاء...' : 'نعم، إلغاء الفاتورة'}
+        cancelText="تراجع"
         confirmColor="bg-red-600 hover:bg-red-700"
+        loading={isCancelingBill}
       />
 
       {/* Session End Confirmation Modal */}
@@ -1685,18 +1715,38 @@ const Billing = () => {
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => {
-                  setShowSessionEndModal(false);
-                  setSessionToEnd(null);
+                  if (!isEndingSession) {
+                    setShowSessionEndModal(false);
+                    setSessionToEnd(null);
+                  }
                 }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+                className={`px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 ${
+                  isEndingSession ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+                disabled={isEndingSession}
               >
                 إلغاء
               </button>
               <button
                 onClick={confirmSessionEnd}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200"
+                className={`px-4 py-2 ${
+                  isEndingSession
+                    ? 'bg-red-700 cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-700'
+                } text-white rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 min-w-[120px]`}
+                disabled={isEndingSession}
               >
-                تأكيد الإنهاء
+                {isEndingSession ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري إنهاء الجلسة...
+                  </>
+                ) : (
+                  'تأكيد الإنهاء'
+                )}
               </button>
             </div>
           </div>
