@@ -1479,15 +1479,19 @@ const Cafe: React.FC = () => {
                           onChange={(e) => setSearchBill(e.target.value)}
                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         />
-                        <div className="mt-2 max-h-32 overflow-y-auto">
+                        <div className="mt-2 max-h-48 overflow-y-auto">
                           {openBills
-                            .filter(bill =>
-                              (bill.status === 'draft' || bill.status === 'partial') &&
-                              (
-                                bill.customerName?.toLowerCase().includes(searchBill.toLowerCase()) ||
-                                bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase())
-                              )
-                            )
+                            .filter(bill => {
+                              // Include draft and partially paid bills
+                              const isMatchingStatus = bill.status === 'draft' || bill.status === 'partial';
+                              // If search is empty, show all matching status bills
+                              if (!searchBill.trim()) return isMatchingStatus;
+                              // Otherwise, filter by search term
+                              return isMatchingStatus && (
+                                (bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())) ||
+                                (bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()))
+                              );
+                            })
                             .map(bill => (
                               <div
                                 key={bill._id}
