@@ -169,31 +169,175 @@ export const sendEmail = async (options) => {
 // Email templates
 export const emailTemplates = {
     // Low stock alert
-    lowStockAlert: (items) => ({
-        subject: "تنبيه: انخفاض المخزون - نظام Bomba",
-        html: `
-      <div dir="rtl" style="font-family: Arial, sans-serif;">
-        <h2>تنبيه انخفاض المخزون</h2>
-        <p>المنتجات التالية وصلت للحد الأدنى من المخزون:</p>
-        <ul>
-          ${items
-              .map(
-                  (item) => `
-            <li>
-              <strong>${item.name}</strong> -
-              متبقي: ${item.currentStock} ${item.unit}
-              (الحد الأدنى: ${item.minStock})
-            </li>
-          `
-              )
-              .join("")}
-        </ul>
-        <p>يرجى إعادة تعبئة المخزون في أقرب وقت ممكن.</p>
-        <hr>
-                  <small>هذه رسالة تلقائية من نظام Bomba</small>
-      </div>
-    `,
-    }),
+    lowStockAlert: ({ items, organizationName, adminNames = [], timestamp = new Date() }) => {
+        const formattedDate = new Date(timestamp).toLocaleString('ar-EG', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        return {
+            subject: `تنبيه: انخفاض المخزون - ${organizationName || 'نظام Bomba'}`,
+            html: `
+                <!DOCTYPE html>
+                <html dir="rtl" lang="ar">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>تنبيه انخفاض المخزون</title>
+                    <style>
+                        body {
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                            max-width: 800px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            background-color: #f9f9f9;
+                        }
+                        .container {
+                            background-color: #fff;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                            overflow: hidden;
+                        }
+                        .header {
+                            background-color: #e74c3c;
+                            color: white;
+                            padding: 20px;
+                            text-align: center;
+                        }
+                        .header h1 {
+                            margin: 0;
+                            font-size: 24px;
+                        }
+                        .content {
+                            padding: 25px;
+                        }
+                        .alert-message {
+                            background-color: #f8d7da;
+                            color: #721c24;
+                            padding: 15px;
+                            border-radius: 5px;
+                            margin-bottom: 20px;
+                            border-right: 5px solid #f5c6cb;
+                        }
+                        .items-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin: 20px 0;
+                        }
+                        .items-table th, .items-table td {
+                            padding: 12px 15px;
+                            text-align: right;
+                            border-bottom: 1px solid #ddd;
+                        }
+                        .items-table th {
+                            background-color: #f8f9fa;
+                            font-weight: bold;
+                        }
+                        .items-table tr:hover {
+                            background-color: #f5f5f5;
+                        }
+                        .stock-critical {
+                            color: #e74c3c;
+                            font-weight: bold;
+                        }
+                        .footer {
+                            text-align: center;
+                            padding: 15px;
+                            font-size: 14px;
+                            color: #777;
+                            border-top: 1px solid #eee;
+                            margin-top: 20px;
+                        }
+                        .urgency-badge {
+                            display: inline-block;
+                            padding: 3px 8px;
+                            border-radius: 12px;
+                            font-size: 12px;
+                            font-weight: bold;
+                            margin-right: 5px;
+                        }
+                        .critical {
+                            background-color: #f8d7da;
+                            color: #721c24;
+                        }
+                        .warning {
+                            background-color: #fff3cd;
+                            color: #856404;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>🚨 تنبيه انخفاض المخزون</h1>
+                            <p>${organizationName || 'نظام إدارة المخزون'}</p>
+                        </div>
+                        
+                        <div class="content">
+                            <div class="alert-message">
+                                <p>يوجد <strong>${items.length} منتج</strong> يحتاج إلى إعادة تعبئة فورية!</p>
+                            </div>
+                            
+                            <h2>تفاصيل المنتجات منخفضة المخزون</h2>
+                            <table class="items-table">
+                                <thead>
+                                    <tr>
+                                        <th>المنتج</th>
+                                        <th>الكمية المتوفرة</th>
+                                        <th>الحد الأدنى</th>
+                                        <th>الوحدة</th>
+                                        <th>الحالة</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${items.map(item => {
+                                        const isCritical = item.currentStock <= (item.minStock * 0.3);
+                                        const status = isCritical ? 'حرج' : 'تحذير';
+                                        const statusClass = isCritical ? 'critical' : 'warning';
+                                        return `
+                                            <tr>
+                                                <td><strong>${item.name}</strong></td>
+                                                <td class="${isCritical ? 'stock-critical' : ''}">${item.currentStock}</td>
+                                                <td>${item.minStock}</td>
+                                                <td>${item.unit || 'قطعة'}</td>
+                                                <td>
+                                                    <span class="urgency-badge ${statusClass}">
+                                                        ${status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                            
+                            <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+                                <h3>الإجراء المطلوب:</h3>
+                                <p>يرجى اتخاذ الإجراء اللازم لإعادة تعبئة المخزون في أقرب وقت ممكن لتجنب نفاد المنتجات.</p>
+                                ${adminNames.length > 0 ? `
+                                    <p>تم إرسال هذا التنبيه إلى: ${adminNames.join('، ')}</p>
+                                ` : ''}
+                            </div>
+                        </div>
+                        
+                        <div class="footer">
+                            <p>⏱️ تم إنشاء هذا التقرير في: ${formattedDate}</p>
+                            <p>📞 للدعم الفني، يرجى التواصل مع فريق الدعم الفني</p>
+                            <p>© ${new Date().getFullYear()} نظام Bomba - جميع الحقوق محفوظة</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `
+        };
+    },
 
     // Daily report
     dailyReport: (data) => ({
@@ -944,24 +1088,72 @@ export const emailTemplates = {
 };
 
 // Send low stock alert
-export const sendLowStockAlert = async (items, adminEmails) => {
-    if (!adminEmails || adminEmails.length === 0) return;
+export const sendLowStockAlert = async ({
+    items,
+    organizationName,
+    recipientEmails,
+    adminNames = []
+}) => {
+    if (!recipientEmails || recipientEmails.length === 0) {
+        Logger.warn("No recipient emails provided for low stock alert");
+        return;
+    }
 
-    const template = emailTemplates.lowStockAlert(items);
+    Logger.info(`Sending low stock alert to ${recipientEmails.length} recipients`, {
+        organizationName,
+        itemCount: items.length,
+        firstFewItems: items.slice(0, 3).map(i => i.name)
+    });
 
-    for (const email of adminEmails) {
+    const template = emailTemplates.lowStockAlert({
+        items,
+        organizationName,
+        adminNames,
+        timestamp: new Date()
+    });
+
+    const results = [];
+    
+    for (const email of recipientEmails) {
+        const startTime = Date.now();
         try {
             await sendEmail({
                 to: email,
                 ...template,
             });
+            results.push({
+                email,
+                status: 'success',
+                duration: Date.now() - startTime
+            });
         } catch (error) {
             Logger.error("Failed to send low stock alert", {
                 email,
                 error: error.message,
+                stack: error.stack,
+                duration: Date.now() - startTime
+            });
+            results.push({
+                email,
+                status: 'failed',
+                error: error.message,
+                duration: Date.now() - startTime
             });
         }
     }
+
+    const successCount = results.filter(r => r.status === 'success').length;
+    const failureCount = results.filter(r => r.status === 'failed').length;
+
+    Logger.info(`Low stock alert sending completed`, {
+        organizationName,
+        totalRecipients: recipientEmails.length,
+        successCount,
+        failureCount,
+        successRate: (successCount / recipientEmails.length * 100).toFixed(1) + '%'
+    });
+
+    return { success: failureCount === 0, results };
 };
 
 // Send daily report

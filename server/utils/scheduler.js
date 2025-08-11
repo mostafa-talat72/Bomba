@@ -72,62 +72,120 @@ const stopAllSchedulers = () => {
 
 // Check for low stock items and send alerts
 const checkLowStock = async () => {
+    const startTime = new Date();
+    Logger.info("🔄 Starting low stock check...", { startTime: startTime.toISOString() });
+    
     try {
-        // Get all organizations
-        const organizations = await Organization.find();
+        // Get all active organizations
+        const organizations = await Organization.find({ isActive: true });
+        Logger.info(`Found ${organizations.length} active organizations to check`);
+
+        let totalLowStockItems = 0;
+        let totalAlertsSent = 0;
 
         for (const organization of organizations) {
+            const orgStartTime = new Date();
             try {
+                Logger.info(`Checking low stock for organization: ${organization.name}`, {
+                    organizationId: organization._id,
+                    startTime: orgStartTime.toISOString()
+                });
+
                 // Get low stock items for this organization
                 const lowStockItems = await InventoryItem.find({
                     isActive: true,
                     organization: organization._id,
-                    $expr: { $lte: ["$currentStock", "$minStock"] },
-                });
+                    $expr: { 
+                        $and: [
+                            { $lte: ["$currentStock", "$minStock"] },
+                            { $gt: ["$minStock", 0] } // Only include items with minStock > 0
+                        ]
+                    },
+                }).lean();
+
+                totalLowStockItems += lowStockItems.length;
 
                 if (lowStockItems.length > 0) {
+                    Logger.info(`Found ${lowStockItems.length} low stock items for ${organization.name}`, {
+                        organizationId: organization._id,
+                        itemNames: lowStockItems.map(item => item.name)
+                    });
+
                     // Get admin emails for this organization
                     const admins = await User.find({
-                        role: "admin",
+                        role: { $in: ["admin", "owner"] },
                         status: "active",
                         organization: organization._id,
                         email: { $exists: true, $ne: "" },
-                    }).select("email");
+                        notifications: { $ne: false } // Only users who haven't disabled notifications
+                    }).select("email name");
 
-                    const adminEmails = admins.map((admin) => admin.email);
+                    const adminEmails = admins.map(admin => admin.email);
 
                     if (adminEmails.length > 0) {
-                        await sendLowStockAlert(lowStockItems, adminEmails);
-                        Logger.info(
-                            `Low stock alert sent for organization: ${organization.name}`,
-                            {
+                        try {
+                            await sendLowStockAlert({
+                                items: lowStockItems,
+                                organizationName: organization.name,
+                                recipientEmails: adminEmails,
+                                adminNames: admins.map(a => a.name)
+                            });
+                            
+                            totalAlertsSent++;
+                            Logger.info(`✅ Low stock alert sent successfully for ${organization.name}`, {
                                 organizationId: organization._id,
-                                itemCount: lowStockItems.length,
-                                adminCount: adminEmails.length,
-                            }
-                        );
+                                recipientCount: adminEmails.length,
+                                recipients: adminEmails
+                            });
+                        } catch (emailError) {
+                            Logger.error(`Failed to send low stock alert for ${organization.name}`, {
+                                organizationId: organization._id,
+                                error: emailError.message,
+                                stack: emailError.stack
+                            });
+                        }
                     } else {
-                        Logger.warn(
-                            `No admin emails found for low stock alert in organization: ${organization.name}`,
-                            {
-                                organizationId: organization._id,
-                                itemCount: lowStockItems.length,
-                            }
-                        );
+                        Logger.warn(`No active admin emails found for organization: ${organization.name}`, {
+                            organizationId: organization._id,
+                            itemCount: lowStockItems.length
+                        });
                     }
                 }
             } catch (orgError) {
-                Logger.error(
-                    `Failed to check low stock for organization: ${organization.name}`,
-                    {
-                        organizationId: organization._id,
-                        error: orgError.message,
-                    }
-                );
+                Logger.error(`❌ Error processing organization ${organization?.name || 'Unknown'}`, {
+                    organizationId: organization?._id,
+                    error: orgError.message,
+                    stack: orgError.stack,
+                    duration: new Date() - orgStartTime
+                });
             }
         }
+
+        const endTime = new Date();
+        const duration = endTime - startTime;
+        
+        Logger.info("✅ Low stock check completed", {
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            duration: `${duration}ms`,
+            organizationsChecked: organizations.length,
+            totalLowStockItems,
+            totalAlertsSent,
+            success: true
+        });
+
     } catch (error) {
-        Logger.error("Failed to check low stock", { error: error.message });
+        const endTime = new Date();
+        const duration = endTime - startTime;
+        
+        Logger.error("❌ Critical error in low stock check", {
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            duration: `${duration}ms`,
+            error: error.message,
+            stack: error.stack,
+            success: false
+        });
     }
 };
 
@@ -708,9 +766,9 @@ export const scheduleSubscriptionExpiryNotifications = () => {
 export const initializeScheduler = () => {
     Logger.info("Initializing scheduled tasks...");
 
-    // Check low stock every hour
-    cron.schedule("0 * * * *", checkLowStock);
-    Logger.info("✅ Low stock check scheduled: every hour at minute 0");
+    // Check low stock every 6 hours at minute 0
+    cron.schedule("0 */6 * * *", checkLowStock);
+    Logger.info("✅ Low stock check scheduled: every 6 hours at minute 0");
 
     // Generate daily report at 5:00 AM (Egypt time)
     cron.schedule("0 5 * * *", () => {
