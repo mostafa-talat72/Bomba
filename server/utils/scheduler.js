@@ -138,21 +138,33 @@ const generateDailyReport = async () => {
 
         const now = new Date();
 
-        // Calculate the report period: from beginning of yesterday to beginning of today
-        const today = new Date(now);
-        today.setHours(0, 0, 0, 0); // Start of today
+        // Calculate the report period: from 5 AM yesterday to 5 AM today
+        const endOfReport = new Date(now);
+        endOfReport.setHours(5, 0, 0, 0); // Today at 5 AM
         
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1); // Start of yesterday
+        // If it's before 5 AM today, adjust to yesterday's 5 AM
+        if (now < endOfReport) {
+            endOfReport.setDate(endOfReport.getDate() - 1);
+        }
         
-        const startOfReport = yesterday;
-        const endOfReport = today;
+        const startOfReport = new Date(endOfReport);
+        startOfReport.setDate(startOfReport.getDate() - 1); // Yesterday at 5 AM
 
-        Logger.info("Daily report date range:", {
-            now: now.toISOString(),
-            startOfReport: startOfReport.toISOString(),
-            endOfReport: endOfReport.toISOString(),
-            reportPeriod: "5 AM yesterday to 5 AM today",
+        // Format dates for logging
+        const formatForLog = (date) => {
+            return {
+                iso: date.toISOString(),
+                local: date.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
+                date: date.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }),
+                time: date.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo' })
+            };
+        };
+
+        Logger.info("📅 Daily report period:", {
+            currentTime: formatForLog(now),
+            reportStart: formatForLog(startOfReport),
+            reportEnd: formatForLog(endOfReport),
+            timezone: 'Africa/Cairo (GMT+2)'
         });
 
         // Get all organizations
@@ -256,8 +268,10 @@ const generateDailyReport = async () => {
                         name: p._id,
                         quantity: p.quantity || 0,
                     })),
-                    reportPeriod: `من ${startOfReport.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})} يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long'})} 
-                                 إلى ${endOfReport.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})} يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long'})}`,
+                    startOfReport: startOfReport,
+                    endOfReport: endOfReport,
+                    reportPeriod: `من 5:00 صباحاً يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})} 
+                                 إلى 5:00 صباحاً يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}`,
                 };
 
                 // Get admin emails for this organization

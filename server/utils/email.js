@@ -621,10 +621,10 @@ export const emailTemplates = {
                 }
               </div>
               <div class="period-badge">
-                ${
-                    data.reportPeriod ||
-                    "من الساعة 5 صباحاً أمس إلى الساعة 5 صباحاً اليوم"
-                }
+                ${data.reportPeriod || `
+                  من 5:00 صباحاً يوم ${new Date(data.startOfReport).toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}
+                  إلى 5:00 صباحاً يوم ${new Date(data.endOfReport).toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}
+                `}
               </div>
             </div>
             <div class="header-decoration">
