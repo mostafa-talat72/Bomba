@@ -53,7 +53,8 @@ interface ReportData {
 const Reports = () => {
   const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, exportReportToExcel, exportReportToPDF, showNotification } = useApp();
 
-  const [filterType, setFilterType] = useState('period'); // 'period', 'daily', 'monthly', 'yearly'
+  // أنواع الفلاتر
+  const [filterType, setFilterType] = useState<'period' | 'daily' | 'monthly' | 'yearly'>('period'); // 'period', 'daily', 'monthly', 'yearly'
   const [selectedPeriod, setSelectedPeriod] = useState('today');
   const [customDay, setCustomDay] = useState(new Date().toISOString().split('T')[0]);
   const [customMonth, setCustomMonth] = useState(new Date().toISOString().substring(0, 7));
@@ -235,6 +236,19 @@ const Reports = () => {
   const renderFilterControls = () => {
     const inputClasses = "input-field bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500";
     
+    // تحويل التاريخ إلى تنسيق عربي
+    const formatArabicDate = (dateString: string) => {
+      const date = new Date(dateString);
+      const options: Intl.DateTimeFormatOptions = { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        calendar: 'islamic',
+        numberingSystem: 'arab'
+      };
+      return date.toLocaleDateString('ar-SA', options);
+    };
+
     if (filterType === 'period') {
       return (
         <div className="flex items-center gap-2 flex-wrap">
@@ -245,48 +259,92 @@ const Reports = () => {
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                 selectedPeriod === p 
                   ? 'bg-orange-600 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
               }`}
             >
-              {p === 'today' ? 'اليوم' : p === 'yesterday' ? 'الأمس' : p === 'week' ? 'أسبوع' : p === 'month' ? 'شهر' : 'سنة'}
+              {p === 'today' ? 'اليوم' : 
+               p === 'yesterday' ? 'أمس' :
+               p === 'week' ? 'هذا الأسبوع' :
+               p === 'month' ? 'هذا الشهر' : 'هذه السنة'}
             </button>
           ))}
         </div>
       );
     }
+    
     if (filterType === 'daily') {
       return (
-        <input 
-          type="date" 
-          value={customDay} 
-          onChange={e => setCustomDay(e.target.value)} 
-          className={inputClasses} 
-        />
+        <div className="relative">
+          <input 
+            type="date" 
+            value={customDay} 
+            onChange={e => setCustomDay(e.target.value)} 
+            className={`${inputClasses} ltr`}
+            style={{ direction: 'ltr' }}
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">
+            {formatArabicDate(customDay)}
+          </span>
+        </div>
       );
     }
+    
     if (filterType === 'monthly') {
+      const months = [
+        'يناير', 'فبراير', 'مارس', 'إبريل', 'مايو', 'يونيو',
+        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+      ];
+      
+      const [year, month] = customMonth.split('-').map(Number);
+      const monthName = months[month - 1];
+      
       return (
-        <input 
-          type="month" 
-          value={customMonth} 
-          onChange={e => setCustomMonth(e.target.value)} 
-          className={inputClasses} 
-        />
+        <div className="flex gap-2">
+          <select
+            value={month}
+            onChange={e => setCustomMonth(`${year}-${e.target.value.padStart(2, '0')}`)}
+            className={`${inputClasses} w-32`}
+          >
+            {months.map((m, i) => (
+              <option key={i} value={String(i + 1).padStart(2, '0')}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            value={year}
+            onChange={e => setCustomMonth(`${e.target.value}-${String(month).padStart(2, '0')}`)}
+            className={`${inputClasses} w-24`}
+            placeholder="السنة"
+          />
+          <div className="flex items-center px-3 bg-gray-50 dark:bg-gray-700 rounded-md text-sm text-gray-700 dark:text-gray-300">
+            {monthName} {year}
+          </div>
+        </div>
       );
     }
+    
     if (filterType === 'yearly') {
       return (
-        <input 
-          type="number" 
-          placeholder="YYYY" 
-          value={customYear} 
-          onChange={e => setCustomYear(e.target.value)} 
-          className={`${inputClasses} w-24`} 
-        />
+        <div className="flex items-center gap-2">
+          <input 
+            type="number" 
+            placeholder="أدخل السنة" 
+            value={customYear} 
+            onChange={e => setCustomYear(e.target.value)} 
+            className={`${inputClasses} w-32`} 
+            dir="ltr"
+          />
+          <span className="text-gray-600 dark:text-gray-400 text-sm">
+            هـ
+          </span>
+        </div>
       );
     }
+    
     return null;
-  };
+  };  
 
   if (loading) {
     return (
@@ -313,15 +371,18 @@ const Reports = () => {
       <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 dark:border-gray-700/50 p-6 hover:shadow-md transition-shadow duration-200 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <Filter className="h-5 w-5 text-gray-600 dark:text-gray-300"/>
-          <select 
-          value={filterType} 
-          onChange={e => setFilterType(e.target.value)} 
-          className="select-field bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500"
-        >
+          <select
+            value={filterType}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+              const value = e.target.value as 'period' | 'daily' | 'monthly' | 'yearly';
+              setFilterType(value);
+            }}
+            className="input-field bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 min-w-[120px]"
+          >
             <option value="period">فترة محددة</option>
-            <option value="daily">يومي</option>
-            <option value="monthly">شهري</option>
-            <option value="yearly">سنوي</option>
+            <option value="daily">تقرير يومي</option>
+            <option value="monthly">تقرير شهري</option>
+            <option value="yearly">تقرير سنوي</option>
           </select>
         </div>
         <div className="flex-grow">
