@@ -327,9 +327,12 @@ const Reports = () => {
         <div className="flex-grow">
           {renderFilterControls()}
         </div>
-        <button onClick={loadReports} className="btn btn-primary flex items-center gap-2">
+        <button 
+          onClick={loadReports} 
+          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors duration-200 dark:bg-orange-500 dark:hover:bg-orange-600 dark:text-white"
+        >
           <RefreshCw className="h-4 w-4" />
-          تحديث
+          <span>تحديث</span>
         </button>
       </div>
 
