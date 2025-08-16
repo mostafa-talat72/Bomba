@@ -1172,9 +1172,15 @@ class ApiClient {
     return this.request(`/reports/dashboard?${searchParams.toString()}`);
   }
 
-  async getSalesReport(period?: string, groupBy?: string): Promise<ApiResponse<any>> {
+  async getSalesReport(filter: any = {}, groupBy?: string): Promise<ApiResponse<any>> {
     const searchParams = new URLSearchParams();
-    if (period) searchParams.append('period', period);
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
     if (groupBy) searchParams.append('groupBy', groupBy);
 
     return this.request(`/reports/sales?${searchParams.toString()}`);
@@ -1189,46 +1195,98 @@ class ApiClient {
     return this.request(`/reports/inventory?${searchParams.toString()}`);
   }
 
-  async getFinancialReport(period?: string): Promise<ApiResponse<any>> {
-    const response = await this.request<any>(`/reports/financial?period=${period || 'today'}`);
+  async getFinancialReport(filter: any = {}): Promise<ApiResponse<any>> {
+    const searchParams = new URLSearchParams();
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+
+    // Ensure period is set if no filter is provided
+    if (!searchParams.has('period') && !searchParams.has('type')) {
+      searchParams.append('period', 'today');
+    }
+
+    const response = await this.request<any>(`/reports/financial?${searchParams.toString()}`);
     return response;
   }
 
-  async exportReportToExcel(reportType: string, period: string = 'today'): Promise<Blob> {
-    const response = await fetch(`${this.baseURL}/reports/export/excel?reportType=${reportType}&period=${period}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.getToken()}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to export report');
-    }
-
-    return response.blob();
-  }
-
-  async exportReportToPDF(reportType: string, period: string = 'today'): Promise<Blob> {
-    const response = await fetch(`${this.baseURL}/reports/export/pdf?reportType=${reportType}&period=${period}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.getToken()}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to export report');
-    }
-
-    return response.blob();
-  }
-
-  async getSessionsReport(period?: string, device?: string): Promise<ApiResponse<any>> {
+  async exportReportToExcel(reportType: string, filter: any = {}): Promise<Blob> {
     const searchParams = new URLSearchParams();
-    if (period) searchParams.append('period', period);
+    searchParams.append('reportType', reportType);
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    } else if (typeof filter === 'string') {
+      searchParams.append('period', filter);
+    }
+
+    if (!searchParams.has('period') && !searchParams.has('type')) {
+      searchParams.append('period', 'today');
+    }
+
+    const response = await fetch(`${this.baseURL}/reports/export/excel?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export report');
+    }
+
+    return response.blob();
+  }
+
+  async exportReportToPDF(reportType: string, filter: any = {}): Promise<Blob> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('reportType', reportType);
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    } else if (typeof filter === 'string') {
+      searchParams.append('period', filter);
+    }
+
+    if (!searchParams.has('period') && !searchParams.has('type')) {
+      searchParams.append('period', 'today');
+    }
+
+    const response = await fetch(`${this.baseURL}/reports/export/pdf?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export report');
+    }
+
+    return response.blob();
+  }
+
+  async getSessionsReport(filter: any = {}, device?: string): Promise<ApiResponse<any>> {
+    const searchParams = new URLSearchParams();
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
     if (device) searchParams.append('device', device);
 
     return this.request(`/reports/sessions?${searchParams.toString()}`);

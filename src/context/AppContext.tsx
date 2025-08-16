@@ -121,10 +121,10 @@ interface AppContextType {
   getRecentActivity: (limit?: number) => Promise<any[]>;
 
   // Report methods
-  getSalesReport: (period?: string, groupBy?: string) => Promise<any>;
-  getSessionsReport: (period?: string, device?: string) => Promise<any>;
+  getSalesReport: (filter: any, groupBy?: string) => Promise<any>;
+  getSessionsReport: (filter: any, device?: string) => Promise<any>;
   getInventoryReport: (category?: string) => Promise<any>;
-  getFinancialReport: (period?: string) => Promise<any>;
+  getFinancialReport: (filter: any) => Promise<any>;
 
   // Notification methods
   getNotifications: (options?: { category?: string; unreadOnly?: boolean; limit?: number }) => Promise<Notification[]>;
@@ -139,8 +139,8 @@ interface AppContextType {
   forceRefreshNotifications: () => Promise<void>;
 
   // Export functions
-  exportReportToExcel: (reportType: string, period?: string) => Promise<void>;
-  exportReportToPDF: (reportType: string, period?: string) => Promise<void>;
+  exportReportToExcel: (reportType: string, filter: Filter) => Promise<void>;
+  exportReportToPDF: (reportType: string, filter: Filter) => Promise<void>;
 
   // Settings methods
   updateUserProfile: (profileData: any) => Promise<boolean>;
@@ -148,6 +148,14 @@ interface AppContextType {
   updateNotificationSettings: (settings: any) => Promise<boolean>;
   updateGeneralSettings: (settings: any) => Promise<boolean>;
 }
+
+export type Filter = {
+  period?: 'today' | 'yesterday' | 'week' | 'month' | 'year';
+  type?: 'daily' | 'monthly' | 'yearly';
+  day?: string; // YYYY-MM-DD
+  month?: string; // YYYY-MM
+  year?: string; // YYYY
+};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -223,68 +231,62 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     checkAuth();
   }, []);
 
-  // جلب الإشعارات غير المقروءة بشكل لحظي
-  useEffect(() => {
-    if (!isAuthenticated || isLoggingOut) return;
-    let interval: ReturnType<typeof setInterval>;
-    const fetchUnreadNotifications = async () => {
-      try {
-        const notifs = await getNotifications({ limit: 100 });
-        setNotifications(notifs);
-      } catch (error) {
-        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
-        if (!isAuthenticated || isLoggingOut) return;
-        console.error('Error fetching notifications:', error);
-      }
-    };
-    fetchUnreadNotifications();
-    interval = setInterval(fetchUnreadNotifications, 5000); // كل 5 ثوانٍ
-    return () => clearInterval(interval);
-  }, [isAuthenticated, isLoggingOut]);
+  // تم تعطيل التحديث التلقائي للبيانات لمنع إعادة تحميل التقارير بشكل مستمر
+  // useEffect(() => {
+  //   if (!isAuthenticated || isLoggingOut) return;
+  //   let interval: ReturnType<typeof setInterval>;
+  //   const fetchUnreadNotifications = async () => {
+  //     try {
+  //       const notifs = await getNotifications({ limit: 100 });
+  //       setNotifications(notifs);
+  //     } catch (error) {
+  //       if (!isAuthenticated || isLoggingOut) return;
+  //       console.error('Error fetching notifications:', error);
+  //     }
+  //   };
+  //   fetchUnreadNotifications();
+  //   interval = setInterval(fetchUnreadNotifications, 5000); // كل 5 ثوانٍ
+  //   return () => clearInterval(interval);
+  // }, [isAuthenticated, isLoggingOut]);
 
-  // جلب الطلبات بشكل لحظي
-  useEffect(() => {
-    if (!isAuthenticated || isLoggingOut) return;
-    let interval: ReturnType<typeof setInterval>;
-    const fetchCafeOrders = async () => {
-      try {
-        await fetchOrders();
-      } catch (error) {
-        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
-        if (!isAuthenticated || isLoggingOut) return;
-        console.error('Error fetching orders:', error);
-      }
-    };
-    fetchCafeOrders();
-    interval = setInterval(fetchCafeOrders, 5000); // كل 5 ثوانٍ
-    return () => clearInterval(interval);
-  }, [isAuthenticated, isLoggingOut]);
+  // useEffect(() => {
+  //   if (!isAuthenticated || isLoggingOut) return;
+  //   let interval: ReturnType<typeof setInterval>;
+  //   const fetchCafeOrders = async () => {
+  //     try {
+  //       await fetchOrders();
+  //     } catch (error) {
+  //       if (!isAuthenticated || isLoggingOut) return;
+  //       console.error('Error fetching orders:', error);
+  //     }
+  //   };
+  //   fetchCafeOrders();
+  //   interval = setInterval(fetchCafeOrders, 5000); // كل 5 ثوانٍ
+  //   return () => clearInterval(interval);
+  // }, [isAuthenticated, isLoggingOut]);
 
-  // تحقق من صلاحية مشاهدة الجلسات
-  const canViewSessions = user && user.permissions && (
-    user.permissions.includes('playstation') ||
-    user.permissions.includes('computer') ||
-    user.permissions.includes('all')
-  );
+  // const canViewSessions = user && user.permissions && (
+  //   user.permissions.includes('playstation') ||
+  //   user.permissions.includes('computer') ||
+  //   user.permissions.includes('all')
+  // );
 
-  // جلب الجلسات النشطة بشكل لحظي فقط إذا كان لديه الصلاحية
-  useEffect(() => {
-    if (!isAuthenticated || isLoggingOut) return;
-    if (!canViewSessions) return;
-    let interval: ReturnType<typeof setInterval>;
-    const fetchActiveSessions = async () => {
-      try {
-        await fetchSessions();
-      } catch (error) {
-        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
-        if (!isAuthenticated || isLoggingOut) return;
-        console.error('Error fetching sessions:', error);
-      }
-    };
-    fetchActiveSessions();
-    interval = setInterval(fetchActiveSessions, 5000); // كل 5 ثوانٍ
-    return () => clearInterval(interval);
-  }, [isAuthenticated, canViewSessions, isLoggingOut]);
+  // useEffect(() => {
+  //   if (!isAuthenticated || isLoggingOut) return;
+  //   if (!canViewSessions) return;
+  //   let interval: ReturnType<typeof setInterval>;
+  //   const fetchActiveSessions = async () => {
+  //     try {
+  //       await fetchSessions();
+  //     } catch (error) {
+  //       if (!isAuthenticated || isLoggingOut) return;
+  //       console.error('Error fetching sessions:', error);
+  //     }
+  //   };
+  //   fetchActiveSessions();
+  //   interval = setInterval(fetchActiveSessions, 5000); // كل 5 ثوانٍ
+  //   return () => clearInterval(interval);
+  // }, [isAuthenticated, canViewSessions, isLoggingOut]);
 
   useEffect(() => {
     if (!isAuthenticated || isLoggingOut) return;
@@ -1344,9 +1346,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Report methods
-  const getSalesReport = async (period?: string, groupBy?: string): Promise<any> => {
+  const getSalesReport = async (filter: Filter): Promise<any> => {
     try {
-      const response = await api.getSalesReport(period, groupBy);
+      const response = await api.getSalesReport(filter);
+      return response.success ? response.data : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const getSessionsReport = async (filter: Filter): Promise<any> => {
+    try {
+      const response = await api.getSessionsReport(filter);
+      return response.success ? response.data : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const getInventoryReport = async (): Promise<any> => {
+    try {
+      const response = await api.getInventoryReport();
+      return response.success ? response.data : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const getFinancialReport = async (filter: Filter): Promise<any> => {
+    try {
+      const response = await api.getFinancialReport(filter);
       return response.success ? response.data : null;
     } catch (error) {
       return null;
@@ -1486,58 +1515,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const getSessionsReport = async (period?: string, device?: string): Promise<any> => {
+  const exportReportToExcel = async (reportType: string, filter: Filter) => {
     try {
-      const response = await api.getSessionsReport(period, device);
-      return response.success ? response.data : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const getInventoryReport = async (category?: string): Promise<any> => {
-    try {
-      const response = await api.getInventoryReport(category);
-      return response.success ? response.data : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const getFinancialReport = async (period?: string): Promise<any> => {
-    try {
-      const response = await api.getFinancialReport(period);
-      return response.success ? response.data : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const exportReportToExcel = async (reportType: string, period: string = 'today') => {
-    try {
-      const blob = await api.exportReportToExcel(reportType, period);
+      const blob = await api.exportReportToExcel(reportType, filter);
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `تقرير_${reportType}_${period}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportType}_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       window.URL.revokeObjectURL(url);
       showNotification('تم تصدير التقرير بنجاح', 'success');
-    } catch (error: unknown) {
-      const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تصدير التقرير', 'error');
+    } catch (error) {
+      console.error(`Failed to export ${reportType} report to Excel:`, error);
+      showNotification('فشل في تصدير التقرير', 'error');
     }
   };
 
-  const exportReportToPDF = async (reportType: string, period: string = 'today') => {
+  const exportReportToPDF = async (reportType: string, filter: Filter) => {
     try {
-      const blob = await api.exportReportToPDF(reportType, period);
+      const blob = await api.exportReportToPDF(reportType, filter);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `تقرير_${reportType}_${period}_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.download = `تقرير_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

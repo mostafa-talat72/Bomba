@@ -11,38 +11,82 @@ export const formatCurrency = (amount, currency = 'EGP') => {
 };
 
 // Calculate date range
-export const getDateRange = (period) => {
+export const getDateRange = (filter) => {
   const now = moment();
   let startDate, endDate;
 
-  switch (period) {
-    case 'today':
-      startDate = now.clone().startOf('day');
-      endDate = now.clone().endOf('day');
-      break;
-    case 'yesterday':
-      startDate = now.clone().subtract(1, 'day').startOf('day');
-      endDate = now.clone().subtract(1, 'day').endOf('day');
-      break;
-    case 'week':
-      startDate = now.clone().startOf('week');
-      endDate = now.clone().endOf('week');
-      break;
-    case 'month':
-      startDate = now.clone().startOf('month');
-      endDate = now.clone().endOf('month');
-      break;
-    case 'quarter':
-      startDate = now.clone().startOf('quarter');
-      endDate = now.clone().endOf('quarter');
-      break;
-    case 'year':
-      startDate = now.clone().startOf('year');
-      endDate = now.clone().endOf('year');
-      break;
-    default:
-      startDate = now.clone().startOf('day');
-      endDate = now.clone().endOf('day');
+  // Handle old string-based period for backward compatibility
+  if (typeof filter === 'string') {
+    switch (filter) {
+      case 'today':
+        startDate = now.clone().startOf('day');
+        endDate = now.clone().endOf('day');
+        break;
+      case 'yesterday':
+        startDate = now.clone().subtract(1, 'day').startOf('day');
+        endDate = now.clone().subtract(1, 'day').endOf('day');
+        break;
+      case 'week':
+        startDate = now.clone().startOf('week');
+        endDate = now.clone().endOf('week');
+        break;
+      case 'month':
+        startDate = now.clone().startOf('month');
+        endDate = now.clone().endOf('month');
+        break;
+      case 'quarter':
+        startDate = now.clone().startOf('quarter');
+        endDate = now.clone().endOf('quarter');
+        break;
+      case 'year':
+        startDate = now.clone().startOf('year');
+        endDate = now.clone().endOf('year');
+        break;
+      default:
+        startDate = now.clone().startOf('day');
+        endDate = now.clone().endOf('day');
+    }
+  } else if (typeof filter === 'object' && filter !== null) {
+    const { type, day, month, year, period } = filter;
+
+    if (period) {
+      return getDateRange(period); // Recursive call for simple period
+    }
+
+    switch (type) {
+      case 'daily':
+        if (day) {
+          const date = moment(day, 'YYYY-MM-DD');
+          startDate = date.clone().startOf('day');
+          endDate = date.clone().endOf('day');
+        }
+        break;
+      case 'monthly':
+        if (month) {
+          const date = moment(month, 'YYYY-MM');
+          startDate = date.clone().startOf('month');
+          endDate = date.clone().endOf('month');
+        }
+        break;
+      case 'yearly':
+        if (year) {
+          const date = moment(year, 'YYYY');
+          startDate = date.clone().startOf('year');
+          endDate = date.clone().endOf('year');
+        }
+        break;
+      default:
+        // Default to today if type is unknown or not provided
+        startDate = now.clone().startOf('day');
+        endDate = now.clone().endOf('day');
+        break;
+    }
+  }
+
+  // Fallback to today if no valid filter was applied
+  if (!startDate || !endDate) {
+    startDate = now.clone().startOf('day');
+    endDate = now.clone().endOf('day');
   }
 
   return {

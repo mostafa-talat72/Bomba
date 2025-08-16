@@ -15,8 +15,8 @@ import {
 // @access  Private
 export const getDashboardStats = async (req, res) => {
     try {
-        const { period = "today" } = req.query;
-        const { startDate, endDate } = getDateRange(period);
+        const filter = req.query;
+        const { startDate, endDate } = getDateRange(filter);
 
         // Revenue from bills
         const revenueData = await Bill.aggregate([
@@ -179,7 +179,7 @@ export const getDashboardStats = async (req, res) => {
         ]);
 
         const result = {
-            period,
+            filter,
             revenue: revenueData[0] || {
                 totalRevenue: 0,
                 totalBills: 0,
@@ -218,8 +218,8 @@ export const getDashboardStats = async (req, res) => {
 // @access  Private
 export const getSalesReport = async (req, res) => {
     try {
-        const { period = "month", groupBy = "day" } = req.query;
-        const { startDate, endDate } = getDateRange(period);
+        const { groupBy = "day", ...filter } = req.query;
+        const { startDate, endDate } = getDateRange(filter);
 
         let groupFormat;
         switch (groupBy) {
@@ -353,7 +353,7 @@ export const getSalesReport = async (req, res) => {
         res.json({
             success: true,
             data: {
-                period,
+                filter,
                 groupBy,
                 salesByPeriod,
                 topItems,
@@ -486,8 +486,8 @@ export const getInventoryReport = async (req, res) => {
 // @access  Private
 export const getFinancialReport = async (req, res) => {
     try {
-        const { period = "month" } = req.query;
-        const { startDate, endDate } = getDateRange(period);
+        const filter = req.query;
+        const { startDate, endDate } = getDateRange(filter);
 
         // Revenue - استخدام total بدلاً من paid للحصول على الإيرادات الفعلية
         const revenue = await Bill.aggregate([
@@ -549,7 +549,7 @@ export const getFinancialReport = async (req, res) => {
             actualRevenue > 0 ? (netProfit / actualRevenue) * 100 : 0;
 
         // Monthly comparison
-        const previousPeriod = getDateRange(period);
+        const previousPeriod = getDateRange(filter);
         previousPeriod.startDate.setMonth(
             previousPeriod.startDate.getMonth() - 1
         );
@@ -599,7 +599,7 @@ export const getFinancialReport = async (req, res) => {
         const totalTransactions = totalBills + totalOrders;
 
         const responseData = {
-            period,
+            filter,
             summary: {
                 totalRevenue,
                 totalPaid,
@@ -641,8 +641,8 @@ export const getFinancialReport = async (req, res) => {
 // @access  Private
 export const getSessionsReport = async (req, res) => {
     try {
-        const { period = "month", device } = req.query;
-        const { startDate, endDate } = getDateRange(period);
+        const { device, ...filter } = req.query;
+        const { startDate, endDate } = getDateRange(filter);
 
         const query = {
             startTime: { $gte: startDate, $lte: endDate },
@@ -716,7 +716,7 @@ export const getSessionsReport = async (req, res) => {
         res.json({
             success: true,
             data: {
-                period,
+                filter,
                 device,
                 sessionsStats,
                 peakHours,
@@ -923,8 +923,8 @@ export const getRecentActivity = async (req, res) => {
 // @access  Private
 export const exportReportToExcel = async (req, res) => {
     try {
-        const { reportType, period = "today" } = req.query;
-        const { startDate, endDate } = getDateRange(period);
+        const { reportType, ...filter } = req.query;
+        const { startDate, endDate } = getDateRange(filter);
 
         let reportData;
 
