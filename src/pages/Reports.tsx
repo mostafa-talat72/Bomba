@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, ReactNode } from 'react';
-import { TrendingUp, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, BarChart3, Filter } from 'lucide-react';
+import { TrendingUp, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, Filter } from 'lucide-react';
+import { format, parseISO, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 // Type definitions
 interface ReportData {
@@ -53,12 +55,20 @@ interface ReportData {
 const Reports = () => {
   const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, exportReportToExcel, exportReportToPDF, showNotification } = useApp();
 
-  // أنواع الفلاتر
-  const [filterType, setFilterType] = useState<'period' | 'daily' | 'monthly' | 'yearly'>('period'); // 'period', 'daily', 'monthly', 'yearly'
+  // أنواع الفلاتر وحالاتها
+  const [filterType, setFilterType] = useState<'period' | 'daily' | 'monthly' | 'yearly'>('period');
   const [selectedPeriod, setSelectedPeriod] = useState('today');
-  const [customDay, setCustomDay] = useState(new Date().toISOString().split('T')[0]);
-  const [customMonth, setCustomMonth] = useState(new Date().toISOString().substring(0, 7));
-  const [customYear, setCustomYear] = useState(new Date().getFullYear().toString());
+  const [customDay, setCustomDay] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [customMonth, setCustomMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+  const [customYear, setCustomYear] = useState(() => new Date().getFullYear().toString());
+  
+  // الحصول على تاريخ اليوم بتوقيت مصر
+  const getEgyptTime = () => {
+    const now = new Date();
+    const egyptOffset = 2 * 60 * 60 * 1000; // توقيت مصر +2
+    const egyptNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + egyptOffset);
+    return egyptNow;
+  };
 
   const [loading, setLoading] = useState(false);
   const [reports, setReports] = useState<ReportData>({
@@ -69,18 +79,96 @@ const Reports = () => {
   });
 
   const buildFilter = useCallback(() => {
+    const egyptNow = getEgyptTime();
+    let startDate: Date, endDate: Date;
+
     switch (filterType) {
-      case 'daily':
-        return { type: 'daily', day: customDay };
-      case 'monthly':
-        return { type: 'monthly', month: customMonth };
-      case 'yearly':
-        return { type: 'yearly', year: customYear };
+      case 'daily': {
+        startDate = startOfDay(parseISO(customDay));
+        endDate = endOfDay(parseISO(customDay));
+        break;
+      }
+      case 'monthly': {
+        startDate = startOfMonth(parseISO(`${customMonth}-01`));
+        endDate = endOfMonth(parseISO(`${customMonth}-01`));
+        break;
+      }
+      case 'yearly': {
+        startDate = startOfYear(new Date(parseInt(customYear), 0, 1));
+        endDate = endOfYear(new Date(parseInt(customYear), 11, 31));
+        break;
+      }
       case 'period':
-      default:
-        return { period: selectedPeriod };
+      default: {
+        const today = startOfDay(egyptNow);
+        switch (selectedPeriod) {
+          case 'today':
+            startDate = startOfDay(today);
+            endDate = endOfDay(today);
+            break;
+          case 'yesterday': {
+            const yesterday = addDays(today, -1);
+            startDate = startOfDay(yesterday);
+            endDate = endOfDay(yesterday);
+            break;
+          }
+          case 'thisWeek':
+            startDate = startOfDay(addDays(today, -today.getDay() + 1));
+            endDate = endOfDay(addDays(today, 7 - today.getDay()));
+            break;
+          case 'thisMonth':
+            startDate = startOfMonth(today);
+            endDate = endOfMonth(today);
+            break;
+          case 'lastMonth': {
+            const firstDayOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            startDate = startOfMonth(firstDayOfLastMonth);
+            endDate = endOfMonth(firstDayOfLastMonth);
+            break;
+          }
+          case 'thisYear':
+            startDate = startOfYear(today);
+            endDate = endOfYear(today);
+            break;
+          default:
+            startDate = startOfDay(today);
+            endDate = endOfDay(today);
+        }
+        break;
+      }
     }
+
+    return {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      establishmentId: 'current-user-establishment-id' // سيتم استبدالها بمعرف المنشأة الحالية
+    };
   }, [filterType, selectedPeriod, customDay, customMonth, customYear]);
+
+  const getDateRangeLabel = useCallback(() => {
+    const formatDate = (date: Date) => format(date, 'dd/MM/yyyy', { locale: ar });
+    
+    try {
+      const filter = buildFilter();
+      const start = new Date(filter.startDate);
+      const end = new Date(filter.endDate);
+      
+      if (filterType === 'daily') {
+        return `يوم ${formatDate(start)}`;
+      } else if (filterType === 'monthly') {
+        return `شهر ${format(start, 'MMMM yyyy', { locale: ar })}`;
+      } else if (filterType === 'yearly') {
+        return `سنة ${start.getFullYear()}`;
+      } else {
+        if (start.toDateString() === end.toDateString()) {
+          return `يوم ${formatDate(start)}`;
+        }
+        return `من ${formatDate(start)} إلى ${formatDate(end)}`;
+      }
+    } catch {
+      return 'تحديد النطاق الزمني';
+    }
+  }, [buildFilter, filterType]);
 
   const loadReports = useCallback(async () => {
     const filter = buildFilter();
@@ -234,117 +322,143 @@ const Reports = () => {
   };
 
   const renderFilterControls = () => {
-    const inputClasses = "input-field bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500";
+    const inputClasses = "input-field bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 rounded-md px-3 py-2 text-sm";
     
     // تحويل التاريخ إلى تنسيق عربي
     const formatArabicDate = (dateString: string) => {
-      const date = new Date(dateString);
-      const options: Intl.DateTimeFormatOptions = { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric',
-        calendar: 'islamic',
-        numberingSystem: 'arab'
-      };
-      return date.toLocaleDateString('ar-SA', options);
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('ar-EG', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          timeZone: 'Africa/Cairo'
+        });
+      } catch {
+        return dateString;
+      }
     };
 
-    if (filterType === 'period') {
-      return (
-        <div className="flex items-center gap-2 flex-wrap">
-          {['today', 'yesterday', 'week', 'month', 'year'].map(p => (
+    return (
+      <div className="space-y-4">
+        {/* شريط التبويب لنوع الفلتر */}
+        <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+          {[
+            { value: 'period', label: 'فترات زمنية' },
+            { value: 'daily', label: 'يوم محدد' },
+            { value: 'monthly', label: 'شهري' },
+            { value: 'yearly', label: 'سنوي' }
+          ].map((tab) => (
             <button
-              key={p}
-              onClick={() => setSelectedPeriod(p)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                selectedPeriod === p 
-                  ? 'bg-orange-600 text-white' 
-                  : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+              key={tab.value}
+              onClick={() => setFilterType(tab.value as 'period' | 'daily' | 'monthly' | 'yearly')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                filterType === tab.value
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
               }`}
             >
-              {p === 'today' ? 'اليوم' : 
-               p === 'yesterday' ? 'أمس' :
-               p === 'week' ? 'هذا الأسبوع' :
-               p === 'month' ? 'هذا الشهر' : 'هذه السنة'}
+              {tab.label}
             </button>
           ))}
         </div>
-      );
-    }
-    
-    if (filterType === 'daily') {
-      return (
-        <div className="relative">
-          <input 
-            type="date" 
-            value={customDay} 
-            onChange={e => setCustomDay(e.target.value)} 
-            className={`${inputClasses} ltr`}
-            style={{ direction: 'ltr' }}
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">
-            {formatArabicDate(customDay)}
-          </span>
-        </div>
-      );
-    }
-    
-    if (filterType === 'monthly') {
-      const months = [
-        'يناير', 'فبراير', 'مارس', 'إبريل', 'مايو', 'يونيو',
-        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
-      ];
-      
-      const [year, month] = customMonth.split('-').map(Number);
-      const monthName = months[month - 1];
-      
-      return (
-        <div className="flex gap-2">
-          <select
-            value={month}
-            onChange={e => setCustomMonth(`${year}-${e.target.value.padStart(2, '0')}`)}
-            className={`${inputClasses} w-32`}
-          >
-            {months.map((m, i) => (
-              <option key={i} value={String(i + 1).padStart(2, '0')}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <input
-            type="number"
-            value={year}
-            onChange={e => setCustomMonth(`${e.target.value}-${String(month).padStart(2, '0')}`)}
-            className={`${inputClasses} w-24`}
-            placeholder="السنة"
-          />
-          <div className="flex items-center px-3 bg-gray-50 dark:bg-gray-700 rounded-md text-sm text-gray-700 dark:text-gray-300">
-            {monthName} {year}
+
+        {/* محتوى الفلاتر */}
+        <div className="space-y-4">
+          {filterType === 'period' && (
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'today', label: 'اليوم' },
+                { value: 'yesterday', label: 'أمس' },
+                { value: 'thisWeek', label: 'هذا الأسبوع' },
+                { value: 'thisMonth', label: 'هذا الشهر' },
+                { value: 'lastMonth', label: 'الشهر الماضي' },
+                { value: 'thisYear', label: 'هذه السنة' }
+              ].map((period) => (
+                <button
+                  key={period.value}
+                  onClick={() => setSelectedPeriod(period.value)}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                    selectedPeriod === period.value
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {period.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filterType === 'daily' && (
+            <div className="flex items-center gap-4">
+              <div className="relative flex-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  اختر تاريخ
+                </label>
+                <input
+                  type="date"
+                  value={customDay}
+                  onChange={(e) => setCustomDay(e.target.value)}
+                  className={`${inputClasses} w-full ltr`}
+                  style={{ direction: 'ltr' }}
+                />
+                <span className="absolute right-3 top-9 text-gray-500 dark:text-gray-400 text-sm">
+                  {formatArabicDate(customDay)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {filterType === 'monthly' && (
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  اختر الشهر
+                </label>
+                <input
+                  type="month"
+                  value={customMonth}
+                  onChange={(e) => setCustomMonth(e.target.value)}
+                  className={`${inputClasses} w-full ltr`}
+                  style={{ direction: 'ltr' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {filterType === 'yearly' && (
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  اختر السنة
+                </label>
+                <select
+                  value={customYear}
+                  onChange={(e) => setCustomYear(e.target.value)}
+                  className={`${inputClasses} w-full`}
+                >
+                  {Array.from({ length: 10 }, (_, i) => {
+                    const year = new Date().getFullYear() - i;
+                    return (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* عرض النطاق الزمني المحدد */}
+          <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">النطاق الزمني:</span> {getDateRangeLabel()}
           </div>
         </div>
-      );
-    }
-    
-    if (filterType === 'yearly') {
-      return (
-        <div className="flex items-center gap-2">
-          <input 
-            type="number" 
-            placeholder="أدخل السنة" 
-            value={customYear} 
-            onChange={e => setCustomYear(e.target.value)} 
-            className={`${inputClasses} w-32`} 
-            dir="ltr"
-          />
-          <span className="text-gray-600 dark:text-gray-400 text-sm">
-            هـ
-          </span>
-        </div>
-      );
-    }
-    
-    return null;
-  };  
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -355,46 +469,47 @@ const Reports = () => {
   }
 
   return (
-    <div className="space-y-6 p-6 bg-gray-100 dark:bg-[#1a1d21] min-h-screen transition-colors duration-200">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-7 w-7 text-orange-600 dark:text-orange-400" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">التقارير</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-300">عرض وتحليل التقارير المالية والتشغيلية</p>
-          </div>
+    <div className="container mx-auto p-4 space-y-6 rtl">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">التقارير</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {getDateRangeLabel()}
+          </p>
+        </div>
+        <div className="flex items-center space-x-2 space-x-reverse">
+          <button
+            onClick={() => loadReports()}
+            disabled={loading}
+            className="p-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full disabled:opacity-50 transition-colors"
+            title="تحديث البيانات"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => handleExport(exportReportToExcel, 'all')}
+            className="px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md flex items-center gap-2 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span>تصدير Excel</span>
+          </button>
+          <button
+            onClick={() => handleExport(exportReportToPDF, 'all')}
+            className="px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md flex items-center gap-2 transition-colors"
+          >
+            <Printer className="w-4 h-4" />
+            <span>طباعة PDF</span>
+          </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 dark:border-gray-700/50 p-6 hover:shadow-md transition-shadow duration-200 flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Filter className="h-5 w-5 text-gray-600 dark:text-gray-300"/>
-          <select
-            value={filterType}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-              const value = e.target.value as 'period' | 'daily' | 'monthly' | 'yearly';
-              setFilterType(value);
-            }}
-            className="input-field bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 min-w-[120px]"
-          >
-            <option value="period">فترة محددة</option>
-            <option value="daily">تقرير يومي</option>
-            <option value="monthly">تقرير شهري</option>
-            <option value="yearly">تقرير سنوي</option>
-          </select>
-        </div>
-        <div className="flex-grow">
-          {renderFilterControls()}
-        </div>
-        <button 
-          onClick={loadReports} 
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors duration-200 dark:bg-orange-500 dark:hover:bg-orange-600 dark:text-white"
-        >
-          <RefreshCw className="h-4 w-4" />
-          <span>تحديث</span>
-        </button>
+      {/* فلترة البيانات */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <Filter className="w-5 h-5 text-orange-500" />
+          <span>تصفية النتائج</span>
+        </h2>
+        {renderFilterControls()}
       </div>
 
       {/* Basic Statistics */}
