@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, ReactNode } from 'react';
 import { TrendingUp, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, Filter } from 'lucide-react';
-import { format, parseISO, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { format, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
 // Type definitions
@@ -63,11 +63,25 @@ const Reports = () => {
   const [customYear, setCustomYear] = useState(() => new Date().getFullYear().toString());
   
   // الحصول على تاريخ اليوم بتوقيت مصر
-  const getEgyptTime = () => {
+  const getEgyptTime = useCallback((): Date => {
     const now = new Date();
     const egyptOffset = 2 * 60 * 60 * 1000; // توقيت مصر +2
-    const egyptNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + egyptOffset);
-    return egyptNow;
+    return new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + egyptOffset);
+  }, []);
+
+  // تعريف نوع البيانات المستخدمة في الفلاتر
+  interface ReportFilter extends Record<string, unknown> {
+    startDate: string;
+    endDate: string;
+    establishmentId?: string;
+  }
+
+  // تعريف نوع نتيجة التقرير
+  type ReportResult = {
+    sales: Record<string, unknown> | null;
+    sessions: Record<string, unknown> | null;
+    inventory: Record<string, unknown> | null;
+    financial: Record<string, unknown> | null;
   };
 
   const [loading, setLoading] = useState(false);
@@ -78,72 +92,57 @@ const Reports = () => {
     financial: null
   });
 
-  const buildFilter = useCallback(() => {
-    const egyptNow = getEgyptTime();
-    let startDate: Date, endDate: Date;
-
-    switch (filterType) {
-      case 'daily': {
-        startDate = startOfDay(parseISO(customDay));
-        endDate = endOfDay(parseISO(customDay));
-        break;
-      }
-      case 'monthly': {
-        startDate = startOfMonth(parseISO(`${customMonth}-01`));
-        endDate = endOfMonth(parseISO(`${customMonth}-01`));
-        break;
-      }
-      case 'yearly': {
-        startDate = startOfYear(new Date(parseInt(customYear), 0, 1));
-        endDate = endOfYear(new Date(parseInt(customYear), 11, 31));
-        break;
-      }
-      case 'period':
-      default: {
-        const today = startOfDay(egyptNow);
-        switch (selectedPeriod) {
-          case 'today':
-            startDate = startOfDay(today);
-            endDate = endOfDay(today);
-            break;
-          case 'yesterday': {
-            const yesterday = addDays(today, -1);
-            startDate = startOfDay(yesterday);
-            endDate = endOfDay(yesterday);
-            break;
-          }
-          case 'thisWeek':
-            startDate = startOfDay(addDays(today, -today.getDay() + 1));
-            endDate = endOfDay(addDays(today, 7 - today.getDay()));
-            break;
-          case 'thisMonth':
-            startDate = startOfMonth(today);
-            endDate = endOfMonth(today);
-            break;
-          case 'lastMonth': {
-            const firstDayOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-            startDate = startOfMonth(firstDayOfLastMonth);
-            endDate = endOfMonth(firstDayOfLastMonth);
-            break;
-          }
-          case 'thisYear':
-            startDate = startOfYear(today);
-            endDate = endOfYear(today);
-            break;
-          default:
-            startDate = startOfDay(today);
-            endDate = endOfDay(today);
-        }
-        break;
+  const buildFilter = useCallback((): ReportFilter => {
+    const now = getEgyptTime();
+    let startDate: Date;
+    let endDate: Date;
+    
+    if (filterType === 'daily') {
+      const selectedDay = new Date(customDay);
+      startDate = startOfDay(selectedDay);
+      endDate = endOfDay(selectedDay);
+    } else if (filterType === 'monthly') {
+      const [year, month] = customMonth.split('-').map(Number);
+      startDate = startOfMonth(new Date(year, month - 1, 1));
+      endDate = endOfMonth(new Date(year, month - 1, 1));
+    } else if (filterType === 'yearly') {
+      const selectedYear = parseInt(customYear);
+      startDate = startOfYear(new Date(selectedYear, 0, 1));
+      endDate = endOfYear(new Date(selectedYear, 0, 1));
+    } else {
+      // Handle period filter
+      if (selectedPeriod === 'yesterday') {
+        const yesterday = addDays(now, -1);
+        startDate = startOfDay(yesterday);
+        endDate = endOfDay(yesterday);
+      } else if (selectedPeriod === 'last7') {
+        startDate = addDays(now, -6);
+        endDate = now;
+      } else if (selectedPeriod === 'last30') {
+        startDate = addDays(now, -29);
+        endDate = now;
+      } else if (selectedPeriod === 'thisMonth') {
+        startDate = startOfMonth(now);
+        endDate = now;
+      } else if (selectedPeriod === 'lastMonth') {
+        const firstDayOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        startDate = startOfMonth(firstDayOfLastMonth);
+        endDate = endOfMonth(firstDayOfLastMonth);
+      } else if (selectedPeriod === 'thisYear') {
+        startDate = startOfYear(now);
+        endDate = now;
+      } else {
+        // Default to today
+        startDate = startOfDay(now);
+        endDate = endOfDay(now);
       }
     }
 
     return {
       startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      establishmentId: 'current-user-establishment-id' // سيتم استبدالها بمعرف المنشأة الحالية
+      endDate: endDate.toISOString()
     };
-  }, [filterType, selectedPeriod, customDay, customMonth, customYear]);
+  }, [filterType, selectedPeriod, customDay, customMonth, customYear, getEgyptTime]);
 
   const getDateRangeLabel = useCallback(() => {
     const formatDate = (date: Date) => format(date, 'dd/MM/yyyy', { locale: ar });
@@ -174,19 +173,67 @@ const Reports = () => {
     const filter = buildFilter();
     try {
       setLoading(true);
-      const [salesReport, sessionsReport, inventoryReport, financialReport] = await Promise.all([
-        getSalesReport(filter),
-        getSessionsReport(filter),
-        getInventoryReport(), // Inventory report is not filtered by date
-        getFinancialReport(filter)
-      ]);
-
-      setReports({
-        sales: salesReport,
-        sessions: sessionsReport,
-        inventory: inventoryReport,
-        financial: financialReport
+      
+      // إضافة معرف المنشأة من بيانات المستخدم الحالي
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      const establishmentId = userData.establishmentId || 'default-establishment';
+      
+      // تسجيل معايير الفلترة لأغراض التصحيح
+      console.log('Fetching reports with filter:', { 
+        ...filter, 
+        establishmentId 
       });
+      
+      // إنشاء كائن لجمع النتائج
+      const results: ReportResult = {
+        sales: null,
+        sessions: null,
+        inventory: null,
+        financial: null
+      };
+      
+      // جلب التقارير بشكل متوازٍ
+      const reportsPromises = [
+        { 
+          key: 'sales', 
+          promise: getSalesReport({ ...filter, establishmentId })
+        },
+        { 
+          key: 'sessions', 
+          promise: getSessionsReport({ ...filter, establishmentId }, undefined)
+        },
+        { 
+          key: 'inventory', 
+          promise: getInventoryReport()
+        },
+        { 
+          key: 'financial', 
+          promise: getFinancialReport({ ...filter, establishmentId })
+        }
+      ] as const;
+      
+      // معالجة كل طلب على حدة مع تسجيل النتائج
+      const errors: {key: keyof ReportResult, reason: unknown}[] = [];
+      
+      for (const {key, promise} of reportsPromises) {
+        try {
+          const value = await promise;
+          console.log(`Successfully loaded ${key} report:`, value);
+          results[key] = value as Record<string, unknown>;
+        } catch (error) {
+          console.error(`Error loading ${key} report:`, error);
+          errors.push({ key, reason: error });
+        }
+      }
+      
+      // تحديث حالة المكون بالنتائج
+      setReports(results);
+      
+      // إظهار إشعار في حالة وجود أخطاء
+      if (errors.length > 0) {
+        showNotification(`تم تحميل التقارير مع ${errors.length} أخطاء`, 'warning');
+      }
+      
     } catch (error) {
       console.error('Failed to load reports:', error);
       showNotification('خطأ في تحميل التقارير', 'error');
@@ -322,7 +369,7 @@ const Reports = () => {
   };
 
   const renderFilterControls = () => {
-    const inputClasses = "input-field bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 rounded-md px-3 py-2 text-sm";
+    const inputClasses = "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 rounded-md px-3 py-2 text-sm w-full";
     
     // تحويل التاريخ إلى تنسيق عربي
     const formatArabicDate = (dateString: string) => {
@@ -338,6 +385,15 @@ const Reports = () => {
         return dateString;
       }
     };
+
+    // إنشاء قائمة بالسنوات (10 سنوات سابقة وحالية)
+    const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
+    
+    // إنشاء قائمة بالأشهر بالعربية
+    const months = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
 
     return (
       <div className="space-y-4">
@@ -391,19 +447,24 @@ const Reports = () => {
           )}
 
           {filterType === 'daily' && (
-            <div className="flex items-center gap-4">
-              <div className="relative flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  اختر تاريخ
-                </label>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                اختر تاريخ
+              </label>
+              <div className="relative">
                 <input
                   type="date"
                   value={customDay}
                   onChange={(e) => setCustomDay(e.target.value)}
-                  className={`${inputClasses} w-full ltr`}
-                  style={{ direction: 'ltr' }}
+                  className={`${inputClasses} pr-10`}
+                  dir="ltr"
                 />
-                <span className="absolute right-3 top-9 text-gray-500 dark:text-gray-400 text-sm">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm pointer-events-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">
                   {formatArabicDate(customDay)}
                 </span>
               </div>
@@ -411,42 +472,79 @@ const Reports = () => {
           )}
 
           {filterType === 'monthly' && (
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  اختر الشهر
-                </label>
-                <input
-                  type="month"
-                  value={customMonth}
-                  onChange={(e) => setCustomMonth(e.target.value)}
-                  className={`${inputClasses} w-full ltr`}
-                  style={{ direction: 'ltr' }}
-                />
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                اختر الشهر
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="relative">
+                  <select
+                    value={customMonth.split('-')[1]}
+                    onChange={(e) => {
+                      const month = e.target.value.padStart(2, '0');
+                      setCustomMonth(`${customMonth.split('-')[0]}-${month}`);
+                    }}
+                    className={`${inputClasses} appearance-none`}
+                  >
+                    {months.map((month, index) => (
+                      <option key={index} value={(index + 1).toString().padStart(2, '0')}>
+                        {month}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="relative">
+                  <select
+                    value={customMonth.split('-')[0]}
+                    onChange={(e) => {
+                      const year = e.target.value;
+                      setCustomMonth(`${year}-${customMonth.split('-')[1]}`);
+                    }}
+                    className={`${inputClasses} appearance-none`}
+                  >
+                    {years.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           {filterType === 'yearly' && (
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  اختر السنة
-                </label>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                اختر السنة
+              </label>
+              <div className="relative">
                 <select
                   value={customYear}
                   onChange={(e) => setCustomYear(e.target.value)}
-                  className={`${inputClasses} w-full`}
+                  className={`${inputClasses} appearance-none`}
                 >
-                  {Array.from({ length: 10 }, (_, i) => {
-                    const year = new Date().getFullYear() - i;
-                    return (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    );
-                  })}
+                  {years.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
                 </select>
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
             </div>
           )}
