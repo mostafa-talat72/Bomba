@@ -61,7 +61,7 @@ const Reports = () => {
   const [customDay, setCustomDay] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [customMonth, setCustomMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [customYear, setCustomYear] = useState(() => new Date().getFullYear().toString());
-  
+
   // الحصول على تاريخ اليوم بتوقيت مصر
   const getEgyptTime = useCallback((): Date => {
     const now = new Date();
@@ -96,7 +96,7 @@ const Reports = () => {
     const now = getEgyptTime();
     let startDate: Date;
     let endDate: Date;
-    
+
     if (filterType === 'daily') {
       const selectedDay = new Date(customDay);
       startDate = startOfDay(selectedDay);
@@ -146,12 +146,12 @@ const Reports = () => {
 
   const getDateRangeLabel = useCallback(() => {
     const formatDate = (date: Date) => format(date, 'dd/MM/yyyy', { locale: ar });
-    
+
     try {
       const filter = buildFilter();
       const start = new Date(filter.startDate);
       const end = new Date(filter.endDate);
-      
+
       if (filterType === 'daily') {
         return `يوم ${formatDate(start)}`;
       } else if (filterType === 'monthly') {
@@ -173,17 +173,12 @@ const Reports = () => {
     const filter = buildFilter();
     try {
       setLoading(true);
-      
+
       // إضافة معرف المنشأة من بيانات المستخدم الحالي
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       const establishmentId = userData.establishmentId || 'default-establishment';
-      
-      // تسجيل معايير الفلترة لأغراض التصحيح
-      console.log('Fetching reports with filter:', { 
-        ...filter, 
-        establishmentId 
-      });
-      
+
+
       // إنشاء كائن لجمع النتائج
       const results: ReportResult = {
         sales: null,
@@ -191,49 +186,48 @@ const Reports = () => {
         inventory: null,
         financial: null
       };
-      
+
       // جلب التقارير بشكل متوازٍ
       const reportsPromises = [
-        { 
-          key: 'sales', 
+        {
+          key: 'sales',
           promise: getSalesReport({ ...filter, establishmentId })
         },
-        { 
-          key: 'sessions', 
+        {
+          key: 'sessions',
           promise: getSessionsReport({ ...filter, establishmentId }, undefined)
         },
-        { 
-          key: 'inventory', 
+        {
+          key: 'inventory',
           promise: getInventoryReport()
         },
-        { 
-          key: 'financial', 
+        {
+          key: 'financial',
           promise: getFinancialReport({ ...filter, establishmentId })
         }
       ] as const;
-      
+
       // معالجة كل طلب على حدة مع تسجيل النتائج
       const errors: {key: keyof ReportResult, reason: unknown}[] = [];
-      
+
       for (const {key, promise} of reportsPromises) {
         try {
           const value = await promise;
-          console.log(`Successfully loaded ${key} report:`, value);
-          results[key] = value as Record<string, unknown>;
+           results[key] = value as Record<string, unknown>;
         } catch (error) {
           console.error(`Error loading ${key} report:`, error);
           errors.push({ key, reason: error });
         }
       }
-      
+
       // تحديث حالة المكون بالنتائج
       setReports(results);
-      
+
       // إظهار إشعار في حالة وجود أخطاء
       if (errors.length > 0) {
         showNotification(`تم تحميل التقارير مع ${errors.length} أخطاء`, 'warning');
       }
-      
+
     } catch (error) {
       console.error('Failed to load reports:', error);
       showNotification('خطأ في تحميل التقارير', 'error');
@@ -259,7 +253,7 @@ const Reports = () => {
 
     const salesData = reports.sales as { totalRevenue?: number; totalOrders?: number };
     const sessionsData = reports.sessions as { totalSessions?: number } | null;
-    
+
     const revenue = salesData?.totalRevenue || 0;
     const orders = salesData?.totalOrders || 0;
     const avgOrderValue = orders > 0 ? revenue / orders : 0;
@@ -278,12 +272,12 @@ const Reports = () => {
   const calculateRevenueBreakdown = (): RevenueBreakdown => {
     if (!reports.sales) return { playstation: 0, computer: 0, cafe: 0 };
 
-    const salesData = reports.sales as { 
+    const salesData = reports.sales as {
       revenueByType?: {
         playstation?: number;
         computer?: number;
         cafe?: number;
-      } 
+      }
     };
 
     return {
@@ -312,7 +306,7 @@ const Reports = () => {
       totalPaid?: number;
       profit?: number;
     };
-    
+
     const revenue = financial?.totalRevenue || financial?.summary?.totalRevenue || 0;
     const paid = financial?.totalPaid || financial?.summary?.totalPaid || 0;
     const profit = financial?.profit || financial?.summary?.netProfit || 0;
@@ -328,11 +322,11 @@ const Reports = () => {
         revenue?: { totalBills?: number };
         totalTransactions?: number;
       };
-      
-      let totalTransactions = financial?.summary?.totalTransactions || 
-                            financial?.revenue?.totalBills || 
+
+      let totalTransactions = financial?.summary?.totalTransactions ||
+                            financial?.revenue?.totalBills ||
                             financial?.totalTransactions || 0;
-      
+
       if (totalTransactions === 0 && reports.sales) {
         const salesData = reports.sales as {
           totalOrders?: number;
@@ -348,7 +342,7 @@ const Reports = () => {
   // تنسيق الأرقام
   const formatNumber = (num: number) => formatDecimal(num);
   const formatCurrency = (amount: number) => formatCurrencyUtil(amount);
-  
+
   // Format percentage helper (removed unused function)
 
   const basicStats = calculateBasicStats();
@@ -370,7 +364,7 @@ const Reports = () => {
 
   const renderFilterControls = () => {
     const inputClasses = "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 rounded-md px-3 py-2 text-sm w-full";
-    
+
     // تحويل التاريخ إلى تنسيق عربي
     const formatArabicDate = (dateString: string) => {
       try {
@@ -388,7 +382,7 @@ const Reports = () => {
 
     // إنشاء قائمة بالسنوات (10 سنوات سابقة وحالية)
     const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
-    
+
     // إنشاء قائمة بالأشهر بالعربية
     const months = [
       'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -612,54 +606,54 @@ const Reports = () => {
 
       {/* Basic Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          icon={DollarSign} 
-          title="إجمالي الإيرادات" 
-          value={formatCurrency(basicStats.revenue)} 
-          color="green" 
+        <StatCard
+          icon={DollarSign}
+          title="إجمالي الإيرادات"
+          value={formatCurrency(basicStats.revenue)}
+          color="green"
         />
-        <StatCard 
-          icon={ShoppingCart} 
-          title="عدد الطلبات" 
-          value={formatNumber(basicStats.orders)} 
-          color="blue" 
+        <StatCard
+          icon={ShoppingCart}
+          title="عدد الطلبات"
+          value={formatNumber(basicStats.orders)}
+          color="blue"
         />
-        <StatCard 
-          icon={TrendingUp} 
-          title="متوسط الطلب" 
-          value={formatCurrency(basicStats.avgOrderValue)} 
-          color="purple" 
+        <StatCard
+          icon={TrendingUp}
+          title="متوسط الطلب"
+          value={formatCurrency(basicStats.avgOrderValue)}
+          color="purple"
         />
-        <StatCard 
-          icon={Users} 
-          title="عدد الجلسات" 
-          value={formatNumber(basicStats.sessions)} 
-          color="orange" 
+        <StatCard
+          icon={Users}
+          title="عدد الجلسات"
+          value={formatNumber(basicStats.sessions)}
+          color="orange"
         />
       </div>
 
       {/* Revenue Breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <RevenueCard 
-          icon={Gamepad2} 
-          title="البلايستيشن" 
-          value={revenueBreakdown.playstation} 
-          total={totalRevenue} 
-          color="blue" 
+        <RevenueCard
+          icon={Gamepad2}
+          title="البلايستيشن"
+          value={revenueBreakdown.playstation}
+          total={totalRevenue}
+          color="blue"
         />
-        <RevenueCard 
-          icon={Monitor} 
-          title="الكمبيوتر" 
-          value={revenueBreakdown.computer} 
-          total={totalRevenue} 
-          color="green" 
+        <RevenueCard
+          icon={Monitor}
+          title="الكمبيوتر"
+          value={revenueBreakdown.computer}
+          total={totalRevenue}
+          color="green"
         />
-        <RevenueCard 
-          icon={ShoppingCart} 
-          title="الطلبات" 
-          value={revenueBreakdown.cafe} 
-          total={totalRevenue} 
-          color="orange" 
+        <RevenueCard
+          icon={ShoppingCart}
+          title="الطلبات"
+          value={revenueBreakdown.cafe}
+          total={totalRevenue}
+          color="orange"
         />
       </div>
 
@@ -687,23 +681,23 @@ const Reports = () => {
           <div className="space-y-3">
             {reports.sessions ? (
               <>
-                <InfoRow 
-                  icon={Clock} 
-                  label="متوسط مدة الجلسة" 
-                  value={`${formatDecimal((reports.sessions as { avgSessionDuration?: number })?.avgSessionDuration || 0)} ساعة`} 
-                  color="blue" 
+                <InfoRow
+                  icon={Clock}
+                  label="متوسط مدة الجلسة"
+                  value={`${formatDecimal((reports.sessions as { avgSessionDuration?: number })?.avgSessionDuration || 0)} ساعة`}
+                  color="blue"
                 />
-                <InfoRow 
-                  icon={Users} 
-                  label="أكثر الأجهزة استخداماً" 
-                  value={(reports.sessions as { mostUsedDevice?: string })?.mostUsedDevice || 'غير متوفر'} 
-                  color="green" 
+                <InfoRow
+                  icon={Users}
+                  label="أكثر الأجهزة استخداماً"
+                  value={(reports.sessions as { mostUsedDevice?: string })?.mostUsedDevice || 'غير متوفر'}
+                  color="green"
                 />
-                <InfoRow 
-                  icon={Target} 
-                  label="معدل الاستخدام" 
-                  value={`${formatDecimal((reports.sessions as { usageRate?: number })?.usageRate || 0)}%`} 
-                  color="purple" 
+                <InfoRow
+                  icon={Target}
+                  label="معدل الاستخدام"
+                  value={`${formatDecimal((reports.sessions as { usageRate?: number })?.usageRate || 0)}%`}
+                  color="purple"
                 />
               </>
             ) : (
@@ -718,13 +712,13 @@ const Reports = () => {
         {reports.financial && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <FinancialStat label="إجمالي الربح" value={formatCurrency(calculateNetProfit())} color="green" />
-            <FinancialStat 
-              label="إجمالي التكاليف" 
+            <FinancialStat
+              label="إجمالي التكاليف"
               value={formatCurrency(
-                (reports.financial as { totalCosts?: number; summary?: { totalCosts?: number } })?.totalCosts || 
+                (reports.financial as { totalCosts?: number; summary?: { totalCosts?: number } })?.totalCosts ||
                 (reports.financial as { summary?: { totalCosts?: number } })?.summary?.totalCosts || 0
-              )} 
-              color="red" 
+              )}
+              color="red"
             />
             <FinancialStat label="هامش الربح" value={`${formatDecimal(calculateProfitMargin())}%`} color="purple" />
             <FinancialStat label="عدد المعاملات" value={formatNumber(calculateTotalTransactions())} color="orange" />
@@ -736,25 +730,25 @@ const Reports = () => {
       <ReportSection title="ملخص المخزون" onExportExcel={() => handleExport(exportReportToExcel, 'inventory')} onExportPDF={() => handleExport(exportReportToPDF, 'inventory')}>
         {reports.inventory && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <FinancialStat 
-              label="إجمالي المنتجات" 
-              value={formatNumber((reports.inventory as { totalItems?: number })?.totalItems || 0)} 
-              color="green" 
+            <FinancialStat
+              label="إجمالي المنتجات"
+              value={formatNumber((reports.inventory as { totalItems?: number })?.totalItems || 0)}
+              color="green"
             />
-            <FinancialStat 
-              label="إجمالي الكمية" 
-              value={formatNumber((reports.inventory as { totalQuantity?: number })?.totalQuantity || 0)} 
-              color="blue" 
+            <FinancialStat
+              label="إجمالي الكمية"
+              value={formatNumber((reports.inventory as { totalQuantity?: number })?.totalQuantity || 0)}
+              color="blue"
             />
-            <FinancialStat 
-              label="إجمالي القيمة" 
-              value={formatCurrency((reports.inventory as { totalValue?: number })?.totalValue || 0)} 
-              color="purple" 
+            <FinancialStat
+              label="إجمالي القيمة"
+              value={formatCurrency((reports.inventory as { totalValue?: number })?.totalValue || 0)}
+              color="purple"
             />
-            <FinancialStat 
-              label="مخزون منخفض" 
-              value={formatNumber((reports.inventory as { lowStockItems?: number })?.lowStockItems || 0)} 
-              color="orange" 
+            <FinancialStat
+              label="مخزون منخفض"
+              value={formatNumber((reports.inventory as { lowStockItems?: number })?.lowStockItems || 0)}
+              color="orange"
             />
           </div>
         )}

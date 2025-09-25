@@ -373,10 +373,10 @@ const Inventory = () => {
   const isItemUsedInMenu = async (itemId: string): Promise<{isUsed: boolean; menuItems?: Array<{name: string}>, itemName: string}> => {
     try {
       // جلب جميع عناصر القائمة مع تفاصيل المكونات
-      const response = await api.getMenuItems({ 
+      const response = await api.getMenuItems({
         limit: 1000 // جلب عدد أكبر من العناصر للتأكد
       });
-      
+
       if (response.success && response.data) {
         // البحث في كل عنصر في القائمة
         const itemName = inventoryItems.find(item => item.id === itemId || item._id === itemId)?.name || 'هذا المنتج';
@@ -388,15 +388,14 @@ const Inventory = () => {
           // البحث عن المكون في قائمة المكونات
           return menuItem.ingredients.some((ing: Ingredient) => {
             // التحقق من أن المكون موجود وأن المعرف متطابق
-            const item = typeof ing.item === 'string' 
-              ? ing.item 
+            const item = typeof ing.item === 'string'
+              ? ing.item
               : (ing.item as { _id?: string; id?: string })?.id || (ing.item as { _id?: string; id?: string })?._id;
             return item === itemId;
           });
         });
-        
+
         const isUsed = menuItems.length > 0;
-        console.log(`المنتج ${itemName} ${isUsed ? 'مستخدم' : 'غير مستخدم'} في القائمة`);
         return {
           isUsed,
           menuItems: menuItems.map((item: MenuItem) => ({ name: item.name })),
@@ -413,7 +412,7 @@ const Inventory = () => {
   // حذف منتج
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    
+
     // التحقق مما إذا كان المنتج مستخدماً في قائمة الطعام
     const { isUsed, menuItems, itemName } = await isItemUsedInMenu(deleteTarget.id || deleteTarget._id);
     if (isUsed && menuItems && menuItems.length > 0) {
@@ -421,14 +420,14 @@ const Inventory = () => {
       const errorMsg = `
         لا يمكن حذف ${itemName} لأنه مستخدم في الأصناف التالية:\n\n${menuItemsList}
         \n\nالرجاء إزالة المنتج من هذه الأصناف أولاً.`;
-      
+
       setError(errorMsg);
       showAlertMessage(`لا يمكن حذف ${itemName} لأنه مستخدم في ${menuItems.length} صنف في القائمة`, 'error');
       setLoading(false);
       setShowDeleteModal(false);
       return;
     }
-    
+
     setLoading(true);
     setError('');
     try {
@@ -890,9 +889,9 @@ const Inventory = () => {
                   >عرض صفحة التكاليف</button>
                 </div>
               )}
-              <button 
-                type="submit" 
-                className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-500' : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'} text-white py-2 rounded-lg font-bold transition-colors duration-200`} 
+              <button
+                type="submit"
+                className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-500' : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'} text-white py-2 rounded-lg font-bold transition-colors duration-200`}
                 disabled={loading}
               >
                 {loading ? (
@@ -973,9 +972,9 @@ const Inventory = () => {
               </div>
               {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
               {success && <div className="text-green-600 dark:text-green-400 text-sm">{success}</div>}
-              <button 
-                type="submit" 
-                className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-500' : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'} text-white py-2 rounded-lg font-bold transition-colors duration-200`} 
+              <button
+                type="submit"
+                className={`w-full flex items-center justify-center gap-2 ${loading ? 'bg-orange-500' : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'} text-white py-2 rounded-lg font-bold transition-colors duration-200`}
                 disabled={loading}
               >
                 {loading ? (
@@ -1000,7 +999,7 @@ const Inventory = () => {
           <div className={`px-6 py-4 rounded-lg shadow-lg ${alertType === 'success' ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'}`}>
             <div className="flex items-center justify-between">
               <p>{alertMessage}</p>
-              <button 
+              <button
                 onClick={closeAlert}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 ml-4"
               >
