@@ -92,7 +92,6 @@ Thumbs.db
 
 # Uploads and backups
 uploads/
-backups/
 
 # PM2
 .pm2/
