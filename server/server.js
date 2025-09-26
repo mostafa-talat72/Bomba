@@ -97,38 +97,51 @@ const allowedOrigins =
 // إزالة القيم الفارغة من المصفوفة
 const filteredOrigins = allowedOrigins.filter(Boolean);
 
-app.use(
-    cors({
-        origin: function (origin, callback) {
-            // السماح بطلبات بدون origin (مثل الطلبات من تطبيقات الجوال)
-            if (!origin) return callback(null, true);
+// إعدادات CORS مبسطة للتطوير
+const corsOptions = {
+    origin: function (origin, callback) {
+        // السماح بجميع المنشآت في وضع التطوير
+        if (process.env.NODE_ENV === 'development') {
+            return callback(null, true);
+        }
 
-            // التحقق مما إذا كان origin مسموحاً به
-            if (
-                filteredOrigins.some((allowedOrigin) => {
-                    if (typeof allowedOrigin === "string") {
-                        return origin === allowedOrigin;
-                    } else if (allowedOrigin instanceof RegExp) {
-                        return allowedOrigin.test(origin);
-                    }
-                    return false;
-                })
-            ) {
-                return callback(null, true);
+        // قائمة بالمنشآت المسموح بها في الإنتاج
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'https://bomba-iota.vercel.app',
+            /^\.*\.vercel\.app$/, // يسمح بجميع النطاقات الفرعية من vercel.app
+        ];
+
+        // السماح بطلبات بدون origin (مثل الطلبات من تطبيقات الجوال)
+        if (!origin) return callback(null, true);
+
+        // التحقق مما إذا كان origin مسموحاً به
+        if (allowedOrigins.some(allowedOrigin => {
+            if (typeof allowedOrigin === 'string') {
+                return origin === allowedOrigin;
+            } else if (allowedOrigin instanceof RegExp) {
+                return allowedOrigin.test(origin);
             }
+            return false;
+        })) {
+            return callback(null, true);
+        }
 
-            // إذا لم يتم العثور على origin مسموح به
-            return callback(new Error("Not allowed by CORS"));
-        },
-        credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-        exposedHeaders: ["Content-Range", "X-Total-Count"],
-    })
-);
+        // إذا لم يتم العثور على origin مسموح به
+        return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'X-Total-Count']
+};
+
+// تطبيق إعدادات CORS
+app.use(cors(corsOptions));
 
 // معالجة تلقائية لطلبات preflight OPTIONS
-app.options("*", cors());
+app.options('*', cors(corsOptions));
 
 // Security middleware
 app.use(

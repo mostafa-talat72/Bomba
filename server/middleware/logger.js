@@ -1,12 +1,3 @@
-import fs from "fs";
-import path from "path";
-
-// Ensure logs directory exists
-const logsDir = "./logs";
-if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
-}
-
 // Log levels
 const LOG_LEVELS = {
     ERROR: "ERROR",
@@ -25,51 +16,34 @@ const createLogEntry = (level, message, meta = {}) => {
     };
 };
 
-// Write log to file
-const writeLog = (filename, logEntry) => {
-    const logPath = path.join(logsDir, filename);
-    const logLine = JSON.stringify(logEntry) + "\n";
-
-    fs.appendFile(logPath, logLine, (err) => {
-        if (err) {
-            console.error("Error writing to log file:", err);
-        }
-    });
-};
-
 // Logger class
 class Logger {
     static error(message, meta = {}) {
         const logEntry = createLogEntry(LOG_LEVELS.ERROR, message, meta);
-        writeLog("error.log", logEntry);
-        console.error("يوجد خطأ! راجع ملف logs/error.log");
+        console.error(JSON.stringify(logEntry));
+        
         if (meta && meta.error) {
-            console.error("تفاصيل الخطأ:", meta.error);
+            console.error("Error details:", meta.error);
         }
         if (meta && meta.stack) {
             console.error("Stack Trace:", meta.stack);
-        }
-        if (typeof message === "object") {
-            console.error(JSON.stringify(message, null, 2));
-        } else {
-            console.error(message);
         }
     }
 
     static warn(message, meta = {}) {
         const logEntry = createLogEntry(LOG_LEVELS.WARN, message, meta);
-        writeLog("app.log", logEntry);
+        console.warn(JSON.stringify(logEntry));
     }
 
     static info(message, meta = {}) {
         const logEntry = createLogEntry(LOG_LEVELS.INFO, message, meta);
-        writeLog("app.log", logEntry);
+        console.log(JSON.stringify(logEntry));
     }
 
     static debug(message, meta = {}) {
         if (process.env.NODE_ENV === "development") {
             const logEntry = createLogEntry(LOG_LEVELS.DEBUG, message, meta);
-            writeLog("debug.log", logEntry);
+            console.debug(JSON.stringify(logEntry));
         }
     }
 
@@ -81,18 +55,36 @@ class Logger {
             action,
             ...details,
         });
-        writeLog("audit.log", logEntry);
+        console.log(JSON.stringify(logEntry));
     }
 }
 
 // Express middleware for request logging
 export const requestLogger = (req, res, next) => {
     const start = Date.now();
+    const { method, originalUrl, ip } = req;
+
+    // Log request
+    Logger.info('Request received', {
+        method,
+        url: originalUrl,
+        ip,
+        headers: req.headers,
+        body: req.body
+    });
 
     // Override res.end to log response
     const originalEnd = res.end;
     res.end = function (chunk, encoding) {
         const duration = Date.now() - start;
+        
+        // Log response
+        Logger.info('Response sent', {
+            statusCode: res.statusCode,
+            duration: `${duration}ms`,
+            url: originalUrl,
+            method
+        });
 
         originalEnd.call(this, chunk, encoding);
     };
