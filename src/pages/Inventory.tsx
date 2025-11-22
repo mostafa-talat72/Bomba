@@ -47,10 +47,18 @@ const Inventory = () => {
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error'>('success');
+  const [menuCategories, setMenuCategories] = useState<Array<{ id: string; name: string }>>([]);
 
-  // القيم المسموحة للفئة والوحدة
-  const categoryOptions = ['مشروبات ساخنة', 'مشروبات باردة', 'طعام', 'حلويات', 'مواد خام', 'أخرى'];
+  // القيم المسموحة للوحدة
   const unitOptions = ['قطعة', 'كيلو', 'جرام', 'لتر', 'مل', 'علبة', 'كيس', 'زجاجة'];
+  
+  // الفئات الافتراضية + الفئات من المنيو
+  const defaultCategories = ['مشروبات ساخنة', 'مشروبات باردة', 'طعام', 'حلويات', 'مواد خام', 'أخرى'];
+  const categoryOptions = useMemo(() => {
+    const menuCategoryNames = menuCategories.map(cat => cat.name);
+    const allCategories = [...new Set([...defaultCategories, ...menuCategoryNames])];
+    return allCategories.sort();
+  }, [menuCategories]);
   const costStatusOptions = [
     { value: 'pending', label: 'معلق' },
     { value: 'paid', label: 'مدفوع' },
@@ -58,11 +66,28 @@ const Inventory = () => {
     { value: 'overdue', label: 'متأخر' },
   ];
 
-  // جلب بيانات المخزون عند تحميل الصفحة
+  // جلب بيانات المخزون والفئات عند تحميل الصفحة
   useEffect(() => {
     fetchInventoryItems();
+    fetchMenuCategories();
     // eslint-disable-next-line
   }, []);
+  
+  // جلب فئات المنيو
+  const fetchMenuCategories = async () => {
+    try {
+      const response = await api.getMenuCategories();
+      if (response.success && response.data) {
+        setMenuCategories(response.data.map((cat: any) => ({
+          id: cat.id || cat._id,
+          name: cat.name
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching menu categories:', error);
+      // لا نعرض خطأ للمستخدم - سنستخدم الفئات الافتراضية
+    }
+  };
 
   // إضافة دعم مفتاح ESC للخروج من النوافذ
   useEffect(() => {
@@ -404,7 +429,6 @@ const Inventory = () => {
       }
       return { isUsed: false, itemName: 'هذا المنتج' };
     } catch (err) {
-      console.error('خطأ في التحقق من استخدام المنتج في القائمة:', err);
       return { isUsed: true, itemName: 'هذا المنتج' }; // في حالة الخطأ، نمنع الحذف كإجراء احترازي
     }
   };
@@ -443,7 +467,6 @@ const Inventory = () => {
         showAlertMessage(errorMsg, 'error');
       }
     } catch (err) {
-      console.error('خطأ في حذف المنتج:', err);
       setError('حدث خطأ أثناء حذف المنتج');
       showAlertMessage('حدث خطأ أثناء حذف المنتج', 'error');
     } finally {

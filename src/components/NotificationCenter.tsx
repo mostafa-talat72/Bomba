@@ -98,8 +98,7 @@ const NotificationCenter: React.FC = () => {
         await forceRefreshNotifications();
         await loadStats();
       } catch (error) {
-        console.error('Error marking all notifications as read:', error);
-      } finally {
+        } finally {
         setIsMarkingAllAsRead(false);
       }
     }
@@ -169,8 +168,7 @@ const NotificationCenter: React.FC = () => {
         badge.style.display = newCount > 0 ? 'flex' : 'none';
       }
     } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
@@ -192,13 +190,11 @@ const NotificationCenter: React.FC = () => {
         setStats(null);
       }
     } catch (error) {
-      console.error('Error loading notification stats:', error);
-    }
+      }
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
     if (!notificationId) {
-      console.error('Notification ID is undefined');
       return;
     }
 
@@ -208,8 +204,7 @@ const NotificationCenter: React.FC = () => {
         await forceRefreshNotifications(); // تحديث الإشعارات فوراً بعد تحديد إشعار كمقروء
       }
     } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
+      }
   };
 
   // Mark notification as read on hover (instant, no delay, no temp message)
@@ -233,13 +228,11 @@ const NotificationCenter: React.FC = () => {
       await forceRefreshNotifications(); // تحديث الإشعارات فوراً بعد تحديد الكل كمقروء
       await loadStats(); // تحديث الإحصائيات فوراً
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
-    }
+      }
   };
 
   const handleDelete = async (notificationId: string) => {
     if (!notificationId) {
-      console.error('Notification ID is undefined');
       return;
     }
 
@@ -264,8 +257,7 @@ const NotificationCenter: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('Error deleting notification:', error);
-    }
+      }
   };
 
   const getNotificationIcon = (type: string) => {
@@ -345,8 +337,7 @@ const NotificationCenter: React.FC = () => {
                   await forceRefreshNotifications();
                   await loadStats();
                 } catch (error) {
-                  console.error('Error marking all notifications as read on close:', error);
-                } finally {
+                  } finally {
                   setIsMarkingAllAsRead(false);
                 }
               }
@@ -374,8 +365,7 @@ const NotificationCenter: React.FC = () => {
                       await forceRefreshNotifications();
                       await loadStats();
                     } catch (error) {
-                      console.error('Error marking all notifications as read on close:', error);
-                    } finally {
+                      } finally {
                       setIsMarkingAllAsRead(false);
                     }
                   }
@@ -570,8 +560,7 @@ const NotificationCenter: React.FC = () => {
                     await forceRefreshNotifications();
                     await loadStats();
                   } catch (error) {
-                    console.error('Error marking all notifications as read on close:', error);
-                  } finally {
+                    } finally {
                     setIsMarkingAllAsRead(false);
                   }
                 }

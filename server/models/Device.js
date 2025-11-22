@@ -59,8 +59,10 @@ const deviceSchema = new mongoose.Schema(
     }
 );
 
-// Index for faster queries
-deviceSchema.index({ status: 1 });
+// Indexes for faster queries
+deviceSchema.index({ status: 1, organization: 1 }); // للبحث عن الأجهزة المتاحة
+deviceSchema.index({ type: 1, organization: 1 }); // للبحث حسب النوع
+deviceSchema.index({ number: 1, organization: 1 }, { unique: true }); // رقم الجهاز فريد لكل منظمة
 
 // Middleware to generate number with prefix before saving
 deviceSchema.pre("save", function (next) {

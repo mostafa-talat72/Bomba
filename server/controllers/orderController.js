@@ -2,9 +2,11 @@ import Order from "../models/Order.js";
 import InventoryItem from "../models/InventoryItem.js";
 import MenuItem from "../models/MenuItem.js";
 import Bill from "../models/Bill.js";
+import Table from "../models/Table.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import mongoose from "mongoose";
+import performanceMetrics from "../utils/performanceMetrics.js";
 import {
     convertQuantity,
     calculateTotalInventoryNeeded,
@@ -18,12 +20,13 @@ import {
 // @route   GET /api/orders
 // @access  Private
 export const getOrders = async (req, res) => {
+    const queryStartTime = Date.now();
     try {
-        const { status, tableNumber, page = 1, limit = 10, date } = req.query;
+        const { status, table, page = 1, limit = 50, date } = req.query;
 
         const query = {};
         if (status) query.status = status;
-        if (tableNumber) query.tableNumber = tableNumber;
+        if (table) query.table = table;
         query.organization = req.user.organization;
 
         // Filter by date if provided
@@ -38,24 +41,59 @@ export const getOrders = async (req, res) => {
             };
         }
 
+        // Enforce maximum limit of 100 records per request
+        const effectiveLimit = Math.min(parseInt(limit) || 50, 100);
+        const effectivePage = parseInt(page) || 1;
+
+        // Selective field projection - only required fields
         const orders = await Order.find(query)
-            .populate("createdBy", "name")
-            .populate("preparedBy", "name")
-            .populate("deliveredBy", "name")
-            .populate("bill")
+            .select('orderNumber customerName table status items total createdAt')
+            .populate('createdBy', 'name')
+            .populate('bill', 'billNumber status')
+            .populate('table', 'number name')
             .sort({ createdAt: -1 })
-            .limit(limit * 1)
-            .skip((page - 1) * limit);
+            .limit(effectiveLimit)
+            .skip((effectivePage - 1) * effectiveLimit)
+            .lean(); // Convert to plain JS objects for better performance
 
         const total = await Order.countDocuments(query);
+
+        const queryExecutionTime = Date.now() - queryStartTime;
+
+        // Log query performance
+        Logger.queryPerformance('/api/orders', queryExecutionTime, orders.length, {
+            filters: { status, table, date },
+            page: effectivePage,
+            limit: effectiveLimit,
+            totalRecords: total
+        });
+
+        // Record query metrics
+        performanceMetrics.recordQuery({
+            endpoint: '/api/orders',
+            executionTime: queryExecutionTime,
+            recordCount: orders.length,
+            filters: { status, table, date },
+            page: effectivePage,
+            limit: effectiveLimit,
+        });
 
         res.json({
             success: true,
             count: orders.length,
             total,
             data: orders,
+            pagination: {
+                page: effectivePage,
+                limit: effectiveLimit,
+                hasMore: orders.length === effectiveLimit && (effectivePage * effectiveLimit) < total
+            }
         });
     } catch (error) {
+        Logger.error("خطأ في جلب الطلبات", {
+            error: error.message,
+            executionTime: `${Date.now() - queryStartTime}ms`
+        });
         res.status(500).json({
             success: false,
             message: "خطأ في جلب الطلبات",
@@ -181,7 +219,6 @@ export const calculateOrderRequirements = async (req, res) => {
 
         res.json(response);
     } catch (error) {
-        console.error("Error in calculateOrderRequirements:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في حساب متطلبات الطلب",
@@ -195,7 +232,7 @@ export const calculateOrderRequirements = async (req, res) => {
 // @access  Private
 export const createOrder = async (req, res) => {
     try {
-        const { tableNumber, customerName, customerPhone, items, notes, bill } =
+        const { table, customerName, customerPhone, items, notes, bill } =
             req.body;
 
         // Validate items
@@ -204,6 +241,25 @@ export const createOrder = async (req, res) => {
                 success: false,
                 message: "يجب إضافة عنصر واحد على الأقل للطلب",
             });
+        }
+
+        // Validate table ObjectId if provided
+        if (table) {
+            if (!mongoose.Types.ObjectId.isValid(table)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "معرف الطاولة غير صحيح",
+                });
+            }
+
+            // Verify table exists
+            const tableDoc = await Table.findById(table);
+            if (!tableDoc) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الطاولة غير موجودة",
+                });
+            }
         }
 
         // حساب المخزون المطلوب لجميع الأصناف
@@ -315,6 +371,78 @@ export const createOrder = async (req, res) => {
             "0"
         )}`;
 
+        // البحث عن فاتورة غير مدفوعة للطاولة أو إنشاء فاتورة جديدة
+        let billToUse = bill;
+        
+        // إذا كان هناك table ولم يكن bill محدداً، ابحث عن فاتورة غير مدفوعة
+        if (table && !billToUse) {
+            try {
+                // Get table info for logging
+                const tableDoc = await Table.findById(table);
+                const tableNumber = tableDoc ? tableDoc.number : table;
+                
+                // البحث عن فاتورة غير مدفوعة للطاولة (draft, partial, overdue)
+                // يشمل جميع أنواع الفواتير: playstation, computer, cafe
+                const existingBill = await Bill.findOne({
+                    table: table,
+                    organization: req.user.organization,
+                    status: { $in: ['draft', 'partial', 'overdue'] }
+                }).sort({ createdAt: -1 }); // أحدث فاتورة
+
+                if (existingBill) {
+                    billToUse = existingBill._id;
+                    Logger.info(`✓ تم العثور على فاتورة موجودة للطاولة ${tableNumber}:`, {
+                        billId: existingBill._id,
+                        billNumber: existingBill.billNumber,
+                        billType: existingBill.billType,
+                        status: existingBill.status
+                    });
+                } else {
+                    // إنشاء فاتورة جديدة للطاولة
+                    const billData = {
+                        table: table,
+                        customerName: customerName || `طاولة ${tableNumber}`,
+                        customerPhone: customerPhone || null,
+                        orders: [],
+                        sessions: [],
+                        subtotal: 0,
+                        total: 0,
+                        discount: 0,
+                        tax: 0,
+                        paid: 0,
+                        remaining: 0,
+                        status: 'draft',
+                        paymentMethod: 'cash',
+                        billType: 'cafe',
+                        createdBy: req.user._id,
+                        organization: req.user.organization,
+                    };
+
+                    const newBill = await Bill.create(billData);
+                    billToUse = newBill._id;
+                    Logger.info(`✓ تم إنشاء فاتورة جديدة للطاولة ${tableNumber}:`, {
+                        billId: newBill._id,
+                        billNumber: newBill.billNumber,
+                        billType: newBill.billType
+                    });
+                }
+
+                // Update table status to 'occupied'
+                if (tableDoc) {
+                    tableDoc.status = 'occupied';
+                    await tableDoc.save();
+                    Logger.info(`✓ تم تحديث حالة الطاولة ${tableNumber} إلى محجوزة`);
+                }
+            } catch (error) {
+                Logger.error('خطأ في البحث عن الفاتورة أو إنشائها:', error);
+            }
+        }
+
+        // ربط الطلب بالفاتورة
+        if (billToUse) {
+            orderData.bill = billToUse;
+        }
+
         const order = new Order(orderData);
 
         await order.save();
@@ -323,21 +451,34 @@ export const createOrder = async (req, res) => {
         const populatedOrder = await Order.findById(order._id)
             .populate("createdBy", "name")
             .populate("bill")
-            .populate("items.menuItem");
+            .populate("table", "number name")
+            .populate("organization", "name")
+            .populate({
+                path: "items.menuItem",
+                populate: {
+                    path: "category",
+                    populate: {
+                        path: "section"
+                    }
+                }
+            });
 
         // Add order to bill if bill exists
-        if (bill) {
+        if (billToUse) {
             try {
-                const billDoc = await Bill.findById(bill);
+                const billDoc = await Bill.findById(billToUse);
                 if (billDoc) {
-                    billDoc.orders.push(order._id);
+                    // التأكد من أن الطلب غير موجود بالفعل في الفاتورة
+                    if (!billDoc.orders.includes(order._id)) {
+                        billDoc.orders.push(order._id);
+                    }
                     await billDoc.save();
 
                     // Recalculate bill totals
                     await billDoc.calculateSubtotal();
                 }
             } catch (error) {
-                //
+                Logger.error('خطأ في إضافة الطلب للفاتورة:', error);
             }
         }
 
@@ -350,6 +491,27 @@ export const createOrder = async (req, res) => {
             );
         } catch (notificationError) {
             //
+        }
+
+        // Emit Socket.IO event for order creation
+        if (req.io) {
+            try {
+                req.io.notifyOrderUpdate("created", populatedOrder);
+            } catch (socketError) {
+                Logger.error('فشل إرسال حدث Socket.IO', socketError);
+            }
+        }
+
+        // Emit table status update event if table is linked
+        if (table && req.io) {
+            try {
+                req.io.emit('table-status-update', { 
+                    tableId: table, 
+                    status: 'occupied' 
+                });
+            } catch (socketError) {
+                Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
+            }
         }
 
         res.status(201).json({
@@ -593,8 +755,19 @@ export const updateOrder = async (req, res) => {
 
         // Populate the order with related data for response
         const updatedOrder = await Order.findById(order._id)
-            .populate("items.menuItem", "name arabicName")
+            .populate({
+                path: "items.menuItem",
+                select: "name arabicName",
+                populate: {
+                    path: "category",
+                    populate: {
+                        path: "section"
+                    }
+                }
+            })
             .populate("bill", "billNumber customerName")
+            .populate("table", "number name")
+            .populate("organization", "name")
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
@@ -612,14 +785,21 @@ export const updateOrder = async (req, res) => {
             }
         }
 
+        // Emit Socket.IO event for order update
+        if (req.io) {
+            try {
+                req.io.notifyOrderUpdate("updated", updatedOrder);
+            } catch (socketError) {
+                Logger.error('فشل إرسال حدث Socket.IO', socketError);
+            }
+        }
+
         res.json({
             success: true,
             message: "تم تحديث الطلب بنجاح",
             data: updatedOrder,
         });
     } catch (error) {
-        console.error("Error updating order:", error);
-
         // Handle specific error types
         if (error.name === "ValidationError") {
             const errors = Object.values(error.errors).map((e) => e.message);
@@ -717,24 +897,92 @@ export const deleteOrder = async (req, res) => {
                 }
             }
         } catch (error) {
-            console.error("Error restoring inventory:", error);
             // لا نوقف عملية الحذف إذا فشل استرداد المخزون
         }
 
-        // Remove order from bill.orders if linked to a bill
+        // Remove order from bill.orders if linked to a bill BEFORE deleting the order
+        let billIdToCheck = null;
+        let tableIdToUpdate = null;
         if (order.bill) {
             const Bill = (await import("../models/Bill.js")).default;
+            const Session = (await import("../models/Session.js")).default;
             const orderIdStr = order._id.toString();
+            billIdToCheck = order.bill;
+            
             let billDoc = await Bill.findById(order.bill); // بدون populate
             if (billDoc) {
+                // Save bill ID and table ID before removing reference
+                const billId = billDoc._id;
+                tableIdToUpdate = billDoc.table;
+                
+                // Remove order from bill
                 billDoc.orders = billDoc.orders.filter(
                     (id) => id.toString() !== orderIdStr
                 );
+                
+                // Remove bill reference from the order before deleting
+                order.bill = undefined;
+                await order.save();
+                
+                // Save bill after removing order
                 await billDoc.save();
+                
+                // Check if bill is now empty (no orders and no sessions)
+                // Reload bill to get fresh data after removing order
+                billDoc = await Bill.findById(billId);
+                if (billDoc) {
+                    const hasOrders = billDoc.orders && billDoc.orders.length > 0;
+                    const hasSessions = billDoc.sessions && billDoc.sessions.length > 0;
+                    
+                    if (!hasOrders && !hasSessions) {
+                        // Delete the bill if it has no orders or sessions
+                        // Remove bill reference from any remaining orders and sessions before deletion
+                        await Order.updateMany({ bill: billId }, { $unset: { bill: 1 } });
+                        await Session.updateMany({ bill: billId }, { $unset: { bill: 1 } });
+                        // Delete the bill
+                        await billDoc.deleteOne();
+
+                        // Update table status to 'empty' if bill is deleted
+                        if (tableIdToUpdate) {
+                            try {
+                                const tableDoc = await Table.findById(tableIdToUpdate);
+                                if (tableDoc) {
+                                    tableDoc.status = 'empty';
+                                    await tableDoc.save();
+                                    Logger.info(`✓ تم تحديث حالة الطاولة ${tableDoc.number} إلى فارغة`);
+
+                                    // Emit table status update event
+                                    if (req.io) {
+                                        req.io.emit('table-status-update', { 
+                                            tableId: tableIdToUpdate, 
+                                            status: 'empty' 
+                                        });
+                                    }
+                                }
+                            } catch (tableError) {
+                                Logger.error('خطأ في تحديث حالة الطاولة:', tableError);
+                            }
+                        }
+                    } else {
+                        // Recalculate bill totals if there are still orders/sessions
+                        await billDoc.calculateSubtotal();
+                        await billDoc.save();
+                    }
+                }
             }
         }
 
+        // Delete the order
         await order.deleteOne();
+
+        // Emit Socket.IO event for order deletion
+        if (req.io) {
+            try {
+                req.io.notifyOrderUpdate("deleted", { _id: req.params.id });
+            } catch (socketError) {
+                Logger.error('فشل إرسال حدث Socket.IO', socketError);
+            }
+        }
 
         res.json({
             success: true,
@@ -759,7 +1007,14 @@ export const getPendingOrders = async (req, res) => {
             organization: req.user.organization,
         })
             .populate("items.menuItem", "name arabicName preparationTime")
-            .populate("bill", "billNumber customerName tableNumber")
+            .populate("bill", "billNumber customerName table")
+            .populate({
+                path: "bill",
+                populate: {
+                    path: "table",
+                    select: "number name"
+                }
+            })
             .populate("createdBy", "name")
             .sort({ createdAt: 1 });
 
@@ -1050,10 +1305,6 @@ export const updateOrderStatus = async (req, res) => {
                     }
                 }
             } catch (error) {
-                console.error(
-                    "Error restoring inventory on cancellation:",
-                    error
-                );
                 // لا نوقف عملية الإلغاء إذا فشل استرداد المخزون
             }
         }
@@ -1064,6 +1315,7 @@ export const updateOrderStatus = async (req, res) => {
         })
             .populate("items.menuItem", "name arabicName")
             .populate("bill", "billNumber customerName")
+            .populate("table", "number name")
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
@@ -1191,7 +1443,6 @@ export const updateOrderItemPrepared = async (req, res) => {
                     }
                 }
             } catch (error) {
-                console.error("Error deducting inventory:", error);
                 return res.status(500).json({
                     success: false,
                     message: "خطأ في خصم المخزون",
@@ -1232,6 +1483,7 @@ export const updateOrderItemPrepared = async (req, res) => {
         const updatedOrder = await Order.findById(order._id)
             .populate("items.menuItem", "name arabicName")
             .populate("bill", "billNumber customerName")
+            .populate("table", "number name")
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
@@ -1405,6 +1657,7 @@ export const deductOrderInventory = async (req, res) => {
         const updatedOrder = await Order.findById(order._id)
             .populate("items.menuItem", "name arabicName")
             .populate("bill", "billNumber customerName")
+            .populate("table", "number name")
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
@@ -1426,7 +1679,6 @@ export const deductOrderInventory = async (req, res) => {
             data: updatedOrder,
         });
     } catch (error) {
-        console.error("Error deducting order inventory:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في خصم المخزون",

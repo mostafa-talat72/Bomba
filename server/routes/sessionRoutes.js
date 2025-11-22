@@ -56,6 +56,13 @@ router.put(
     sessionController.endSession
 );
 
+// Unlink session from table (playstation and computer permissions)
+router.put(
+    "/:sessionId/unlink-table",
+    authorize("playstation", "computer", "all"),
+    sessionController.unlinkTableFromSession
+);
+
 // Get active sessions (playstation and computer permissions)
 router.get(
     "/status/active",

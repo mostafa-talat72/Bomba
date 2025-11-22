@@ -85,7 +85,6 @@ const EmailActions: React.FC = () => {
         setErrors({ email: data.message || 'فشل في إعادة إرسال رابط التفعيل' });
       }
     } catch (error) {
-      console.error('Resend verification error:', error);
       setErrors({ email: 'حدث خطأ أثناء إعادة إرسال رابط التفعيل' });
     } finally {
       setIsSubmitting(false);
@@ -120,7 +119,6 @@ const EmailActions: React.FC = () => {
         setErrors({ email: data.message || 'فشل في إرسال رابط إعادة تعيين كلمة المرور' });
       }
     } catch (error) {
-      console.error('Forgot password error:', error);
       setErrors({ email: 'حدث خطأ أثناء إرسال رابط إعادة تعيين كلمة المرور' });
     } finally {
       setIsSubmitting(false);

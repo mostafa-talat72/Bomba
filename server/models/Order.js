@@ -62,10 +62,11 @@ const orderSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
-        tableNumber: {
-            type: Number,
+        table: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Table",
             required: false,
-            min: 1,
+            default: null,
         },
         customerName: {
             type: String,
@@ -148,14 +149,11 @@ const orderSchema = new mongoose.Schema(
     }
 );
 
-// Create a unique index on orderNumber to prevent duplicates
-orderSchema.index({ orderNumber: 1 }, { unique: true });
-
 // Add pre-validate hook to ensure order number is set before validation
-orderSchema.pre('validate', function(next) {
+orderSchema.pre("validate", function (next) {
     if (!this.orderNumber) {
         // Set a temporary value to pass validation
-        this.orderNumber = 'TEMP';
+        this.orderNumber = "TEMP";
     }
     next();
 });
@@ -164,21 +162,21 @@ orderSchema.pre('validate', function(next) {
 orderSchema.pre("save", async function (next) {
     try {
         // Generate order number if new or if it's temporary
-        if (this.isNew || this.orderNumber === 'TEMP') {
+        if (this.isNew || this.orderNumber === "TEMP") {
             const now = new Date();
-            
+
             // Format date and time
             const year = now.getFullYear().toString().slice(-2);
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
-            
+            const month = String(now.getMonth() + 1).padStart(2, "0");
+            const day = String(now.getDate()).padStart(2, "0");
+            const hours = String(now.getHours()).padStart(2, "0");
+            const minutes = String(now.getMinutes()).padStart(2, "0");
+            const seconds = String(now.getSeconds()).padStart(2, "0");
+            const milliseconds = String(now.getMilliseconds()).padStart(3, "0");
+
             // Create a unique identifier using the full timestamp
             const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}${milliseconds}`;
-            
+
             // Create order number using the timestamp
             this.orderNumber = `ORD-${timestamp}`;
         }
@@ -224,7 +222,6 @@ orderSchema.pre("save", async function (next) {
 
         next();
     } catch (error) {
-        console.error("❌ Pre-save hook error:", error);
         next(error);
     }
 });
@@ -239,25 +236,19 @@ orderSchema.post("save", function (doc, next) {
 // Add post-save hook for error logging
 orderSchema.post("save", function (error, doc, next) {
     if (error) {
-        console.error("❌ Order save error:", {
-            error: error.message,
-            orderData: doc
-                ? {
-                      customerName: doc.customerName,
-                      itemsCount: doc.items ? doc.items.length : 0,
-                      subtotal: doc.subtotal,
-                  }
-                : "No doc",
-        });
     }
     next(error);
 });
 
-// Indexes
+// Indexes for performance optimization
 orderSchema.index({ orderNumber: 1 }, { unique: true });
-orderSchema.index({ tableNumber: 1 });
-orderSchema.index({ status: 1 });
-orderSchema.index({ createdAt: 1 });
 orderSchema.index({ bill: 1 });
+orderSchema.index({ table: 1 }); // Index for table field query performance
+
+// Compound indexes for common query patterns
+orderSchema.index({ organization: 1, status: 1, createdAt: -1 });
+orderSchema.index({ organization: 1, table: 1, createdAt: -1 });
+orderSchema.index({ organization: 1, createdAt: -1 });
+orderSchema.index({ table: 1, status: 1 }); // Index for table-status queries
 
 export default mongoose.model("Order", orderSchema);

@@ -113,8 +113,6 @@ router.post(
                 data: userResponse,
             });
         } catch (error) {
-            console.error("Error creating user:", error);
-
             // Handle specific database errors
             if (error.code === 11000) {
                 if (error.keyPattern && error.keyPattern.email) {

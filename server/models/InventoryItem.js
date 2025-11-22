@@ -10,14 +10,7 @@ const inventoryItemSchema = new mongoose.Schema(
         category: {
             type: String,
             required: [true, "فئة المنتج مطلوبة"],
-            enum: [
-                "مشروبات ساخنة",
-                "مشروبات باردة",
-                "طعام",
-                "حلويات",
-                "مواد خام",
-                "أخرى",
-            ],
+            // Remove enum to allow dynamic categories from menu
         },
         currentStock: {
             type: Number,

@@ -378,7 +378,7 @@ export const getMe = async (req, res) => {
                 message: "توكن غير صالح أو منتهي الصلاحية",
             });
         }
-        const user = await User.findById(decoded.id);
+        const user = await User.findById(decoded.id).populate('organization', 'name');
         if (!user) {
             return res
                 .status(401)
@@ -395,6 +395,7 @@ export const getMe = async (req, res) => {
                     permissions: user.permissions,
                     lastLogin: user.lastLogin,
                     organization: user.organization,
+                    organizationName: user.organization?.name,
                     status: user.status,
                 },
             },

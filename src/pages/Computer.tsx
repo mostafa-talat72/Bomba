@@ -111,7 +111,6 @@ const Computer: React.FC = () => {
         ]);
 
       } catch (error) {
-        console.error('Error loading initial data:', error);
         setLoadingError('حدث خطأ في تحميل البيانات');
       } finally {
         setIsInitialLoading(false);
@@ -140,8 +139,7 @@ const Computer: React.FC = () => {
         });
       }
     } catch (error) {
-      console.error('Error loading open bills:', error);
-    }
+      }
   };
 
   // تحميل الأجهزة
@@ -153,8 +151,7 @@ const Computer: React.FC = () => {
         setDevices(computerDevices);
       }
     } catch (error) {
-      console.error('Error loading devices:', error);
-    }
+      }
   };
 
   // إضافة جهاز جديد
@@ -182,8 +179,7 @@ const Computer: React.FC = () => {
       const errorMessage = error?.response?.data?.error || error?.message || 'حدث خطأ غير متوقع.';
       setAddDeviceError(errorMessage);
       showNotification(errorMessage, 'error');
-      console.error('addDevice error:', err);
-    } finally {
+      } finally {
       setIsAddingDevice(false);
     }
   };
@@ -275,7 +271,6 @@ const Computer: React.FC = () => {
           setSearchBill('');
           setSessionError(null);
         } catch (updateError) {
-          console.error('Error updating device status:', updateError);
           showNotification('تم بدء الجلسة ولكن حدث خطأ في تحديث حالة الجهاز', 'warning');
           setShowNewSession(false); // مع ذلك نقوم بإغلاق النافذة
         }
@@ -287,8 +282,7 @@ const Computer: React.FC = () => {
       const error = err as { message?: string; response?: { data?: { message?: string } } };
       setSessionError(error?.message || error?.response?.data?.message || 'حدث خطأ غير متوقع.');
       showNotification(error?.message || error?.response?.data?.message || 'حدث خطأ غير متوقع.', 'error');
-      console.error('createSession error:', err);
-    } finally {
+      } finally {
       setLoadingSession(false);
     }
   };
@@ -310,7 +304,6 @@ const Computer: React.FC = () => {
       await loadDevices();
       await fetchSessions();
     } catch (error) {
-      console.error('Error ending session:', error);
       showNotification('حدث خطأ أثناء إنهاء الجلسة', 'error');
     } finally {
       setEndingSessions(prev => ({ ...prev, [sessionId]: false }));

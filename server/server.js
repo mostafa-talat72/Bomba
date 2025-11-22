@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import compression from "compression";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
@@ -9,6 +10,7 @@ import connectDB from "./config/database.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { requestLogger, errorLogger } from "./middleware/logger.js";
 import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
+import { performanceMonitor } from "./middleware/performanceMonitor.js";
 import { setupSocketIO } from "./socket/socketHandler.js";
 import { initializeScheduler } from "./utils/scheduler.js";
 import Logger from "./middleware/logger.js";
@@ -28,6 +30,8 @@ import settingsRoutes from "./routes/settingsRoutes.js";
 import deviceRoutes from "./routes/deviceRoutes.js";
 import menuRoutes from "./routes/menuRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import tableRoutes from "./routes/tableRoutes.js";
+import performanceRoutes from "./routes/performanceRoutes.js";
 
 // Load environment variables
 dotenv.config();
@@ -101,15 +105,15 @@ const filteredOrigins = allowedOrigins.filter(Boolean);
 const corsOptions = {
     origin: function (origin, callback) {
         // السماح بجميع المنشآت في وضع التطوير
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.NODE_ENV === "development") {
             return callback(null, true);
         }
 
         // قائمة بالمنشآت المسموح بها في الإنتاج
         const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:5173',
-            'https://bomba-iota.vercel.app',
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://bomba-iota.vercel.app",
             /^\.*\.vercel\.app$/, // يسمح بجميع النطاقات الفرعية من vercel.app
         ];
 
@@ -117,31 +121,44 @@ const corsOptions = {
         if (!origin) return callback(null, true);
 
         // التحقق مما إذا كان origin مسموحاً به
-        if (allowedOrigins.some(allowedOrigin => {
-            if (typeof allowedOrigin === 'string') {
-                return origin === allowedOrigin;
-            } else if (allowedOrigin instanceof RegExp) {
-                return allowedOrigin.test(origin);
-            }
-            return false;
-        })) {
+        if (
+            allowedOrigins.some((allowedOrigin) => {
+                if (typeof allowedOrigin === "string") {
+                    return origin === allowedOrigin;
+                } else if (allowedOrigin instanceof RegExp) {
+                    return allowedOrigin.test(origin);
+                }
+                return false;
+            })
+        ) {
             return callback(null, true);
         }
 
         // إذا لم يتم العثور على origin مسموح به
-        return callback(new Error('Not allowed by CORS'));
+        return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Range', 'X-Total-Count']
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    exposedHeaders: ["Content-Range", "X-Total-Count"],
 };
 
 // تطبيق إعدادات CORS
 app.use(cors(corsOptions));
 
 // معالجة تلقائية لطلبات preflight OPTIONS
-app.options('*', cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+// Compression middleware - يضغط الاستجابات لتقليل حجم البيانات
+app.use(compression({
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+            return false;
+        }
+        return compression.filter(req, res);
+    },
+    level: 6 // مستوى الضغط (0-9)
+}));
 
 // Security middleware
 app.use(
@@ -163,6 +180,9 @@ app.set("trust proxy", 1);
 
 // Request logging
 app.use(requestLogger);
+
+// Performance monitoring
+app.use(performanceMonitor);
 
 // Rate limiting
 app.use("/api/", apiLimiter);
@@ -218,6 +238,8 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/devices", deviceRoutes);
 app.use("/api/menu", menuRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/tables", tableRoutes);
+app.use("/api/performance", performanceRoutes);
 
 // Public bill viewing route - متاح للجميع بدون تسجيل دخول
 app.get("/bill/:billId", async (req, res) => {

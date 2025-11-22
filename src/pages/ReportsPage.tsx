@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { 
-  format, 
-  addDays, 
-  addMonths, 
-  startOfDay, 
-  endOfDay, 
-  startOfMonth, 
-  endOfMonth, 
-  startOfYear, 
-  endOfYear, 
-  startOfWeek, 
+import {
+  format,
+  addDays,
+  addMonths,
+  startOfDay,
+  endOfDay,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+  startOfWeek,
   endOfWeek,
   subDays,
   subWeeks,
@@ -134,14 +134,14 @@ interface StatCardProps {
 
 const formatDate = (date: Date): string => format(date, 'yyyy-MM-dd');
 
-const formatArabicDate = (date: Date): string => 
+const formatArabicDate = (date: Date): string =>
   format(date, 'dd MMMM yyyy', { locale: ar });
 
-const calculateNetProfit = (financialData: FinancialData): number => 
+const calculateNetProfit = (financialData: FinancialData): number =>
   financialData.totalRevenue - financialData.totalExpenses;
 
-const calculateProfitMargin = (financialData: FinancialData): number => 
-  financialData.totalRevenue === 0 ? 0 : 
+const calculateProfitMargin = (financialData: FinancialData): number =>
+  financialData.totalRevenue === 0 ? 0 :
   ((financialData.totalRevenue - financialData.totalExpenses) / financialData.totalRevenue) * 100;
 
 // ==============================================
@@ -151,7 +151,6 @@ const calculateProfitMargin = (financialData: FinancialData): number =>
 type ApiResponse<T> = Promise<T>;
 
 async function getSalesReport(filter: ReportFilter): ApiResponse<SalesData> {
-  console.log('Fetching sales report with filter:', filter);
   // Simulate API call
   return new Promise(resolve => {
     setTimeout(() => {
@@ -177,7 +176,6 @@ async function getSalesReport(filter: ReportFilter): ApiResponse<SalesData> {
 }
 
 async function getSessionsReport(filter: ReportFilter): ApiResponse<SessionsData> {
-  console.log('Fetching sessions report with filter:', filter);
   // Simulate API call
   return new Promise(resolve => {
     setTimeout(() => {
@@ -199,7 +197,6 @@ async function getSessionsReport(filter: ReportFilter): ApiResponse<SessionsData
 }
 
 async function getInventoryReport(filter: ReportFilter): ApiResponse<InventoryData> {
-  console.log('Fetching inventory report with filter:', filter);
   // Simulate API call
   return new Promise(resolve => {
     setTimeout(() => {
@@ -218,7 +215,6 @@ async function getInventoryReport(filter: ReportFilter): ApiResponse<InventoryDa
 }
 
 async function getFinancialReport(filter: ReportFilter): ApiResponse<FinancialData> {
-  console.log('Fetching financial report with filter:', filter);
   // Simulate API call
   return new Promise(resolve => {
     setTimeout(() => {
@@ -272,7 +268,7 @@ const StatCard = ({
       <div className="mt-1 text-sm text-red-600">
         {error}
         {onRetry && (
-          <button 
+          <button
             onClick={onRetry}
             className="ml-2 text-blue-600 hover:underline"
           >
@@ -315,7 +311,7 @@ const FilterControls = ({
             <option value="monthly">شهري</option>
             <option value="yearly">سنوي</option>
           </select>
-        
+
         {filterType === 'period' && (
           <select
             value={selectedPeriod}
@@ -332,7 +328,7 @@ const FilterControls = ({
             <option value="lastYear">السنة الماضية</option>
           </select>
         )}
-        
+
         {filterType === 'daily' && (
           <input
             type="date"
@@ -341,7 +337,7 @@ const FilterControls = ({
             className="px-3 py-1 text-sm border rounded"
           />
         )}
-        
+
         {filterType === 'monthly' && (
           <input
             type="month"
@@ -350,7 +346,7 @@ const FilterControls = ({
             className="px-3 py-1 text-sm border rounded"
           />
         )}
-        
+
         {filterType === 'yearly' && (
           <select
             value={customYear}
@@ -363,7 +359,7 @@ const FilterControls = ({
           </select>
         )}
       </div>
-      
+
       <div className="flex-1 flex justify-end gap-2">
         <button
           onClick={onResetFilter}
@@ -401,7 +397,7 @@ const ReportsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const currentFilter = useRef<ReportFilter | null>(null);
-  
+
   // Reports data state
   const [reports, setReports] = useState<ReportType>({
     sales: null,
@@ -424,7 +420,7 @@ const ReportsPage: React.FC = () => {
     inventory: null,
     financial: null
   });
-  
+
   // Initialize with default filter
   useEffect(() => {
     const initialFilter = buildFilter('period', 'today');
@@ -438,7 +434,7 @@ const ReportsPage: React.FC = () => {
   const [customMonth, setCustomMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
   const [customYear, setCustomYear] = useState<string>(new Date().getFullYear().toString());
   const [dateRangeLabel, setDateRangeLabel] = useState<string>('');
-  
+
   // Reports data state
   const [reports, setReports] = useState<ReportType>({
     sales: null,
@@ -465,7 +461,7 @@ const ReportsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const currentFilter = useRef<ReportFilter | null>(null);
-  
+
   // Format date with Arabic locale
   const formatDate = (date: Date | string): string => {
     return format(new Date(date), 'yyyy-MM-dd');
@@ -481,7 +477,7 @@ const ReportsPage: React.FC = () => {
 
     try {
       setIsLoading(true);
-      
+
       // Fetch all reports in parallel
       const [salesData, sessionsData, inventoryData, financialData] = await Promise.all([
         getSalesReport(currentFilter.current),
@@ -496,7 +492,7 @@ const ReportsPage: React.FC = () => {
         inventory: inventoryData,
         financial: financialData
       });
-      
+
       // Clear any previous errors
       setErrors({
         sales: null,
@@ -505,7 +501,6 @@ const ReportsPage: React.FC = () => {
         financial: null
       });
     } catch (error) {
-      console.error('Error loading reports:', error);
       setErrors(prev => ({
         ...prev,
         sales: error instanceof Error ? error.message : 'Failed to load sales data',
@@ -731,7 +726,7 @@ const ReportsPage: React.FC = () => {
       setIsLoading(true);
       const filter = buildFilter(filterType, selectedPeriod);
       currentFilter.current = filter;
-      
+
       // Update date range label
       if (filterType === 'period') {
         setDateRangeLabel(`${formatArabicDate(filter.startDate)} - ${formatArabicDate(filter.endDate)}`);
@@ -748,7 +743,6 @@ const ReportsPage: React.FC = () => {
       setIsLoading(false);
       setIsInitialLoad(false);
     } catch (error) {
-      console.error('Error loading reports:', error);
       setIsLoading(false);
     }
   }, [filterType, selectedPeriod, customDay, customMonth, customYear]);
@@ -756,7 +750,6 @@ const ReportsPage: React.FC = () => {
   // Handle export
   const handleExport = (format: 'pdf' | 'excel') => {
     // TODO: Implement export functionality
-    console.log(`Exporting to ${format}`, currentFilter.current);
   };
 
   // Initial load
@@ -783,7 +776,7 @@ const fetchReport = async (type: string, filter: ReportFilter): Promise<any> => 
 const buildFilter = useCallback((): ReportFilter => {
   let startDate: Date;
   let endDate: Date = new Date();
-  
+
   switch (filterType) {
     case 'period':
       switch (selectedPeriod) {
@@ -853,12 +846,12 @@ const buildFilter = useCallback((): ReportFilter => {
 // Load reports data
 const loadReports = useCallback(async () => {
   if (!currentFilter.current) return;
-  
+
   setIsLoading(true);
-  
+
   try {
     const filter = currentFilter.current;
-    
+
     // Load all reports in parallel
     const [sales, sessions, inventory, financial] = await Promise.all([
       getSalesReport(filter),
@@ -866,14 +859,14 @@ const loadReports = useCallback(async () => {
       getInventoryReport(filter),
       getFinancialReport(filter)
     ]);
-    
+
     setReports({
       sales,
       sessions,
       inventory,
       financial
     });
-    
+
     // Clear any previous errors
     setErrors({
       sales: null,
@@ -882,7 +875,6 @@ const loadReports = useCallback(async () => {
       financial: null
     });
   } catch (error) {
-    console.error('Error loading reports:', error);
     setError('sales', 'Failed to load sales data');
     setError('sessions', 'Failed to load sessions data');
     setError('inventory', 'Failed to load inventory data');
@@ -993,7 +985,6 @@ const renderReportContent = useCallback(() => {
 
 // Handle export
 const handleExport = useCallback((type: 'pdf' | 'excel') => {
-  console.log(`Exporting report as ${type}`, currentFilter.current);
   // TODO: Implement export functionality
 }, []);
 
@@ -1117,7 +1108,6 @@ const ReportsPage: React.FC = () => {
           financial: null
         });
       } catch (error) {
-        console.error('Error loading reports:', error);
         setErrors(prev => ({
           ...prev,
           sales: 'Failed to load sales data',

@@ -14,7 +14,6 @@ export const cleanupOldNotifications = async () => {
 
         return result.deletedCount;
     } catch (error) {
-        console.error("❌ خطأ في حذف الإشعارات القديمة:", error);
         throw error;
     }
 };
@@ -34,7 +33,6 @@ export const cleanupOldReadNotifications = async () => {
 
         return result.deletedCount;
     } catch (error) {
-        console.error("❌ خطأ في حذف الإشعارات المقروءة القديمة:", error);
         throw error;
     }
 };
@@ -54,7 +52,6 @@ export const cleanupOldUnreadNotifications = async () => {
 
         return result.deletedCount;
     } catch (error) {
-        console.error("❌ خطأ في حذف الإشعارات غير المقروءة القديمة:", error);
         throw error;
     }
 };
@@ -71,7 +68,6 @@ export const runCleanup = async () => {
 
         return totalDeleted;
     } catch (error) {
-        console.error("❌ خطأ في عملية تنظيف الإشعارات:", error);
         throw error;
     }
 };

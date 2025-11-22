@@ -1,2203 +1,1960 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingCart, Plus, Edit, Trash2, Clock, CheckCircle, User } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MenuItem, Order, Bill } from '../services/api';
-import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
-import { api } from '../services/api';
+import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
+import { formatCurrency } from '../utils/formatters';
+import { printOrderBySections } from '../utils/printOrderBySection';
+import api from '../services/api';
+import { io, Socket } from 'socket.io-client';
 
 interface LocalOrderItem {
   menuItem: string;
   name: string;
-  arabicName?: string;
   price: number;
   quantity: number;
-  preparedCount?: number;
   notes?: string;
 }
 
+// Memoized Table Button Component
+interface TableButtonProps {
+  table: Table;
+  isSelected: boolean;
+  isOccupied: boolean;
+  onClick: (table: Table) => void;
+}
+
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, onClick }) => {
+  return (
+    <button
+      onClick={() => onClick(table)}
+      className={`
+        p-4 rounded-lg border-2 transition-all duration-200
+        ${isSelected 
+          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20' 
+          : isOccupied
+          ? 'border-red-300 bg-red-50 dark:bg-red-900/20 hover:border-red-400'
+          : 'border-green-300 bg-green-50 dark:bg-green-900/20 hover:border-green-400'
+        }
+      `}
+    >
+      <div className="text-center">
+        <div className={`
+          text-2xl font-bold mb-1
+          ${isSelected 
+            ? 'text-orange-600 dark:text-orange-400' 
+            : isOccupied
+            ? 'text-red-600 dark:text-red-400'
+            : 'text-green-600 dark:text-green-400'
+          }
+        `}>
+          {table.number}
+        </div>
+        <div className={`
+          text-xs
+          ${isOccupied ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}
+        `}>
+          {isOccupied ? 'محجوزة' : 'فاضية'}
+        </div>
+      </div>
+    </button>
+  );
+});
+
+TableButton.displayName = 'TableButton';
+
+// Memoized Order Item Component
+interface OrderItemProps {
+  order: Order;
+  onPrint: (order: Order) => void;
+  onEdit: (order: Order) => void;
+  onDelete: (order: Order) => void;
+}
+
+const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete }) => {
+  // Calculate total from items if finalAmount is not available
+  const calculateTotal = () => {
+    if (order.finalAmount) return order.finalAmount;
+    if (order.totalAmount) return order.totalAmount;
+    
+    // Calculate from items
+    if (order.items && Array.isArray(order.items)) {
+      return order.items.reduce((sum: number, item: any) => {
+        const itemTotal = (item.price || 0) * (item.quantity || 0);
+        return sum + itemTotal;
+      }, 0);
+    }
+    
+    return 0;
+  };
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="font-semibold text-gray-900 dark:text-gray-100">
+            {order.orderNumber}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            {formatCurrency(calculateTotal())}
+          </div>
+        </div>
+        <div className="flex items-center space-x-2 space-x-reverse">
+          <button
+            onClick={() => onPrint(order)}
+            className="text-blue-600 hover:text-blue-700 p-1"
+            title="طباعة"
+          >
+            <Printer className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => onEdit(order)}
+            className="text-orange-600 hover:text-orange-700 p-1"
+            title="تعديل"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(order);
+            }}
+            className="text-red-600 hover:text-red-700 p-1"
+            title="حذف"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">
+        {order.items.length} عنصر
+      </div>
+    </div>
+  );
+});
+
+OrderItem.displayName = 'OrderItem';
+
 const Cafe: React.FC = () => {
   const {
+    tableSections,
+    tables,
+    fetchTableSections,
+    fetchTables,
     menuItems,
+    menuSections,
+    menuCategories,
     fetchAvailableMenuItems,
+    fetchMenuSections,
+    fetchMenuCategories,
     showNotification,
-    user,
+    createOrder,
     updateOrder,
+    deleteOrder,
+    getTableStatus: getTableStatusFromContext,
+    createTableSection,
+    updateTableSection,
+    deleteTableSection,
+    createTable,
+    updateTable,
+    deleteTable,
+    bills,
+    fetchBills,
+    orders,
+    fetchOrders,
+    user,
   } = useApp();
-  const [showNewOrder, setShowNewOrder] = useState(false);
-  const [customerName, setCustomerName] = useState('');
-  const [orderNotes, setOrderNotes] = useState('');
+
+  // States
   const [loading, setLoading] = useState(false);
-  const [updatingOrder, setUpdatingOrder] = useState(false);
-  const [activeTab, setActiveTab] = useState<'menu' | 'orders' | 'kitchen'>('menu');
-  const [categories, setCategories] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
-  const [readyOrders, setReadyOrders] = useState<any[]>([]);
-  const [currentOrder, setCurrentOrder] = useState<LocalOrderItem[]>([]);
+  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [tableOrders, setTableOrders] = useState<Order[]>([]);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showEditOrderModal, setShowEditOrderModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [currentOrderItems, setCurrentOrderItems] = useState<LocalOrderItem[]>([]);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({}); // Sections are collapsed by default
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [orderNotes, setOrderNotes] = useState('');
+  const [tableStatuses, setTableStatuses] = useState<Record<string | number, { hasUnpaid: boolean; orders: Order[] }>>({});
+  
+  // Management states
+  const [showManagementModal, setShowManagementModal] = useState(false);
+  const [showSectionModal, setShowSectionModal] = useState(false);
+  const [showTableModal, setShowTableModal] = useState(false);
+  const [editingSection, setEditingSection] = useState<TableSection | null>(null);
+  const [editingTable, setEditingTable] = useState<Table | null>(null);
+  const [sectionFormData, setSectionFormData] = useState({ name: '', description: '', sortOrder: 0 });
+  const [tableFormData, setTableFormData] = useState({ number: '', section: '' });
+  
+  // Confirm modal states
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmModalData, setConfirmModalData] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    cancelText?: string;
+    confirmColor?: string;
+  } | null>(null);
 
-  // فاتورة جديدة أو موجودة
-  const [billOption, setBillOption] = useState<'new' | 'existing'>('new');
-  const [selectedBillId, setSelectedBillId] = useState<string>('');
-  const [openBills, setOpenBills] = useState<any[]>([]);
-  const [searchBill, setSearchBill] = useState('');
-  const [selectedBill, setSelectedBill] = useState<any>(null);
-  const [showOrderDetails, setShowOrderDetails] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-  const [showEditOrder, setShowEditOrder] = useState(false);
-  const [editOrderData, setEditOrderData] = useState<any>(null);
-  const [todayStats, setTodayStats] = useState<{
-    totalOrders: number;
-    totalSales: number;
-    ordersByStatus: any;
-  }>({
-    totalOrders: 0,
-    totalSales: 0,
-    ordersByStatus: {}
-  });
+  // Track if we've loaded data for this page visit
+  const hasLoadedDataRef = React.useRef(false);
+  
+  // Socket.IO reference
+  const socketRef = useRef<Socket | null>(null);
+  
+  // Refs to track latest values without causing re-renders
+  const selectedTableRef = useRef(selectedTable);
+  const tablesRef = useRef(tables);
+  
+  // Update refs when values change
+  useEffect(() => {
+    selectedTableRef.current = selectedTable;
+  }, [selectedTable]);
+  
+  useEffect(() => {
+    tablesRef.current = tables;
+  }, [tables]);
 
-  // إضافة state لإدارة قيم الإدخال المباشر للتجهيز
-  const [preparedInputs, setPreparedInputs] = useState<{ [key: string]: string }>({});
-
-  // إضافة state لإدارة حالة التجهيز لكل طلب
-  const [preparingOrders, setPreparingOrders] = useState<{ [key: string]: boolean }>({});
-
-  // دالة لإدارة حالة التجهيز
-  const togglePreparing = (orderId: string) => {
-    setPreparingOrders(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
-  };
-
-  // دالة لتجهيز الطلب بالكامل
-  const prepareOrderComplete = async (orderId: string) => {
-    try {
-      const order = pendingOrders.find(o => o._id === orderId) || readyOrders.find(o => o._id === orderId);
-      if (!order || !order.items) {
-        showNotification('خطأ: الطلب غير موجود', 'error');
-        return;
-      }
-
-      // استخدام الدالة الجديدة لخصم جميع المكونات دفعة واحدة
-      const response = await api.deductOrderInventory(orderId);
-
-      if (response.success) {
-        // إزالة حالة التجهيز
-        setPreparingOrders(prev => {
-          const newState = { ...prev };
-          delete newState[orderId];
-          return newState;
-        });
-
-        showNotification('تم تجهيز الطلب بالكامل', 'success');
-
-        // إعادة تحميل البيانات
-        fetchPendingOrders();
-        fetchReadyOrders();
-      } else {
-        // عرض رسائل الخطأ التفصيلية
-        if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
-          const detailsMessage = response.data.details
-            .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
-            .join('\n');
-          showNotification(`المخزون غير كافي لتجهيز الطلب:\n${detailsMessage}`, 'error');
-        } else {
-          showNotification(response.message || 'خطأ في تجهيز الطلب', 'error');
-        }
-      }
-    } catch (error) {
-      showNotification('خطأ في تجهيز الطلب', 'error');
+  // Load data on mount - only once per page visit
+  useEffect(() => {
+    if (!hasLoadedDataRef.current) {
+      hasLoadedDataRef.current = true;
+      loadInitialData();
     }
-  };
+    
+    // Reset flag when component unmounts
+    return () => {
+      hasLoadedDataRef.current = false;
+    };
+  }, []);
 
-  // دالة لإدارة الإدخال المباشر للتجهيز
-  const handlePreparedInputChange = (orderId: string, itemIndex: number, value: string) => {
-    const key = `${orderId}-${itemIndex}`;
-    setPreparedInputs(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  };
+  // Socket.IO connection - initialize once on mount
+  useEffect(() => {
+    // Initialize Socket.IO connection
+    // Remove /api suffix from VITE_API_URL for Socket.IO connection
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const socketUrl = apiUrl.replace(/\/api\/?$/, '');
+    
+    const socket = io(socketUrl, {
+      path: '/socket.io/',
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      autoConnect: true,
+      forceNew: false,
+    });
 
-  // دالة لتطبيق الإدخال المباشر للتجهيز
-  const applyPreparedInput = async (orderId: string, itemIndex: number) => {
-    const key = `${orderId}-${itemIndex}`;
-    const inputValue = preparedInputs[key];
+    socketRef.current = socket;
 
-    if (!inputValue || inputValue.trim() === '') {
-      showNotification('يرجى إدخال عدد صحيح', 'error');
-      return;
-    }
+    // Connection event handlers
+    socket.on('connect', () => {
+      console.log('Socket.IO connected');
+    });
 
-    const preparedCount = parseInt(inputValue);
-    if (isNaN(preparedCount) || preparedCount < 0) {
-      showNotification('يرجى إدخال عدد صحيح موجب', 'error');
-      return;
-    }
+    socket.on('disconnect', (reason) => {
+      console.log('Socket.IO disconnected:', reason);
+      showNotification?.('انقطع الاتصال - جاري إعادة الاتصال...', 'warning');
+    });
 
-    // البحث عن الطلب للحصول على الكمية المطلوبة
-    const order = pendingOrders.find(o => o._id === orderId) || readyOrders.find(o => o._id === orderId);
-    if (!order || !order.items || !order.items[itemIndex]) {
-      showNotification('خطأ: الطلب أو الصنف غير موجود', 'error');
-      return;
-    }
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('Socket.IO reconnected after', attemptNumber, 'attempts');
+      showNotification?.('تم إعادة الاتصال', 'success');
+      // Refresh data to sync state
+      fetchAllTableStatuses();
+      fetchBills();
+    });
 
-    const maxQuantity = order.items[itemIndex].quantity || 0;
-    if (preparedCount > maxQuantity) {
-      showNotification(`لا يمكن تجاوز الكمية المطلوبة (${maxQuantity})`, 'error');
-      return;
-    }
+    socket.on('reconnect_error', (error) => {
+      console.error('Socket.IO reconnection error:', error);
+    });
 
-    try {
-      await updateItemPrepared(orderId, itemIndex, preparedCount);
-      // مسح قيمة الإدخال بعد التطبيق
-      setPreparedInputs(prev => {
-        const newState = { ...prev };
-        delete newState[key];
-        return newState;
+    socket.on('reconnect_failed', () => {
+      console.error('Socket.IO reconnection failed');
+      showNotification?.('فشل إعادة الاتصال. يرجى تحديث الصفحة.', 'error');
+    });
+
+    socket.on('connect_error', (error: any) => {
+      console.error('Socket.IO connection error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        description: error.description,
+        context: error.context,
+        type: error.type
       });
-    } catch (error) {
-      showNotification('خطأ في تحديث عدد التجهيز', 'error');
-    }
-  };
+    });
 
-  // Group menu items by category
-  const menuItemsByCategory = menuItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
-    }
-    acc[item.category].push(item);
-    return acc;
-  }, {} as Record<string, MenuItem[]>);
+    socket.on('error', (error) => {
+      console.error('Socket.IO error:', error);
+    });
 
-  // Fetch categories
-  useEffect(() => {
-    fetchCategories();
-    fetchOpenBills();
-    fetchPendingOrders();
-    fetchReadyOrders();
-    fetchTodayStats();
-
-    // إعادة تحميل البيانات كل 30 ثانية للتأكد من التحديث
-    const interval = setInterval(() => {
-      fetchPendingOrders();
-      fetchReadyOrders();
-      fetchTodayStats();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch menu items when component mounts
-  useEffect(() => {
-    fetchAvailableMenuItems();
-  }, []);
-
-  // Update categories when menu items are loaded
-  useEffect(() => {
-    if (menuItems.length > 0) {
-      const uniqueCategories = [...new Set(menuItems.map(item => item.category))];
-      setCategories(uniqueCategories);
-    }
-  }, [menuItems]);
-
-  // Fetch pending orders for kitchen
-  useEffect(() => {
-    if (activeTab === 'kitchen') {
-      // لا نحتاج لاستدعاء الدوال هنا لأنها تُستدعى في useEffect الأول
-      // فقط نضيف interval إضافي للطبخ
-      const interval = setInterval(() => {
-        fetchPendingOrders();
-        fetchReadyOrders();
-        fetchTodayStats();
-      }, 10000); // Refresh every 10 seconds
-      return () => clearInterval(interval);
-    }
-  }, [activeTab]);
-
-  const fetchCategories = async () => {
-    try {
-      // استخدام menuItems من الـ context بدلاً من استدعاء API مباشرة
-      if (menuItems.length > 0) {
-        const uniqueCategories = [...new Set(menuItems.map(item => item.category))];
-        setCategories(uniqueCategories);
+    // Listen for order-created event
+    socket.on('order-update', (data: any) => {
+      if (data.type === 'created' && data.order) {
+        // Update table statuses when a new order is created
+        fetchAllTableStatuses();
+        
+        // If the order is for the currently selected table, refresh its orders
+        const currentTable = selectedTableRef.current;
+        if (currentTable && data.order.table?._id === currentTable._id) {
+          handleTableClick(currentTable);
+        }
+      } else if (data.type === 'updated' && data.order) {
+        // Refresh table statuses on order update
+        fetchAllTableStatuses();
+        
+        // If the order is for the currently selected table, refresh its orders
+        const currentTable = selectedTableRef.current;
+        if (currentTable && data.order.table?._id === currentTable._id) {
+          handleTableClick(currentTable);
+        }
+      } else if (data.type === 'deleted') {
+        // Refresh table statuses on order deletion
+        fetchAllTableStatuses();
+        
+        // Refresh currently selected table's orders
+        const currentTable = selectedTableRef.current;
+        if (currentTable) {
+          handleTableClick(currentTable);
+        }
       }
-    } catch (error) {
-      // تجاهل الأخطاء
-    }
-  };
+    });
 
-  const fetchOpenBills = async () => {
-    try {
-      const response = await api.getBills();
-      if (response.success && response.data) {
-        response.data.forEach((bill: any) => {
-          if (bill.orders && bill.orders.length > 0) {
-            bill.orders.forEach((order: any) => {
-              if (order.items && order.items.length > 0) {
-                order.items.forEach((item: any, index: number) => {
-                  // تحضير البيانات للعرض
-                });
-              }
-            });
+    // Listen for bill-updated event
+    socket.on('bill-update', (data: any) => {
+      if (data.type === 'payment-received' || data.type === 'created' || data.type === 'deleted') {
+        // Refresh table statuses when bill is updated
+        fetchAllTableStatuses();
+        fetchBills();
+        
+        // If a table is selected, refresh its orders
+        const currentTable = selectedTableRef.current;
+        if (currentTable) {
+          handleTableClick(currentTable);
+        }
+      }
+    });
+
+    // Listen for table-status-update event
+    socket.on('table-status-update', (data: { tableId: string; status: string }) => {
+      // Find the table by ID and update its status in the UI immediately
+      const currentTables = tablesRef.current;
+      const table = currentTables.find(t => t._id === data.tableId || t.id === data.tableId);
+      if (table) {
+        // Update table statuses immediately
+        setTableStatuses(prev => ({
+          ...prev,
+          [table.number]: {
+            ...prev[table.number],
+            hasUnpaid: data.status === 'occupied'
           }
-        });
-        setOpenBills(response.data);
+        }));
       }
-    } catch (error) {
-      console.error('Error fetching open bills:', error);
-    }
-  };
+    });
 
-  const fetchPendingOrders = async () => {
-    try {
-      const response = await api.getPendingOrders();
-      if (response.success && response.data) {
-        const transformedOrders = response.data.map((order: any) => {
-          if (order.items && order.items.length > 0) {
-            order.items.forEach((item: any, index: number) => {
-              // تحضير البيانات للعرض
-            });
-          }
-          return order;
-        });
+    // Cleanup on unmount
+    return () => {
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('reconnect');
+      socket.off('reconnect_error');
+      socket.off('reconnect_failed');
+      socket.off('connect_error');
+      socket.off('error');
+      socket.off('order-update');
+      socket.off('bill-update');
+      socket.off('table-status-update');
+      socket.disconnect();
+    };
+  }, []); // Empty dependency array - only run once on mount
 
-        // تصفية الطلبات المسلمة أو الملغية
-        const filteredOrders = transformedOrders.filter((order: any) =>
-          order.status !== 'delivered' && order.status !== 'cancelled'
-        );
-
-        setPendingOrders(filteredOrders);
-      }
-    } catch (error) {
-      console.error('Error fetching pending orders:', error);
-    }
-  };
-
-  const fetchReadyOrders = async () => {
-    try {
-      const response = await api.getOrders({ status: 'ready' });
-      if (response.success && response.data) {
-        const transformedOrders = response.data.map((order: any) => {
-          if (order.items && order.items.length > 0) {
-            order.items.forEach((item: any, index: number) => {
-              // تحضير البيانات للعرض
-            });
-          }
-          return order;
-        });
-
-        // تصفية الطلبات المسلمة أو الملغية
-        const filteredOrders = transformedOrders.filter((order: any) =>
-          order.status !== 'delivered' && order.status !== 'cancelled'
-        );
-
-        setReadyOrders(filteredOrders);
-      }
-    } catch (error) {
-      console.error('Error fetching ready orders:', error);
-    }
-  };
-
-  const fetchTodayStats = async () => {
-    try {
-      const response = await api.getTodayOrdersStats();
-      if (response.success && response.data) {
-        setTodayStats(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching today stats:', error);
-    }
-  };
-
-  const filteredMenuItems = menuItems.filter(item =>
-    selectedCategory === 'all' || item.category === selectedCategory
-  );
-
-  const addToOrder = (item: MenuItem) => {
-    if (!item || !item._id || !item.name) {
-      showNotification('عنصر القائمة غير موجود أو غير معرف', 'error');
-      return;
-    }
-    const existingItem = currentOrder.find(orderItem => orderItem.menuItem === item._id);
-
-    if (existingItem) {
-      setCurrentOrder(currentOrder.map(orderItem =>
-        orderItem.menuItem === item._id
-          ? { ...orderItem, quantity: orderItem.quantity + 1 }
-          : orderItem
-      ));
-    } else {
-      setCurrentOrder([...currentOrder, {
-        menuItem: item._id,
-        name: item.name,
-        price: item.price,
-        quantity: 1,
-        preparedCount: 0,
-        notes: item.notes
-      }]);
-    }
-  };
-
-  const removeFromOrder = (menuItemId: string) => {
-    setCurrentOrder(currentOrder.filter(item => item.menuItem !== menuItemId));
-  };
-
-  const updateQuantity = (menuItemId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromOrder(menuItemId);
-    } else {
-      setCurrentOrder(currentOrder.map(item =>
-        item.menuItem === menuItemId
-          ? { ...item, quantity }
-          : item
-      ));
-    }
-  };
-
-  const calculateTotal = () => {
-    return currentOrder.reduce((total, item) => {
-      return total + (item.price * item.quantity);
-    }, 0);
-  };
-
-  const calculateEditOrderTotal = () => {
-    if (!editOrderData || !editOrderData.items) return 0;
-    return editOrderData.items.reduce((total, item) => {
-      return total + (item.price * item.quantity);
-    }, 0);
-  };
-
-  const handleCreateOrder = async () => {
-    if (currentOrder.length === 0) {
-      showNotification('يرجى إضافة عناصر للطلب', 'error');
-      return;
-    }
-
-    // تحقق صارم من كل عنصر
-    if (currentOrder.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
-      showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
-      return;
-    }
-
-    if (!customerName.trim()) {
-      showNotification('يرجى إدخال اسم العميل', 'error');
-      return;
-    }
-
+  const loadInitialData = async () => {
     setLoading(true);
-
     try {
-      // التحقق من المخزون قبل إنشاء الطلب
-      const orderData = {
-        customerName: customerName.trim(),
-        items: currentOrder.map(item => ({
-          menuItem: item.menuItem,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          notes: item.notes,
-        })),
-        notes: orderNotes
-      };
-
-      // التحقق من المخزون أولاً
-      const inventoryCheck = await api.calculateOrderRequirements(orderData);
-
-      if (!inventoryCheck.success) {
-        // إذا كان هناك تفاصيل ناقصة في المخزون، اعرضها بشكل واضح
-        if (
-          inventoryCheck.data &&
-          Array.isArray(inventoryCheck.data.details) &&
-          inventoryCheck.data.details.length > 0
-        ) {
-          const detailsTable = inventoryCheck.data.details
-            .map(
-              (d) =>
-                `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`
-            )
-            .join('\n');
-          showNotification(`المخزون غير كافي:\n${detailsTable}`, 'error');
-        } else if (inventoryCheck.data && Array.isArray(inventoryCheck.data.errors) && inventoryCheck.data.errors.length > 0) {
-          showNotification(`المخزون غير كافي:\n${inventoryCheck.data.errors.join('\n')}`, 'error');
-        } else {
-          showNotification('خطأ في التحقق من المخزون', 'error');
-        }
-        setLoading(false);
-        return;
-      }
-
-      // تحقق من وجود تفاصيل المكونات الناقصة حتى لو كان الفحص ناجح
-      if (inventoryCheck.data && inventoryCheck.data.details && inventoryCheck.data.details.length > 0) {
-        const detailsMessage = inventoryCheck.data.details
-          .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
-          .join('\n');
-        showNotification(`المخزون غير كافي:\n${detailsMessage}`, 'error');
-        setLoading(false);
-        return;
-      }
-
-      // إذا كان المخزون متوفر، تابع إنشاء الطلب
-
-      let response;
-      if (billOption === 'new') {
-        // 1. أنشئ الفاتورة أولاً
-        const billResponse = await api.createBill({
-          customerName: customerName.trim(),
-          orders: [],
-          sessions: [],
-          discount: 0,
-          tax: 0,
-          notes: orderNotes,
-          billType: 'cafe'
-        });
-        if (!billResponse.success || !billResponse.data) {
-          showNotification('فشل في إنشاء الفاتورة', 'error');
-          setLoading(false);
-          return;
-        }
-        const newBillId = billResponse.data._id || billResponse.data.id;
-
-        // 2. أنشئ الطلب
-        response = await api.createOrder(orderData);
-
-        // 3. اربط الطلب بالفاتورة الجديدة
-        if (response.success && response.data) {
-          await api.addOrderToBill(newBillId, response.data._id);
-        }
-      } else if (billOption === 'existing' && selectedBillId) {
-        response = await api.createOrder(orderData);
-        if (response.success && response.data) {
-          // إضافة الطلب إلى الفاتورة المختارة
-          await api.addOrderToBill(selectedBillId, response.data._id);
-        }
-      } else {
-        showNotification('يرجى اختيار فاتورة موجودة', 'error');
-        setLoading(false);
-        return;
-      }
-
-      if (response && response.success) {
-        showNotification('تم إنشاء الطلب بنجاح', 'success');
-        setShowNewOrder(false);
-        setCustomerName('');
-        setOrderNotes('');
-        setCurrentOrder([]);
-        setBillOption('new');
-        setSelectedBillId('');
-        setSelectedBill(null);
-        setSearchBill('');
-
-        // إعادة تحميل البيانات
-        setTimeout(() => {
-          fetchPendingOrders();
-          fetchReadyOrders();
-          fetchOpenBills();
-        }, 1000);
-      } else {
-        let errorMessage = 'خطأ في إنشاء الطلب';
-
-        // Handle specific inventory errors
-        if (response?.errors && Array.isArray(response.errors)) {
-          errorMessage = `المخزون غير كافي:\n${response.errors.join('\n')}`;
-        } else if (response?.details) {
-          errorMessage = response.details;
-        } else if (response?.message) {
-          errorMessage = response.message;
-        }
-
-        showNotification(errorMessage, 'error');
-      }
+      await Promise.all([
+        fetchTableSections(),
+        fetchTables(),
+        fetchAvailableMenuItems(),
+        fetchMenuSections(),
+        fetchMenuCategories(),
+        fetchBills(), // Fetch bills on initial load
+        fetchOrders(), // Fetch orders on initial load
+      ]);
+      // Fetch table statuses after loading tables and bills - INSTANT!
+      fetchAllTableStatuses();
     } catch (error) {
-      console.error('Error creating order:', error);
-      showNotification('خطأ في إنشاء الطلب', 'error');
+      showNotification('خطأ في تحميل البيانات', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const updateOrderStatus = async (orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled') => {
-    try {
-      const response = await api.updateOrderStatus(orderId, status);
-
-      if (response && response.success) {
-        // إعادة تحميل البيانات
-        fetchPendingOrders();
-        fetchReadyOrders();
-        return response;
-      } else {
-        const errorMessage = response?.message || 'خطأ في تحديث حالة الطلب';
-        showNotification(errorMessage, 'error');
-        return null;
-      }
-    } catch (error) {
-      console.error('Error updating order status:', error);
-      showNotification('خطأ في تحديث حالة الطلب', 'error');
-      return null;
-    }
-  };
-
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('ar-SA', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'preparing':
-        return 'bg-blue-100 text-blue-800';
-      case 'ready':
-        return 'bg-green-100 text-green-800';
-      case 'delivered':
-        return 'bg-gray-100 text-gray-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'في الانتظار';
-      case 'preparing':
-        return 'قيد التجهيز';
-      case 'ready':
-        return 'جاهز للتسليم';
-      case 'delivered':
-        return 'تم التسليم';
-      case 'cancelled':
-        return 'ملغي';
-      default:
-        return status;
-    }
-  };
-
-  // دالة للتحقق من وجود أصناف غير مجهزة
-  const hasUnpreparedItems = (order: any) => {
-    if (!order.items) return false;
-    return order.items.some((item: any) => {
-      return (item.preparedCount || 0) < (item.quantity || 0);
-    });
-  };
-
-  // دالة للتحقق من وجود أصناف مجهزة
-  const hasAnyPreparedItems = (order: any) => {
-    if (!order.items) return false;
-    return order.items.some((item: any) => {
-      return (item.preparedCount || 0) > 0;
-    });
-  };
-
-  // دالة للتحقق من أن جميع الأصناف مجهزة بالكامل
-  const hasAllItemsFullyPrepared = (order: any) => {
-    if (!order.items) return false;
-    return order.items.every((item: any) => {
-      return (item.preparedCount || 0) >= (item.quantity || 0);
-    });
-  };
-
-  // دالة للتحقق من أن الطلب جاهز للتسليم
-  const isOrderReadyForDelivery = (order: any) => {
-    // التحقق من الحالة أولاً
-    if (order.status === 'ready') {
-        return true;
-      }
-    if (!order.items) return false;
-    return order.items.every((item: any) => (item.preparedCount || 0) >= (item.quantity || 0));
-  };
-
-  // Filter orders with unprepared items using useMemo
-  const incompleteOrders = useMemo(() => {
-    const filtered = pendingOrders.filter(order => {
-      // تجاهل الطلبات المسلمة أو الملغية
-      if (order.status === 'delivered' || order.status === 'cancelled') {
-        return false;
-      }
-
-      // إظهار الطلبات التي لديها أصناف غير مجهزة بالكامل (pending + preparing)
-      const hasUnprepared = hasUnpreparedItems(order);
-      return hasUnprepared;
-    });
-    return filtered;
-  }, [pendingOrders]);
-
-  // تحويل الطلبات إلى أصناف مجهزة منفصلة
-  const preparedItems = useMemo(() => {
-    const items: Array<{
-      _id: string;
-      orderId: string;
-      orderNumber: string;
-      customerName: string;
-      itemName: string;
-      quantity: number;
-      preparedCount: number;
-      price: number;
-      totalPrice: number;
-      createdAt: Date;
-      orderCreatedAt: Date;
-      billNumber?: string;
-    }> = [];
-
-    // البحث في جميع الطلبات (pending + ready)
-    const allOrders = [...pendingOrders, ...readyOrders];
-
-    allOrders.forEach(order => {
-      if (order.items) {
-        order.items.forEach(item => {
-          const preparedCount = item.preparedCount || 0;
-          const quantity = item.quantity || 0;
-
-          // إضافة الأصناف المجهزة فقط (preparedCount > 0)
-          if (preparedCount > 0) {
-            items.push({
-              _id: `${order._id}-${item.name}`,
-              orderId: order._id,
-              orderNumber: order.orderNumber,
-              customerName: order.customerName || 'بدون اسم',
-              itemName: item.name,
-              quantity: preparedCount,
-              preparedCount: preparedCount,
-              price: item.price,
-              totalPrice: item.price * preparedCount,
-              createdAt: new Date(),
-              orderCreatedAt: order.createdAt,
-              billNumber: order.bill?.billNumber
-            });
-          }
-        });
-      }
-    });
-
-    return items;
-  }, [pendingOrders, readyOrders]);
-
-  // طلبات جاهزة للتسليم
-  const readyForDeliveryOrders = useMemo(() => {
-    const filtered = [...pendingOrders, ...readyOrders].filter(order => {
-      // تجاهل الطلبات المسلمة أو الملغية
-      if (order.status === 'delivered' || order.status === 'cancelled') {
-        return false;
-      }
-
-      // إظهار الطلبات التي جميع أصنافها مجهزة بالكامل
-      const isReady = isOrderReadyForDelivery(order);
-      return isReady;
-    });
-    return filtered;
-  }, [pendingOrders, readyOrders]);
-
-  // Auto-refresh data every 30 seconds to ensure consistency
+  // Fetch table statuses when tables or bills change - INSTANT!
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchPendingOrders();
-      fetchReadyOrders();
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Clean up delivered orders from all lists - يتم تنظيفها في fetchPendingOrders و fetchReadyOrders
-  // لذلك لا نحتاج لـ useEffect منفصل هنا
-
-  // Helper: Get unprepared items count for an order
-  const getUnpreparedItemsCount = (order: any) => {
-    if (!order.items) return 0;
-    let count = 0;
-    order.items.forEach((item: any) => {
-      count += Math.max(0, (item.quantity || 0) - (item.preparedCount || 0));
-    });
-    return count;
-  };
-
-  // دالة لحساب عدد الأصناف المجهزة
-  const getPreparedItemsCount = (order: any) => {
-    if (!order.items) return 0;
-    let count = 0;
-    order.items.forEach((item: any) => {
-      count += item.preparedCount || 0;
-    });
-    return count;
-  };
-
-  // Function to update item prepared count
-  const updateItemPrepared = async (orderId: string, itemIndex: number, preparedCount: number) => {
-    const updateKey = `${orderId}-${itemIndex}`;
-    setIsUpdatingItem({orderId, itemIndex});
-    try {
-      const order = pendingOrders.find((o: any) => o._id === orderId) || readyOrders.find((o: any) => o._id === orderId);
-      if (!order) {
-        showNotification('الطلب غير موجود', 'error');
-        return;
-      }
-
-      const currentItem = order.items[itemIndex];
-      if (!currentItem) {
-        showNotification('العنصر غير موجود', 'error');
-        return;
-      }
-
-      const quantity = currentItem.quantity || 0;
-      if (preparedCount > quantity) {
-        showNotification(`لا يمكن تجاوز الكمية المطلوبة (${quantity})`, 'error');
-        return;
-      }
-
-      const response = await api.updateOrderItemPrepared(orderId, itemIndex, {
-        preparedCount: preparedCount,
-      });
-
-      if (response.success) {
-        showNotification('تم تحديث حالة التجهيز بنجاح', 'success');
-        await fetchPendingOrders();
-        await fetchReadyOrders();
-      } else {
-        showNotification('فشل في تحديث حالة التجهيز', 'error');
-      }
-    } catch (error) {
-      console.error('Error updating item prepared:', error);
-      showNotification('خطأ في تحديث حالة التجهيز', 'error');
-    } finally {
-      setIsUpdatingItem(null);
+    if (tables.length > 0) {
+      fetchAllTableStatuses();
     }
-  };
+  }, [tables, bills]); // Update when tables or bills change (use full arrays to detect changes)
 
-  // Function to move order to ready manually
-  const moveOrderToReady = async (orderId: string) => {
-    setIsMovingToReady(orderId);
-    try {
-      // البحث عن الطلب
-      const order = pendingOrders.find(o => o._id === orderId);
-      if (!order) {
-        showNotification('خطأ: الطلب غير موجود', 'error');
-        return;
-      }
-
-      // التحقق من أن جميع الأصناف مجهزة بالكامل
-      if (!hasAllItemsFullyPrepared(order)) {
-        showNotification('لا يمكن تحريك الطلب - بعض الأصناف غير مجهزة بالكامل', 'error');
-        return;
-      }
-
-      // تحديث حالة الطلب إلى ready
-      await updateOrderStatus(orderId, 'ready');
-
-      // إزالة من قائمة الطلبات قيد التجهيز
-      setPendingOrders(prev => prev.filter(o => o._id !== orderId));
-
-      showNotification('تم تحريك الطلب إلى الجاهزة بنجاح', 'success');
-
-      // إعادة تحميل البيانات
-      fetchPendingOrders();
-      fetchReadyOrders();
-    } catch (error) {
-      console.error('❌ Error moving order to ready:', error);
-      showNotification('خطأ في تحريك الطلب', 'error');
-    } finally {
-      setIsMovingToReady(null);
-    }
-  };
-
-  // دالة لاختبار الاتصال بالخادم
-  const testServerConnection = async () => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/orders/pending`);
-
-      if (response.ok) {
-        showNotification('الخادم يعمل بشكل طبيعي', 'success');
-      } else {
-        showNotification(`خطأ في الخادم: ${response.status}`, 'error');
-      }
-    } catch (error) {
-      showNotification('لا يمكن الاتصال بالخادم، تأكد من تشغيله', 'error');
-    }
-  };
-
-  // Function to deliver order
-  const deliverOrder = async (orderId: string) => {
-    try {
-      // البحث عن الطلب في جميع القوائم
-      const allOrders = [...pendingOrders, ...readyOrders];
-      const order = allOrders.find(o => o._id === orderId);
-
-      if (!order) {
-        showNotification('خطأ: الطلب غير موجود', 'error');
-        return;
-      }
-
-      // التحقق من أن الطلب جاهز للتسليم
-      const isReady = isOrderReadyForDelivery(order);
-
-      if (!isReady) {
-        const unpreparedItems = order.items?.filter(item =>
-          (item.preparedCount || 0) < (item.quantity || 0)
-        ) || [];
-        showNotification('لا يمكن تسليم الطلب - بعض الأصناف غير جاهزة', 'error');
-        return;
-      }
-
-      // تحديث حالة الطلب إلى delivered
-      const response = await updateOrderStatus(orderId, 'delivered');
-
-      if (response && response.success) {
-        // إزالة من جميع القوائم فوراً
-        setReadyOrders(prev => {
-          const filtered = prev.filter(o => o._id !== orderId);
-          return filtered;
-        });
-
-        setPendingOrders(prev => {
-          const filtered = prev.filter(o => o._id !== orderId);
-          return filtered;
-        });
-
-        showNotification('تم تسليم الطلب بنجاح', 'success');
-
-        // إعادة تحميل البيانات بعد تأخير قصير للتأكد من التحديث
-        setTimeout(() => {
-        fetchPendingOrders();
-        fetchReadyOrders();
-          fetchOpenBills(); // تحديث الفواتير
-        }, 1000);
-      } else {
-        const errorMessage = response?.message || 'خطأ غير معروف في تحديث حالة الطلب';
-        showNotification(errorMessage, 'error');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'خطأ في تسليم الطلب';
-      showNotification(errorMessage, 'error');
-    }
-  };
-
-  // Function to deliver specific item
-  const deliverItem = async (orderId: string, itemName: string, itemIndex: number) => {
-    try {
-      // البحث عن الطلب في جميع الطلبات (pending + ready)
-      const order = pendingOrders.find(o => o._id === orderId) || readyOrders.find(o => o._id === orderId);
-      if (!order || !order.items || !order.items[itemIndex]) {
-        showNotification('خطأ: الطلب أو الصنف غير موجود', 'error');
-        return;
-      }
-
-      const currentItem = order.items[itemIndex];
-      const currentPreparedCount = currentItem.preparedCount || 0;
-      const requiredQuantity = currentItem.quantity || 0;
-
-      // حساب العدد المطلوب إضافته للوصول للكمية الكاملة
-      const remainingToDeliver = requiredQuantity - currentPreparedCount;
-
-      if (remainingToDeliver <= 0) {
-        showNotification(`${itemName} تم تسليمه بالكامل بالفعل`, 'info');
-        return;
-      }
-
-      // استخدام API الجديد لتسليم الصنف
-      const response = await api.deliverItem(orderId, itemIndex);
-
-      if (response.success) {
-        // التحقق من حالة الطلب بعد التحديث
-        const updatedOrder = response.data;
-        if (updatedOrder) {
-          // التحقق من أن جميع الأصناف تم تسليمها بالكامل
-          const allItemsFullyDelivered = updatedOrder.items?.every(item =>
-            (item.preparedCount || 0) >= (item.quantity || 0)
-          );
-
-          if (allItemsFullyDelivered) {
-            // إذا تم تسليم جميع الأصناف، الطلب أصبح delivered
-            setReadyOrders(prev => {
-              const filtered = prev.filter(o => o._id !== orderId);
-              return filtered;
-            });
-
-            setPendingOrders(prev => {
-              const filtered = prev.filter(o => o._id !== orderId);
-              return filtered;
-            });
-
-            showNotification(`تم تسليم ${itemName} واكتمل الطلب بالكامل`, 'success');
-          } else {
-            // إذا تبقى أصناف، تحديث الواجهة فقط
-            setReadyOrders(prev => {
-              const updatedOrders = prev.map(o => {
-                if (o._id === orderId) {
-                  const updatedOrder = { ...o };
-                  updatedOrder.items = [...o.items];
-                  updatedOrder.items[itemIndex] = {
-                    ...o.items[itemIndex],
-                    preparedCount: requiredQuantity
-                  };
-                  return updatedOrder;
-                }
-                return o;
-              });
-              return updatedOrders;
-            });
-
-            setPendingOrders(prev => {
-              const updatedOrders = prev.map(o => {
-                if (o._id === orderId) {
-                  const updatedOrder = { ...o };
-                  updatedOrder.items = [...o.items];
-                  updatedOrder.items[itemIndex] = {
-                    ...o.items[itemIndex],
-                    preparedCount: requiredQuantity
-                  };
-                  return updatedOrder;
-                }
-                return o;
-              });
-              return updatedOrders;
-            });
-
-            showNotification(`تم تسليم ${itemName} بنجاح (${remainingToDeliver} من ${requiredQuantity})`, 'success');
-          }
+  const fetchAllTableStatuses = () => {
+    const statuses: Record<number, { hasUnpaid: boolean; orders: Order[] }> = {};
+    
+    // Use bills from state (already loaded) - filter unpaid bills
+    const unpaidBills = bills.filter((bill: any) => 
+      bill.status !== 'paid' && bill.status !== 'cancelled'
+    );
+    
+    // Create a map of table ID to bills for fast lookup
+    const tableBillsMap = new Map<string, any[]>();
+    unpaidBills.forEach((bill: any) => {
+      if (bill.table) {
+        const tableId = bill.table._id || bill.table.id || bill.table;
+        if (!tableBillsMap.has(tableId)) {
+          tableBillsMap.set(tableId, []);
         }
-
-        // إعادة تحميل البيانات للتأكد من التحديث
-        setTimeout(() => {
-          fetchPendingOrders();
-          fetchReadyOrders();
-        }, 500);
-      } else {
-        showNotification('خطأ في تسليم الصنف', 'error');
+        tableBillsMap.get(tableId)!.push(bill);
       }
-    } catch (error) {
-      showNotification('خطأ في تسليم الصنف', 'error');
+    });
+    
+    // Process each table - INSTANT!
+    for (const table of tables) {
+      const tableId = table._id || table.id;
+      const tableBills = tableBillsMap.get(tableId) || [];
+      
+      // Table has unpaid bills if there are any bills in the map
+      const hasUnpaid = tableBills.length > 0;
+      
+      statuses[table.number] = {
+        hasUnpaid,
+        orders: [], // We'll fetch orders only when clicking on the table
+      };
+    }
+    
+    setTableStatuses(statuses);
+  };
+
+  // Memoize active table sections
+  const activeTableSections = useMemo(() => {
+    return tableSections
+      .filter(section => section.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [tableSections]);
+
+  // Memoize active tables
+  const activeTables = useMemo(() => {
+    return tables.filter(t => t.isActive);
+  }, [tables]);
+
+  // Memoize table statistics
+  const tableStats = useMemo(() => {
+    const emptyTables = activeTables.filter(t => {
+      const status = tableStatuses[t.number];
+      return !status?.hasUnpaid;
+    }).length;
+
+    const occupiedTables = activeTables.filter(t => {
+      const status = tableStatuses[t.number];
+      return status?.hasUnpaid;
+    }).length;
+
+    return {
+      totalSections: activeTableSections.length,
+      totalTables: activeTables.length,
+      emptyTables,
+      occupiedTables,
+    };
+  }, [activeTables, activeTableSections, tableStatuses]);
+
+  // Get tables by section (memoized)
+  const getTablesBySection = useMemo(() => {
+    const tablesBySection: Record<string, Table[]> = {};
+    
+    activeTables.forEach(table => {
+      const section = typeof table.section === 'string' ? table.section : (table.section as TableSection)?._id || (table.section as TableSection)?.id;
+      if (section) {
+        if (!tablesBySection[section]) {
+          tablesBySection[section] = [];
+        }
+        tablesBySection[section].push(table);
+      }
+    });
+    
+    // Sort tables by number within each section
+    Object.keys(tablesBySection).forEach(sectionId => {
+      tablesBySection[sectionId].sort((a, b) => a.number - b.number);
+    });
+    
+    return tablesBySection;
+  }, [activeTables]);
+
+  // Helper function for ManagementModal
+  const getTablesBySectionFn = (sectionId: string): Table[] => {
+    return getTablesBySection[sectionId] || [];
+  };
+
+  // Memoize filtered table orders (only unpaid)
+  const filteredTableOrders = useMemo(() => {
+    return tableOrders.filter((order: Order) => {
+      // If order has no bill, show it
+      if (!order.bill) return true;
+      
+      // If bill is populated, check status
+      if (typeof order.bill === 'object' && order.bill !== null) {
+        const bill = order.bill as any;
+        return bill.status !== 'paid';
+      }
+      
+      // If bill is just an ID, assume it's not paid
+      return true;
+    });
+  }, [tableOrders]);
+
+  // Update table orders when selected table or orders change
+  useEffect(() => {
+    if (selectedTable) {
+      const tableId = selectedTable._id || selectedTable.id;
+      
+      // Filter orders that belong to this table - INSTANT!
+      const filteredOrders = orders.filter((order: any) => {
+        const orderTableId = order.table?._id || order.table?.id || order.table;
+        return orderTableId === tableId;
+      });
+      
+      setTableOrders(filteredOrders);
+    }
+  }, [selectedTable, orders]);
+
+  // Handle table click
+  const handleTableClick = (table: Table) => {
+    setSelectedTable(table);
+    // Orders will be updated automatically by useEffect above
+  };
+
+  // Handle add order
+  const handleAddOrder = () => {
+    if (!selectedTable) {
+      showNotification('يرجى اختيار طاولة أولاً', 'error');
+      return;
+    }
+    setCurrentOrderItems([]);
+    setOrderNotes('');
+    setShowOrderModal(true);
+  };
+
+  // Handle edit order
+  const handleEditOrder = (order: Order) => {
+    setSelectedOrder(order);
+    const items: LocalOrderItem[] = order.items.map(item => ({
+      menuItem: (item as any).menuItem?._id || (item as any).menuItem || '',
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      notes: item.notes || '',
+    }));
+    setCurrentOrderItems(items);
+    setOrderNotes(order.notes || '');
+    setShowEditOrderModal(true);
+  };
+
+  // Toggle section expand
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  };
+
+  // Toggle category expand
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId],
+    }));
+  };
+
+  // Get categories for section
+  const getCategoriesForSection = (sectionId: string) => {
+    return menuCategories.filter(cat => {
+      const section = typeof cat.section === 'string' ? cat.section : (cat.section as MenuSection)?._id || (cat.section as MenuSection)?.id;
+      return section === sectionId && cat.isActive;
+    }).sort((a, b) => a.sortOrder - b.sortOrder);
+  };
+
+  // Get items for category
+  const getItemsForCategory = (categoryId: string) => {
+    return menuItems.filter(item => {
+      const category = typeof item.category === 'string' ? item.category : (item.category as MenuCategory)?._id || (item.category as MenuCategory)?.id;
+      return category === categoryId && item.isAvailable;
+    });
+  };
+
+  // Add item to order
+  const addItemToOrder = (menuItem: MenuItem) => {
+    const existingItem = currentOrderItems.find(item => item.menuItem === menuItem.id);
+    if (existingItem) {
+      setCurrentOrderItems(prev =>
+        prev.map(item =>
+          item.menuItem === menuItem.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      );
+    } else {
+      setCurrentOrderItems(prev => [
+        ...prev,
+        {
+          menuItem: menuItem.id,
+          name: menuItem.name,
+          price: menuItem.price,
+          quantity: 1,
+          notes: '',
+        },
+      ]);
     }
   };
 
-  // Function to show order details
-  const handleOrderClick = (order: any) => {
-    setSelectedOrder(order);
-    setShowOrderDetails(true);
+  // Update item quantity
+  const updateItemQuantity = (menuItemId: string, delta: number) => {
+    setCurrentOrderItems(prev =>
+      prev.map(item => {
+        if (item.menuItem === menuItemId) {
+          const newQuantity = item.quantity + delta;
+          if (newQuantity <= 0) {
+            return null;
+          }
+          return { ...item, quantity: newQuantity };
+        }
+        return item;
+      }).filter(Boolean) as LocalOrderItem[]
+    );
   };
 
-  // تحديث اسم العميل عند اختيار فاتورة موجودة
-  const handleBillSelection = (bill: any) => {
-    setSelectedBillId(bill._id);
-    setSelectedBill(bill);
-    setCustomerName(bill.customerName || '');
+  // Update item notes
+  const updateItemNotes = (menuItemId: string, notes: string) => {
+    setCurrentOrderItems(prev =>
+      prev.map(item =>
+        item.menuItem === menuItemId ? { ...item, notes } : item
+      )
+    );
   };
 
-  // إعادة تعيين عند تغيير خيار الفاتورة
-  const handleBillOptionChange = (option: 'new' | 'existing') => {
-    setBillOption(option);
-    setSelectedBillId('');
-    setSelectedBill(null);
-    setSearchBill('');
-    if (option === 'new') {
-      setCustomerName('');
+  // Remove item from order
+  const removeItemFromOrder = (menuItemId: string) => {
+    setCurrentOrderItems(prev => prev.filter(item => item.menuItem !== menuItemId));
+  };
+
+  // Calculate order total
+  const calculateOrderTotal = () => {
+    return currentOrderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  };
+
+  // Save order
+  const handleSaveOrder = async () => {
+    if (!selectedTable || currentOrderItems.length === 0) {
+      showNotification('يرجى إضافة عنصر واحد على الأقل', 'error');
+      return;
     }
-  };
 
-  // أضف الدالتين داخل مكون Cafe
-  const handleEditOrder = (order: any) => {
-    setSelectedOrder(order);
-    setShowOrderDetails(true);
-    // يمكن لاحقاً تفعيل وضع التعديل في نافذة التفاصيل
-  };
+    // Store previous state for rollback on error
+    const previousTableStatuses = { ...tableStatuses };
 
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [orderToCancel, setOrderToCancel] = useState<any>(null);
-  const [isCancelingOrder, setIsCancelingOrder] = useState(false);
-  const [isMovingToReady, setIsMovingToReady] = useState<string | null>(null);
-  const [isUpdatingItem, setIsUpdatingItem] = useState<{orderId: string, itemIndex: number} | null>(null);
-
-  const handleCancelOrder = (order: any) => {
-    setOrderToCancel(order);
-    setShowCancelModal(true);
-  };
-
-  const confirmCancelOrder = async () => {
-    if (!orderToCancel) return;
-    setIsCancelingOrder(true);
     try {
-      const response = await api.cancelOrder(orderToCancel._id);
-      if (response && response.success) {
-        showNotification('تم إلغاء الطلب بنجاح', 'success');
-        setShowCancelModal(false);
-        setOrderToCancel(null);
-        setPendingOrders(prev => prev.filter(o => o._id !== orderToCancel._id));
-        setReadyOrders(prev => prev.filter(o => o._id !== orderToCancel._id));
+      const orderData = {
+        table: selectedTable._id,
+        customerName: selectedTable.number.toString(),
+        items: currentOrderItems.map(item => ({
+          menuItem: item.menuItem,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          notes: item.notes || null,
+        })),
+        notes: orderNotes || null,
+      };
+
+      // Close modal immediately for better UX
+      setShowOrderModal(false);
+      setCurrentOrderItems([]);
+      setOrderNotes('');
+      showNotification('جاري حفظ الطلب...', 'info');
+      
+      // Create order in background
+      setLoading(true);
+      const order = await createOrder(orderData);
+      
+      if (order) {
+        showNotification('تم إضافة الطلب بنجاح', 'success');
+        
+        // Print order immediately
+        const menuItemsMap = new Map();
+        menuItems.forEach(item => {
+          menuItemsMap.set(item.id, item);
+          menuItemsMap.set(item._id, item);
+          menuItemsMap.set(String(item.id), item);
+          menuItemsMap.set(String(item._id), item);
+        });
+        
+        const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
+        printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
+        
+        // Update table status immediately (optimistic update)
+        if (selectedTable) {
+          setTableStatuses(prev => ({
+            ...prev,
+            [selectedTable.number]: {
+              hasUnpaid: true,
+              orders: [...(prev[selectedTable.number]?.orders || []), order]
+            }
+          }));
+          
+          // Add order to table orders immediately
+          setTableOrders(prev => [...prev, order]);
+        }
+        
+        // Refresh data in background (non-blocking)
+        fetchOrders();
+        fetchBills();
+      } else {
+        // If order creation failed, revert optimistic updates
+        setTableStatuses(previousTableStatuses);
+        showNotification('فشل في إضافة الطلب', 'error');
       }
-    } catch (err) {
-      showNotification('حدث خطأ أثناء إلغاء الطلب', 'error');
+    } catch (error: any) {
+      // Revert optimistic updates on error
+      setTableStatuses(previousTableStatuses);
+      
+      // Handle different error types
+      if (error?.message) {
+        showNotification(error.message, 'error');
+      } else if (error?.response?.data?.message) {
+        showNotification(error.response.data.message, 'error');
+      } else if (!navigator.onLine) {
+        showNotification('لا يوجد اتصال بالإنترنت', 'error');
+      } else {
+        showNotification('خطأ في إضافة الطلب', 'error');
+      }
     } finally {
-      setIsCancelingOrder(false);
+      setLoading(false);
     }
   };
+
+  // Update order
+  const handleUpdateOrder = async () => {
+    if (!selectedOrder || currentOrderItems.length === 0) {
+      showNotification('يرجى إضافة عنصر واحد على الأقل', 'error');
+      return;
+    }
+
+    // Store previous state for rollback on error
+    const previousTableStatuses = { ...tableStatuses };
+
+    try {
+      const orderData = {
+        items: currentOrderItems.map(item => ({
+          menuItem: item.menuItem,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          notes: item.notes || null,
+        })),
+        notes: orderNotes || null,
+      };
+
+      // Close modal immediately for better UX
+      setShowEditOrderModal(false);
+      setSelectedOrder(null);
+      setCurrentOrderItems([]);
+      setOrderNotes('');
+      showNotification('جاري تحديث الطلب...', 'info');
+      
+      // Update order in background
+      setLoading(true);
+      const updatedOrder = await updateOrder(selectedOrder.id, orderData);
+      
+      if (updatedOrder) {
+        showNotification('تم تحديث الطلب بنجاح', 'success');
+        
+        // Print updated order immediately
+        const menuItemsMap = new Map();
+        menuItems.forEach(item => {
+          menuItemsMap.set(item.id, item);
+          menuItemsMap.set(item._id, item);
+          menuItemsMap.set(String(item.id), item);
+          menuItemsMap.set(String(item._id), item);
+        });
+        
+        const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
+        printOrderBySections(updatedOrder, menuSections, menuItemsMap, establishmentName);
+        
+        // Update table orders immediately (optimistic)
+        if (selectedTable) {
+          setTableOrders(prev => 
+            prev.map(order => order.id === updatedOrder.id ? updatedOrder : order)
+          );
+        }
+        
+        // Refresh data in background (non-blocking)
+        fetchOrders();
+        fetchBills();
+      } else {
+        // If order update failed, revert optimistic updates
+        setTableStatuses(previousTableStatuses);
+        showNotification('فشل في تحديث الطلب', 'error');
+      }
+    } catch (error: any) {
+      // Revert optimistic updates on error
+      setTableStatuses(previousTableStatuses);
+      
+      // Handle different error types
+      if (error?.message) {
+        showNotification(error.message, 'error');
+      } else if (error?.response?.data?.message) {
+        showNotification(error.response.data.message, 'error');
+      } else if (!navigator.onLine) {
+        showNotification('لا يوجد اتصال بالإنترنت', 'error');
+      } else {
+        showNotification('خطأ في تحديث الطلب', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Print order
+  const handlePrintOrder = (order: Order) => {
+    const menuItemsMap = new Map();
+    menuItems.forEach(item => {
+      menuItemsMap.set(item.id, item);
+      menuItemsMap.set(item._id, item);
+      menuItemsMap.set(String(item.id), item);
+      menuItemsMap.set(String(item._id), item);
+    });
+    
+    // Get establishment name from user (already populated from backend)
+    const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
+    
+    printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
+  };
+
+  // Show confirm modal
+  const showConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmText: string = 'تأكيد',
+    cancelText: string = 'إلغاء',
+    confirmColor: string = 'bg-red-600 hover:bg-red-700'
+  ) => {
+    setConfirmModalData({
+      title,
+      message,
+      onConfirm,
+      confirmText,
+      cancelText,
+      confirmColor,
+    });
+    setShowConfirmModal(true);
+  };
+
+  // Delete order
+  const handleDeleteOrder = (order: Order) => {
+    showConfirm(
+      'حذف الطلب',
+      `هل أنت متأكد من حذف الطلب ${order.orderNumber}؟`,
+      async () => {
+        try {
+          setLoading(true);
+          const result = await deleteOrder(order.id);
+          if (result) {
+            showNotification('تم حذف الطلب بنجاح', 'success');
+            await fetchAllTableStatuses();
+            if (selectedTable) {
+              await handleTableClick(selectedTable);
+            }
+          }
+        } catch (error) {
+          showNotification('خطأ في حذف الطلب', 'error');
+        } finally {
+          setLoading(false);
+          setShowConfirmModal(false);
+        }
+      }
+    );
+  };
+
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
-        <div className="flex items-center xs:w-full xs:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
             <ShoppingCart className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
-            إدارة الطلبات
+            إدارة الطلبات والطاولات
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mr-4 xs:mr-0 xs:w-full xs:text-center">طلبات المشروبات والأصناف للعملاء</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">إدارة الطلبات والطاولات</p>
         </div>
-        <div className="flex items-center space-x-3 space-x-reverse xs:w-full xs:justify-center xs:mt-2">
+        <div className="flex items-center space-x-3 space-x-reverse">
           <button
-            onClick={() => {
-              fetchPendingOrders();
-              fetchReadyOrders();
-              fetchTodayStats();
-              showNotification('تم تحديث البيانات', 'success');
-            }}
-            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
-            title="تحديث البيانات"
+            onClick={() => setShowManagementModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
           >
-            <svg className="h-5 w-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            <Settings className="h-5 w-5 ml-2" />
+            إدارة الطاولات
+          </button>
+          <button
+            onClick={loadInitialData}
+            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+          >
             تحديث
           </button>
-          <button
-            onClick={() => setShowNewOrder(true)}
-            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
-          >
-            <Plus className="h-5 w-5 ml-2" />
-            طلب جديد
-          </button>
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
-              <Clock className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-lg shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 dark:text-blue-200 text-sm font-medium mb-1">عدد الأقسام</p>
+              <p className="text-3xl font-bold">{tableStats.totalSections}</p>
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">طلبات قيد التجهيز</p>
-              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                {formatDecimal(incompleteOrders.length)}
-              </p>
+            <div className="bg-white/20 rounded-full p-3">
+              <Settings className="h-8 w-8" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+        <div className="bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-lg shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 dark:text-green-200 text-sm font-medium mb-1">إجمالي الطاولات</p>
+              <p className="text-3xl font-bold">{tableStats.totalTables}</p>
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">جاهز للتسليم</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatDecimal(readyForDeliveryOrders.length)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-              <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">أصناف مجهزة</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(preparedItems.length)}</p>
+            <div className="bg-white/20 rounded-full p-3">
+              <ShoppingCart className="h-8 w-8" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
-              <ShoppingCart className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 rounded-lg shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-emerald-100 dark:text-emerald-200 text-sm font-medium mb-1">الطاولات الفارغة</p>
+              <p className="text-3xl font-bold">{tableStats.emptyTables}</p>
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300"> المبيعات اليوم</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {formatCurrency(todayStats.totalSales)}
-              </p>
+            <div className="bg-white/20 rounded-full p-3">
+              <CheckCircle className="h-8 w-8" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-red-500 to-red-600 dark:from-red-600 dark:to-red-700 rounded-lg shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-100 dark:text-red-200 text-sm font-medium mb-1">الطاولات المحجوزة</p>
+              <p className="text-3xl font-bold">{tableStats.occupiedTables}</p>
+            </div>
+            <div className="bg-white/20 rounded-full p-3">
+              <AlertTriangle className="h-8 w-8" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Orders List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">طلبات قيد التجهيز</h3>
-        </div>
-        <div className="p-6">
-          {incompleteOrders.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد طلبات قيد التجهيز</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {incompleteOrders.map((order) => (
-                <div
-                  key={order._id}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200 relative pt-8"
-                >
-                  {/* زر الإلغاء أعلى الكارت */}
-                  {(
-                    (user && user.role === 'admin') ||
-                    (user && user.role === 'staff' && order.status !== 'preparing')
-                  ) && (
-                    <>
-                      <button
-                        onClick={() => handleCancelOrder(order)}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 text-red-600 dark:text-red-400 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-2 z-10"
-                        title="إلغاء الطلب"
-                      >
-                        ×
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditOrderData({
-                            ...order,
-                            items: order.items.map(item => {
-                              let menuItemId = item.menuItem;
-                              if (typeof menuItemId === 'object' && menuItemId !== null && menuItemId._id) {
-                                menuItemId = menuItemId._id;
-                              }
-                              const found = menuItems.find(m =>
-                                (menuItemId && (String(m._id) === String(menuItemId) || String(m.id) === String(menuItemId))) ||
-                                (!menuItemId && m.name === item.name)
-                              );
-                              return {
-                                ...item,
-                                menuItem: found ? String(found._id) : (menuItemId ? String(menuItemId) : undefined),
-                                name: found ? found.name : item.name
-                              };
-                            })
-                          });
-                          setShowEditOrder(true);
-                        }}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900 hover:bg-yellow-200 dark:hover:bg-yellow-800 text-yellow-700 dark:text-yellow-400 shadow-sm transition-colors duration-200 text-lg font-bold absolute top-2 right-12 z-10"
-                        title="تعديل الطلب"
-                      >
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-1.414.828l-4.243 1.414 1.414-4.243a4 4 0 01.828-1.414z" /></svg>
-                      </button>
-                    </>
-                  )}
-                  {/* Header */}
-                  <div className="p-4 border-b border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center">
-                        <span className="text-2xl mr-2">📋</span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(order.status)}`}>
-                          {getStatusText(order.status)}
-                        </span>
-                      </div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">#{order.orderNumber}</span>
-                    </div>
-
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      <User className="h-4 w-4 mr-1" />
-                      <span className="truncate">{order.customerName || 'بدون اسم'}</span>
-                    </div>
-
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                      <Clock className="h-4 w-4 mr-1" />
-                      <span>{new Date(order.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </div>
-
-                  {/* Content - عرض الأصناف بدون أسعار */}
-                  <div className="p-4">
-                    <div className="space-y-3">
-                      {/* عرض جميع الأصناف المطلوبة بدون أسعار */}
-                      {order.items && order.items.length > 0 && (
-                        <div className="text-sm text-gray-700 dark:text-gray-300">
-                          <div className="font-medium mb-2 text-gray-900 dark:text-gray-100">الأصناف المطلوبة:</div>
-                          {order.items.map((item, index) => (
-                            <div key={index} className="py-1 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
-                              <div className="flex justify-between items-center">
-                                <span className="truncate">{item.name}</span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100">{formatQuantity(item.quantity, 'قطعة')}</span>
-                              </div>
-                              {/* ملاحظة لهذا المشروب: غير متوفرة */}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {order.bill && (
-                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700">
-                          <span>فاتورة: {order.bill.billNumber}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Footer - أزرار التجهيز وأزرار التحكم */}
-                  <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 rounded-b-lg flex flex-col gap-2">
-                    {/* أزرار التجهيز */}
-                    {order.status === 'preparing' ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          prepareOrderComplete(order._id);
-                        }}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center"
-                      >
-                        <CheckCircle className="h-4 w-4 ml-2" />
-                        تم التجهيز
-                      </button>
-                    ) : (
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            const response = await api.updateOrderStatus(order._id, 'preparing');
-                            if (response && response.success) {
-                              setPendingOrders(prevOrders => prevOrders.map(o =>
-                                o._id === order._id ? { ...o, status: 'preparing' } : o
-                              ));
-                            } else {
-                              showNotification('حدث خطأ أثناء بدء التجهيز، يرجى المحاولة مرة أخرى', 'error');
-                            }
-                          } catch (error) {
-                            showNotification('حدث خطأ أثناء بدء التجهيز، يرجى المحاولة مرة أخرى', 'error');
-                          }
-                        }}
-                        className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white py-2 px-4 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center"
-                      >
-                        <ShoppingCart className="h-4 w-4 ml-2" />
-                        بدء التجهيز
-                      </button>
-                    )}
-
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ready for Delivery Orders */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">طلبات جاهزة للتسليم</h3>
-        </div>
-        <div className="p-6">
-          {readyForDeliveryOrders.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد طلبات جاهزة للتسليم</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {readyForDeliveryOrders.map((order) => (
-                <div
-                  key={order._id}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-green-200 dark:border-green-700 hover:shadow-md transition-shadow duration-200"
-                >
-                  {/* Header */}
-                  <div className="p-4 border-b border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center">
-                        <span className="text-2xl mr-2">✅</span>
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
-                          جاهز للتسليم
-                        </span>
-                      </div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">#{order.orderNumber}</span>
-                    </div>
-
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      <User className="h-4 w-4 mr-1" />
-                      <span className="truncate">{order.customerName || 'بدون اسم'}</span>
-                    </div>
-
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                      <Clock className="h-4 w-4 mr-1" />
-                      <span>{new Date(order.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">الأصناف الجاهزة:</span>
-                        <span className="font-semibold text-green-600 dark:text-green-400">{formatDecimal(order.items?.length || 0)}</span>
-                      </div>
-
-                      {/* عرض الأصناف الجاهزة */}
-                      {order.items && order.items.length > 0 && (
-                        <div className="text-xs text-gray-600 dark:text-gray-400">
-                          <div className="font-medium mb-1">الأصناف الجاهزة:</div>
-                          {order.items.map((item, index) => (
-                            <div key={index} className="py-1 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
-                              <div className="flex justify-between items-center">
-                                <span className="truncate">{item.name}</span>
-                                <span className="text-green-600 dark:text-green-400 font-medium">{formatQuantity(item.quantity, 'قطعة')} × {formatCurrency(item.price)}</span>
-                              </div>
-                              {/* ملاحظة لهذا المشروب: غير متوفرة */}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">إجمالي الطلب:</span>
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(order.finalAmount || order.totalAmount)}</span>
-                      </div>
-
-                      {order.bill && (
-                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
-                          <span>فاتورة: {order.bill.billNumber}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-green-50 dark:bg-green-900 rounded-b-lg">
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={() => handleOrderClick(order)}
-                        className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                      >
-                        <ShoppingCart className="h-4 w-4 mr-1 inline" />
-                        عرض التفاصيل
-                      </button>
-                      <button
-                        onClick={() => deliverOrder(order._id)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
-                      >
-                        تسليم الطلب
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* New Order Modal */}
-      {showNewOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">طلب جديد</h3>
-            </div>
-
-            <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Menu Items for Order */}
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر من القائمة</h4>
-                  {/* فلتر الفئة */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
-                    <select
-                      value={selectedCategory}
-                      onChange={e => setSelectedCategory(e.target.value)}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="all">جميع الفئات</option>
-                      {categories.map(category => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {loading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-                      <p className="mt-2 text-gray-600 dark:text-gray-400">جاري تحميل القائمة...</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {categories
-                        .filter(category => selectedCategory === 'all' || category === selectedCategory)
-                        .map(category => (
-                          <div key={category}>
-                            <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">{category}</h5>
-                            <div className="space-y-2">
-                              {(menuItemsByCategory[category] || []).filter(item => item.isAvailable).map(item => (
-                                <button
-                                  key={item.id}
-                                  onClick={() => addToOrder(item)}
-                                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
-                                >
-                                  <span className="text-gray-900 dark:text-gray-100">{item.name}</span>
-                                  <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Order Details */}
-                <div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      اسم العميل
-                      {billOption === 'existing' && selectedBill && (
-                        <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">(من الفاتورة المختارة)</span>
-                      )}
-                    </label>
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className={`w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${billOption === 'existing' && selectedBill ? 'bg-gray-100 dark:bg-gray-600' : ''
-                        }`}
-                      placeholder="أدخل اسم العميل"
-                      readOnly={billOption === 'existing' && selectedBill}
-                    />
-                  </div>
-
-                  {/* اختيار الفاتورة */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفاتورة</label>
-                    <div className="space-y-2">
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="billOption"
-                          value="new"
-                          checked={billOption === 'new'}
-                          onChange={(e) => handleBillOptionChange(e.target.value as 'new' | 'existing')}
-                          className="ml-2"
-                        />
-                        <span className="text-sm dark:text-gray-300">فاتورة جديدة</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="billOption"
-                          value="existing"
-                          checked={billOption === 'existing'}
-                          onChange={(e) => handleBillOptionChange(e.target.value as 'new' | 'existing')}
-                          className="ml-2"
-                        />
-                        <span className="text-sm dark:text-gray-300">فاتورة موجودة</span>
-                      </label>
-                    </div>
-
-                    {billOption === 'existing' && (
-                      <div className="mt-3">
-                        <input
-                          type="text"
-                          placeholder="البحث عن فاتورة بالاسم..."
-                          value={searchBill}
-                          onChange={(e) => setSearchBill(e.target.value)}
-                          className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        />
-                        <div className="mt-2 max-h-48 overflow-y-auto">
-                          {openBills
-                            .filter(bill => {
-                              // Include draft and partially paid bills
-                              const isMatchingStatus = bill.status === 'draft' || bill.status === 'partial';
-                              // If search is empty, show all matching status bills
-                              if (!searchBill.trim()) return isMatchingStatus;
-                              // Otherwise, filter by search term
-                              return isMatchingStatus && (
-                                (bill.customerName?.toLowerCase().includes(searchBill.toLowerCase())) ||
-                                (bill.billNumber?.toLowerCase().includes(searchBill.toLowerCase()))
-                              );
-                            })
-                            .map(bill => (
-                              <div
-                                key={bill._id}
-                                                            className={`p-2 border rounded cursor-pointer text-sm ${selectedBillId === bill._id ? 'bg-orange-100 dark:bg-orange-900 border-orange-500 dark:border-orange-400' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
-                              }`}
-                                onClick={() => handleBillSelection(bill)}
-                              >
-                                <div className="font-medium dark:text-gray-100">{bill.customerName || 'بدون اسم'}</div>
-                                <div className="text-gray-600 dark:text-gray-400 text-xs">فاتورة رقم: {bill.billNumber}</div>
-                                <div className="text-gray-600 dark:text-gray-400 text-xs">المجموع: {formatCurrency(bill.total)}</div>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">تفاصيل الطلب</h4>
-                  <div className="space-y-3">
-                    {currentOrder.length === 0 ? (
-                      <p className="text-gray-500 dark:text-gray-400 text-center py-4">لا توجد عناصر في الطلب</p>
-                    ) : (
-                      currentOrder.map((item, index) => (
-                        <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{item.name}</span>
-                            <button
-                              onClick={() => removeFromOrder(item.menuItem)}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <div className="flex items-center space-x-2 space-x-reverse mb-2">
-                            <button
-                              onClick={() => updateQuantity(item.menuItem, Math.max(0, item.quantity - 1))}
-                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
-                            >
-                              -
-                            </button>
-                            <span className="w-8 text-center dark:text-gray-100">{formatDecimal(item.quantity)}</span>
-                            <button
-                              onClick={() => updateQuantity(item.menuItem, item.quantity + 1)}
-                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
-                            >
-                              +
-                            </button>
-                            <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
-                          </div>
-                          <div className="mb-2">
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">ملاحظات هذا المشروب:</label>
-                            <textarea
-                              value={item.notes || ''}
-                              onChange={(e) => {
-                                const updatedOrder = [...currentOrder];
-                                updatedOrder[index] = { ...item, notes: e.target.value };
-                                setCurrentOrder(updatedOrder);
-                              }}
-                              className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              rows={1}
-                              placeholder="مثال: بدون سكر، مع حليب إضافي..."
-                            />
-                          </div>
-                        </div>
-                      ))
-                    )}
-
-                    {currentOrder.length > 0 && (
-                      <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                        <div className="flex justify-between items-center font-bold text-lg">
-                          <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">إجمالي الطلب: </span>
-                          <span className="text-green-600 dark:text-green-400">
-                            {formatCurrency(calculateTotal())}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 space-x-reverse">
-              <button
-                onClick={() => {
-                  setShowNewOrder(false);
-                  setCustomerName('');
-                  setOrderNotes('');
-                  setCurrentOrder([]);
-                  setBillOption('new');
-                  setSelectedBillId('');
-                  setSelectedBill(null);
-                  setSearchBill('');
-                }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleCreateOrder}
-                disabled={loading || currentOrder.length === 0}
-                className={`px-4 py-2 text-white rounded-lg transition-colors duration-200 flex items-center justify-center min-w-[120px] ${
-                  loading
-                    ? 'bg-orange-700 dark:bg-orange-600 cursor-not-allowed'
-                    : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'
-                } ${currentOrder.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    جاري الإنشاء...
-                  </>
-                ) : 'إنشاء الطلب'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Order Details Modal */}
-      {showOrderDetails && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  تفاصيل الطلب #{selectedOrder.orderNumber}
-                </h3>
-                <button
-                  onClick={() => setShowOrderDetails(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              {/* Order Info */}
-              <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <span className="text-sm text-gray-600 dark:text-gray-300">العميل:</span>
-                    <p className="font-medium dark:text-gray-100">{selectedOrder.customerName || 'بدون اسم'}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600 dark:text-gray-300">الحالة:</span>
-                    <p className="font-medium dark:text-gray-100">{getStatusText(selectedOrder.status)}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600 dark:text-gray-300">الوقت:</span>
-                    <p className="font-medium dark:text-gray-100">
-                      {new Date(selectedOrder.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-
-                {/* حالة الطلب الكلية */}
-                <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">حالة الطلب الكلية:</span>
-                    {hasAllItemsFullyPrepared(selectedOrder) ? (
-                      <div className="flex items-center">
-                        <span className="text-green-600 dark:text-green-400 text-sm font-medium mr-2">✓ جاهز للتحريك</span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">جميع الأصناف مجهزة بالكامل</span>
-                      </div>
-                    ) : hasAnyPreparedItems(selectedOrder) ? (
-                        <div className="flex items-center">
-                          <span className="text-yellow-600 dark:text-yellow-400 text-sm font-medium mr-2">⚠ جزئي</span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {getUnpreparedItemsCount(selectedOrder)} صنف غير مجهز بالكامل
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center">
-                        <span className="text-red-600 dark:text-red-400 text-sm font-medium mr-2">✗ غير مجهز</span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">لا توجد أصناف مجهزة</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* تفاصيل إضافية */}
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    <div className="flex justify-between">
-                                              <span>إجمالي الأصناف: {formatDecimal(selectedOrder.items?.length || 0)}</span>
-                                              <span>الأصناف المجهزة بالكامل: {formatDecimal((selectedOrder.items?.filter(item => (item.preparedCount || 0) >= (item.quantity || 0)).length || 0))}</span>
-                        <span>الأصناف الجزئية: {formatDecimal((selectedOrder.items?.filter(item => (item.preparedCount || 0) > 0 && (item.preparedCount || 0) < (item.quantity || 0)).length || 0))}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Order Items */}
-              <div className="space-y-4">
-                <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">أصناف الطلب</h4>
-                {selectedOrder?.items?.map((item, index) => {
-                    const preparedCount = item.preparedCount || 0;
-                  const quantity = item.quantity || 0;
-                  const isFullyPrepared = preparedCount >= quantity;
-                  const isPartiallyPrepared = preparedCount > 0 && preparedCount < quantity;
-                  const isNotPrepared = preparedCount === 0;
+      {/* Table Sections and Tables */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Table Sections */}
+        <div className="lg:col-span-2">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">الأقسام والطاولات</h2>
+            
+            {loading && tableSections.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">جاري التحميل...</div>
+            ) : tableSections.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">لا توجد أقسام</div>
+            ) : (
+              <div className="space-y-6">
+                {activeTableSections.map(section => {
+                    const sectionTables = getTablesBySection[section.id] || [];
+                    if (sectionTables.length === 0) return null;
 
                     return (
-                    <div
-                      key={index}
-                      className={`p-4 rounded-lg border ${
-                        isFullyPrepared
-                          ? 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900'
-                          : isPartiallyPrepared
-                          ? 'border-yellow-200 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900'
-                          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h5 className="font-medium text-gray-900 dark:text-gray-100">{item.name}</h5>
-                          <p className="text-sm text-gray-600 dark:text-gray-300">
-                            {formatCurrency(item.price)} × {formatDecimal(quantity)} = {formatCurrency(item.price * quantity)}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <span
-                            className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              isFullyPrepared
-                                ? 'bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200'
-                                : isPartiallyPrepared
-                                ? 'bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-200'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-                            }`}
-                          >
-                            {isFullyPrepared
-                              ? 'جاهز'
-                              : isPartiallyPrepared
-                              ? 'جزئي'
-                              : 'في الانتظار'}
-                              </span>
-                          </div>
-                        </div>
+                      <div key={section.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                          {section.name}
+                        </h3>
+                        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                          {sectionTables.map(table => {
+                            const status = tableStatuses[table.number];
+                            const isOccupied = status?.hasUnpaid || false;
+                            const isSelected = selectedTable?.id === table.id;
 
-                        <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                            <span className="text-sm text-gray-600 dark:text-gray-300">
-                            مجهز: {preparedCount} / {quantity}
-                            </span>
-                            {isFullyPrepared && (
-                            <span className="text-sm text-green-600 dark:text-green-400 font-medium">
-                              ✓ جاهز للتسليم
-                            </span>
-                            )}
-                          </div>
-
-                        {/* Preparation Controls */}
-                        {selectedOrder.status !== 'delivered' && (
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max={quantity}
-                              value={preparedCount}
-                              onChange={(e) => {
-                                const newValue = Math.min(
-                                  Math.max(0, parseInt(e.target.value) || 0),
-                                  quantity
-                                );
-                                updateItemPrepared(selectedOrder._id, index, newValue);
-                              }}
-                              className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                            />
-                              <button
-                                onClick={() => updateItemPrepared(selectedOrder._id, index, quantity)}
-                                disabled={isUpdatingItem?.orderId === selectedOrder._id && isUpdatingItem?.itemIndex === index}
-                                className={`px-3 py-1 text-xs text-white rounded transition-colors flex items-center justify-center min-w-[80px] ${
-                                  isUpdatingItem?.orderId === selectedOrder._id && isUpdatingItem?.itemIndex === index
-                                    ? 'bg-green-700 cursor-not-allowed'
-                                    : 'bg-green-600 hover:bg-green-700'
-                                }`}
-                              >
-                                {isUpdatingItem?.orderId === selectedOrder._id && isUpdatingItem?.itemIndex === index ? (
-                                  <>
-                                    <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    جاري التجهيز...
-                                  </>
-                                ) : 'تجهيز كامل'}
-                              </button>
-                          </div>
-                        )}
+                            return (
+                              <TableButton
+                                key={table.id}
+                                table={table}
+                                isSelected={isSelected}
+                                isOccupied={isOccupied}
+                                onClick={handleTableClick}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     );
-                })}
+                  })}
               </div>
+            )}
+          </div>
+        </div>
 
-              {/* Action Buttons */}
-              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
-                <button
-                  onClick={() => setShowOrderDetails(false)}
-                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
-                >
-                  إغلاق
-                </button>
-
-                {/* زر تحريك الطلب إلى الجاهزة */}
-                {selectedOrder && hasAllItemsFullyPrepared(selectedOrder) && (
+        {/* Right: Table Orders */}
+        <div className="lg:col-span-1">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                {selectedTable ? `طاولة ${selectedTable.number}` : 'اختر طاولة'}
+              </h2>
+              {selectedTable && (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      moveOrderToReady(selectedOrder._id);
-                      setShowOrderDetails(false);
-                    }}
-                    disabled={isMovingToReady === selectedOrder._id}
-                    className={`px-4 py-2 text-white rounded-lg transition-colors duration-200 flex items-center ${
-                      isMovingToReady === selectedOrder._id
-                        ? 'bg-green-700 cursor-not-allowed'
-                        : 'bg-green-600 hover:bg-green-700'
-                    }`}
+                    onClick={handleAddOrder}
+                    className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center text-sm transition-colors duration-200"
                   >
-                    {isMovingToReady === selectedOrder._id ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        جاري التحريك...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="h-4 w-4 ml-2" />
-                        تحريك إلى الجاهزة
-                      </>
-                    )}
+                    <Plus className="h-4 w-4 ml-1" />
+                    طلب جديد
                   </button>
+                </div>
+              )}
+            </div>
+
+            {selectedTable ? (
+              <div className="space-y-3">
+                {filteredTableOrders.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">لا توجد طلبات</div>
+                ) : (
+                  filteredTableOrders.map(order => (
+                    <OrderItem
+                      key={order.id}
+                      order={order}
+                      onPrint={handlePrintOrder}
+                      onEdit={handleEditOrder}
+                      onDelete={handleDeleteOrder}
+                    />
+                  ))
                 )}
-
-                {/* زر إعادة تحميل البيانات */}
-                <button
-                  onClick={() => {
-                    fetchPendingOrders();
-                    fetchReadyOrders();
-                  }}
-                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 flex items-center"
-                  title="إعادة تحميل البيانات"
-                >
-                  <svg className="h-4 w-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  تحديث
-                </button>
               </div>
-            </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                اختر طاولة لعرض الطلبات
+              </div>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Add Order Modal */}
+      {showOrderModal && selectedTable && (
+        <OrderModal
+          table={selectedTable}
+          orderItems={currentOrderItems}
+          setOrderItems={setCurrentOrderItems}
+          orderNotes={orderNotes}
+          setOrderNotes={setOrderNotes}
+          menuSections={menuSections}
+          menuCategories={menuCategories}
+          menuItems={menuItems}
+          expandedSections={expandedSections}
+          expandedCategories={expandedCategories}
+          toggleSection={toggleSection}
+          toggleCategory={toggleCategory}
+          getCategoriesForSection={getCategoriesForSection}
+          getItemsForCategory={getItemsForCategory}
+          addItemToOrder={addItemToOrder}
+          updateItemQuantity={updateItemQuantity}
+          updateItemNotes={updateItemNotes}
+          removeItemFromOrder={removeItemFromOrder}
+          calculateTotal={calculateOrderTotal}
+          onSave={handleSaveOrder}
+          onClose={() => {
+            setShowOrderModal(false);
+            setCurrentOrderItems([]);
+            setOrderNotes('');
+          }}
+          loading={loading}
+          isEdit={false}
+        />
       )}
 
-      {showCancelModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 dark:bg-opacity-60 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full p-6 relative text-center">
-            <button
-              className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl font-bold transition-colors"
-              onClick={() => setShowCancelModal(false)}
-              aria-label="إغلاق"
-            >
-              ×
-            </button>
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">تأكيد إلغاء الطلب</h2>
-            <p className="mb-6 text-gray-700 dark:text-gray-300">
-              هل أنت متأكد أنك تريد إلغاء الطلب رقم{' '}
-              <span className="font-bold text-red-600 dark:text-red-400">#{orderToCancel?.orderNumber}</span>؟
-            </p>
-            <div className="flex gap-4 justify-center">
-              <button
-                className="px-4 py-2 rounded-lg font-bold transition-colors
-                  bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600
-                  text-gray-800 dark:text-gray-200"
-                onClick={() => setShowCancelModal(false)}
-                disabled={isCancelingOrder}
-              >
-                تراجع
-              </button>
-              <button
-                className={`px-4 py-2 rounded-lg font-bold text-white flex items-center justify-center min-w-[120px] transition-colors ${
-                  isCancelingOrder
-                    ? 'bg-red-700 dark:bg-red-800 cursor-not-allowed'
-                    : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700'
-                }`}
-                onClick={confirmCancelOrder}
-                disabled={isCancelingOrder}
-              >
-                {isCancelingOrder ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    جاري الإلغاء...
-                  </>
-                ) : 'تأكيد الإلغاء'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Edit Order Modal */}
+      {showEditOrderModal && selectedOrder && selectedTable && (
+        <OrderModal
+          table={selectedTable}
+          orderItems={currentOrderItems}
+          setOrderItems={setCurrentOrderItems}
+          orderNotes={orderNotes}
+          setOrderNotes={setOrderNotes}
+          menuSections={menuSections}
+          menuCategories={menuCategories}
+          menuItems={menuItems}
+          expandedSections={expandedSections}
+          expandedCategories={expandedCategories}
+          toggleSection={toggleSection}
+          toggleCategory={toggleCategory}
+          getCategoriesForSection={getCategoriesForSection}
+          getItemsForCategory={getItemsForCategory}
+          addItemToOrder={addItemToOrder}
+          updateItemQuantity={updateItemQuantity}
+          updateItemNotes={updateItemNotes}
+          removeItemFromOrder={removeItemFromOrder}
+          calculateTotal={calculateOrderTotal}
+          onSave={handleUpdateOrder}
+          onClose={() => {
+            setShowEditOrderModal(false);
+            setSelectedOrder(null);
+            setCurrentOrderItems([]);
+            setOrderNotes('');
+          }}
+          loading={loading}
+          isEdit={true}
+        />
       )}
 
-      {showEditOrder && editOrderData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
+      {/* Management Modal */}
+      {showManagementModal && (
+        <ManagementModal
+          tableSections={tableSections}
+          tables={tables}
+          onClose={() => setShowManagementModal(false)}
+          onAddSection={() => {
+            setEditingSection(null);
+            setSectionFormData({ name: '', description: '', sortOrder: 0 });
+            setShowSectionModal(true);
+          }}
+          onEditSection={(section) => {
+            setEditingSection(section);
+            setSectionFormData({
+              name: section.name,
+              description: section.description || '',
+              sortOrder: section.sortOrder,
+            });
+            setShowSectionModal(true);
+          }}
+          onDeleteSection={async (id) => {
+            showConfirm(
+              'حذف القسم',
+              'هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع الطاولات التابعة له.',
+              async () => {
+                await deleteTableSection(id);
+                await fetchTables();
+                setShowConfirmModal(false);
+              }
+            );
+          }}
+          onAddTable={(sectionId) => {
+            setEditingTable(null);
+            setTableFormData({ number: '', section: sectionId });
+            setShowTableModal(true);
+          }}
+          onEditTable={(table) => {
+            setEditingTable(table);
+            const sectionId = typeof table.section === 'string' 
+              ? table.section 
+              : (table.section as TableSection)?.id || (table.section as TableSection)?._id || '';
+            setTableFormData({ number: table.number.toString(), section: sectionId });
+            setShowTableModal(true);
+          }}
+          onDeleteTable={async (id) => {
+            showConfirm(
+              'حذف الطاولة',
+              'هل أنت متأكد من حذف هذه الطاولة؟',
+              async () => {
+                await deleteTable(id);
+                setShowConfirmModal(false);
+              }
+            );
+          }}
+          getTablesBySection={getTablesBySectionFn}
+        />
+      )}
+
+      {/* Section Modal */}
+      {showSectionModal && (
+        <SectionModal
+          formData={sectionFormData}
+          setFormData={setSectionFormData}
+          editingSection={editingSection}
+          onSave={async () => {
+            if (!sectionFormData.name.trim()) {
+              showNotification('يرجى إدخال اسم القسم', 'error');
+              return;
+            }
+            if (editingSection) {
+              await updateTableSection(editingSection.id, sectionFormData);
+            } else {
+              await createTableSection(sectionFormData);
+            }
+            setShowSectionModal(false);
+            setEditingSection(null);
+            setSectionFormData({ name: '', description: '', sortOrder: 0 });
+          }}
+          onClose={() => {
+            setShowSectionModal(false);
+            setEditingSection(null);
+            setSectionFormData({ name: '', description: '', sortOrder: 0 });
+          }}
+        />
+      )}
+
+      {/* Table Modal */}
+      {showTableModal && (
+        <TableModal
+          formData={tableFormData}
+          setFormData={setTableFormData}
+          tableSections={tableSections}
+          editingTable={editingTable}
+          onSave={async () => {
+            if (!tableFormData.number || tableFormData.number.trim() === '') {
+              showNotification('يرجى إدخال رقم/اسم الطاولة', 'error');
+              return;
+            }
+            if (!tableFormData.section) {
+              showNotification('يرجى اختيار قسم', 'error');
+              return;
+            }
+            if (editingTable) {
+              await updateTable(editingTable.id, {
+                number: tableFormData.number,
+                section: tableFormData.section,
+              });
+            } else {
+              await createTable({
+                number: tableFormData.number,
+                section: tableFormData.section,
+              });
+            }
+            setShowTableModal(false);
+            setEditingTable(null);
+            setTableFormData({ number: '', section: '' });
+          }}
+          onClose={() => {
+            setShowTableModal(false);
+            setEditingTable(null);
+            setTableFormData({ number: '', section: '' });
+          }}
+        />
+      )}
+
+      {/* Confirm Modal */}
+      {showConfirmModal && confirmModalData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">تعديل الطلب #{editOrderData.orderNumber}</h3>
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {confirmModalData.title}
+                  </h3>
+                </div>
+              </div>
             </div>
             <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Menu Items for Order */}
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر من القائمة</h4>
-                  {/* فلتر الفئة */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
-                    <select
-                      value={selectedCategory}
-                      onChange={e => setSelectedCategory(e.target.value)}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="all">جميع الفئات</option>
-                      {categories.map(category => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {loading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-                      <p className="mt-2 text-gray-600 dark:text-gray-400">جاري تحميل القائمة...</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {categories
-                        .filter(category => selectedCategory === 'all' || category === selectedCategory)
-                        .map(category => (
-                          <div key={category}>
-                            <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">{category}</h5>
-                            <div className="space-y-2">
-                              {(menuItemsByCategory[category] || []).filter(item => item.isAvailable).map(item => (
-                                <button
-                                  key={item.id || item._id}
-                                  onClick={() => {
-                                    const menuItemId = item._id || item.id;
-                                    const existingIndex = editOrderData.items.findIndex(
-                                      (i) =>
-                                        (i.menuItem && String(i.menuItem) === String(menuItemId)) ||
-                                        (!i.menuItem && i.name === item.name)
-                                    );
-                                    if (existingIndex !== -1) {
-                                      const items = [...editOrderData.items];
-                                      items[existingIndex].quantity += 1;
-                                      setEditOrderData({ ...editOrderData, items });
-                                    } else {
-                                      const items = [
-                                        ...editOrderData.items,
-                                        {
-                                          menuItem: String(menuItemId),
-                                          name: item.name,
-                                          price: item.price,
-                                          quantity: 1,
-                                          notes: ''
-                                        }
-                                      ];
-                                      setEditOrderData({ ...editOrderData, items });
-                                    }
-                                  }}
-                                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
-                                >
-                                  <span className="text-gray-900 dark:text-gray-100">{item.name}</span>
-                                  <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Order Details */}
-                <div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم العميل</label>
-                    <input
-                      type="text"
-                      value={editOrderData.customerName || ''}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      readOnly
-                    />
-                  </div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">تفاصيل الطلب</h4>
-                  <div className="space-y-3">
-                    {editOrderData.items.length === 0 ? (
-                      <p className="text-gray-500 dark:text-gray-400 text-center py-4">لا توجد عناصر في الطلب</p>
-                    ) : (
-                      editOrderData.items.map((item, index) => (
-                        <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{item.name}</span>
-                            <button
-                              onClick={() => {
-                                const items = editOrderData.items.filter((_, i) => i !== index);
-                                setEditOrderData({ ...editOrderData, items });
-                              }}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <div className="flex items-center space-x-2 space-x-reverse mb-2">
-                            <button
-                              onClick={() => {
-                                const items = [...editOrderData.items];
-                                if (items[index].quantity > 1) items[index].quantity -= 1;
-                                setEditOrderData({ ...editOrderData, items });
-                              }}
-                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
-                            >
-                              -
-                            </button>
-                            <span className="w-8 text-center dark:text-gray-100">{formatDecimal(item.quantity)}</span>
-                            <button
-                              onClick={() => {
-                                const items = [...editOrderData.items];
-                                items[index].quantity += 1;
-                                setEditOrderData({ ...editOrderData, items });
-                              }}
-                              className="w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-full flex items-center justify-center"
-                            >
-                              +
-                            </button>
-                            <span className="text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
-                          </div>
-                          <div className="mb-2">
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">ملاحظات هذا المشروب:</label>
-                            <textarea
-                              value={item.notes || ''}
-                              onChange={e => {
-                                const items = [...editOrderData.items];
-                                items[index].notes = e.target.value;
-                                setEditOrderData({ ...editOrderData, items });
-                              }}
-                              className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                              rows={1}
-                              placeholder="مثال: بدون سكر، مع حليب إضافي..."
-                            />
-                          </div>
-                        </div>
-                      ))
-                    )}
-                    {editOrderData.items.length > 0 && (
-                      <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                        <div className="flex justify-between items-center font-bold text-lg">
-                          <span className="dark:text-gray-100">الإجمالي:</span>
-                          <span className="text-green-600 dark:text-green-400">
-                            {formatCurrency(calculateEditOrderTotal())}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <p className="text-gray-700 dark:text-gray-300">
+                {confirmModalData.message}
+              </p>
             </div>
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3 space-x-reverse">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
               <button
-                onClick={() => setShowEditOrder(false)}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
-              >إلغاء</button>
-              <button
-                onClick={async () => {
-                  try {
-                    setUpdatingOrder(true);
-
-                    if (editOrderData.items.length === 0) {
-                      showNotification('يرجى إضافة عناصر للطلب', 'error');
-                      setUpdatingOrder(false);
-                      return;
-                    }
-
-                    // تحقق صارم من كل عنصر
-                    if (editOrderData.items.some(item => !item || !item.menuItem || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number')) {
-                      showNotification('هناك عنصر غير معرف أو ناقص في الطلب، يرجى إعادة إضافة العناصر.', 'error');
-                      setUpdatingOrder(false);
-                      return;
-                    }
-
-                    // التحقق من المخزون قبل تحديث الطلب
-                    const orderData = {
-                      customerName: editOrderData.customerName,
-                      items: editOrderData.items.map(item => ({
-                        menuItem: item.menuItem,
-                        name: item.name,
-                        price: item.price,
-                        quantity: item.quantity,
-                        notes: item.notes,
-                      })),
-                      notes: editOrderData.notes
-                    };
-
-                    // التحقق من المخزون أولاً
-                    const inventoryCheck = await api.calculateOrderRequirements(orderData);
-
-                    if (!inventoryCheck.success) {
-                      // إذا كان هناك تفاصيل ناقصة في المخزون، اعرضها بشكل واضح
-                      if (
-                        inventoryCheck.data &&
-                        Array.isArray(inventoryCheck.data.details) &&
-                        inventoryCheck.data.details.length > 0
-                      ) {
-                        const detailsTable = inventoryCheck.data.details
-                          .map(
-                            (d) =>
-                              `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`
-                          )
-                          .join('\n');
-                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsTable}`, 'error');
-                      } else if (inventoryCheck.data && Array.isArray(inventoryCheck.data.errors) && inventoryCheck.data.errors.length > 0) {
-                        showNotification(`المخزون غير كافي لتحديث الطلب:\n${inventoryCheck.data.errors.join('\n')}`, 'error');
-                      } else {
-                        showNotification('خطأ في التحقق من المخزون', 'error');
-                      }
-                      setUpdatingOrder(false);
-                      return;
-                    }
-
-                    // تحقق من وجود تفاصيل المكونات الناقصة حتى لو كان الفحص ناجح
-                    if (inventoryCheck.data && inventoryCheck.data.details && inventoryCheck.data.details.length > 0) {
-                      const detailsMessage = inventoryCheck.data.details
-                        .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
-                        .join('\n');
-                      showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
-                      setUpdatingOrder(false);
-                      return;
-                    }
-
-                    // إذا كان المخزون متوفر، تابع تحديث الطلب
-
-                    const updatedOrder = {
-                      customerName: editOrderData.customerName,
-                      notes: editOrderData.notes,
-                      items: editOrderData.items.map(item => ({
-                        menuItem: item.menuItem,
-                        name: item.name,
-                        price: item.price,
-                        quantity: item.quantity,
-                        notes: item.notes || ''
-                      }))
-                    };
-
-
-                    if (!editOrderData._id) {
-                      console.error("Order ID is missing!");
-                      showNotification('خطأ: معرف الطلب مفقود', 'error');
-                      setUpdatingOrder(false);
-                      return;
-                    }
-
-                    const response = await updateOrder(editOrderData._id, updatedOrder);
-
-                    if (response) {
-                      setShowEditOrder(false);
-                      setEditOrderData(null);
-                      fetchPendingOrders();
-                      fetchReadyOrders();
-                    }
-                  } catch (err) {
-                    // تجاهل الأخطاء
-                    showNotification('حدث خطأ أثناء تحديث الطلب', 'error');
-                  } finally {
-                    setUpdatingOrder(false);
-                  }
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setConfirmModalData(null);
                 }}
-                disabled={updatingOrder}
-                className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
-                  updatingOrder
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'
-                } text-white`}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors"
               >
-                {updatingOrder ? 'جارى حفظ التعديلات...' : 'حفظ التعديلات'}
+                {confirmModalData.cancelText || 'إلغاء'}
+              </button>
+              <button
+                onClick={() => {
+                  confirmModalData.onConfirm();
+                }}
+                className={`px-4 py-2 text-white rounded-lg transition-colors ${confirmModalData.confirmColor || 'bg-red-600 hover:bg-red-700'}`}
+              >
+                {confirmModalData.confirmText || 'تأكيد'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+    </div>
+  );
+};
+
+// Order Modal Component
+interface OrderModalProps {
+  table: {
+    _id: string;
+    number: string | number;
+    name?: string;
+  };
+  orderItems: LocalOrderItem[];
+  setOrderItems: React.Dispatch<React.SetStateAction<LocalOrderItem[]>>;
+  orderNotes: string;
+  setOrderNotes: (notes: string) => void;
+  menuSections: MenuSection[];
+  menuCategories: MenuCategory[];
+  menuItems: MenuItem[];
+  expandedSections: Record<string, boolean>;
+  expandedCategories: Record<string, boolean>;
+  toggleSection: (sectionId: string) => void;
+  toggleCategory: (categoryId: string) => void;
+  getCategoriesForSection: (sectionId: string) => MenuCategory[];
+  getItemsForCategory: (categoryId: string) => MenuItem[];
+  addItemToOrder: (menuItem: MenuItem) => void;
+  updateItemQuantity: (menuItemId: string, delta: number) => void;
+  updateItemNotes: (menuItemId: string, notes: string) => void;
+  removeItemFromOrder: (menuItemId: string) => void;
+  calculateTotal: () => number;
+  onSave: () => void;
+  onClose: () => void;
+  loading: boolean;
+  isEdit: boolean;
+}
+
+const OrderModal: React.FC<OrderModalProps> = ({
+  table,
+  orderItems,
+  orderNotes,
+  setOrderNotes,
+  menuSections,
+  menuCategories,
+  menuItems,
+  expandedSections,
+  expandedCategories,
+  toggleSection,
+  toggleCategory,
+  getCategoriesForSection,
+  getItemsForCategory,
+  addItemToOrder,
+  updateItemQuantity,
+  updateItemNotes,
+  removeItemFromOrder,
+  calculateTotal,
+  onSave,
+  onClose,
+  loading,
+  isEdit,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const sectionRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const orderItemRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  
+  // Scroll to section when clicked
+  const scrollToSection = (sectionId: string) => {
+    const sectionElement = sectionRefs.current[sectionId];
+    if (sectionElement) {
+      sectionElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start',
+        inline: 'nearest'
+      });
+    }
+  };
+  
+  // Scroll to order item after adding
+  const scrollToOrderItem = (itemId: string) => {
+    setTimeout(() => {
+      const orderItemElement = orderItemRefs.current[itemId];
+      if (orderItemElement) {
+        orderItemElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'nearest'
+        });
+      }
+    }, 100); // Small delay to ensure item is rendered
+  };
+  
+  // Wrap addItemToOrder to include scroll
+  const handleAddItemToOrder = (item: MenuItem) => {
+    addItemToOrder(item);
+    scrollToOrderItem(item.id);
+  };
+
+  // Filter items based on search query
+  const filteredMenuItems = useMemo(() => {
+    if (!searchQuery.trim()) return menuItems;
+    const query = searchQuery.toLowerCase();
+    return menuItems.filter(item => 
+      item.name.toLowerCase().includes(query)
+    );
+  }, [menuItems, searchQuery]);
+
+  // Get filtered items for category
+  const getFilteredItemsForCategory = (categoryId: string) => {
+    const items = getItemsForCategory(categoryId);
+    if (!searchQuery.trim()) return items;
+    const query = searchQuery.toLowerCase();
+    return items.filter(item => item.name.toLowerCase().includes(query));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            {isEdit ? 'تعديل الطلب' : 'إضافة طلب'} - طاولة {table.number}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left: Menu */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">المنيو</h3>
+            </div>
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="بحث عن عنصر..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pr-10 pl-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              {searchQuery.trim() ? (
+                // Show all matching items when searching
+                <div className="space-y-2">
+                  {filteredMenuItems.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">لا توجد نتائج</div>
+                  ) : (
+                    filteredMenuItems.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => handleAddItemToOrder(item)}
+                        className="w-full flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        <span className="text-gray-700 dark:text-gray-300 font-medium">
+                          {item.name}
+                        </span>
+                        <span className="font-semibold text-orange-600 dark:text-orange-400">
+                          {formatCurrency(item.price)}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : (
+                // Show sections and categories when not searching
+                menuSections
+                  .filter(section => section.isActive)
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map(section => {
+                    const categories = getCategoriesForSection(section.id);
+                    if (categories.length === 0) return null;
+
+                    return (
+                      <div 
+                        key={section.id} 
+                        ref={(el) => (sectionRefs.current[section.id] = el)}
+                        className="border border-gray-200 dark:border-gray-700 rounded-lg"
+                      >
+                        <button
+                          onClick={() => {
+                            toggleSection(section.id);
+                            scrollToSection(section.id);
+                          }}
+                          className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                        >
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                            {section.name}
+                          </span>
+                          {expandedSections[section.id] ? (
+                            <MinusCircle className="h-5 w-5 text-gray-500" />
+                          ) : (
+                            <PlusCircle className="h-5 w-5 text-gray-500" />
+                          )}
+                        </button>
+                        {expandedSections[section.id] && (
+                          <div className="p-3 space-y-2">
+                            {categories.map(category => {
+                              const items = getItemsForCategory(category.id);
+                              if (items.length === 0) return null;
+
+                              return (
+                                <div key={category.id}>
+                                  <button
+                                    onClick={() => toggleCategory(category.id)}
+                                    className="w-full flex items-center justify-between p-2 text-sm bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors rounded"
+                                  >
+                                    <span className="font-medium text-gray-800 dark:text-gray-200">
+                                      {category.name}
+                                    </span>
+                                    {expandedCategories[category.id] ? (
+                                      <MinusCircle className="h-4 w-4 text-gray-500" />
+                                    ) : (
+                                      <PlusCircle className="h-4 w-4 text-gray-500" />
+                                    )}
+                                  </button>
+                                  {expandedCategories[category.id] && (
+                                    <div className="mt-2 space-y-1 pr-4">
+                                      {getFilteredItemsForCategory(category.id).map(item => (
+                                        <button
+                                          key={item.id}
+                                          onClick={() => handleAddItemToOrder(item)}
+                                          className="w-full flex items-center justify-between p-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+                                        >
+                                          <span className="text-gray-700 dark:text-gray-300">
+                                            {item.name}
+                                          </span>
+                                          <span className="font-semibold text-orange-600 dark:text-orange-400">
+                                            {formatCurrency(item.price)}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+
+          {/* Right: Order Items */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الطلبات</h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {orderItems.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">لا توجد عناصر في الطلب</div>
+              ) : (
+                orderItems.map(item => {
+                  const menuItem = menuItems.find(mi => mi.id === item.menuItem);
+                  return (
+                    <div
+                      key={item.menuItem}
+                      ref={(el) => (orderItemRefs.current[item.menuItem] = el)}
+                      className="border border-gray-200 dark:border-gray-700 rounded-lg p-3"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900 dark:text-gray-100">
+                            {item.name}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {formatCurrency(item.price)} × {item.quantity} = {formatCurrency(item.price * item.quantity)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeItemFromOrder(item.menuItem)}
+                          className="text-red-600 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                        <button
+                          onClick={() => updateItemQuantity(item.menuItem, -1)}
+                          className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded p-1"
+                        >
+                          <MinusCircle className="h-4 w-4" />
+                        </button>
+                        <span className="font-semibold w-8 text-center">{item.quantity}</span>
+                        <button
+                          onClick={() => updateItemQuantity(item.menuItem, 1)}
+                          className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded p-1"
+                        >
+                          <PlusCircle className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={item.notes || ''}
+                        onChange={(e) => updateItemNotes(item.menuItem, e.target.value)}
+                        placeholder="ملاحظات على العنصر"
+                        className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">الإجمالي:</span>
+                <span className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                  {formatCurrency(calculateTotal())}
+                </span>
+              </div>
+              <textarea
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                placeholder="ملاحظات على الطلب"
+                rows={3}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end space-x-3 space-x-reverse p-6 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+          >
+            إلغاء
+          </button>
+          <button
+            onClick={onSave}
+            disabled={loading || orderItems.length === 0}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          >
+            {loading ? 'جاري الحفظ...' : isEdit ? 'تحديث' : 'حفظ'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+// Management Modal Component
+interface ManagementModalProps {
+  tableSections: TableSection[];
+  tables: Table[];
+  onClose: () => void;
+  onAddSection: () => void;
+  onEditSection: (section: TableSection) => void;
+  onDeleteSection: (id: string) => Promise<void>;
+  onAddTable: (sectionId: string) => void;
+  onEditTable: (table: Table) => void;
+  onDeleteTable: (id: string) => Promise<void>;
+  getTablesBySection: (sectionId: string) => Table[];
+}
+
+const ManagementModal: React.FC<ManagementModalProps> = ({
+  tableSections,
+  tables,
+  onClose,
+  onAddSection,
+  onEditSection,
+  onDeleteSection,
+  onAddTable,
+  onEditTable,
+  onDeleteTable,
+  getTablesBySection,
+}) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الأقسام والطاولات</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الأقسام</h3>
+              <button
+                onClick={onAddSection}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center text-sm"
+              >
+                <Plus className="h-4 w-4 ml-1" />
+                إضافة قسم
+              </button>
+            </div>
+            <div className="space-y-3">
+              {tableSections
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map(section => {
+                  const sectionTables = getTablesBySection(section.id);
+                  return (
+                    <div
+                      key={section.id}
+                      className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 dark:text-gray-100">{section.name}</h4>
+                          {section.description && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{section.description}</p>
+                          )}
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                            {sectionTables.length} طاولة
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2 space-x-reverse">
+                          <button
+                            onClick={() => onEditSection(section)}
+                            className="text-orange-600 hover:text-orange-700 p-2"
+                            title="تعديل"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => onDeleteSection(section.id)}
+                            className="text-red-600 hover:text-red-700 p-2"
+                            title="حذف"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap gap-2">
+                          {sectionTables.map(table => (
+                            <div
+                              key={table.id}
+                              className="flex items-center space-x-2 space-x-reverse bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded"
+                            >
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                طاولة {table.number}
+                              </span>
+                              <button
+                                onClick={() => onEditTable(table)}
+                                className="text-orange-600 hover:text-orange-700"
+                                title="تعديل"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => onDeleteTable(table.id)}
+                                className="text-red-600 hover:text-red-700"
+                                title="حذف"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => onAddTable(section.id)}
+                          className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
+                        >
+                          <Plus className="h-4 w-4 ml-1" />
+                          إضافة طاولة
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end p-6 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+          >
+            إغلاق
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Section Modal Component
+interface SectionModalProps {
+  formData: { name: string; description: string; sortOrder: number };
+  setFormData: (data: { name: string; description: string; sortOrder: number }) => void;
+  editingSection: TableSection | null;
+  onSave: () => void;
+  onClose: () => void;
+}
+
+const SectionModal: React.FC<SectionModalProps> = ({
+  formData,
+  setFormData,
+  editingSection,
+  onSave,
+  onClose,
+}) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+            {editingSection ? 'تعديل القسم' : 'إضافة قسم'}
+          </h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              اسم القسم *
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="اسم القسم"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              الوصف
+            </label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="وصف القسم"
+              rows={3}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              ترتيب العرض
+            </label>
+            <input
+              type="number"
+              value={formData.sortOrder}
+              onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="0"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end space-x-3 space-x-reverse p-6 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg"
+          >
+            إلغاء
+          </button>
+          <button
+            onClick={onSave}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+          >
+            حفظ
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Table Modal Component
+interface TableModalProps {
+  formData: { number: string; section: string };
+  setFormData: (data: { number: string; section: string }) => void;
+  tableSections: TableSection[];
+  editingTable: Table | null;
+  onSave: () => void;
+  onClose: () => void;
+}
+
+const TableModal: React.FC<TableModalProps> = ({
+  formData,
+  setFormData,
+  tableSections,
+  editingTable,
+  onSave,
+  onClose,
+}) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+            {editingTable ? 'تعديل الطاولة' : 'إضافة طاولة'}
+          </h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              رقم/اسم الطاولة *
+            </label>
+            <input
+              type="text"
+              value={formData.number}
+              onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="مثال: 1، واحد، A1، VIP، شرفة 1"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              القسم *
+            </label>
+            <select
+              value={formData.section}
+              onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              <option value="">اختر القسم</option>
+              {tableSections
+                .filter(section => section.isActive)
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map(section => (
+                  <option key={section.id} value={section.id}>
+                    {section.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end space-x-3 space-x-reverse p-6 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg"
+          >
+            إلغاء
+          </button>
+          <button
+            onClick={onSave}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+          >
+            حفظ
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

@@ -6,9 +6,11 @@ import {
     updateBill,
     addPayment,
     addOrderToBill,
+    removeOrderFromBill,
     addSessionToBill,
     getBillByQR,
     cancelBill,
+    deleteBill,
     addPartialPayment,
     getBillItems,
     getSubscriptionStatus,
@@ -35,11 +37,13 @@ router
 router
     .route("/:id")
     .get(authorize("billing", "all"), getBill)
-    .put(authorize("billing", "all"), updateBill);
+    .put(authorize("billing", "all"), updateBill)
+    .delete(authorize("billing", "all"), deleteBill);
 
 router.post("/:id/payment", authorize("billing", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "all"), addPayment);
 router.post("/:id/orders", authorize("billing", "all"), addOrderToBill);
+router.delete("/:id/orders/:orderId", authorize("billing", "all"), removeOrderFromBill);
 router.post("/:id/sessions", authorize("billing", "all"), addSessionToBill);
 // إلغاء الفاتورة - للمدير فقط
 router.put("/:id/cancel", protect, adminOnly, cancelBill);

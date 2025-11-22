@@ -25,6 +25,7 @@ import NotificationManagement from './pages/NotificationManagement';
 import Subscription from './pages/Subscription';
 import VerifyEmail from './pages/VerifyEmail';
 import ResetPassword from './pages/ResetPassword';
+import ConsumptionReport from './pages/ConsumptionReport';
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
@@ -165,6 +166,11 @@ const RouteHandler = () => {
           <Route path="reports" element={
             <ProtectedRoute requiredPermissions={['reports']}>
               <Reports />
+            </ProtectedRoute>
+          } />
+          <Route path="consumption-report" element={
+            <ProtectedRoute requiredPermissions={['reports']}>
+              <ConsumptionReport />
             </ProtectedRoute>
           } />
           <Route path="inventory" element={

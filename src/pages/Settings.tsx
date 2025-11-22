@@ -154,7 +154,6 @@ const Settings: FC = () => {
         showAlertMessage('حدث خطأ أثناء تحديث الملف الشخصي', 'error');
       }
     } catch (error) {
-      console.error('Error updating profile:', error);
       showAlertMessage('حدث خطأ غير متوقع أثناء تحديث الملف الشخصي', 'error');
     } finally {
       setProfileSaving(false);
@@ -191,7 +190,6 @@ const Settings: FC = () => {
         showAlertMessage('فشل تغيير كلمة المرور. يرجى التحقق من كلمة المرور الحالية', 'error');
       }
     } catch (error) {
-      console.error('Error changing password:', error);
       showAlertMessage('حدث خطأ أثناء تغيير كلمة المرور', 'error');
     } finally {
       setPasswordSaving(false);
@@ -208,7 +206,6 @@ const Settings: FC = () => {
         showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
       }
     } catch (error) {
-      console.error('Error updating notification settings:', error);
       showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
     } finally {
       setNotificationsSaving(false);
@@ -225,7 +222,6 @@ const Settings: FC = () => {
         showAlertMessage('حدث خطأ أثناء حفظ الإعدادات العامة', 'error');
       }
     } catch (error) {
-      console.error('Error updating general settings:', error);
       showAlertMessage('حدث خطأ أثناء حفظ الإعدادات العامة', 'error');
     } finally {
       setGeneralSaving(false);

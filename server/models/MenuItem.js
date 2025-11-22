@@ -9,18 +9,9 @@ const menuItemSchema = new mongoose.Schema(
         },
         // تم حذف arabicName نهائياً
         category: {
-            type: String,
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "MenuCategory",
             required: [true, "فئة المنتج مطلوبة"],
-            enum: [
-                "مشروبات ساخنة",
-                "مشروبات باردة",
-                "طعام",
-                "حلويات",
-                "وجبات خفيفة",
-                "عصائر",
-                "قهوة",
-                "شاي",
-            ],
         },
         description: {
             type: String,
@@ -128,12 +119,11 @@ const menuItemSchema = new mongoose.Schema(
     }
 );
 
-// Indexes
-menuItemSchema.index({ name: 1 });
-// تم حذف index الخاص بـ arabicName
-menuItemSchema.index({ category: 1 });
-menuItemSchema.index({ isAvailable: 1 });
-menuItemSchema.index({ isPopular: 1 });
-menuItemSchema.index({ sortOrder: 1 });
+// Indexes for better query performance
+menuItemSchema.index({ name: 1, organization: 1 });
+menuItemSchema.index({ category: 1, organization: 1, isAvailable: 1 }); // للبحث عن العناصر المتاحة
+menuItemSchema.index({ organization: 1, isAvailable: 1, sortOrder: 1 }); // للعرض المرتب
+menuItemSchema.index({ isPopular: 1, organization: 1 }); // للعناصر الشائعة
+menuItemSchema.index({ section: 1, organization: 1 }); // للبحث حسب القسم
 
 export default mongoose.model("MenuItem", menuItemSchema);

@@ -7,12 +7,27 @@ import Logger from "../middleware/logger.js";
 const execAsync = promisify(exec);
 
 // Backup configuration
-const BACKUP_DIR = "./backups";
+const BACKUP_DIR = path.join(process.cwd(), 'backups');
 const MAX_BACKUPS = 10; // Keep only the last 10 backups
 
 // Ensure backup directory exists
-if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+const ensureBackupDir = () => {
+    if (!fs.existsSync(BACKUP_DIR)) {
+        try {
+            fs.mkdirSync(BACKUP_DIR, { recursive: true });
+            Logger.info(`Created backup directory at: ${BACKUP_DIR}`);
+        } catch (error) {
+            Logger.error('Failed to create backup directory', { error });
+            throw error;
+        }
+    }
+};
+
+// Initialize backup directory on startup
+try {
+    ensureBackupDir();
+} catch (error) {
+    Logger.error('Backup directory initialization failed', { error });
 }
 
 // Create database backup

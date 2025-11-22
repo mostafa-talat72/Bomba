@@ -1,4 +1,35 @@
+// Debounce utility function
+const debounce = (func, delay) => {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+    };
+};
+
+// Create debounced emitters with 100ms delay
+const createDebouncedEmitters = (io) => {
+    const debouncedEmitters = new Map();
+    
+    const getDebouncedEmitter = (eventName) => {
+        if (!debouncedEmitters.has(eventName)) {
+            debouncedEmitters.set(
+                eventName,
+                debounce((data) => {
+                    io.emit(eventName, data);
+                }, 100)
+            );
+        }
+        return debouncedEmitters.get(eventName);
+    };
+    
+    return getDebouncedEmitter;
+};
+
 export const setupSocketIO = (io) => {
+    // Initialize debounced emitters
+    const getDebouncedEmitter = createDebouncedEmitters(io);
+    
     io.on("connection", (socket) => {
         // Join user to their role room
         socket.on("join-role", (role) => {
@@ -135,4 +166,7 @@ export const setupSocketIO = (io) => {
             io.emit("notification", notification);
         }
     };
+
+    // Debounced table status update to reduce event frequency
+    io.notifyTableStatusUpdate = getDebouncedEmitter("table-status-update");
 };

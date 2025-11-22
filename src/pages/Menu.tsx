@@ -1,28 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle } from 'lucide-react';
+import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle, Folder, FolderOpen, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MenuItem, InventoryItem } from '../services/api';
+import { MenuItem, MenuSection, MenuCategory } from '../services/api';
 import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
 
 const Menu: React.FC = () => {
 	const {
 		menuItems,
+		menuSections,
+		menuCategories,
 		fetchMenuItems,
+		fetchMenuSections,
+		fetchMenuCategories,
 		createMenuItem,
 		updateMenuItem,
 		deleteMenuItem,
+		createMenuSection,
+		updateMenuSection,
+		deleteMenuSection,
+		createMenuCategory,
+		updateMenuCategory,
+		deleteMenuCategory,
 		inventoryItems,
 		fetchInventoryItems,
 		showNotification
 	} = useApp();
 	const [loading, setLoading] = useState(false);
 	const [showAddModal, setShowAddModal] = useState(false);
+	const [showSectionModal, setShowSectionModal] = useState(false);
+	const [showCategoryModal, setShowCategoryModal] = useState(false);
 	const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+	const [editingSection, setEditingSection] = useState<MenuSection | null>(null);
+	const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
 	const [deletingItems, setDeletingItems] = useState<Record<string, boolean>>({});
+	const [deletingSections, setDeletingSections] = useState<Record<string, boolean>>({});
+	const [deletingCategories, setDeletingCategories] = useState<Record<string, boolean>>({});
 	const [savingItem, setSavingItem] = useState(false);
-	const [showDeleteModal, setShowDeleteModal] = useState<{show: boolean, itemId: string | null}>({show: false, itemId: null});
+	const [savingSection, setSavingSection] = useState(false);
+	const [savingCategory, setSavingCategory] = useState(false);
+	const [showDeleteModal, setShowDeleteModal] = useState<{show: boolean, itemId: string | null, type: 'item' | 'section' | 'category'}>({show: false, itemId: null, type: 'item'});
 	const [searchTerm, setSearchTerm] = useState('');
-	const [selectedCategory, setSelectedCategory] = useState('all');
+	const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+	const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
 	// Form state
 	const [formData, setFormData] = useState({
@@ -36,22 +55,44 @@ const Menu: React.FC = () => {
 		ingredients: [] as { item: string; quantity: number; unit: string }[]
 	});
 
-	const categories = [
-		'مشروبات ساخنة',
-		'مشروبات باردة',
-		'طعام',
-		'حلويات',
-		'وجبات سريعة',
-		'عصائر طبيعية',
-		'منتجات أخرى'
-	];
-
 	const unitOptions = ['جرام', 'كيلو', 'مل', 'لتر', 'قطعة', 'ملعقة', 'كوب'];
+
+	// Form states
+	const [sectionFormData, setSectionFormData] = useState({
+		name: '',
+		description: '',
+		sortOrder: 0
+	});
+
+	const [categoryFormData, setCategoryFormData] = useState({
+		name: '',
+		description: '',
+		section: '',
+		sortOrder: 0
+	});
 
 	useEffect(() => {
 		loadMenuItems();
+		loadMenuSections();
+		loadMenuCategories();
 		fetchInventoryItems();
 	}, []);
+
+	const loadMenuSections = async () => {
+		try {
+			await fetchMenuSections();
+		} catch (error) {
+			showNotification('خطأ في تحميل الأقسام', 'error');
+		}
+	};
+
+	const loadMenuCategories = async () => {
+		try {
+			await fetchMenuCategories();
+		} catch (error) {
+			showNotification('خطأ في تحميل الفئات', 'error');
+		}
+	};
 
 	// إعادة تحميل الخامات عند فتح النافذة
 	useEffect(() => {
@@ -66,6 +107,8 @@ const Menu: React.FC = () => {
 		const handleEscape = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') {
 				setShowAddModal(false);
+				setShowSectionModal(false);
+				setShowCategoryModal(false);
 			}
 		};
 
@@ -73,23 +116,55 @@ const Menu: React.FC = () => {
 		return () => document.removeEventListener('keydown', handleEscape);
 	}, []);
 
-			const loadMenuItems = async () => {
-			setLoading(true);
-			try {
-				await fetchMenuItems();
-			} catch {
-				showNotification('خطأ في تحميل قائمة الطعام', 'error');
-			} finally {
-				setLoading(false);
-			}
-		};
+	// Helper functions
+	const toggleSection = (sectionId: string) => {
+		setExpandedSections(prev => ({
+			...prev,
+			[sectionId]: !prev[sectionId]
+		}));
+	};
 
-	const handleAddItem = () => {
+	const toggleCategory = (categoryId: string) => {
+		setExpandedCategories(prev => ({
+			...prev,
+			[categoryId]: !prev[categoryId]
+		}));
+	};
+
+	// Get categories for a section
+	const getCategoriesForSection = (sectionId: string) => {
+		return menuCategories.filter(cat => {
+			const section = typeof cat.section === 'string' ? cat.section : cat.section?.id || cat.section?._id;
+			return section === sectionId;
+		}).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+	};
+
+	// Get items for a category
+	const getItemsForCategory = (categoryId: string) => {
+		return menuItems.filter(item => {
+			const category = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
+			return category === categoryId;
+		}).sort((a, b) => a.name.localeCompare(b.name));
+	};
+
+	const loadMenuItems = async () => {
+		setLoading(true);
+		try {
+			// Fetch all menu items
+			await fetchMenuItems();
+		} catch (error) {
+			showNotification('خطأ في تحميل قائمة الطعام', 'error');
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleAddItem = (categoryId?: string) => {
 		setEditingItem(null);
 		setFormData({
 			name: '',
 			price: '',
-			category: '',
+			category: categoryId || '',
 			description: '',
 			isAvailable: true,
 			preparationTime: '5',
@@ -101,10 +176,11 @@ const Menu: React.FC = () => {
 
 	const handleEditItem = (item: MenuItem) => {
 		setEditingItem(item);
+		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
 		setFormData({
 			name: item.name,
 			price: item.price.toString(),
-			category: item.category,
+			category: categoryId,
 			description: item.description || '',
 			isAvailable: item.isAvailable,
 			preparationTime: item.preparationTime.toString(),
@@ -116,15 +192,14 @@ const Menu: React.FC = () => {
 
 	const handleDeleteItem = async () => {
 		const { itemId } = showDeleteModal;
-		if (!itemId) return;
-		
+		if (!itemId || showDeleteModal.type !== 'item') return;
+
 		try {
 			setDeletingItems(prev => ({ ...prev, [itemId]: true }));
 			const success = await deleteMenuItem(itemId);
 			if (success) {
 				await loadMenuItems();
-				showNotification('تم حذف العنصر بنجاح', 'success');
-				setShowDeleteModal({show: false, itemId: null});
+				setShowDeleteModal({show: false, itemId: null, type: 'item'});
 			}
 		} catch (error) {
 			showNotification('حدث خطأ أثناء حذف العنصر', 'error');
@@ -133,12 +208,147 @@ const Menu: React.FC = () => {
 		}
 	};
 
-	const openDeleteModal = (itemId: string) => {
-		setShowDeleteModal({show: true, itemId});
+	const openDeleteModal = (itemId: string, type: 'item' | 'section' | 'category' = 'item') => {
+		setShowDeleteModal({show: true, itemId, type});
 	};
 
 	const closeDeleteModal = () => {
-		setShowDeleteModal({show: false, itemId: null});
+		setShowDeleteModal({show: false, itemId: null, type: 'item'});
+	};
+
+	// Section handlers
+	const handleAddSection = () => {
+		setEditingSection(null);
+		setSectionFormData({
+			name: '',
+			description: '',
+			sortOrder: menuSections.length
+		});
+		setShowSectionModal(true);
+	};
+
+	const handleEditSection = (section: MenuSection) => {
+		setEditingSection(section);
+		setSectionFormData({
+			name: section.name,
+			description: section.description || '',
+			sortOrder: section.sortOrder
+		});
+		setShowSectionModal(true);
+	};
+
+	const handleSaveSection = async () => {
+		if (!sectionFormData.name.trim()) {
+			showNotification('يرجى إدخال اسم القسم', 'error');
+			return;
+		}
+
+		setSavingSection(true);
+		try {
+			if (editingSection) {
+				await updateMenuSection(editingSection.id, sectionFormData);
+			} else {
+				await createMenuSection(sectionFormData);
+			}
+			setShowSectionModal(false);
+			setEditingSection(null);
+			await loadMenuSections();
+		} catch (error) {
+			showNotification('حدث خطأ أثناء حفظ القسم', 'error');
+		} finally {
+			setSavingSection(false);
+		}
+	};
+
+	const handleDeleteSection = async () => {
+		const { itemId } = showDeleteModal;
+		if (!itemId || showDeleteModal.type !== 'section') return;
+
+		try {
+			setDeletingSections(prev => ({ ...prev, [itemId]: true }));
+			const success = await deleteMenuSection(itemId);
+			if (success) {
+				await loadMenuSections();
+				setShowDeleteModal({show: false, itemId: null, type: 'item'});
+			}
+		} catch (error) {
+			showNotification('حدث خطأ أثناء حذف القسم', 'error');
+		} finally {
+			setDeletingSections(prev => ({ ...prev, [itemId]: false }));
+		}
+	};
+
+	// Category handlers
+	const handleAddCategory = (sectionId?: string) => {
+		setEditingCategory(null);
+		setCategoryFormData({
+			name: '',
+			description: '',
+			section: sectionId || '',
+			sortOrder: menuCategories.filter(cat => {
+				const section = typeof cat.section === 'string' ? cat.section : cat.section?.id || cat.section?._id;
+				return section === sectionId;
+			}).length
+		});
+		setShowCategoryModal(true);
+	};
+
+	const handleEditCategory = (category: MenuCategory) => {
+		setEditingCategory(category);
+		const sectionId = typeof category.section === 'string' ? category.section : category.section?.id || category.section?._id;
+		setCategoryFormData({
+			name: category.name,
+			description: category.description || '',
+			section: sectionId || '',
+			sortOrder: category.sortOrder
+		});
+		setShowCategoryModal(true);
+	};
+
+	const handleSaveCategory = async () => {
+		if (!categoryFormData.name.trim()) {
+			showNotification('يرجى إدخال اسم الفئة', 'error');
+			return;
+		}
+
+		if (!categoryFormData.section) {
+			showNotification('يرجى اختيار القسم', 'error');
+			return;
+		}
+
+		setSavingCategory(true);
+		try {
+			if (editingCategory) {
+				await updateMenuCategory(editingCategory.id, categoryFormData);
+			} else {
+				await createMenuCategory(categoryFormData);
+			}
+			setShowCategoryModal(false);
+			setEditingCategory(null);
+			await loadMenuCategories();
+		} catch (error) {
+			showNotification('حدث خطأ أثناء حفظ الفئة', 'error');
+		} finally {
+			setSavingCategory(false);
+		}
+	};
+
+	const handleDeleteCategory = async () => {
+		const { itemId } = showDeleteModal;
+		if (!itemId || showDeleteModal.type !== 'category') return;
+
+		try {
+			setDeletingCategories(prev => ({ ...prev, [itemId]: true }));
+			const success = await deleteMenuCategory(itemId);
+			if (success) {
+				await loadMenuCategories();
+				setShowDeleteModal({show: false, itemId: null, type: 'item'});
+			}
+		} catch (error) {
+			showNotification('حدث خطأ أثناء حذف الفئة', 'error');
+		} finally {
+			setDeletingCategories(prev => ({ ...prev, [itemId]: false }));
+		}
 	};
 
 	const handleSaveItem = async () => {
@@ -155,17 +365,17 @@ const Menu: React.FC = () => {
 			return;
 		}
 
-		// التحقق من وجود خامة واحدة على الأقل
-		const validIngredients = formData.ingredients.filter(ing => ing.item !== '' && ing.quantity > 0);
-		if (validIngredients.length === 0) {
-			showNotification('يجب إضافة خامة واحدة على الأقل للعنصر', 'error');
-			return;
-		}
+		// تصفية الخامات الفارغة أو غير الصالحة
+		const validIngredients = formData.ingredients.filter(ing =>
+			// احتفظ فقط بالخامات التي تحتوي على معرف وجزء صحيح موجب
+			ing.item && ing.item.trim() !== '' &&
+			!isNaN(ing.quantity) &&
+			ing.quantity > 0
+		);
 
-		// التحقق من أن جميع الخامات المضافة صحيحة
-		const invalidIngredients = formData.ingredients.filter(ing => ing.item !== '' && (ing.quantity <= 0 || ing.quantity === undefined));
-		if (invalidIngredients.length > 0) {
-			showNotification('يرجى التأكد من إدخال كمية صحيحة لجميع الخامات', 'error');
+		// التحقق من أن جميع الخامات المضافة صحيحة (فقط إذا كانت هناك خامات مضافة)
+		if (formData.ingredients.length > 0 && validIngredients.length !== formData.ingredients.length) {
+			showNotification('يرجى التأكد من إدخال بيانات صحيحة للخامات المضافة', 'error');
 			return;
 		}
 
@@ -177,7 +387,7 @@ const Menu: React.FC = () => {
 			isAvailable: formData.isAvailable,
 			preparationTime: parseInt(formData.preparationTime),
 			isPopular: formData.isPopular,
-			ingredients: formData.ingredients
+			ingredients: validIngredients.length > 0 ? validIngredients : undefined
 		};
 
 		try {
@@ -204,12 +414,21 @@ const Menu: React.FC = () => {
 		}
 	};
 
-	const filteredItems = menuItems.filter(item => {
-		const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-			item.description?.toLowerCase().includes(searchTerm.toLowerCase());
-		const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-		return matchesSearch && matchesCategory;
+	// Debug: Log the raw menu items
+	useEffect(() => {
+		// Menu items loaded
+	}, [menuItems]);
+
+	// Filter menu items by search term
+	const filteredMenuItems = menuItems.filter(item => {
+		if (!searchTerm) return true;
+		const matches = (
+			item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+			(item.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false)
+		);
+		return matches;
 	});
+
 
 	const getStatusColor = (isAvailable: boolean) => {
 		return isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
@@ -338,10 +557,6 @@ const Menu: React.FC = () => {
 		}
 	};
 
-  const getIngredientDisplay = (ing: { item: string; quantity: number; unit: string }) => {
-    const ingredientItem = inventoryItems.find(item => item.id === ing.item);
-    return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
-  };
 
 
 	return (
@@ -355,19 +570,35 @@ const Menu: React.FC = () => {
 					</h1>
 					<p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">إدارة قائمة الطعام والمشروبات</p>
 				</div>
-				<button
-					onClick={handleAddItem}
-					className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center xs:mt-2"
-				>
-					<Plus className="h-5 w-5 ml-2" />
-					إضافة عنصر
-				</button>
+				<div className="flex items-center gap-2 xs:w-full xs:flex-col">
+					<button
+						onClick={handleAddSection}
+						className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
+					>
+						<Layers className="h-5 w-5 ml-2" />
+						إضافة قسم
+					</button>
+					<button
+						onClick={() => handleAddCategory()}
+						className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
+					>
+						<Folder className="h-5 w-5 ml-2" />
+						إضافة فئة
+					</button>
+					<button
+						onClick={() => handleAddItem()}
+						className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
+					>
+						<Plus className="h-5 w-5 ml-2" />
+						إضافة عنصر
+					</button>
+				</div>
 			</div>
 
-			{/* Search and Filter */}
+			{/* Search */}
 			<div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-					<div>
+				<div className="flex items-center gap-4">
+					<div className="flex-1">
 						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">البحث</label>
 						<div className="relative">
 							<Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
@@ -375,117 +606,248 @@ const Menu: React.FC = () => {
 								type="text"
 								value={searchTerm}
 								onChange={(e) => setSearchTerm(e.target.value)}
-								placeholder="البحث في العناصر..."
+								placeholder="البحث في الأقسام والفئات والعناصر..."
 								className="w-full pr-10 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
 							/>
 						</div>
 					</div>
-					<div>
-						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
-						<select
-							value={selectedCategory}
-							onChange={(e) => setSelectedCategory(e.target.value)}
-							className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-						>
-							<option value="all">جميع الفئات</option>
-							{categories.map(category => (
-								<option key={category} value={category}>{category}</option>
-							))}
-						</select>
-					</div>
 					<div className="flex items-end">
 						<div className="text-sm text-gray-600 dark:text-gray-400">
-							إجمالي العناصر: {filteredItems.length}
+							إجمالي العناصر: {filteredMenuItems.length}
 						</div>
 					</div>
 				</div>
 			</div>
 
-			{/* Menu Items Grid */}
+			{/* Hierarchical Menu Display */}
 			{loading ? (
 				<div className="text-center py-8">
 					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 dark:border-orange-400 mx-auto"></div>
 					<p className="mt-2 text-gray-600 dark:text-gray-300">جاري التحميل...</p>
 				</div>
+			) : menuSections.length === 0 ? (
+				<div className="text-center py-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+					<Layers className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+					<p className="text-gray-500 dark:text-gray-400">لا توجد أقسام في المنيو</p>
+					<p className="text-sm text-gray-400 dark:text-gray-500 mt-2">ابدأ بإضافة قسم جديد</p>
+				</div>
 			) : (
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-					{filteredItems.map((item) => (
-						<div key={item.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-							<div className="flex items-start justify-between mb-4">
-								<div className="flex-1">
-									<div className="flex items-center gap-2 mb-1">
-										<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{item.name}</h3>
-										{item.isNew && (
-											<span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">جديد</span>
-										)}
-										{item.isPopular && (
-											<Star className="h-4 w-4 text-yellow-500" />
-										)}
+				<div className="space-y-4">
+					{menuSections
+						.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+						.map((section) => {
+							const sectionCategories = getCategoriesForSection(section.id);
+							const isExpanded = expandedSections[section.id] ?? true;
+							
+							return (
+								<div key={section.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+									{/* Section Header */}
+									<div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-b border-gray-200 dark:border-gray-700">
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-3 flex-1">
+												<button
+													onClick={() => toggleSection(section.id)}
+													className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+												>
+													{isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+												</button>
+												<Layers className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+												<h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{section.name}</h2>
+												{section.description && (
+													<p className="text-sm text-gray-600 dark:text-gray-400 mr-2">{section.description}</p>
+												)}
+											</div>
+											<div className="flex items-center gap-2">
+												<button
+													onClick={() => handleAddCategory(section.id)}
+													className="p-2 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+													title="إضافة فئة"
+												>
+													<Plus className="h-4 w-4" />
+												</button>
+												<button
+													onClick={() => handleEditSection(section)}
+													className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+													title="تعديل القسم"
+												>
+													<Edit className="h-4 w-4" />
+												</button>
+												<button
+													onClick={() => openDeleteModal(section.id, 'section')}
+													disabled={deletingSections[section.id]}
+													className={`p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors ${deletingSections[section.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+													title="حذف القسم"
+												>
+													{deletingSections[section.id] ? (
+														<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+													) : (
+														<Trash2 className="h-4 w-4" />
+													)}
+												</button>
+											</div>
+										</div>
 									</div>
-									<p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{item.category}</p>
-									{item.description && (
-										<p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{item.description}</p>
-									)}
-									{item.ingredients && item.ingredients.length > 0 && (
-										<div className="text-xs text-blue-600 dark:text-blue-400 mb-2">
-											الخامات: {item.ingredients.map(ing => {
-												const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
-												return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
-											}).join(', ')}
+
+									{/* Categories */}
+									{isExpanded && (
+										<div className="p-4 space-y-4">
+											{sectionCategories.length === 0 ? (
+												<div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+													لا توجد فئات في هذا القسم
+												</div>
+											) : (
+												sectionCategories.map((category) => {
+													const categoryItems = getItemsForCategory(category.id);
+													const isCategoryExpanded = expandedCategories[category.id] ?? true;
+													const filteredCategoryItems = searchTerm
+														? categoryItems.filter(item => 
+															item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+															(item.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false)
+														)
+														: categoryItems;
+
+													return (
+														<div key={category.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+															{/* Category Header */}
+															<div className="p-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+																<div className="flex items-center justify-between">
+																	<div className="flex items-center gap-2 flex-1">
+																		<button
+																			onClick={() => toggleCategory(category.id)}
+																			className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+																		>
+																			{isCategoryExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+																		</button>
+																		<FolderOpen className="h-4 w-4 text-green-600 dark:text-green-400" />
+																		<h3 className="text-md font-medium text-gray-900 dark:text-gray-100">{category.name}</h3>
+																		{category.description && (
+																			<p className="text-xs text-gray-600 dark:text-gray-400 mr-2">{category.description}</p>
+																		)}
+																		<span className="text-xs text-gray-500 dark:text-gray-400">({filteredCategoryItems.length} عنصر)</span>
+																	</div>
+																	<div className="flex items-center gap-2">
+																		<button
+																			onClick={() => handleAddItem(category.id)}
+																			className="p-1.5 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 rounded transition-colors"
+																			title="إضافة عنصر"
+																		>
+																			<Plus className="h-3.5 w-3.5" />
+																		</button>
+																		<button
+																			onClick={() => handleEditCategory(category)}
+																			className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded transition-colors"
+																			title="تعديل الفئة"
+																		>
+																			<Edit className="h-3.5 w-3.5" />
+																		</button>
+																		<button
+																			onClick={() => openDeleteModal(category.id, 'category')}
+																			disabled={deletingCategories[category.id]}
+																			className={`p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors ${deletingCategories[category.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+																			title="حذف الفئة"
+																		>
+																			{deletingCategories[category.id] ? (
+																				<div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-red-600"></div>
+																			) : (
+																				<Trash2 className="h-3.5 w-3.5" />
+																			)}
+																		</button>
+																	</div>
+																</div>
+															</div>
+
+															{/* Items Grid */}
+															{isCategoryExpanded && (
+																<div className="p-4">
+																	{filteredCategoryItems.length === 0 ? (
+																		<div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+																			{searchTerm ? 'لا توجد نتائج' : 'لا توجد عناصر في هذه الفئة'}
+																		</div>
+																	) : (
+																		<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+																			{filteredCategoryItems.map((item) => (
+																				<div key={item.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+																					<div className="flex items-start justify-between mb-4">
+																						<div className="flex-1">
+																							<div className="flex items-center gap-2 mb-1">
+																								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{item.name}</h3>
+																								{item.isNew && (
+																									<span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">جديد</span>
+																								)}
+																								{item.isPopular && (
+																									<Star className="h-4 w-4 text-yellow-500" />
+																								)}
+																							</div>
+																							{item.description && (
+																								<p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{item.description}</p>
+																							)}
+																							{item.ingredients && item.ingredients.length > 0 && (
+																								<div className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+																									الخامات: {item.ingredients.map(ing => {
+																										const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
+																										return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
+																									}).join(', ')}
+																								</div>
+																							)}
+																						</div>
+																						<span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.isAvailable)}`}>
+																							{getStatusText(item.isAvailable)}
+																						</span>
+																					</div>
+
+																					<div className="space-y-2 mb-4">
+																						<div className="flex items-center justify-between">
+																							<span className="text-xl font-bold text-green-600">{formatCurrency(item.price)}</span>
+																							<div className="flex items-center text-sm text-gray-500">
+																								<TrendingUp className="h-4 w-4 ml-1" />
+																								{formatDecimal(item.orderCount)} طلب
+																							</div>
+																						</div>
+																						<div className="flex items-center text-sm text-gray-500">
+																							<Clock className="h-4 w-4 ml-1" />
+																							{formatDecimal(item.preparationTime)} دقيقة للتحضير
+																						</div>
+																					</div>
+
+																					<div className="flex items-center justify-end space-x-2 space-x-reverse">
+																						<button
+																							onClick={() => handleEditItem(item)}
+																							className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors duration-200"
+																							title="تعديل"
+																						>
+																							<Edit className="h-4 w-4" />
+																						</button>
+																						<button
+																							onClick={() => openDeleteModal(item.id, 'item')}
+																							disabled={deletingItems[item.id]}
+																							className={`p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200 ${deletingItems[item.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+																							title="حذف"
+																						>
+																							{deletingItems[item.id] ? (
+																								<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 dark:border-red-400"></div>
+																							) : (
+																								<Trash2 className="h-4 w-4" />
+																							)}
+																						</button>
+																					</div>
+																				</div>
+																			))}
+																		</div>
+																	)}
+																</div>
+															)}
+														</div>
+													);
+												})
+											)}
 										</div>
 									)}
 								</div>
-								<span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.isAvailable)}`}>
-									{getStatusText(item.isAvailable)}
-								</span>
-							</div>
+							);
+						})}
+					</div>
+				)}
 
-							<div className="space-y-2 mb-4">
-								<div className="flex items-center justify-between">
-									<span className="text-xl font-bold text-green-600">{formatCurrency(item.price)}</span>
-									<div className="flex items-center text-sm text-gray-500">
-										<TrendingUp className="h-4 w-4 ml-1" />
-										{formatDecimal(item.orderCount)} طلب
-									</div>
-								</div>
-								<div className="flex items-center text-sm text-gray-500">
-									<Clock className="h-4 w-4 ml-1" />
-									{formatDecimal(item.preparationTime)} دقيقة للتحضير
-								</div>
-							</div>
-
-							<div className="flex items-center justify-end space-x-2 space-x-reverse">
-								<button
-									onClick={() => handleEditItem(item)}
-									className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors duration-200"
-									title="تعديل"
-								>
-									<Edit className="h-4 w-4" />
-								</button>
-								<button
-									onClick={() => openDeleteModal(item.id)}
-									disabled={deletingItems[item.id]}
-									className={`p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200 ${deletingItems[item.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-									title="حذف"
-								>
-									{deletingItems[item.id] ? (
-										<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 dark:border-red-400"></div>
-									) : (
-										<Trash2 className="h-4 w-4" />
-									)}
-								</button>
-							</div>
-						</div>
-					))}
-				</div>
-			)}
-
-			{!loading && filteredItems.length === 0 && (
-				<div className="text-center py-8">
-					<Utensils className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-					<p className="text-gray-500">لا توجد عناصر في القائمة</p>
-				</div>
-			)}
 
 			{/* Add/Edit Modal */}
 			{showAddModal && (
@@ -545,9 +907,16 @@ const Menu: React.FC = () => {
 									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
 								>
 									<option value="">اختر الفئة</option>
-									{categories.map(category => (
-										<option key={category} value={category}>{category}</option>
-									))}
+									{menuCategories.map(category => {
+										const sectionName = typeof category.section === 'string' 
+											? menuSections.find(s => s.id === category.section)?.name || ''
+											: (category.section as MenuSection)?.name || '';
+										return (
+											<option key={category.id} value={category.id}>
+												{sectionName ? `${sectionName} - ` : ''}{category.name}
+											</option>
+										);
+									})}
 								</select>
 							</div>
 
@@ -617,17 +986,7 @@ const Menu: React.FC = () => {
 										)}
 									</label>
 
-									{/* تحذير إذا لم تكن هناك خامات مضافة */}
-									{formData.ingredients.length === 0 && (
-										<div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-600 rounded-lg p-3 mb-3">
-											<div className="flex items-center">
-												<svg className="h-4 w-4 text-red-600 dark:text-red-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-												</svg>
-												<span className="text-red-800 dark:text-red-200 text-sm font-medium">يجب إضافة خامة واحدة على الأقل</span>
-											</div>
-										</div>
-									)}
+									{/* تمت إزالة رسالة تحذير الخامات المطلوبة */}
 
 									<div className="space-y-3 max-h-60 overflow-y-auto">
 									{formData.ingredients.map((ingredient, index) => (
@@ -727,7 +1086,7 @@ const Menu: React.FC = () => {
 										const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
 										const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
 
-											if (availableItems.length === 0 && availableRawMaterials.length > 0) {
+										if (availableItems.length === 0 && availableRawMaterials.length > 0) {
 												return (
 													<div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600 rounded-lg p-4 text-center">
 														<div className="flex items-center justify-center mb-2">
@@ -810,30 +1169,50 @@ const Menu: React.FC = () => {
 								<button
 									onClick={closeDeleteModal}
 									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
-									disabled={deletingItems[showDeleteModal.itemId || '']}
+									disabled={
+										(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
+									}
 								>
 									<X className="h-6 w-6" />
 								</button>
 							</div>
 
 							<p className="text-gray-600 dark:text-gray-300 mb-6">
-								هل أنت متأكد من رغبتك في حذف هذا العنصر؟ لا يمكن التراجع عن هذه العملية.
+								{showDeleteModal.type === 'section' && 'هل أنت متأكد من رغبتك في حذف هذا القسم؟ لا يمكن التراجع عن هذه العملية.'}
+								{showDeleteModal.type === 'category' && 'هل أنت متأكد من رغبتك في حذف هذه الفئة؟ لا يمكن التراجع عن هذه العملية.'}
+								{showDeleteModal.type === 'item' && 'هل أنت متأكد من رغبتك في حذف هذا العنصر؟ لا يمكن التراجع عن هذه العملية.'}
 							</p>
 
 							<div className="flex justify-end space-x-3 space-x-reverse">
 								<button
 									onClick={closeDeleteModal}
-									disabled={deletingItems[showDeleteModal.itemId || '']}
+									disabled={
+										(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
+									}
 									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200 disabled:opacity-50"
 								>
 									إلغاء
 								</button>
 								<button
-									onClick={handleDeleteItem}
-									disabled={deletingItems[showDeleteModal.itemId || '']}
+									onClick={() => {
+										if (showDeleteModal.type === 'item') handleDeleteItem();
+										else if (showDeleteModal.type === 'section') handleDeleteSection();
+										else if (showDeleteModal.type === 'category') handleDeleteCategory();
+									}}
+									disabled={
+										(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
+									}
 									className="px-6 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center"
 								>
-									{deletingItems[showDeleteModal.itemId || ''] ? (
+									{((showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
+										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])) ? (
 										<>
 											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
 											جاري الحذف...
@@ -842,6 +1221,189 @@ const Menu: React.FC = () => {
 										<>
 											<Trash2 className="h-4 w-4 ml-2" />
 											حذف
+										</>
+									)}
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Add/Edit Section Modal */}
+			{showSectionModal && (
+				<div
+					className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+					onClick={(e) => {
+						if (e.target === e.currentTarget) {
+							setShowSectionModal(false);
+						}
+					}}
+				>
+					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+						<div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+							<div className="flex items-center justify-between">
+								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+									{editingSection ? 'تعديل القسم' : 'إضافة قسم جديد'}
+								</h3>
+								<button
+									onClick={() => setShowSectionModal(false)}
+									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+								>
+									<X className="h-6 w-6" />
+								</button>
+							</div>
+						</div>
+						<div className="p-6 space-y-4">
+							<div>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم القسم *</label>
+								<input
+									type="text"
+									value={sectionFormData.name}
+									onChange={(e) => setSectionFormData({ ...sectionFormData, name: e.target.value })}
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									placeholder="مثال: المشروبات"
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
+								<textarea
+									value={sectionFormData.description}
+									onChange={(e) => setSectionFormData({ ...sectionFormData, description: e.target.value })}
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									rows={3}
+									placeholder="وصف القسم..."
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ترتيب العرض</label>
+								<input
+									type="number"
+									value={sectionFormData.sortOrder}
+									onChange={(e) => setSectionFormData({ ...sectionFormData, sortOrder: parseInt(e.target.value) || 0 })}
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									min="0"
+								/>
+							</div>
+							<div className="flex justify-end space-x-3 space-x-reverse pt-4">
+								<button
+									onClick={() => setShowSectionModal(false)}
+									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200"
+								>
+									إلغاء
+								</button>
+								<button
+									onClick={handleSaveSection}
+									disabled={savingSection}
+									className="px-6 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+								>
+									{savingSection ? (
+										<>
+											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
+											{editingSection ? 'جاري التحديث...' : 'جاري الإضافة...'}
+										</>
+									) : (
+										<>
+											<CheckCircle className="h-4 w-4 ml-2" />
+											{editingSection ? 'تحديث القسم' : 'إضافة القسم'}
+										</>
+									)}
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Add/Edit Category Modal */}
+			{showCategoryModal && (
+				<div
+					className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+					onClick={(e) => {
+						if (e.target === e.currentTarget) {
+							setShowCategoryModal(false);
+						}
+					}}
+				>
+					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+						<div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+							<div className="flex items-center justify-between">
+								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+									{editingCategory ? 'تعديل الفئة' : 'إضافة فئة جديدة'}
+								</h3>
+								<button
+									onClick={() => setShowCategoryModal(false)}
+									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+								>
+									<X className="h-6 w-6" />
+								</button>
+							</div>
+						</div>
+						<div className="p-6 space-y-4">
+							<div>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم الفئة *</label>
+								<input
+									type="text"
+									value={categoryFormData.name}
+									onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+									placeholder="مثال: المشروبات الساخنة"
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">القسم *</label>
+								<select
+									value={categoryFormData.section}
+									onChange={(e) => setCategoryFormData({ ...categoryFormData, section: e.target.value })}
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+								>
+									<option value="">اختر القسم</option>
+									{menuSections.map(section => (
+										<option key={section.id} value={section.id}>{section.name}</option>
+									))}
+								</select>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
+								<textarea
+									value={categoryFormData.description}
+									onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+									rows={3}
+									placeholder="وصف الفئة..."
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ترتيب العرض</label>
+								<input
+									type="number"
+									value={categoryFormData.sortOrder}
+									onChange={(e) => setCategoryFormData({ ...categoryFormData, sortOrder: parseInt(e.target.value) || 0 })}
+									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+									min="0"
+								/>
+							</div>
+							<div className="flex justify-end space-x-3 space-x-reverse pt-4">
+								<button
+									onClick={() => setShowCategoryModal(false)}
+									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200"
+								>
+									إلغاء
+								</button>
+								<button
+									onClick={handleSaveCategory}
+									disabled={savingCategory}
+									className="px-6 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+								>
+									{savingCategory ? (
+										<>
+											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
+											{editingCategory ? 'جاري التحديث...' : 'جاري الإضافة...'}
+										</>
+									) : (
+										<>
+											<CheckCircle className="h-4 w-4 ml-2" />
+											{editingCategory ? 'تحديث الفئة' : 'إضافة الفئة'}
 										</>
 									)}
 								</button>

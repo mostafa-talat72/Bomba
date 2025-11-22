@@ -62,11 +62,9 @@ const calculateTotalInventoryNeeded = async (orderItems) => {
         if (item.menuItem) {
             const menuItem = await MenuItem.findById(item.menuItem);
             if (!menuItem) {
-                console.error(`Menu item not found: ${item.menuItem}`);
                 throw new Error(`عنصر القائمة غير موجود: ${item.menuItem}`);
             }
             if (!menuItem.isAvailable) {
-                console.error(`Menu item not available: ${menuItem.name}`);
                 throw new Error(`العنصر غير متاح: ${menuItem.name}`);
             }
 
@@ -192,7 +190,6 @@ const validateInventoryAvailability = async (inventoryNeeded) => {
     for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
         const inventoryItem = await InventoryItem.findById(inventoryItemId);
         if (!inventoryItem) {
-            console.error(`Inventory item not found: ${inventoryItemId}`);
             validationErrors.push(
                 `الخامة ${inventoryItemId} غير موجودة في المخزون`
             );
@@ -214,7 +211,6 @@ const validateInventoryAvailability = async (inventoryNeeded) => {
 
         if (inventoryItem.currentStock < convertedQuantityNeeded) {
             const errorMsg = `${inventoryItem.name}: المطلوب ${convertedQuantityNeeded} ${inventoryItem.unit}، المتوفر ${inventoryItem.currentStock} ${inventoryItem.unit}`;
-            console.error(`INSUFFICIENT STOCK: ${errorMsg}`);
             validationErrors.push(errorMsg);
             details.push({
                 name: inventoryItem.name,
@@ -237,7 +233,6 @@ const calculateOrderTotalCost = async (orderItems) => {
         if (item.menuItem) {
             const menuItem = await MenuItem.findById(item.menuItem);
             if (!menuItem) {
-                console.error(`Menu item not found: ${item.menuItem}`);
                 continue;
             }
 
@@ -247,9 +242,6 @@ const calculateOrderTotalCost = async (orderItems) => {
                         ingredient.item
                     );
                     if (!inventoryItem) {
-                        console.error(
-                            `Inventory item not found: ${ingredient.item}`
-                        );
                         continue;
                     }
 
@@ -384,7 +376,6 @@ const processOrderItems = async (items, operation = "create") => {
             },
         };
     } catch (error) {
-        console.error("Error in processOrderItems:", error);
         return {
             success: false,
             status: 500,

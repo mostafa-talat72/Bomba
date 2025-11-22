@@ -53,7 +53,6 @@ const deviceController = {
                 data: devices,
             });
         } catch (err) {
-            console.error("getDevices error:", err);
             res.status(500).json({
                 success: false,
                 message: "خطأ في جلب الأجهزة",
@@ -95,7 +94,6 @@ const deviceController = {
                 data: deviceWithSession,
             });
         } catch (err) {
-            console.error("getDevice error:", err);
             res.status(500).json({
                 success: false,
                 message: "خطأ في جلب الجهاز",
@@ -221,7 +219,6 @@ const deviceController = {
                 data: device,
             });
         } catch (err) {
-            console.error("createDevice error:", err);
             // Handle mongoose validation errors
             if (err.name === "ValidationError") {
                 const errors = Object.values(err.errors).map((e) => e.message);
@@ -369,7 +366,6 @@ const deviceController = {
                 data: device,
             });
         } catch (err) {
-            console.error("updateDevice error:", err);
             res.status(400).json({
                 success: false,
                 message: "خطأ في تحديث بيانات الجهاز",
@@ -422,7 +418,6 @@ const deviceController = {
                 data: device,
             });
         } catch (err) {
-            console.error("updateDeviceStatus error:", err);
             res.status(400).json({
                 success: false,
                 message: "خطأ في تحديث حالة الجهاز",
@@ -491,7 +486,6 @@ const deviceController = {
                 },
             });
         } catch (err) {
-            console.error("deleteDevice error:", err);
             res.status(400).json({
                 success: false,
                 message: "خطأ في حذف الجهاز",
@@ -560,7 +554,6 @@ const deviceController = {
                 data: result,
             });
         } catch (err) {
-            console.error("getDeviceStats error:", err);
             res.status(500).json({
                 success: false,
                 message: "خطأ في جلب إحصائيات الأجهزة",
@@ -612,7 +605,6 @@ const deviceController = {
                 },
             });
         } catch (err) {
-            console.error("bulkUpdateDevices error:", err);
             res.status(400).json({
                 success: false,
                 message: "خطأ في التحديث الجماعي",

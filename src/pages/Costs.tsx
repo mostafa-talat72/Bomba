@@ -54,7 +54,6 @@ const Costs = () => {
       setLoading(true);
       await fetchCosts();
     } catch (error) {
-      console.error('Error loading costs:', error);
       showNotification('خطأ في تحميل التكاليف', 'error');
     } finally {
       setLoading(false);
@@ -312,7 +311,6 @@ const Costs = () => {
       // await loadCosts(); // This line is removed as per the edit hint
 
     } catch (error) {
-      console.error('Error saving cost:', error);
       showNotification('خطأ في حفظ التكلفة', 'error');
     } finally {
       setLoading(false);
@@ -352,7 +350,6 @@ const Costs = () => {
       showNotification('تم حذف التكلفة بنجاح', 'success');
       await loadCosts();
     } catch (error) {
-      console.error('Error deleting cost:', error);
       showNotification('خطأ في حذف التكلفة', 'error');
     } finally {
       setDeleteLoading(false);

@@ -103,7 +103,6 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
       }, duration * 1000);
 
     } catch (error) {
-      console.error('Error playing notification sound:', error);
       onSoundPlayed?.();
     }
   };

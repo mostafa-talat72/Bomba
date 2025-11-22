@@ -19,7 +19,8 @@ import {
   Bell,
   Server,
   Moon,
-  Sun
+  Sun,
+  Package2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -111,6 +112,7 @@ const Layout = () => {
     },
     { name: 'المنيو', href: '/menu', icon: Utensils, permissions: ['menu'] },
     { name: 'التقارير', href: '/reports', icon: BarChart3, permissions: ['reports'] },
+    { name: 'تقرير الاستهلاك', href: '/consumption-report', icon: Package2, permissions: ['reports'] },
     { name: 'المخزون', href: '/inventory', icon: Package, permissions: ['inventory'] },
     { name: 'التكاليف', href: '/costs', icon: Wallet, permissions: ['costs'] },
     { name: 'المستخدمين', href: '/users', icon: Users, permissions: ['users'] },

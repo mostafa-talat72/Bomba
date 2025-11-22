@@ -1,0 +1,813 @@
+interface OrderItem {
+  _id: string;
+  name: string;
+  arabicName?: string;
+  price: number;
+  quantity: number;
+  notes?: string;
+  preparedCount?: number;
+  addons?: Array<{
+    _id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+  menuItem?: {
+    category?: {
+      section?: {
+        _id?: string;
+        name?: string;
+      };
+    };
+  };
+}
+
+interface Order {
+  _id: string;
+  orderNumber: string;
+  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  table?: {
+    _id: string;
+    number: string | number;
+    name?: string;
+  };
+  customerName?: string;
+  items: OrderItem[];
+  totalAmount?: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+interface MenuSection {
+  _id: string;
+  name: string;
+}
+
+// دالة لطباعة الطلب مقسم حسب أقسام المنيو (كل قسم على ورقة منفصلة)
+export const printOrderBySections = (
+  order: Order,
+  menuSections: MenuSection[],
+  menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }>,
+  establishmentName: string = 'اسم المنشأة'
+) => {
+  // تجميع العناصر حسب قسم المنيو
+  const itemsBySection = new Map<string, OrderItem[]>();
+
+  order.items.forEach(item => {
+    // الحصول على قسم المنيو للعنصر
+    let sectionId: string | null = null;
+    let sectionName: string | null = null;
+
+    // محاولة الحصول على menuItem من item.menuItem (قد يكون string ID أو object)
+    const menuItemFromOrder = typeof item.menuItem === 'object' && item.menuItem !== null 
+      ? (item.menuItem as any) 
+      : null;
+    
+    const menuItemId = menuItemFromOrder 
+      ? (menuItemFromOrder._id || menuItemFromOrder.id) 
+      : (typeof item.menuItem === 'string' ? item.menuItem : null);
+    
+    // محاولة الحصول على category و section
+    let category = null;
+    let section = null;
+
+    // أولاً: محاولة الحصول من menuItem في order.items مباشرة (إذا كان populated)
+    if (menuItemFromOrder && menuItemFromOrder.category) {
+      category = menuItemFromOrder.category;
+      // إذا كان category object (populated)، نحصل على section منه
+      if (typeof category === 'object' && category.section) {
+        section = category.section;
+      }
+    }
+    
+    // ثانياً: إذا لم يكن موجوداً، نبحث في menuItemsMap
+    if (!section && menuItemId) {
+      // محاولة البحث بكل الأشكال الممكنة
+      const menuItem = menuItemsMap.get(menuItemId) 
+        || menuItemsMap.get(String(menuItemId))
+        || (typeof menuItemId === 'object' && menuItemId 
+          ? menuItemsMap.get((menuItemId as any)?._id || (menuItemId as any)?.id) 
+          : null);
+      
+      if (menuItem) {
+        // الحصول على category من menuItem
+        if ((menuItem as any).category) {
+          category = typeof (menuItem as any).category === 'string' 
+            ? (menuItem as any).category 
+            : ((menuItem as any).category as any);
+          
+          // إذا كان category object، نحصل على section منه
+          if (category && typeof category === 'object' && category.section) {
+            section = category.section;
+          }
+        }
+      }
+    }
+    
+    // الحصول على sectionId من section
+    if (section) {
+      if (typeof section === 'string') {
+        sectionId = section;
+      } else if (typeof section === 'object') {
+        sectionId = (section as any)?._id || (section as any)?.id || null;
+      }
+      
+      if (sectionId) {
+        // البحث عن اسم القسم
+        const sectionObj = menuSections.find(s => 
+          s._id === sectionId || 
+          s.id === sectionId ||
+          String(s._id) === String(sectionId) ||
+          String(s.id) === String(sectionId)
+        );
+        sectionName = sectionObj?.name || 'غير محدد';
+      }
+    }
+
+    // إذا لم يكن هناك قسم، نضعه في قسم "أخرى"
+    if (!sectionId) {
+      sectionId = 'other';
+      sectionName = 'أخرى';
+    }
+
+    if (!itemsBySection.has(sectionId)) {
+      itemsBySection.set(sectionId, []);
+    }
+    itemsBySection.get(sectionId)!.push(item);
+  });
+
+  // طباعة جميع الأقسام في نفس الصفحة
+  const sectionsArray = Array.from(itemsBySection.entries()).map(([sectionId, items]) => {
+    const sectionName = sectionId === 'other' 
+      ? 'أخرى'
+      : menuSections.find(s => 
+          s._id === sectionId || 
+          s.id === sectionId ||
+          String(s._id) === String(sectionId) ||
+          String(s.id) === String(sectionId)
+        )?.name || 'غير محدد';
+    
+    return { sectionId, sectionName, items };
+  });
+
+  // طباعة جميع الأقسام في صفحة واحدة
+  printAllSectionsInOnePage(order, sectionsArray, establishmentName);
+};
+
+// دالة لطباعة جميع الأقسام في صفحة واحدة
+const printAllSectionsInOnePage = (
+  order: Order,
+  sections: Array<{ sectionId: string; sectionName: string; items: OrderItem[] }>,
+  establishmentName: string
+) => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
+  const now = new Date();
+  const dateTimeString = now.toLocaleString('ar-EG', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  const isUpdatedOrder = order.updatedAt && 
+    new Date(order.updatedAt).getTime() > new Date(order.createdAt).getTime();
+
+  // إنشاء محتوى كل قسم - كل قسم يحتوي على معلومات كاملة
+  const sectionsContent = sections.map(({ sectionName, items }) => {
+    const sectionTotal = items.reduce((sum, item) => {
+      const itemTotal = item.price * item.quantity;
+      const addonsTotal = item.addons?.reduce((addonSum, addon) =>
+        addonSum + (addon.price * addon.quantity), 0) || 0;
+      return sum + itemTotal + addonsTotal;
+    }, 0);
+
+    const formattedTotal = sectionTotal.toLocaleString('ar-EG', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+
+    return `
+      <div class="section-block" style="page-break-after: always; margin-bottom: 20px;">
+        <!-- Header لكل قسم -->
+        <div class="header">
+          <h1>${establishmentName}</h1>
+          ${isUpdatedOrder ? `
+          <div class="update-banner">
+            <span>🔄 تم تحديث الطلب</span>
+            <small>${new Date(order.updatedAt).toLocaleString('ar-EG')}</small>
+          </div>` : ''}
+          <div style="font-size: 16px; font-weight: bold; margin: 5px 0;">فاتورة طلب</div>
+        </div>
+
+        <!-- معلومات الطلب لكل قسم -->
+        <div class="order-info">
+          <div style="margin-bottom: 10px;">
+            <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${order.orderNumber}</strong></div>
+            <div style="font-size: 16px; color: #333; margin: 8px 0;">${dateTimeString}</div>
+            ${order.table?.number ? `
+              <div style="font-size: 16px; margin: 8px 0; text-align: center;">
+                طاولة: <strong>${order.table.number}</strong>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- اسم القسم -->
+        <div class="section-name">
+          قسم: ${sectionName}
+        </div>
+
+        <!-- جدول العناصر -->
+        <table class="items">
+          <thead>
+            <tr>
+              <th class="item-name">الصنف</th>
+              <th class="item-qty">الكمية</th>
+              <th class="item-price">المجموع</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(item => `
+              <tr>
+                <td class="item-name">${item.name}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
+                <td class="item-qty"><strong>${item.quantity.toLocaleString('ar-EG')}</strong></td>
+                <td class="item-price"><strong>${(item.price * item.quantity).toLocaleString('ar-EG', {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2
+                })}</strong></td>
+              </tr>
+              ${item.addons && item.addons.length > 0 ?
+                item.addons.map(addon => `
+                  <tr>
+                    <td class="item-name" style="padding-right: 15px;">+ ${addon.name}</td>
+                    <td class="item-qty"><strong>${addon.quantity.toLocaleString('ar-EG')}</strong></td>
+                    <td class="item-price"><strong>${(addon.price * addon.quantity).toLocaleString('ar-EG', {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2
+                    })}</strong></td>
+                  </tr>
+                `).join('') : ''
+              }
+            `).join('')}
+          </tbody>
+        </table>
+
+        <!-- إجمالي القسم -->
+        <div class="total">
+          إجمالي القسم: <strong>${formattedTotal}</strong> ج.م
+        </div>
+
+        <!-- ملاحظات الطلب إذا كانت موجودة -->
+        ${order.notes ? `
+          <div class="notes">
+            <strong>ملاحظات:</strong> ${order.notes}
+          </div>
+        ` : ''}
+
+        <!-- Footer لكل قسم -->
+        <div class="footer">
+          شكراً لزيارتكم<br>
+          <strong style="font-weight: 900;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  let printContent = `
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head>
+      <meta charset="UTF-8">
+      <title>طباعة الطلب #${order.orderNumber}</title>
+      <style>
+        @page {
+          size: 80mm auto;
+          margin: 0;
+          padding: 0;
+        }
+        body {
+          direction: rtl;
+          font-family: 'Arial', sans-serif;
+          width: 72mm;
+          max-width: 72mm;
+          margin: 0 auto;
+          padding: 0 4mm;
+          background: white;
+          color: #000;
+          font-size: 15px;
+          line-height: 1.4;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          box-sizing: border-box;
+        }
+        .header {
+          text-align: center;
+          margin: 5px auto;
+          padding: 5px 0;
+          border-bottom: 1px dashed #000;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+        .header h1 {
+          font-size: 18px;
+          margin: 0;
+          padding: 10px 0 5px;
+          text-align: center;
+          border-bottom: 1px dashed #ddd;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+        .section-block {
+          margin-bottom: 15px;
+          border-bottom: 2px dashed #000;
+          padding-bottom: 15px;
+        }
+        .section-name {
+          background-color: #f0f0f0;
+          padding: 8px;
+          text-align: center;
+          font-weight: bold;
+          font-size: 16px;
+          margin: 10px 0 5px 0;
+          border-radius: 4px;
+        }
+        .update-banner {
+          background-color: #fff3cd;
+          color: #856404;
+          padding: 5px 0;
+          text-align: center;
+          font-weight: bold;
+          border-radius: 4px;
+          margin: 5px 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          border: 1px dashed #ffeeba;
+        }
+        .update-banner small {
+          font-size: 12px;
+          opacity: 0.8;
+          margin-top: 2px;
+        }
+        .order-info {
+          margin-bottom: 10px;
+          border-bottom: 1px dashed #000;
+          padding-bottom: 10px;
+          font-size: 16px;
+          text-align: center;
+          font-weight: bold;
+        }
+        .order-info p {
+          margin: 3px 0;
+          text-align: center;
+          justify-content: center;
+        }
+        .items {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 10px 0;
+          table-layout: fixed;
+          text-align: center;
+          direction: rtl;
+        }
+        .items th, .items td {
+          padding: 6px 0;
+          text-align: center;
+          border-bottom: 1px dashed #eee;
+          font-size: 15px;
+          word-break: break-word;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .item-name {
+          text-align: right;
+          padding: 4px 8px 4px 4px;
+          width: 50%;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          direction: rtl;
+          unicode-bidi: embed;
+        }
+        .item-qty {
+          text-align: center;
+          width: 30px;
+          direction: rtl;
+          unicode-bidi: embed;
+        }
+        .item-price {
+          text-align: left;
+          padding: 4px 4px 4px 8px;
+          width: 30%;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          direction: rtl;
+          unicode-bidi: embed;
+        }
+        .item-notes {
+          font-size: 8px;
+          color: #666;
+          padding: 0 5px;
+          font-style: italic;
+          max-width: 60mm;
+          word-break: break-word;
+          text-align: center;
+          margin: 0 auto;
+        }
+        .total {
+          margin: 15px auto 0;
+          text-align: center;
+          font-weight: bold;
+          font-size: 18px;
+          border-top: 2px dashed #000;
+          padding: 10px 0;
+          width: 100%;
+          background-color: #f9f9f9;
+          border-radius: 4px;
+        }
+        .notes {
+          margin: 5px auto 0;
+          font-size: 9px;
+          color: #666;
+          padding: 0 5px;
+          text-align: center;
+          width: 100%;
+        }
+        .footer {
+          margin: 5px auto 0;
+          text-align: center;
+          font-size: 9px;
+          color: #666;
+          border-top: 1px dashed #000;
+          padding-top: 5px;
+          width: 100%;
+        }
+        @media print {
+          body {
+            padding: 0;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .section-block {
+            page-break-after: always;
+          }
+          .section-block:last-child {
+            page-break-after: auto;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      ${sectionsContent}
+
+      <div class="no-print" style="margin-top: 20px; text-align: center;">
+        <button onclick="window.print()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          طباعة الفاتورة
+        </button>
+        <button onclick="window.close()" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+          إغلاق
+        </button>
+      </div>
+
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 500);
+          setTimeout(function() {
+            window.close();
+          }, 5000);
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(printContent);
+  printWindow.document.close();
+};
+
+// دالة لطباعة قسم واحد من الطلب (محفوظة للاستخدام المستقبلي)
+const printSectionOrder = (
+  order: Order,
+  items: OrderItem[],
+  sectionName: string,
+  establishmentName: string
+) => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
+  const now = new Date();
+  const dateTimeString = now.toLocaleString('ar-EG', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  const isUpdatedOrder = order.updatedAt && 
+    new Date(order.updatedAt).getTime() > new Date(order.createdAt).getTime();
+
+  let printContent = `
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head>
+      <meta charset="UTF-8">
+      <title>طباعة الطلب #${order.orderNumber} - ${sectionName}</title>
+      <style>
+        @page {
+          size: 80mm auto;
+          margin: 0;
+          padding: 0;
+        }
+        body {
+          direction: rtl;
+          font-family: 'Arial', sans-serif;
+          width: 72mm;
+          max-width: 72mm;
+          margin: 0 auto;
+          padding: 0 4mm;
+          background: white;
+          color: #000;
+          font-size: 15px;
+          line-height: 1.4;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          box-sizing: border-box;
+        }
+        .header {
+          text-align: center;
+          margin: 5px auto;
+          padding: 5px 0;
+          border-bottom: 1px dashed #000;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+        .header h1 {
+          font-size: 18px;
+          margin: 0;
+          padding: 10px 0 5px;
+          text-align: center;
+          border-bottom: 1px dashed #ddd;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+        .section-name {
+          background-color: #f0f0f0;
+          padding: 8px;
+          text-align: center;
+          font-weight: bold;
+          font-size: 16px;
+          margin: 5px 0;
+          border-radius: 4px;
+        }
+        .update-banner {
+          background-color: #fff3cd;
+          color: #856404;
+          padding: 5px 0;
+          text-align: center;
+          font-weight: bold;
+          border-radius: 4px;
+          margin: 5px 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          border: 1px dashed #ffeeba;
+        }
+        .update-banner small {
+          font-size: 12px;
+          opacity: 0.8;
+          margin-top: 2px;
+        }
+        .order-info {
+          margin-bottom: 10px;
+          border-bottom: 1px dashed #000;
+          padding-bottom: 10px;
+          font-size: 16px;
+          text-align: center;
+          font-weight: bold;
+        }
+        .order-info p {
+          margin: 3px 0;
+          text-align: center;
+          justify-content: center;
+        }
+        .items {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 10px 0;
+          table-layout: fixed;
+          text-align: center;
+          direction: rtl;
+        }
+        .items th, .items td {
+          padding: 6px 0;
+          text-align: center;
+          border-bottom: 1px dashed #eee;
+          font-size: 15px;
+          word-break: break-word;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .item-name {
+          text-align: right;
+          padding: 4px 8px 4px 4px;
+          width: 50%;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          direction: rtl;
+          unicode-bidi: embed;
+        }
+        .item-qty {
+          text-align: center;
+          width: 30px;
+          direction: rtl;
+          unicode-bidi: embed;
+        }
+        .item-price {
+          text-align: left;
+          padding: 4px 4px 4px 8px;
+          width: 30%;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          direction: rtl;
+          unicode-bidi: embed;
+        }
+        .item-notes {
+          font-size: 8px;
+          color: #666;
+          padding: 0 5px;
+          font-style: italic;
+          max-width: 60mm;
+          word-break: break-word;
+          text-align: center;
+          margin: 0 auto;
+        }
+        .total {
+          margin: 15px auto 0;
+          text-align: center;
+          font-weight: bold;
+          font-size: 18px;
+          border-top: 2px dashed #000;
+          padding: 10px 0;
+          width: 100%;
+          background-color: #f9f9f9;
+          border-radius: 4px;
+        }
+        .notes {
+          margin: 5px auto 0;
+          font-size: 9px;
+          color: #666;
+          padding: 0 5px;
+          text-align: center;
+          width: 100%;
+        }
+        .footer {
+          margin: 5px auto 0;
+          text-align: center;
+          font-size: 9px;
+          color: #666;
+          border-top: 1px dashed #000;
+          padding-top: 5px;
+          width: 100%;
+        }
+        @media print {
+          body {
+            padding: 0;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>${establishmentName}</h1>
+        ${isUpdatedOrder ? `
+        <div class="update-banner">
+          <span>🔄 تم تحديث الطلب</span>
+          <small>${new Date(order.updatedAt).toLocaleString('ar-EG')}</small>
+        </div>` : ''}
+        <div style="font-size: 16px; font-weight: bold; margin: 5px 0;">فاتورة طلب</div>
+      </div>
+
+      <div class="section-name">
+        قسم: ${sectionName}
+      </div>
+
+      <div class="order-info">
+        <div style="margin-bottom: 10px;">
+          <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${order.orderNumber}</strong></div>
+          <div style="font-size: 16px; color: #333; margin: 8px 0;">${dateTimeString}</div>
+          ${order.table?.number ? `
+            <div style="font-size: 16px; margin: 8px 0; text-align: center;">
+              طاولة: <strong>${order.table.number}</strong>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+
+      <table class="items">
+        <thead>
+          <tr>
+            <th class="item-name">الصنف</th>
+            <th class="item-qty">الكمية</th>
+            <th class="item-price">المجموع</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(item => `
+            <tr>
+              <td class="item-name">${item.name}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
+              <td class="item-qty"><strong>${item.quantity.toLocaleString('ar-EG')}</strong></td>
+              <td class="item-price"><strong>${(item.price * item.quantity).toLocaleString('ar-EG', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+              })}</strong></td>
+            </tr>
+            ${item.addons && item.addons.length > 0 ?
+              item.addons.map(addon => `
+                <tr>
+                  <td class="item-name" style="padding-right: 15px;">+ ${addon.name}</td>
+                  <td class="item-qty"><strong>${addon.quantity.toLocaleString('ar-EG')}</strong></td>
+                  <td class="item-price"><strong>${(addon.price * addon.quantity).toLocaleString('ar-EG', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2
+                  })}</strong></td>
+                </tr>
+              `).join('') : ''
+            }
+          `).join('')}
+        </tbody>
+      </table>
+
+      ${(() => {
+        const total = items.reduce((sum, item) => {
+          const itemTotal = item.price * item.quantity;
+          const addonsTotal = item.addons?.reduce((addonSum, addon) =>
+            addonSum + (addon.price * addon.quantity), 0) || 0;
+          return sum + itemTotal + addonsTotal;
+        }, 0);
+
+        const formattedTotal = total.toLocaleString('ar-EG', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2
+        });
+
+        return `
+          <div class="total">
+            إجمالي القسم: <strong>${formattedTotal}</strong> ج.م
+          </div>
+        `;
+      })()}
+
+      ${order.notes ? `
+        <div class="notes">
+          <strong>ملاحظات:</strong> ${order.notes}
+        </div>
+      ` : ''}
+
+      <div class="footer">
+        شكراً لزيارتكم<br>
+        <strong style="font-weight: 900;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه
+      </div>
+
+      <div class="no-print" style="margin-top: 20px; text-align: center;">
+        <button onclick="window.print()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          طباعة الفاتورة
+        </button>
+        <button onclick="window.close()" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+          إغلاق
+        </button>
+      </div>
+
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 500);
+          setTimeout(function() {
+            window.close();
+          }, 5000);
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(printContent);
+  printWindow.document.close();
+};
+

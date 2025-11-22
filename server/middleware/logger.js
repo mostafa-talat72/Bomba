@@ -19,9 +19,10 @@ const createLogEntry = (level, message, meta = {}) => {
 // Logger class
 class Logger {
     static error(message, meta = {}) {
+        // Only ERROR logging is enabled
         const logEntry = createLogEntry(LOG_LEVELS.ERROR, message, meta);
         console.error(JSON.stringify(logEntry));
-        
+
         if (meta && meta.error) {
             console.error("Error details:", meta.error);
         }
@@ -31,78 +32,58 @@ class Logger {
     }
 
     static warn(message, meta = {}) {
-        const logEntry = createLogEntry(LOG_LEVELS.WARN, message, meta);
-        console.warn(JSON.stringify(logEntry));
+        // WARNING logging disabled
     }
 
     static info(message, meta = {}) {
-        const logEntry = createLogEntry(LOG_LEVELS.INFO, message, meta);
-        console.log(JSON.stringify(logEntry));
+        // INFO logging disabled
     }
 
     static debug(message, meta = {}) {
-        if (process.env.NODE_ENV === "development") {
-            const logEntry = createLogEntry(LOG_LEVELS.DEBUG, message, meta);
-            console.debug(JSON.stringify(logEntry));
-        }
+        // DEBUG logging disabled
     }
 
     static audit(action, user, details = {}) {
-        const logEntry = createLogEntry(LOG_LEVELS.INFO, `Audit: ${action}`, {
-            userId: user?._id,
-            userName: user?.name,
-            userEmail: user?.email,
-            action,
-            ...details,
+        // AUDIT logging disabled
+    }
+
+    // Performance monitoring methods
+    static performance(message, metrics = {}) {
+        // Performance logging disabled
+    }
+
+    static queryPerformance(endpoint, executionTime, recordCount, meta = {}) {
+        this.performance("Database Query Performance", {
+            endpoint,
+            executionTime: `${executionTime}ms`,
+            recordCount,
+            ...meta,
         });
-        console.log(JSON.stringify(logEntry));
+    }
+
+    static apiPerformance(method, url, statusCode, duration, responseSize, compressed, meta = {}) {
+        this.performance("API Performance", {
+            method,
+            url,
+            statusCode,
+            duration: `${duration}ms`,
+            responseSize: responseSize ? `${(responseSize / 1024).toFixed(2)} KB` : "N/A",
+            compressed: compressed ? "yes" : "no",
+            compressionRatio: meta.compressionRatio || "N/A",
+            ...meta,
+        });
     }
 }
 
 // Express middleware for request logging
 export const requestLogger = (req, res, next) => {
-    const start = Date.now();
-    const { method, originalUrl, ip } = req;
-
-    // Log request
-    Logger.info('Request received', {
-        method,
-        url: originalUrl,
-        ip,
-        headers: req.headers,
-        body: req.body
-    });
-
-    // Override res.end to log response
-    const originalEnd = res.end;
-    res.end = function (chunk, encoding) {
-        const duration = Date.now() - start;
-        
-        // Log response
-        Logger.info('Response sent', {
-            statusCode: res.statusCode,
-            duration: `${duration}ms`,
-            url: originalUrl,
-            method
-        });
-
-        originalEnd.call(this, chunk, encoding);
-    };
-
+    // Request logging disabled - no console output
     next();
 };
 
 // Error logging middleware
 export const errorLogger = (err, req, res, next) => {
-    Logger.error("Request error", {
-        error: err.message,
-        stack: err.stack,
-        method: req.method,
-        url: req.url,
-        ip: req.ip,
-        userId: req.user?._id,
-    });
-
+    // Error logging disabled - no console output
     next(err);
 };
 

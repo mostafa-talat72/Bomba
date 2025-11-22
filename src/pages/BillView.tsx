@@ -161,57 +161,11 @@ const BillView = () => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [showOrdersModal, setShowOrdersModal] = useState(false);
-	const [devices, setDevices] = useState<any[]>([]);
 
-	// جلب الأجهزة عند تحميل الصفحة
-	useEffect(() => {
-		async function fetchDevices() {
-			const res = await api.getDevices({});
-			if (res.success && res.data) {
-				setDevices(res.data);
-			} else {
-				console.error('❌ فشل في تحميل الأجهزة:', res.message);
-			}
-		}
-		fetchDevices();
-	}, []);
-
-	// دالة لجلب الجهاز المناسب
-	function getDeviceForSession(session: any) {
-		// إذا كان هناك معرف الجهاز، استخدمه للمطابقة
-		if (session.deviceId) {
-			const device = devices.find(d => d._id === session.deviceId);
-			return device;
-		}
-
-		// إذا كان هناك منظمة مرتبطة بالجهاز (fallback)
-		if (session.organization) {
-			const device = devices.find(
-				d => d.deviceNumber === session.deviceNumber && d.organization === session.organization
-			);
-			return device;
-		}
-
-		// بدون منظمة (fallback)
-		const device = devices.find(d => d.deviceNumber === session.deviceNumber);
-		return device;
-	}
-
-	// دالة لجلب سعر الساعة الصحيح
-	function getHourlyRateFromDevice(session: any, controllers: number) {
-		const device = getDeviceForSession(session);
-		if (!device) {
-			return 0;
-		}
-
-		let hourlyRate = 0;
-		if (session.deviceType === 'playstation' && device.playstationRates) {
-			hourlyRate = device.playstationRates[controllers] || 0;
-		} else {
-			hourlyRate = device.hourlyRate || 0;
-		}
-
-		return hourlyRate;
+	// دالة لجلب سعر الساعة من الجلسة مباشرة
+	function getHourlyRateFromDevice(session: Session, controllers: number) {
+		// استخدام hourlyRate من الجلسة نفسها
+		return session.hourlyRate || 0;
 	}
 
 	const fetchBill = async (showLoading = true) => {
@@ -238,11 +192,9 @@ const BillView = () => {
 			if (response.success && response.data) {
 				setBill(normalizeBillDates(response.data));
 			} else {
-				console.error('❌ BillView: API Error:', response.message);
 				setError(response.message || 'لم يتم العثور على الفاتورة. تأكد من صحة الرابط أو أن الفاتورة لم تُحذف.');
 			}
 		} catch (err: unknown) {
-			console.error('❌ BillView: Fetch Error:', err);
 			setError('حدث خطأ في تحميل الفاتورة. تأكد من اتصالك بالخادم أو أعد المحاولة لاحقاً.');
 		} finally {
 			if (showLoading) setLoading(false);

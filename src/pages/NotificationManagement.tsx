@@ -84,8 +84,7 @@ const NotificationManagement = () => {
       await loadNotifications();
       await loadStats();
     } catch (error) {
-      console.error('Error marking all notifications as read on page load:', error);
-    } finally {
+      } finally {
       setIsMarkingAllAsRead(false);
     }
   };
@@ -127,7 +126,6 @@ const NotificationManagement = () => {
     } catch {
       // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه أو أثناء تسجيل الخروج
       if (!user || isLoggingOut) return;
-      console.error('Error loading stats');
       setStats(null);
     }
   };

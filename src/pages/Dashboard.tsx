@@ -66,8 +66,7 @@ const Dashboard = () => {
       // تحديث لوحة التحكم
       await refreshDashboardData();
     } catch (error) {
-      console.error('❌ Failed to clean data:', error);
-    }
+      }
   };
 
   // دالة منفصلة لتحديث البيانات فقط
@@ -94,8 +93,7 @@ const Dashboard = () => {
       setRecentActivity(activityData);
 
     } catch (error) {
-      console.error('❌ Failed to refresh dashboard data:', error);
-    }
+      }
   };
 
 
@@ -120,14 +118,12 @@ const Dashboard = () => {
       if (statsResponse.success) {
         setDashboardStats(statsResponse.data);
       } else {
-        console.error('❌ Dashboard stats failed:', statsResponse);
-      }
+        }
 
       setRecentActivity(activityData);
 
     } catch (error) {
-      console.error('❌ Failed to load dashboard data:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
