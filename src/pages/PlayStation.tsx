@@ -431,67 +431,39 @@ const PlayStation: React.FC = () => {
 
   // ربط الجلسة بطاولة
   const handleLinkTableToSession = async (session: Session, tableId: string | null) => {
-    // استخراج معرف الفاتورة من الجلسة
-    let billId = typeof session.bill === 'string' 
-      ? session.bill 
-      : (session.bill as any)?._id || (session.bill as any)?.id;
-    
-    // إذا لم تكن الجلسة مرتبطة بفاتورة، نحاول إنشاء فاتورة لها
-    if (!billId) {
-      showNotification('⚠️ الجلسة غير مرتبطة بفاتورة. جاري إنشاء فاتورة...', 'warning');
-      
-      try {
-        // إنشاء فاتورة جديدة للجلسة
-        const billData = {
-          customerName: session.customerName || `عميل (${session.deviceName})`,
-          billType: session.deviceType,
-          status: 'draft',
-          sessions: [session.id],
-          subtotal: 0,
-          total: 0,
-          discount: 0,
-          tax: 0,
-          notes: `فاتورة جلسة ${session.deviceName}`,
-        };
-        
-        if (tableId) {
-          (billData as any).table = tableId;
-        }
-        
-        const newBill = await createBill(billData);
-        
-        if (newBill) {
-          billId = newBill.id || newBill._id;
-          showNotification('✅ تم إنشاء فاتورة للجلسة بنجاح', 'success');
-          await Promise.all([fetchBills(), fetchSessions()]);
-          setShowLinkTableModal(false);
-          setSelectedSessionForLink(null);
-          return;
-        } else {
-          showNotification('❌ فشل في إنشاء فاتورة للجلسة', 'error');
-          return;
-        }
-      } catch (error) {
-        showNotification('❌ حدث خطأ أثناء إنشاء الفاتورة', 'error');
-        return;
-      }
+    // التحقق من وجود tableId
+    if (!tableId) {
+      showNotification('⚠️ يرجى اختيار طاولة', 'warning');
+      return;
     }
 
     try {
       setLinkingTable(true);
       
-      const result = await api.updateBill(billId, { table: tableId || undefined } as any);
+      // استخدام الـ endpoint الجديد الذي يدمج الفواتير بذكاء
+      const result = await api.linkSessionToTable(session._id || session.id, tableId);
       
       if (result && result.success) {
         // Get table number for notification
         const tableDoc = tables.find(t => t._id === tableId);
         const tableNumber = tableDoc?.number;
-        showNotification(tableNumber ? `✅ تم ربط الجلسة بالطاولة ${tableNumber} بنجاح` : '✅ تم فك ربط الجلسة من الطاولة', 'success');
+        
+        // عرض رسالة نجاح مع تفاصيل الدمج إذا حدث
+        const billData = result.data?.bill;
+        let message = `✅ تم ربط الجلسة بالطاولة ${tableNumber} بنجاح`;
+        
+        if (billData && billData.sessionsCount > 1) {
+          message += ` (تم دمج الفواتير - ${billData.sessionsCount} جلسات)`;
+        }
+        
+        showNotification(message, 'success');
+        
+        // تحديث البيانات
         await Promise.all([fetchBills(), loadDevices(), fetchSessions()]);
         setShowLinkTableModal(false);
         setSelectedSessionForLink(null);
       } else {
-        showNotification('❌ فشل في ربط الجلسة بالطاولة. يرجى المحاولة مرة أخرى.', 'error');
+        showNotification(result.message || '❌ فشل في ربط الجلسة بالطاولة', 'error');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
@@ -669,7 +641,19 @@ const PlayStation: React.FC = () => {
                   {activeSession.bill && (() => {
                     const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
                     const billTable = bill ? (bill as any)?.table : null;
-                    const billTableNumber = billTable?.number;
+                    
+                    // Handle both cases: table as object or as ID string
+                    let billTableNumber = null;
+                    if (billTable) {
+                      if (typeof billTable === 'object') {
+                        billTableNumber = billTable.number || billTable.name;
+                      } else {
+                        // If it's just an ID, try to find the table in the tables array
+                        const foundTable = tables.find(t => t._id === billTable || t.id === billTable);
+                        billTableNumber = foundTable?.number;
+                      }
+                    }
+                    
                     return (
                       <div className="space-y-2">
                         <div className="flex items-center text-sm">
@@ -855,7 +839,19 @@ const PlayStation: React.FC = () => {
                               {(() => {
                                 const bill = typeof session.bill === 'object' ? session.bill : null;
                                 const billTable = bill ? (bill as any)?.table : null;
-                                const billTableNumber = billTable?.number;
+                                
+                                // Handle both cases: table as object or as ID string
+                                let billTableNumber = null;
+                                if (billTable) {
+                                  if (typeof billTable === 'object') {
+                                    billTableNumber = billTable.number || billTable.name;
+                                  } else {
+                                    // If it's just an ID, try to find the table in the tables array
+                                    const foundTable = tables.find(t => t._id === billTable || t.id === billTable);
+                                    billTableNumber = foundTable?.number;
+                                  }
+                                }
+                                
                                 return billTableNumber ? (
                                   <div className="text-xs text-blue-600 dark:text-blue-400">
                                     🪑 مرتبطة بطاولة: {billTableNumber}
@@ -913,7 +909,19 @@ const PlayStation: React.FC = () => {
                       {(() => {
                         const bill = typeof session.bill === 'object' ? session.bill : null;
                         const billTable = bill ? (bill as any)?.table : null;
-                        const billTableNumber = billTable?.number;
+                        
+                        // Handle both cases: table as object or as ID string
+                        let billTableNumber = null;
+                        if (billTable) {
+                          if (typeof billTable === 'object') {
+                            billTableNumber = billTable.number || billTable.name;
+                          } else {
+                            // If it's just an ID, try to find the table in the tables array
+                            const foundTable = tables.find(t => t._id === billTable || t.id === billTable);
+                            billTableNumber = foundTable?.number;
+                          }
+                        }
+                        
                         const isLinked = !!billTable;
                         
                         return (

@@ -63,6 +63,13 @@ router.put(
     sessionController.unlinkTableFromSession
 );
 
+// Link session to table with smart bill merging (playstation and computer permissions)
+router.put(
+    "/:sessionId/link-table",
+    authorize("playstation", "computer", "all"),
+    sessionController.linkSessionToTable
+);
+
 // Get active sessions (playstation and computer permissions)
 router.get(
     "/status/active",

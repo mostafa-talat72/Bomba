@@ -19,6 +19,13 @@ const sessionController = {
             const sessions = await Session.find(query)
                 .populate("createdBy", "name")
                 .populate("updatedBy", "name")
+                .populate({
+                    path: "bill",
+                    populate: {
+                        path: "table",
+                        select: "number name"
+                    }
+                })
                 .sort({ startTime: -1 })
                 .limit(limit * 1)
                 .skip((page - 1) * limit);
@@ -432,6 +439,19 @@ const sessionController = {
                 });
             }
 
+            // Check if session is linked to a table
+            const bill = session.bill;
+            const isLinkedToTable = bill && bill.table;
+
+            // If not linked to table and no customer name provided, require it
+            if (!isLinkedToTable && (!customerName || customerName.trim() === '')) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'اسم العميل مطلوب للجلسات غير المرتبطة بطاولة',
+                    error: 'Customer name required'
+                });
+            }
+
             // Update customer name if provided
             if (customerName && customerName.trim() !== "") {
                 session.customerName = customerName.trim();
@@ -494,11 +514,11 @@ const sessionController = {
             );
 
             // Update existing bill with final cost OR create new bill if missing
-            let bill = null;
+            let updatedBill = null;
             if (updatedSession.bill) {
                 try {
-                    bill = await Bill.findById(updatedSession.bill);
-                    if (bill) {
+                    updatedBill = await Bill.findById(updatedSession.bill);
+                    if (updatedBill) {
                         // تحديد اسم العميل بنفس منطق البداية
                         let customerNameForBill = "";
                         const deviceType = updatedSession.deviceType;
@@ -527,18 +547,18 @@ const sessionController = {
                         Logger.info(`✓ Updating bill with customer name: ${customerNameForBill}`);
                         
                         // Update bill with final session cost and customer name
-                        bill.customerName = customerNameForBill;
-                        bill.subtotal = updatedSession.finalCost || 0;
-                        bill.total = updatedSession.finalCost || 0;
-                        bill.discount = updatedSession.discount || 0;
-                        bill.status = "partial"; // تغيير الحالة من draft إلى partial
-                        bill.updatedBy = req.user._id;
+                        updatedBill.customerName = customerNameForBill;
+                        updatedBill.subtotal = updatedSession.finalCost || 0;
+                        updatedBill.total = updatedSession.finalCost || 0;
+                        updatedBill.discount = updatedSession.discount || 0;
+                        updatedBill.status = "partial"; // تغيير الحالة من draft إلى partial
+                        updatedBill.updatedBy = req.user._id;
 
-                        await bill.save();
-                        await bill.calculateSubtotal();
-                        await bill.populate(["sessions", "createdBy"], "name");
+                        await updatedBill.save();
+                        await updatedBill.calculateSubtotal();
+                        await updatedBill.populate(["sessions", "createdBy"], "name");
 
-                        Logger.info(`✓ Bill updated successfully: ${bill.billNumber}, Customer: ${bill.customerName}`);
+                        Logger.info(`✓ Bill updated successfully: ${updatedBill.billNumber}, Customer: ${updatedBill.customerName}`);
                     } else {
                         Logger.error(
                             "❌ Bill not found for session:",
@@ -600,19 +620,19 @@ const sessionController = {
                         organization: req.user.organization,
                     };
 
-                    bill = await Bill.create(billData);
+                    updatedBill = await Bill.create(billData);
                     
                     // ربط الفاتورة بالجلسة
-                    updatedSession.bill = bill._id;
+                    updatedSession.bill = updatedBill._id;
                     await updatedSession.save();
                     
-                    await bill.populate(["sessions", "createdBy"], "name");
+                    await updatedBill.populate(["sessions", "createdBy"], "name");
                     
                     Logger.info("✅ Created new bill for session:", {
                         sessionId: updatedSession._id,
-                        billId: bill._id,
-                        billNumber: bill.billNumber,
-                        customerName: bill.customerName,
+                        billId: updatedBill._id,
+                        billNumber: updatedBill.billNumber,
+                        customerName: updatedBill.customerName,
                     });
                 } catch (createBillError) {
                     Logger.error("❌ خطأ في إنشاء الفاتورة:", createBillError);
@@ -625,13 +645,13 @@ const sessionController = {
                 message: "تم إنهاء الجلسة وتحديث الفاتورة بنجاح",
                 data: {
                     session: updatedSession,
-                    bill: bill
+                    bill: updatedBill
                         ? {
-                              id: bill._id,
-                              billNumber: bill.billNumber,
-                              customerName: bill.customerName,
-                              total: bill.total,
-                              status: bill.status,
+                              id: updatedBill._id,
+                              billNumber: updatedBill.billNumber,
+                              customerName: updatedBill.customerName,
+                              total: updatedBill.total,
+                              status: updatedBill.status,
                           }
                         : null,
                 },
@@ -798,10 +818,14 @@ const sessionController = {
                 organization: req.user.organization,
             })
                 .populate("createdBy", "name")
-                .populate(
-                    "bill",
-                    "billNumber customerName total status billType tableNumber"
-                )
+                .populate({
+                    path: "bill",
+                    select: "billNumber customerName total status billType table",
+                    populate: {
+                        path: "table",
+                        select: "number name"
+                    }
+                })
                 .sort({ startTime: -1 });
 
             res.json({
@@ -1056,6 +1080,256 @@ const sessionController = {
             });
         }
     },
+
+    // Link session to table with smart bill merging
+    linkSessionToTable: async (req, res) => {
+        try {
+            const { sessionId } = req.params;
+            const { tableId } = req.body;
+
+            // Validate inputs
+            if (!tableId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "معرف الطاولة مطلوب",
+                    error: "Table ID is required",
+                });
+            }
+
+            // Find the session
+            const session = await Session.findOne({
+                _id: sessionId,
+                organization: req.user.organization,
+            }).populate("bill");
+
+            if (!session) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الجلسة غير موجودة",
+                    error: "Session not found",
+                });
+            }
+
+            if (session.status !== "active") {
+                return res.status(400).json({
+                    success: false,
+                    message: "لا يمكن ربط جلسة غير نشطة بطاولة",
+                    error: "Session is not active",
+                });
+            }
+
+            // Verify table exists
+            const table = await Table.findOne({
+                _id: tableId,
+                organization: req.user.organization,
+            });
+
+            if (!table) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الطاولة غير موجودة",
+                    error: "Table not found",
+                });
+            }
+
+            // Get session's bill
+            const sessionBill = await Bill.findById(session.bill);
+            
+            if (!sessionBill) {
+                return res.status(404).json({
+                    success: false,
+                    message: "فاتورة الجلسة غير موجودة",
+                    error: "Session bill not found",
+                });
+            }
+
+            // Check if session bill is already linked to this table
+            if (sessionBill.table && sessionBill.table.toString() === tableId.toString()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "الجلسة مرتبطة بالفعل بهذه الطاولة",
+                    error: "Session is already linked to this table",
+                });
+            }
+
+            // Search for existing unpaid bill on the table
+            const existingTableBill = await Bill.findOne({
+                table: tableId,
+                organization: req.user.organization,
+                status: { $in: ['draft', 'partial', 'overdue'] }
+            }).sort({ createdAt: -1 });
+
+            let finalBill = null;
+
+            if (existingTableBill && existingTableBill._id.toString() !== sessionBill._id.toString()) {
+                // Case 1: Table has an existing unpaid bill - merge bills
+                Logger.info(`✓ Found existing bill on table ${table.number}, merging...`, {
+                    sessionBillId: sessionBill._id,
+                    sessionBillNumber: sessionBill.billNumber,
+                    tableBillId: existingTableBill._id,
+                    tableBillNumber: existingTableBill.billNumber,
+                });
+
+                // Merge bills using helper function
+                finalBill = await mergeBills(sessionBill, existingTableBill, session, req.user._id);
+
+            } else {
+                // Case 2: No existing bill on table - transfer session bill to table
+                Logger.info(`✓ No existing bill on table ${table.number}, transferring session bill...`, {
+                    sessionBillId: sessionBill._id,
+                    sessionBillNumber: sessionBill.billNumber,
+                });
+
+                sessionBill.table = tableId;
+                sessionBill.billType = "cafe"; // Change to cafe type when linked to table
+                sessionBill.updatedBy = req.user._id;
+                await sessionBill.save();
+                
+                finalBill = sessionBill;
+            }
+
+            // Populate final bill data including table
+            await finalBill.populate([
+                { path: "sessions", select: "deviceName deviceNumber" },
+                { path: "orders", select: "orderNumber" },
+                { path: "createdBy", select: "name" },
+                { path: "table", select: "number name" }
+            ]);
+
+            // Reload session with populated bill and table
+            const updatedSession = await Session.findById(session._id)
+                .populate({
+                    path: "bill",
+                    populate: {
+                        path: "table",
+                        select: "number name"
+                    }
+                });
+
+            // Create notification
+            try {
+                if (req.user && req.user.organization) {
+                    await NotificationService.createNotification({
+                        type: "session",
+                        title: "ربط جلسة بطاولة",
+                        message: `تم ربط جلسة ${session.deviceName} بالطاولة ${table.number}`,
+                        organization: req.user.organization,
+                        createdBy: req.user._id,
+                    });
+                }
+            } catch (notificationError) {
+                Logger.error(
+                    "Failed to create link notification:",
+                    notificationError
+                );
+            }
+
+            res.json({
+                success: true,
+                message: "تم ربط الجلسة بالطاولة بنجاح",
+                data: {
+                    session: updatedSession, // Return full session with populated data
+                    bill: {
+                        id: finalBill._id,
+                        billNumber: finalBill.billNumber,
+                        customerName: finalBill.customerName,
+                        total: finalBill.total,
+                        status: finalBill.status,
+                        billType: finalBill.billType,
+                        table: table.number,
+                        sessionsCount: finalBill.sessions.length,
+                        ordersCount: finalBill.orders.length,
+                    },
+                },
+            });
+
+        } catch (err) {
+            Logger.error("linkSessionToTable error:", err);
+            res.status(500).json({
+                success: false,
+                message: "خطأ في ربط الجلسة بالطاولة",
+                error: err.message,
+            });
+        }
+    },
 };
+
+// Helper function to merge two bills
+async function mergeBills(sourceBill, targetBill, session, userId) {
+    try {
+        Logger.info(`🔄 Starting bill merge:`, {
+            sourceBillId: sourceBill._id,
+            sourceBillNumber: sourceBill.billNumber,
+            targetBillId: targetBill._id,
+            targetBillNumber: targetBill.billNumber,
+        });
+
+        // Transfer session to target bill (avoid duplicates)
+        if (!targetBill.sessions.includes(session._id)) {
+            targetBill.sessions.push(session._id);
+        }
+
+        // Transfer all other sessions from source bill (avoid duplicates)
+        for (const sessionId of sourceBill.sessions) {
+            if (!targetBill.sessions.some(s => s.toString() === sessionId.toString())) {
+                targetBill.sessions.push(sessionId);
+            }
+        }
+
+        // Transfer all orders from source bill (avoid duplicates)
+        if (sourceBill.orders && sourceBill.orders.length > 0) {
+            for (const orderId of sourceBill.orders) {
+                if (!targetBill.orders.some(o => o.toString() === orderId.toString())) {
+                    targetBill.orders.push(orderId);
+                }
+            }
+        }
+
+        // Transfer all payments from source bill
+        if (sourceBill.payments && sourceBill.payments.length > 0) {
+            targetBill.payments.push(...sourceBill.payments);
+        }
+
+        // Aggregate paid amounts
+        targetBill.paid = (targetBill.paid || 0) + (sourceBill.paid || 0);
+
+        // Update bill metadata
+        targetBill.updatedBy = userId;
+
+        // Recalculate subtotal and total
+        await targetBill.calculateSubtotal();
+        await targetBill.save();
+
+        // Update session reference to point to target bill
+        session.bill = targetBill._id;
+        await session.save();
+
+        // Update all other sessions from source bill to point to target bill
+        await Session.updateMany(
+            { bill: sourceBill._id },
+            { $set: { bill: targetBill._id } }
+        );
+
+        // Delete source bill
+        await Bill.findByIdAndDelete(sourceBill._id);
+
+        Logger.info(`✅ Bill merge completed successfully:`, {
+            deletedBillId: sourceBill._id,
+            deletedBillNumber: sourceBill.billNumber,
+            finalBillId: targetBill._id,
+            finalBillNumber: targetBill.billNumber,
+            finalTotal: targetBill.total,
+            finalPaid: targetBill.paid,
+            sessionsCount: targetBill.sessions.length,
+            ordersCount: targetBill.orders.length,
+        });
+
+        return targetBill;
+
+    } catch (error) {
+        Logger.error("❌ Bill merge failed:", error);
+        throw error;
+    }
+}
 
 export default sessionController;

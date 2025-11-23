@@ -754,6 +754,22 @@ class ApiClient {
     return response;
   }
 
+  async linkSessionToTable(sessionId: string, tableId: string): Promise<ApiResponse<{ session: any; bill: any }>> {
+    const response = await this.request<{ session: any; bill: any }>(`/sessions/${sessionId}/link-table`, {
+      method: 'PUT',
+      body: JSON.stringify({ tableId }),
+    });
+    if (response.success && response.data) {
+      if (response.data.session) {
+        response.data.session = this.normalizeData(response.data.session);
+      }
+      if (response.data.bill) {
+        response.data.bill = this.normalizeData(response.data.bill);
+      }
+    }
+    return response;
+  }
+
   async getActiveSessions(): Promise<ApiResponse<Session[]>> {
     const response = await this.request<Session[]>('/sessions/status/active');
     if (response.success && response.data) {

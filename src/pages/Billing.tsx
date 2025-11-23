@@ -1836,7 +1836,7 @@ const Billing = () => {
                           <span className="font-medium mr-2 dark:text-gray-100">طاولة {selectedBill.table.number}</span>
                           <button
                             onClick={() => {
-                              setNewTableNumber(selectedBill.table?.number || null);
+                              setNewTableNumber(selectedBill.table?._id || selectedBill.table?.id || null);
                               setShowChangeTableModal(true);
                             }}
                             className="mr-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
@@ -2717,7 +2717,7 @@ const Billing = () => {
               </label>
               <select
                 value={newTableNumber || ''}
-                onChange={(e) => setNewTableNumber(e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) => setNewTableNumber(e.target.value ? e.target.value : null)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
                 disabled={isChangingTable}
               >

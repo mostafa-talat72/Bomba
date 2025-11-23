@@ -518,6 +518,7 @@ export const updateBill = async (req, res) => {
             notes,
             dueDate,
             tableNumber,
+            table, // إضافة table (ID)
         } = req.body;
 
         const bill = await Bill.findById(req.params.id);
@@ -547,7 +548,32 @@ export const updateBill = async (req, res) => {
         if (notes !== undefined) bill.notes = notes;
         if (dueDate !== undefined) bill.dueDate = dueDate;
         
-        // إذا تم تغيير رقم الطاولة، نحدث جميع الطلبات المرتبطة بالفاتورة
+        // إذا تم تغيير الطاولة (باستخدام ID)
+        if (table !== undefined) {
+            const oldTableId = bill.table ? bill.table.toString() : null;
+            const newTableId = table ? table.toString() : null;
+            
+            if (oldTableId !== newTableId) {
+                bill.table = table || null;
+                Logger.info(`✓ تم تغيير الطاولة من ${oldTableId} إلى ${newTableId}`);
+                
+                // تحديث جميع الطلبات المرتبطة بهذه الفاتورة
+                if (bill.orders && bill.orders.length > 0) {
+                    try {
+                        const Order = (await import('../models/Order.js')).default;
+                        await Order.updateMany(
+                            { _id: { $in: bill.orders } },
+                            { $set: { table: table } }
+                        );
+                        Logger.info(`✓ تم تحديث ${bill.orders.length} طلب للطاولة الجديدة`);
+                    } catch (orderUpdateError) {
+                        Logger.error('خطأ في تحديث الطلبات:', orderUpdateError);
+                    }
+                }
+            }
+        }
+        
+        // إذا تم تغيير رقم الطاولة (للتوافق مع الكود القديم)
         if (tableNumber !== undefined && bill.tableNumber !== tableNumber) {
             bill.tableNumber = tableNumber;
             
@@ -571,10 +597,13 @@ export const updateBill = async (req, res) => {
         // Recalculate totals
         await bill.calculateSubtotal();
 
-        await bill.populate(
-            ["orders", "sessions", "createdBy", "updatedBy"],
-            "name"
-        );
+        await bill.populate([
+            { path: "orders", select: "orderNumber" },
+            { path: "sessions", select: "deviceName deviceNumber" },
+            { path: "createdBy", select: "name" },
+            { path: "updatedBy", select: "name" },
+            { path: "table", select: "number name" }
+        ]);
 
         const prevStatus = bill.status;
         const updatedBill = await bill.save();
