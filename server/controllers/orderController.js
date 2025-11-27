@@ -22,27 +22,53 @@ import {
 export const getOrders = async (req, res) => {
     const queryStartTime = Date.now();
     try {
-        const { status, table, page = 1, limit = 50, date } = req.query;
+        const { 
+            status, 
+            table, 
+            page = 1, 
+            limit = 50, 
+            startDate,  // NEW: Date range filtering
+            endDate     // NEW: Date range filtering
+        } = req.query;
 
         const query = {};
         if (status) query.status = status;
         if (table) query.table = table;
         query.organization = req.user.organization;
 
-        // Filter by date if provided
-        if (date) {
-            const startDate = new Date(date);
-            const endDate = new Date(date);
-            endDate.setDate(endDate.getDate() + 1);
-
-            query.createdAt = {
-                $gte: startDate,
-                $lt: endDate,
-            };
+        // NEW: Date range filtering
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) {
+                try {
+                    query.createdAt.$gte = new Date(startDate);
+                } catch (error) {
+                    Logger.error("Invalid startDate format", { startDate });
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid date format. Use ISO 8601 format (YYYY-MM-DD)",
+                    });
+                }
+            }
+            if (endDate) {
+                try {
+                    const endDateTime = new Date(endDate);
+                    // Set to end of day to include all orders from that day
+                    endDateTime.setHours(23, 59, 59, 999);
+                    query.createdAt.$lte = endDateTime;
+                } catch (error) {
+                    Logger.error("Invalid endDate format", { endDate });
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid date format. Use ISO 8601 format (YYYY-MM-DD)",
+                    });
+                }
+            }
         }
 
-        // Enforce maximum limit of 100 records per request
-        const effectiveLimit = Math.min(parseInt(limit) || 50, 100);
+        // إزالة الحد الأقصى للسماح بجلب جميع الطلبات
+        // هذا ضروري لضمان ظهور جميع الطلبات المرتبطة بالفواتير القديمة
+        const effectiveLimit = parseInt(limit) || 999999; // بدون حد أقصى
         const effectivePage = parseInt(page) || 1;
 
         // Selective field projection - only required fields
@@ -62,7 +88,7 @@ export const getOrders = async (req, res) => {
 
         // Log query performance
         Logger.queryPerformance('/api/orders', queryExecutionTime, orders.length, {
-            filters: { status, table, date },
+            filters: { status, table, startDate, endDate },
             page: effectivePage,
             limit: effectiveLimit,
             totalRecords: total
@@ -73,11 +99,12 @@ export const getOrders = async (req, res) => {
             endpoint: '/api/orders',
             executionTime: queryExecutionTime,
             recordCount: orders.length,
-            filters: { status, table, date },
+            filters: { status, table, startDate, endDate },
             page: effectivePage,
             limit: effectiveLimit,
         });
 
+        // Enhanced pagination metadata
         res.json({
             success: true,
             count: orders.length,
@@ -86,7 +113,8 @@ export const getOrders = async (req, res) => {
             pagination: {
                 page: effectivePage,
                 limit: effectiveLimit,
-                hasMore: orders.length === effectiveLimit && (effectivePage * effectiveLimit) < total
+                hasMore: (effectivePage * effectiveLimit) < total,
+                totalPages: Math.ceil(total / effectiveLimit)
             }
         });
     } catch (error) {

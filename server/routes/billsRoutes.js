@@ -10,6 +10,8 @@ import {
     getBillByQR,
     cancelBill,
     getAvailableBillsForSession,
+    payForItems,
+    paySessionPartial,
 } from "../controllers/billingController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -37,6 +39,8 @@ router
 
 router.post("/:id/payment", authorize("billing", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "all"), addPayment);
+router.post("/:id/pay-items", authorize("billing", "all"), payForItems);
+router.post("/:id/pay-session-partial", authorize("billing", "all"), paySessionPartial);
 router.post("/:id/orders", authorize("billing", "all"), addOrderToBill);
 router.post("/:id/sessions", authorize("billing", "all"), addSessionToBill);
 router.put("/:id/cancel", authorize("billing", "all"), cancelBill);

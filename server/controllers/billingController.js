@@ -17,25 +17,90 @@ const convertToArabicNumbers = (str) => {
     return str.replace(/[0-9]/g, (match) => arabicNumbers[parseInt(match)]);
 };
 
+/**
+ * Helper function to update table status based on unpaid bills
+ * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
+ * @param {ObjectId|Object} tableId - The table ID or table object to update
+ * @param {ObjectId} organizationId - The organization ID for filtering bills
+ * @param {Object} io - Socket.IO instance for emitting events (optional)
+ * @returns {Promise<string|null>} The new table status or null if no table
+ */
+async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
+    if (!tableId) {
+        return null;
+    }
+
+    // Extract the actual ID if tableId is an object
+    const actualTableId = tableId._id || tableId;
+
+    try {
+        // Find all unpaid bills for this table (draft, partial, or overdue status)
+        const unpaidBills = await Bill.find({
+            table: actualTableId,
+            status: { $in: ["draft", "partial", "overdue"] },
+            organization: organizationId,
+        });
+
+        // Determine new status: occupied if there are unpaid bills, empty otherwise
+        const newStatus = unpaidBills.length > 0 ? "occupied" : "empty";
+
+        // Update table status
+        await Table.findByIdAndUpdate(actualTableId, { status: newStatus });
+
+        Logger.info(
+            `✓ Table status updated to '${newStatus}' for table: ${actualTableId} (${unpaidBills.length} unpaid bills)`
+        );
+
+        // Emit table status update event if io is provided
+        if (io) {
+            io.emit("table-status-update", {
+                tableId: actualTableId,
+                status: newStatus,
+            });
+        }
+
+        return newStatus;
+    } catch (error) {
+        Logger.error("خطأ في تحديث حالة الطاولة", error);
+        // Don't throw error - table status update failure shouldn't break bill operations
+        return null;
+    }
+}
+
 // @desc    Get all bills
 // @route   GET /api/bills
 // @access  Private
 export const getBills = async (req, res) => {
     const queryStartTime = Date.now();
+    
     try {
         const {
             status,
             tableNumber,
+            table,  // Support table parameter (ObjectId)
             page = 1,
-            limit = 50, // Default limit reduced to 50 for better performance
-            date,
+            limit = 50,
+            startDate,  // IGNORED - Date filtering removed per requirements
+            endDate,    // IGNORED - Date filtering removed per requirements
             customerName,
         } = req.query;
 
         const query = {};
         if (status) query.status = status;
+        
         // Support both table ObjectId and legacy tableNumber filtering
-        if (tableNumber) {
+        // Priority: table parameter > tableNumber parameter
+        if (table) {
+            // New table parameter (ObjectId)
+            if (mongoose.Types.ObjectId.isValid(table)) {
+                query.table = new mongoose.Types.ObjectId(table);
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: "معرف الطاولة غير صحيح",
+                });
+            }
+        } else if (tableNumber) {
             // Check if tableNumber is a valid ObjectId (for table field filtering)
             if (mongoose.Types.ObjectId.isValid(tableNumber)) {
                 query.table = new mongoose.Types.ObjectId(tableNumber);
@@ -44,32 +109,28 @@ export const getBills = async (req, res) => {
                 query.tableNumber = tableNumber;
             }
         }
-        if (customerName)
+        
+        if (customerName) {
             query.customerName = { $regex: customerName, $options: "i" };
+        }
+        
+        // Date range filtering COMPLETELY REMOVED per requirements 1.1, 1.2, 1.3
+        // System now returns ALL bills regardless of creation date
+        // startDate and endDate parameters are ignored
+        
         query.organization = req.user.organization;
 
-        // Filter by date if provided
-        if (date) {
-            const startDate = new Date(date);
-            const endDate = new Date(date);
-            endDate.setDate(endDate.getDate() + 1);
-
-            query.createdAt = {
-                $gte: startDate,
-                $lt: endDate,
-            };
-        }
-
-        // Enforce maximum limit of 100 records per request
-        const effectiveLimit = Math.min(parseInt(limit), 100);
-        const effectivePage = parseInt(page);
+        // إزالة الحد الأقصى للسماح بجلب جميع الفواتير
+        // هذا ضروري لضمان ظهور الفواتير القديمة غير المدفوعة والطاولات المحجوزة
+        const effectiveLimit = parseInt(limit) || 999999; // بدون حد أقصى
+        const effectivePage = parseInt(page) || 1;
 
         const bills = await Bill.find({
             organization: req.user.organization,
             ...query,
         })
-            // Selective field projection - only required fields
-            .select('billNumber customerName customerPhone table tableNumber status total paid remaining orders sessions createdAt discount discountPercentage tax notes')
+            // Selective field projection - include new partial payment fields
+            .select('billNumber customerName customerPhone table tableNumber status total paid remaining orders sessions createdAt discount discountPercentage tax notes itemPayments sessionPayments paymentHistory')
             .populate({
                 path: "table",
                 select: "number name section", // Populate table with number, name, and section
@@ -85,17 +146,27 @@ export const getBills = async (req, res) => {
             })
             .populate({
                 path: "sessions",
-                select: "deviceName deviceType status finalCost duration", // Limit session fields
+                select: "deviceName deviceType status finalCost duration table", // Limit session fields + table
                 options: { limit: 5 }, // Limit populated sessions to 5
-                populate: {
-                    path: "createdBy",
-                    select: "name",
-                },
+                populate: [
+                    {
+                        path: "createdBy",
+                        select: "name",
+                    },
+                    {
+                        path: "table",
+                        select: "number name",
+                    },
+                ],
             })
             .populate("createdBy", "name")
             .populate("updatedBy", "name")
             .populate("payments.user", "name")
             .populate("partialPayments.items.paidBy", "name")
+            // NEW: Populate partial payment fields
+            .populate("itemPayments.paidBy", "name")
+            .populate("sessionPayments.payments.paidBy", "name")
+            .populate("paymentHistory.paidBy", "name")
             .sort({ createdAt: -1 })
             .limit(effectiveLimit)
             .skip((effectivePage - 1) * effectiveLimit)
@@ -122,7 +193,7 @@ export const getBills = async (req, res) => {
 
         // Log query performance
         Logger.queryPerformance('/api/bills', queryExecutionTime, bills.length, {
-            filters: { status, tableNumber, date, customerName },
+            filters: { status, table, tableNumber, customerName },
             page: effectivePage,
             limit: effectiveLimit,
             totalRecords: total
@@ -133,11 +204,12 @@ export const getBills = async (req, res) => {
             endpoint: '/api/bills',
             executionTime: queryExecutionTime,
             recordCount: bills.length,
-            filters: { status, tableNumber, date, customerName },
+            filters: { status, table, tableNumber, customerName },
             page: effectivePage,
             limit: effectiveLimit,
         });
 
+        // Enhanced pagination metadata
         res.json({
             success: true,
             count: bills.length,
@@ -146,7 +218,7 @@ export const getBills = async (req, res) => {
             pagination: {
                 page: effectivePage,
                 limit: effectiveLimit,
-                hasMore: bills.length === effectiveLimit,
+                hasMore: (effectivePage * effectiveLimit) < total,
                 totalPages: Math.ceil(total / effectiveLimit)
             }
         });
@@ -187,15 +259,23 @@ export const getBill = async (req, res) => {
                 })
                 .populate({
                     path: "sessions",
-                    populate: {
-                        path: "createdBy",
-                        select: "name",
-                    },
+                    populate: [
+                        {
+                            path: "createdBy",
+                            select: "name",
+                        },
+                        {
+                            path: "table",
+                            select: "number name",
+                        },
+                    ],
                 })
                 .populate("createdBy", "name")
                 .populate("updatedBy", "name")
                 .populate("payments.user", "name")
-                .populate("partialPayments.items.paidBy", "name");
+                .populate("partialPayments.items.paidBy", "name")
+                .populate("itemPayments.paidBy", "name")
+                .populate("sessionPayments.payments.paidBy", "name");
             if (!bill) {
                 return res.status(404).json({
                     success: false,
@@ -274,15 +354,23 @@ export const getBill = async (req, res) => {
             })
             .populate({
                 path: "sessions",
-                populate: {
-                    path: "createdBy",
-                    select: "name",
-                },
+                populate: [
+                    {
+                        path: "createdBy",
+                        select: "name",
+                    },
+                    {
+                        path: "table",
+                        select: "number name",
+                    },
+                ],
             })
             .populate("createdBy", "name")
             .populate("updatedBy", "name")
             .populate("payments.user", "name")
-            .populate("partialPayments.items.paidBy", "name");
+            .populate("partialPayments.items.paidBy", "name")
+            .populate("itemPayments.paidBy", "name")
+            .populate("sessionPayments.payments.paidBy", "name");
         if (!bill) {
             return res.status(404).json({
                 success: false,
@@ -469,6 +557,11 @@ export const createBill = async (req, res) => {
 
         await bill.populate(["orders", "sessions", "createdBy"], "name");
 
+        // Update table status if bill has a table (Requirement 2.3)
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+        }
+
         // Notify via Socket.IO
         if (req.io) {
             req.io.notifyBillUpdate("created", bill);
@@ -608,6 +701,16 @@ export const updateBill = async (req, res) => {
         const prevStatus = bill.status;
         const updatedBill = await bill.save();
 
+        // Update table status if bill status changed (Requirement 2.3, 2.4)
+        if (bill.table && prevStatus !== updatedBill.status) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+        }
+
+        // Notify via Socket.IO (Requirement 8.1)
+        if (req.io) {
+            req.io.notifyBillUpdate("updated", updatedBill);
+        }
+
         if (prevStatus !== "paid" && updatedBill.status === "paid") {
             try {
                 await NotificationService.createBillNotification(
@@ -697,6 +800,23 @@ export const addPayment = async (req, res) => {
                 bill.updatedBy = req.user._id;
                 await bill.save();
             }
+
+            // Mark all items as paid if bill is fully paid
+            if (status === 'paid' && bill.itemPayments && bill.itemPayments.length > 0) {
+                let itemsUpdated = false;
+                bill.itemPayments.forEach(item => {
+                    if (!item.isPaid || item.paidQuantity < item.quantity) {
+                        item.paidQuantity = item.quantity;
+                        item.isPaid = true;
+                        item.paidAt = new Date();
+                        item.paidBy = req.user._id;
+                        itemsUpdated = true;
+                    }
+                });
+                if (itemsUpdated) {
+                    await bill.save();
+                }
+            }
         } else {
             // الطريقة القديمة (للتوافق مع الكود القديم)
             if (amount <= 0) {
@@ -715,6 +835,23 @@ export const addPayment = async (req, res) => {
 
             bill.addPayment(amount, method, req.user._id, reference);
             await bill.save();
+        }
+
+        // Mark all items as paid if bill is fully paid
+        if (bill.status === 'paid' && bill.itemPayments && bill.itemPayments.length > 0) {
+            let itemsUpdated = false;
+            bill.itemPayments.forEach(item => {
+                if (!item.isPaid || item.paidQuantity < item.quantity) {
+                    item.paidQuantity = item.quantity;
+                    item.isPaid = true;
+                    item.paidAt = new Date();
+                    item.paidBy = req.user._id;
+                    itemsUpdated = true;
+                }
+            });
+            if (itemsUpdated) {
+                await bill.save();
+            }
         }
 
         // Generate QR code if it doesn't exist
@@ -751,27 +888,9 @@ export const addPayment = async (req, res) => {
             { path: "payments.user", select: "name" }
         ]);
 
-        // Update table status to 'empty' if bill is fully paid
-        if (bill.status === 'paid' && bill.table) {
-            try {
-                await Table.findByIdAndUpdate(
-                    bill.table._id || bill.table,
-                    { status: 'empty' },
-                    { new: true }
-                );
-                Logger.info(`✓ Table status updated to 'empty' for table: ${bill.table._id || bill.table}`);
-                
-                // Emit table status update event
-                if (req.io) {
-                    req.io.emit('table-status-update', {
-                        tableId: bill.table._id || bill.table,
-                        status: 'empty'
-                    });
-                }
-            } catch (tableError) {
-                Logger.error('خطأ في تحديث حالة الطاولة', tableError);
-                // Don't fail the payment if table update fails
-            }
+        // Update table status based on all unpaid bills (Requirement 2.4)
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
         }
 
         // Notify via Socket.IO
@@ -1142,6 +1261,7 @@ export const deleteBill = async (req, res) => {
 
         // Store table reference before deletion
         const tableId = bill.table?._id || bill.table;
+        const organizationId = bill.organization;
 
         // Delete all orders associated with this bill (cascade delete)
         if (bill.orders && bill.orders.length > 0) {
@@ -1152,31 +1272,13 @@ export const deleteBill = async (req, res) => {
         // Remove bill reference from sessions before deletion
         await Session.updateMany({ bill: bill._id }, { $unset: { bill: 1 } });
 
-        // Update table status to 'empty' if bill has a table
-        if (tableId) {
-            try {
-                await Table.findByIdAndUpdate(
-                    tableId,
-                    { status: 'empty' },
-                    { new: true }
-                );
-                Logger.info(`✓ Table status updated to 'empty' for table: ${tableId}`);
-                
-                // Emit table status update event
-                if (req.io) {
-                    req.io.emit('table-status-update', {
-                        tableId: tableId,
-                        status: 'empty'
-                    });
-                }
-            } catch (tableError) {
-                Logger.error('خطأ في تحديث حالة الطاولة', tableError);
-                // Don't fail the deletion if table update fails
-            }
-        }
-
         // Delete the bill
         await bill.deleteOne();
+
+        // Update table status based on remaining unpaid bills (Requirement 2.5)
+        if (tableId) {
+            await updateTableStatusIfNeeded(tableId, organizationId, req.io);
+        }
 
         // Emit bill-deleted event
         if (req.io) {
@@ -1567,6 +1669,358 @@ export const fawryWebhook = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في معالجة Webhook",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Pay for specific items in a bill with quantities
+// @route   POST /api/bills/:id/pay-items
+// @access  Private
+// Requirements: 1.1, 1.2, 1.3, 4.1, 4.2, 4.3
+export const payForItems = async (req, res) => {
+    try {
+        const { items, paymentMethod = "cash" } = req.body;
+
+        // Validate items array (Requirement 4.2)
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب تحديد الأصناف والكميات المراد دفعها",
+            });
+        }
+
+        // Validate each item has itemId and quantity (Requirement 4.2)
+        for (const item of items) {
+            if (!item.itemId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب تحديد معرف الصنف لكل صنف",
+                });
+            }
+
+            // Validate quantity is provided and is a positive number (Requirement 4.2)
+            if (item.quantity === undefined || item.quantity === null) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب تحديد الكمية لكل صنف",
+                });
+            }
+
+            if (typeof item.quantity !== 'number' || item.quantity <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب إدخال كمية صحيحة أكبر من صفر",
+                });
+            }
+
+            // Validate quantity is not a decimal (must be whole number)
+            if (!Number.isInteger(item.quantity)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب أن تكون الكمية رقماً صحيحاً",
+                });
+            }
+        }
+
+        // Find the bill
+        const bill = await Bill.findById(req.params.id);
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة",
+            });
+        }
+
+        // Check if bill is already paid (Requirement 4.3)
+        if (bill.status === "paid") {
+            return res.status(400).json({
+                success: false,
+                message: "لا يمكن دفع أصناف من فاتورة مدفوعة بالكامل",
+            });
+        }
+
+        // Check if bill is cancelled
+        if (bill.status === "cancelled") {
+            return res.status(400).json({
+                success: false,
+                message: "لا يمكن دفع أصناف من فاتورة ملغاة",
+            });
+        }
+
+        // Validate that all itemIds exist in the bill
+        const invalidItems = [];
+        for (const item of items) {
+            const billItem = bill.itemPayments.find(
+                (bi) => bi._id.toString() === item.itemId.toString()
+            );
+            
+            if (!billItem) {
+                invalidItems.push(item.itemId);
+            }
+        }
+
+        if (invalidItems.length > 0) {
+            return res.status(404).json({
+                success: false,
+                message: "بعض الأصناف المحددة غير موجودة في الفاتورة",
+                invalidItems: invalidItems,
+            });
+        }
+
+        // Validate quantities for each item (Requirements 4.1, 4.3)
+        for (const item of items) {
+            const billItem = bill.itemPayments.find(
+                (bi) => bi._id.toString() === item.itemId.toString()
+            );
+
+            const remainingQuantity = (billItem.quantity || 0) - (billItem.paidQuantity || 0);
+
+            // Check if item is already fully paid (Requirement 4.3)
+            if (remainingQuantity === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `الصنف "${billItem.itemName}" مدفوع بالكامل`,
+                    itemId: item.itemId,
+                    itemName: billItem.itemName,
+                });
+            }
+
+            // Check if quantity exceeds remaining (Requirement 4.1)
+            if (item.quantity > remainingQuantity) {
+                return res.status(400).json({
+                    success: false,
+                    message: `الكمية المطلوبة (${item.quantity}) أكبر من الكمية المتبقية (${remainingQuantity}) للصنف "${billItem.itemName}"`,
+                    itemId: item.itemId,
+                    itemName: billItem.itemName,
+                    requestedQuantity: item.quantity,
+                    remainingQuantity: remainingQuantity,
+                });
+            }
+        }
+
+        // Process the payment (Requirements 1.1, 1.2, 1.3)
+        try {
+            const result = bill.payForItems(
+                items,
+                paymentMethod,
+                req.user._id
+            );
+            await bill.save();
+
+            // Update table status based on all unpaid bills
+            if (bill.table) {
+                await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            }
+
+            // Populate bill data for response
+            await bill.populate([
+                { path: "table", select: "number name section" },
+                { path: "orders", select: "orderNumber items status total" },
+                {
+                    path: "sessions",
+                    select: "deviceName deviceNumber status totalCost",
+                },
+                { path: "createdBy", select: "name" },
+                { path: "updatedBy", select: "name" },
+                { path: "itemPayments.paidBy", select: "name" },
+                { path: "paymentHistory.paidBy", select: "name" },
+            ]);
+
+            // Notify via Socket.IO
+            if (req.io) {
+                req.io.notifyBillUpdate("payment-received", bill);
+            }
+
+            // Create notification for item payment
+            try {
+                await NotificationService.createBillingNotification(
+                    bill.status === "paid" ? "paid" : "partial_payment",
+                    bill,
+                    req.user._id
+                );
+            } catch (notificationError) {
+                Logger.error(
+                    "Failed to create item payment notification:",
+                    notificationError
+                );
+            }
+
+            // Return response with paid quantities (Requirement 1.4)
+            res.json({
+                success: true,
+                message: "تم دفع الأصناف بنجاح",
+                data: {
+                    bill,
+                    paidItems: result.paidItems.map(item => ({
+                        itemName: item.itemName,
+                        paidQuantity: item.quantity,
+                        amount: item.amount,
+                        remainingQuantity: item.remainingQuantity,
+                    })),
+                    totalPaid: result.totalAmount,
+                    remaining: bill.remaining,
+                    status: bill.status,
+                },
+            });
+        } catch (paymentError) {
+            Logger.error("خطأ في معالجة دفع الأصناف", paymentError);
+            return res.status(400).json({
+                success: false,
+                message: paymentError.message || "خطأ في معالجة دفع الأصناف",
+            });
+        }
+    } catch (error) {
+        Logger.error("خطأ في دفع الأصناف", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في دفع الأصناف",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Pay partial amount for a session
+// @route   POST /api/bills/:id/pay-session-partial
+// @access  Private
+export const paySessionPartial = async (req, res) => {
+    try {
+        const { sessionId, amount, paymentMethod = "cash" } = req.body;
+
+        // Validate sessionId and amount
+        if (!sessionId) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب تحديد الجلسة",
+            });
+        }
+
+        if (!amount || amount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب إدخال مبلغ صحيح أكبر من صفر",
+            });
+        }
+
+        // Find the bill
+        const bill = await Bill.findById(req.params.id);
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة",
+            });
+        }
+
+        // Check if bill is already paid or cancelled
+        if (bill.status === "paid") {
+            return res.status(400).json({
+                success: false,
+                message: "لا يمكن دفع جلسة من فاتورة مدفوعة بالكامل",
+            });
+        }
+
+        if (bill.status === "cancelled") {
+            return res.status(400).json({
+                success: false,
+                message: "لا يمكن دفع جلسة من فاتورة ملغاة",
+            });
+        }
+
+        // Validate that sessionId exists in the bill
+        const sessionPayment = bill.sessionPayments.find(
+            (s) => s.sessionId.toString() === sessionId.toString()
+        );
+
+        if (!sessionPayment) {
+            return res.status(404).json({
+                success: false,
+                message: "الجلسة غير موجودة في الفاتورة",
+            });
+        }
+
+        // Validate that amount doesn't exceed remaining balance
+        if (amount > sessionPayment.remainingAmount) {
+            return res.status(400).json({
+                success: false,
+                message: `المبلغ (${amount} جنيه) أكبر من المبلغ المتبقي (${sessionPayment.remainingAmount} جنيه)`,
+                remainingAmount: sessionPayment.remainingAmount,
+            });
+        }
+
+        // Process the payment
+        try {
+            const result = bill.paySessionPartial(
+                sessionId,
+                amount,
+                paymentMethod,
+                req.user._id
+            );
+            await bill.save();
+
+            // Update table status based on all unpaid bills (Requirement 2.4)
+            if (bill.table) {
+                await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            }
+
+            // Populate bill data for response
+            await bill.populate([
+                { path: "table", select: "number name section" },
+                { path: "orders", select: "orderNumber items status total" },
+                {
+                    path: "sessions",
+                    select: "deviceName deviceNumber status totalCost finalCost",
+                },
+                { path: "createdBy", select: "name" },
+                { path: "updatedBy", select: "name" },
+                { path: "sessionPayments.payments.paidBy", select: "name" },
+                { path: "paymentHistory.paidBy", select: "name" },
+            ]);
+
+            // Notify via Socket.IO (Requirement 8.2)
+            if (req.io) {
+                req.io.notifyBillUpdate("payment-received", bill);
+            }
+
+            // Create notification for session payment
+            try {
+                await NotificationService.createBillingNotification(
+                    bill.status === "paid" ? "paid" : "partial_payment",
+                    bill,
+                    req.user._id
+                );
+            } catch (notificationError) {
+                Logger.error(
+                    "Failed to create session payment notification:",
+                    notificationError
+                );
+            }
+
+            res.json({
+                success: true,
+                message: "تم دفع جزء من الجلسة بنجاح",
+                data: {
+                    bill,
+                    sessionId: result.sessionId,
+                    paidAmount: result.paidAmount,
+                    sessionRemaining: result.remaining,
+                    billRemaining: bill.remaining,
+                    billStatus: bill.status,
+                },
+            });
+        } catch (paymentError) {
+            Logger.error("خطأ في معالجة الدفع الجزئي للجلسة", paymentError);
+            return res.status(400).json({
+                success: false,
+                message: paymentError.message || "خطأ في معالجة الدفع الجزئي للجلسة",
+            });
+        }
+    } catch (error) {
+        Logger.error("خطأ في الدفع الجزئي للجلسة", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في الدفع الجزئي للجلسة",
             error: error.message,
         });
     }

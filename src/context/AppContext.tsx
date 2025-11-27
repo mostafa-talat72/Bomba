@@ -503,8 +503,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isAuthenticated || isLoggingOut) return;
     
     try {
-      const response = await api.getOrders();
+      // جلب جميع الطلبات بدون حدود لضمان ظهور الطلبات المرتبطة بالفواتير القديمة
+      const response = await api.getOrders({ limit: 999999 });
       if (response.success && response.data) {
+        console.log(`📦 Fetched ${response.data.length} orders (all orders without limits)`);
         setOrders(response.data);
       }
     } catch (error) {
@@ -529,8 +531,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isAuthenticated || isLoggingOut) return;
     
     try {
-      const response = await api.getBills();
+      // جلب جميع الفواتير بدون أي حدود - لضمان ظهور جميع الفواتير القديمة والجديدة
+      const response = await api.getBills({ limit: 999999 });
       if (response.success && response.data) {
+        console.log(`📊 Fetched ${response.data.length} bills (all bills without limits)`);
         setBills(response.data);
       }
     } catch (error) {

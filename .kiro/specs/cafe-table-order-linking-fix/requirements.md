@@ -2,89 +2,113 @@
 
 ## Introduction
 
-This specification addresses critical issues in the Cafe management system related to table-order-bill linking. The system currently has problems where orders linked to tables appear in the "unlinked bills" section, and there are performance issues with order creation and updates. This feature will fix the table status management, ensure proper bill categorization, and improve the responsiveness of order operations.
+هذه الميزة تهدف إلى إصلاح مشكلة في نظام ربط الطلبات بالطاولات والفواتير. حالياً، توجد حالات حيث تظهر طلبات في صفحة الطلبات ولكن الطاولة المرتبطة بها تظهر كفارغة (غير محجوزة)، وأيضاً لا تظهر الفواتير المرتبطة بهذه الطلبات في صفحة الفواتير. هذا يسبب تناقضاً في البيانات ويؤثر على دقة النظام.
 
 ## Glossary
 
-- **Table**: A physical table in the cafe that can be assigned to customers
-- **Order**: A collection of menu items requested by customers
-- **Bill**: A financial document that contains orders and tracks payments
-- **Table Status**: The current state of a table (empty/occupied/reserved)
-- **Linked Bill**: A bill that is associated with a specific table
-- **Unlinked Bill**: A bill that is not associated with any table (takeaway/delivery)
-- **Table ID**: The MongoDB ObjectId that uniquely identifies a table
-- **Table Number**: The display number shown to users (e.g., "1", "2", "3")
+- **System**: نظام Bomba لإدارة المقاهي والمطاعم
+- **Order**: طلب كافيه يحتوي على أصناف من القائمة
+- **Table**: طاولة في المقهى أو المطعم
+- **Bill**: فاتورة تحتوي على طلبات و/أو جلسات
+- **Table Status**: حالة الطاولة (available/occupied/reserved)
+- **Unpaid Bill**: فاتورة لم يتم دفعها بالكامل (draft/partial/overdue)
+- **Order-Table Linking**: ربط الطلب برقم طاولة محدد
+- **Order-Bill Linking**: ربط الطلب بفاتورة محددة
 
 ## Requirements
 
 ### Requirement 1
 
-**User Story:** As a cafe staff member, I want orders linked to tables to appear in the correct table section, so that I can manage table orders separately from takeaway orders.
+**User Story:** كمستخدم للنظام، أريد أن يتم ربط كل طلب بفاتورة تلقائياً عند إنشائه، حتى تظهر جميع الطلبات في صفحة الفواتير بشكل صحيح.
 
 #### Acceptance Criteria
 
-1. WHEN an order is created with a table ID THEN the system SHALL store the table reference as an ObjectId
-2. WHEN displaying bills in the billing page THEN the system SHALL categorize bills with valid table references in the "table bills" section
-3. WHEN displaying bills in the billing page THEN the system SHALL categorize bills without table references in the "unlinked bills" section
-4. WHEN a bill has a table reference THEN the system SHALL display the table number alongside the bill information
-5. WHEN the frontend receives bill data THEN the system SHALL correctly identify table-linked bills based on the table field presence
+1. WHEN المستخدم ينشئ طلباً جديداً مرتبطاً بطاولة، THEN THE System SHALL يبحث عن فاتورة غير مدفوعة موجودة لهذه الطاولة
+2. WHEN يتم العثور على فاتورة غير مدفوعة للطاولة، THEN THE System SHALL يضيف الطلب إلى هذه الفاتورة الموجودة
+3. WHEN لا يتم العثور على فاتورة غير مدفوعة للطاولة، THEN THE System SHALL ينشئ فاتورة جديدة ويضيف الطلب إليها
+4. WHEN يتم إنشاء طلب بدون طاولة، THEN THE System SHALL ينشئ فاتورة جديدة للطلب
+5. THE System SHALL يحفظ معرف الفاتورة في حقل bill الخاص بالطلب
 
 ### Requirement 2
 
-**User Story:** As a cafe staff member, I want table status to update immediately when orders are created or bills are paid, so that I can see accurate table availability in real-time.
+**User Story:** كمستخدم للنظام، أريد أن تتحدث حالة الطاولة تلقائياً عند إنشاء طلب لها، حتى تظهر الطاولة كمحجوزة في واجهة المستخدم.
 
 #### Acceptance Criteria
 
-1. WHEN an order is created for a table THEN the system SHALL change the table status to "occupied" immediately
-2. WHEN a bill is fully paid THEN the system SHALL change the associated table status to "empty" immediately
-3. WHEN a bill is deleted THEN the system SHALL change the associated table status to "empty" immediately
-4. WHEN table status changes THEN the system SHALL emit a Socket.IO event to update all connected clients
-5. WHEN the frontend receives a table status update event THEN the system SHALL update the table display color and status text immediately
+1. WHEN يتم إنشاء طلب مرتبط بطاولة، THEN THE System SHALL يحدث حالة الطاولة إلى 'occupied'
+2. WHEN يتم إنشاء فاتورة لطاولة، THEN THE System SHALL يحدث حالة الطاولة إلى 'occupied'
+3. WHEN يتم دفع جميع فواتير الطاولة بالكامل، THEN THE System SHALL يحدث حالة الطاولة إلى 'available'
+4. WHEN يتم حذف آخر طلب غير مدفوع من طاولة، THEN THE System SHALL يحدث حالة الطاولة إلى 'available'
+5. THE System SHALL يتحقق من حالة الطاولة بناءً على وجود فواتير غير مدفوعة
 
 ### Requirement 3
 
-**User Story:** As a cafe staff member, I want orders to appear in the orders page immediately after creation, so that the kitchen can start preparing them without delay.
+**User Story:** كمستخدم للنظام، أريد أن تظهر جميع الفواتير المرتبطة بالطلبات في صفحة الفواتير، حتى أتمكن من إدارة المدفوعات بشكل صحيح.
 
 #### Acceptance Criteria
 
-1. WHEN an order is saved THEN the system SHALL persist it to the database within 500 milliseconds
-2. WHEN an order is created THEN the system SHALL emit a Socket.IO event to notify all connected clients
-3. WHEN the frontend receives an order creation event THEN the system SHALL add the order to the display within 100 milliseconds
-4. WHEN an order is updated THEN the system SHALL propagate changes to all clients within 500 milliseconds
-5. WHEN multiple orders are created simultaneously THEN the system SHALL handle them without blocking or delays
+1. WHEN المستخدم يفتح صفحة الفواتير، THEN THE System SHALL يعرض جميع الفواتير التي تحتوي على طلبات
+2. WHEN فاتورة تحتوي على طلبات مرتبطة بطاولة، THEN THE System SHALL يعرض رقم الطاولة في الفاتورة
+3. WHEN فاتورة تحتوي على طلبات غير مرتبطة بطاولة، THEN THE System SHALL يعرض اسم العميل أو "عميل" كافتراضي
+4. THE System SHALL يحسب إجمالي الفاتورة بناءً على جميع الطلبات المرتبطة بها
+5. THE System SHALL يعرض حالة الفاتورة بشكل صحيح (draft/partial/paid/overdue)
 
 ### Requirement 4
 
-**User Story:** As a cafe staff member, I want the print dialog to appear immediately after saving an order, so that I can print kitchen tickets without waiting.
+**User Story:** كمستخدم للنظام، أريد أن يتم تحديث الفاتورة تلقائياً عند تعديل أو حذف طلب، حتى تبقى البيانات متسقة.
 
 #### Acceptance Criteria
 
-1. WHEN the save button is clicked THEN the system SHALL complete the save operation within 500 milliseconds
-2. WHEN the save operation completes THEN the system SHALL trigger the print dialog within 100 milliseconds
-3. WHEN printing is triggered THEN the system SHALL not block the UI from updating
-4. WHEN an order is saved and printed THEN the system SHALL update the table status before showing the print dialog
-5. WHEN network latency occurs THEN the system SHALL show a loading indicator but not block the print action
+1. WHEN يتم تعديل طلب مرتبط بفاتورة، THEN THE System SHALL يعيد حساب إجمالي الفاتورة
+2. WHEN يتم حذف طلب من فاتورة، THEN THE System SHALL يزيل الطلب من قائمة طلبات الفاتورة
+3. WHEN يتم حذف آخر طلب من فاتورة، THEN THE System SHALL يحذف الفاتورة أو يحدث حالتها بناءً على وجود جلسات
+4. WHEN يتم تحديث عناصر الطلب، THEN THE System SHALL يعيد حساب تكلفة الطلب وإجمالي الفاتورة
+5. THE System SHALL يحدث حالة الفاتورة بناءً على المبلغ المدفوع والمتبقي
 
 ### Requirement 5
 
-**User Story:** As a cafe staff member, I want deleted bills to properly clean up associated orders and table status, so that tables become available for new customers.
+**User Story:** كمستخدم للنظام، أريد أن تكون عملية ربط الطلبات بالفواتير والطاولات موثوقة، حتى لا أواجه أخطاء أو تناقضات في البيانات.
 
 #### Acceptance Criteria
 
-1. WHEN a bill is deleted THEN the system SHALL delete all associated orders from the database
-2. WHEN a bill is deleted THEN the system SHALL set the associated table status to "empty"
-3. WHEN a bill is deleted THEN the system SHALL emit Socket.IO events to update all clients
-4. WHEN orders are deleted THEN the system SHALL restore inventory quantities for items that were deducted
-5. WHEN a table becomes empty THEN the system SHALL update the table color to indicate availability
+1. WHEN يتم إنشاء طلب، THEN THE System SHALL يتحقق من صحة معرف الطاولة قبل الربط
+2. WHEN يتم إنشاء فاتورة، THEN THE System SHALL يتحقق من عدم وجود فاتورة مكررة لنفس الطاولة
+3. WHEN يحدث خطأ أثناء إنشاء الطلب أو الفاتورة، THEN THE System SHALL يتراجع عن جميع التغييرات
+4. THE System SHALL يسجل جميع عمليات الربط في سجل النظام للتدقيق
+5. THE System SHALL يعرض رسائل خطأ واضحة عند فشل عملية الربط
 
 ### Requirement 6
 
-**User Story:** As a system administrator, I want all table references to use ObjectId consistently, so that the system maintains data integrity across frontend and backend.
+**User Story:** كمستخدم للنظام، أريد أن تتزامن البيانات بين صفحة الطلبات وصفحة الفواتير، حتى أرى نفس المعلومات في كلا الصفحتين.
 
 #### Acceptance Criteria
 
-1. WHEN the frontend sends a table reference THEN the system SHALL use the table ObjectId not the table number
-2. WHEN the backend receives a table reference THEN the system SHALL validate it as a valid ObjectId
-3. WHEN querying bills by table THEN the system SHALL use ObjectId comparison not string comparison
-4. WHEN populating table data THEN the system SHALL use Mongoose populate to retrieve full table documents
-5. WHEN displaying table information THEN the system SHALL extract the table number from the populated table object
+1. WHEN يتم إنشاء طلب في صفحة الكافيه، THEN THE System SHALL يحدث صفحة الفواتير تلقائياً عبر Socket.IO
+2. WHEN يتم دفع فاتورة في صفحة الفواتير، THEN THE System SHALL يحدث حالة الطاولة في صفحة الكافيه
+3. WHEN يتم حذف طلب، THEN THE System SHALL يحدث كلاً من صفحة الطلبات وصفحة الفواتير
+4. THE System SHALL يستخدم Socket.IO لإرسال تحديثات فورية لجميع المستخدمين المتصلين
+5. THE System SHALL يحدث واجهة المستخدم فوراً عند استلام تحديثات عبر Socket.IO
+
+### Requirement 7
+
+**User Story:** كمستخدم للنظام، أريد أن يتعامل النظام مع الحالات الاستثنائية بشكل صحيح، حتى لا تحدث مشاكل في البيانات.
+
+#### Acceptance Criteria
+
+1. WHEN يتم إنشاء طلب لطاولة غير موجودة، THEN THE System SHALL يعرض رسالة خطأ ويمنع إنشاء الطلب
+2. WHEN يحدث خطأ في الاتصال بقاعدة البيانات، THEN THE System SHALL يعرض رسالة خطأ ويحتفظ بالحالة السابقة
+3. WHEN يتم إنشاء طلب بدون عناصر، THEN THE System SHALL يعرض رسالة خطأ ويمنع إنشاء الطلب
+4. WHEN يتم حذف طاولة لها طلبات نشطة، THEN THE System SHALL يمنع الحذف ويعرض رسالة تحذير
+5. THE System SHALL يتحقق من صحة جميع المدخلات قبل تنفيذ أي عملية
+
+### Requirement 8
+
+**User Story:** كمستخدم للنظام، أريد أن يحافظ النظام على تناسق البيانات بين الطلبات والفواتير والطاولات، حتى تكون التقارير دقيقة.
+
+#### Acceptance Criteria
+
+1. THE System SHALL يضمن أن كل طلب مرتبط بفاتورة واحدة فقط في أي وقت
+2. THE System SHALL يضمن أن كل فاتورة مرتبطة بطاولة واحدة فقط أو بدون طاولة
+3. THE System SHALL يضمن أن حالة الطاولة تعكس بدقة وجود فواتير غير مدفوعة
+4. THE System SHALL يضمن أن إجمالي الفاتورة يساوي مجموع جميع الطلبات والجلسات المرتبطة بها
+5. THE System SHALL يضمن أن حذف طلب لا يؤدي إلى فواتير يتيمة أو بيانات غير متسقة

@@ -16,6 +16,7 @@ import {
     getSubscriptionStatus,
     createSubscriptionPayment,
     fawryWebhook,
+    payForItems,
 } from "../controllers/billingController.js";
 import { protect, authorize, adminOnly } from "../middleware/auth.js";
 
@@ -53,6 +54,8 @@ router.post(
     authorize("billing", "all"),
     addPartialPayment
 );
+// دفع أصناف محددة من الفاتورة
+router.post("/:id/pay-items", authorize("billing", "all"), payForItems);
 router.post("/subscription/payment", protect, createSubscriptionPayment);
 router.post("/subscription/fawry-webhook", fawryWebhook);
 

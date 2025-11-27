@@ -181,7 +181,16 @@ sessionSchema.methods.calculateCost = async function () {
             const hourlyRate = getRate(this.controllers);
             const minuteRate = hourlyRate / 60;
             const rawCost = minutes * minuteRate;
-            this.totalCost = Math.round(rawCost); // التقريب فقط عند حساب التكلفة النهائية
+            
+            // التقريب المخصص: إذا كان >= 0.5 ساعة، نقرب لأعلى، وإلا نبقيها كما هي
+            const hours = minutes / 60;
+            const fractionalPart = hours - Math.floor(hours);
+            
+            if (fractionalPart >= 0.5) {
+                this.totalCost = Math.ceil(rawCost);
+            } else {
+                this.totalCost = Math.round(rawCost);
+            }
         } else {
             this.totalCost = 0;
         }
@@ -228,8 +237,18 @@ sessionSchema.methods.calculateCost = async function () {
             total = rawCost; // لا نقرب هنا أيضاً
         }
     }
-    // التقريب فقط عند حساب التكلفة النهائية
-    this.totalCost = Math.round(total);
+    // التقريب المخصص: إذا كان >= 0.5 ساعة، نقرب لأعلى، وإلا نبقيها كما هي
+    const hours = total / (getRate(this.controllers) || 1);
+    const fractionalPart = hours - Math.floor(hours);
+    
+    if (fractionalPart >= 0.5) {
+        // إذا كانت الساعات >= 0.5، نقرب لأعلى
+        this.totalCost = Math.ceil(total);
+    } else {
+        // إذا كانت أقل من 0.5، نبقيها كما هي
+        this.totalCost = Math.round(total);
+    }
+    
     this.finalCost = this.totalCost - (this.discount || 0);
     
     // Mark fields as modified to ensure they are saved

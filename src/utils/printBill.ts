@@ -1,4 +1,5 @@
-import { Bill, Order, Session } from '../services/api';
+import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
+import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
 
 export const printBill = (bill: Bill, organizationName?: string) => {
   // Format date in Arabic
@@ -20,110 +21,19 @@ export const printBill = (bill: Bill, organizationName?: string) => {
     return num.toString().replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]);
   };
 
-  // Format currency in EGP with Arabic numerals
-  const formatCurrency = (amount: number | undefined | null) => {
-    // Handle undefined or null values
+  // Format number without currency - no decimals
+  const formatNumber = (amount: number | undefined | null) => {
     const safeAmount = amount ?? 0;
-    
-    // Convert to Arabic numerals
     const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    const formatted = safeAmount.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
-    return formatted.replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]) + ' ج.م';
+    const rounded = Math.round(safeAmount);
+    const formatted = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return formatted.replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]);
   };
 
   // Format quantity with Arabic numerals
   const formatQuantity = (qty: number) => {
     const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
     return qty.toString().replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]);
-  };
-
-  // Generate order items HTML - Grouped by item name and price
-  const generateOrderItems = (orders: Order[]) => {
-    // Create a map to group items by name and price
-    const itemsMap = new Map<string, {name: string, price: number, quantity: number}>();
-    
-    // Process all orders and items
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        const key = `${item.name}_${item.price}`;
-        if (itemsMap.has(key)) {
-          const existing = itemsMap.get(key)!;
-          existing.quantity += item.quantity;
-        } else {
-          itemsMap.set(key, {
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity
-          });
-        }
-      });
-    });
-    
-    // Generate HTML for each unique item with total quantity
-    const itemsHtml = Array.from(itemsMap.values()).map(item => {
-      return `
-        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-          <span>${formatQuantity(item.quantity)} × ${item.name}</span>
-          <span>${formatCurrency(item.price * item.quantity)}</span>
-        </div>
-      `;
-    }).join('');
-    
-    return `
-      <div style="border-bottom: 1px dashed #ddd; padding: 8px 0; margin-bottom: 8px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">الطلبات</div>
-        <div style="margin-right: 10px;">
-          ${itemsHtml}
-        </div>
-      </div>
-    `;
-  };
-
-  // Generate sessions HTML
-  const generateSessions = (sessions: Session[]) => {
-    return sessions.map(session => {
-      const startTime = new Date(session.startTime);
-      const endTime = session.endTime ? new Date(session.endTime) : new Date();
-      const duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60); // in hours
-      
-      // Get costs with fallback values
-      const finalCost = session.finalCost ?? session.totalCost ?? 0;
-
-      return `
-        <div style="border-bottom: 1px dashed #ddd; padding: 8px 0; margin-bottom: 8px;">
-          <div style="font-weight: bold; margin-bottom: 4px;">
-            جلسة ${session.deviceName || session.deviceNumber || 'غير محدد'}
-          </div>
-          <div style="margin-right: 10px;">
-            <div style="display: flex; justify-content: space-between;">
-              <span>المدة:</span>
-              <span>${formatQuantity(parseFloat(duration.toFixed(1)))} ساعة</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-weight: bold;">
-              <span>المجموع:</span>
-              <span>${formatCurrency(finalCost)}</span>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  };
-
-  // Generate payments HTML
-  const generatePayments = (payments: any[]) => {
-    if (!payments || payments.length === 0) return '';
-
-    return `
-      <div style="margin-top: 10px; border-top: 1px solid #000; padding-top: 10px;">
-        <div style="font-weight: bold; margin-bottom: 5px;">المدفوعات:</div>
-        ${payments.map(payment => `
-          <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-            <span>${formatDate(payment.timestamp)} - ${getPaymentMethodText(payment.method)}</span>
-            <span>${formatCurrency(payment.amount)}</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
   };
 
   const getPaymentMethodText = (method: string) => {
@@ -135,6 +45,91 @@ export const printBill = (bill: Bill, organizationName?: string) => {
     }
   };
 
+  // Generate order items table
+  const generateOrderItemsTable = (orders: Order[], itemPayments?: ItemPayment[], billStatus?: string, billPaid?: number, billTotal?: number) => {
+    const aggregatedItems = aggregateItemsWithPayments(
+      orders,
+      itemPayments,
+      billStatus,
+      billPaid,
+      billTotal
+    );
+    
+    if (aggregatedItems.length === 0) {
+      return '';
+    }
+    
+    const itemsRows = aggregatedItems.map((item: AggregatedItem) => {
+      const addonsText = item.addons && item.addons.length > 0
+        ? ` (${item.addons.map(a => a.name).join(', ')})`
+        : '';
+      
+      const paidAmount = item.price * item.paidQuantity;
+      
+      return `
+        <tr>
+          <td class="item-name" style="width: 50%;">${item.name}${addonsText}</td>
+          <td class="item-quantity" style="width: 16.67%;">${formatQuantity(item.totalQuantity)}</td>
+          <td class="item-paid" style="width: 16.67%;">${formatNumber(paidAmount)}</td>
+          <td class="item-total" style="width: 16.66%;">${formatNumber(item.price * item.totalQuantity)}</td>
+        </tr>
+      `;
+    }).join('');
+    
+    return `
+      <div class="section-title">الطلبات</div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th class="col-name" style="width: 50%;">الصنف</th>
+            <th class="col-quantity" style="width: 16.67%;">الكمية</th>
+            <th class="col-paid" style="width: 16.67%;">المدفوع</th>
+            <th class="col-total" style="width: 16.66%;">الإجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+        </tbody>
+      </table>
+    `;
+  };
+
+  // Generate sessions table
+  const generateSessionsTable = (sessions: Session[], sessionPayments?: SessionPayment[]) => {
+    if (!sessions || sessions.length === 0) return '';
+
+    const sessionsRows = sessions.map(session => {
+      const startTime = new Date(session.startTime);
+      const endTime = session.endTime ? new Date(session.endTime) : new Date();
+      const duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+      const finalCost = session.finalCost ?? session.totalCost ?? 0;
+      
+      return `
+        <tr>
+          <td class="item-name" style="width: 50%;">${session.deviceName || session.deviceNumber || 'غير محدد'}</td>
+          <td class="item-quantity" style="width: 25%;">${formatQuantity(parseFloat(duration.toFixed(1)))} س</td>
+          <td class="item-total" style="width: 25%;">${formatNumber(finalCost)}</td>
+        </tr>
+      `;
+    }).join('');
+    
+    return `
+      <div class="section-title">الجلسات</div>
+      <table class="items-table sessions-table">
+        <thead>
+          <tr>
+            <th class="col-name" style="width: 50%;">الجهاز</th>
+            <th class="col-quantity" style="width: 25%;">المدة</th>
+            <th class="col-total" style="width: 25%;">الإجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sessionsRows}
+        </tbody>
+      </table>
+    `;
+  };
+
   // Main receipt HTML
   const receiptHTML = `
     <!DOCTYPE html>
@@ -144,73 +139,246 @@ export const printBill = (bill: Bill, organizationName?: string) => {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>فاتورة ${bill.billNumber || ''}</title>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-        * { font-family: 'Tajawal', sans-serif; }
-        body { margin: 0; padding: 16px; font-size: 14px; color: #1a1a1a; }
-        .header { text-align: center; margin-bottom: 16px; }
-        .title { font-size: 1.5rem; font-weight: bold; margin-bottom: 8px; }
-        .info { margin-bottom: 8px; }
-        .divider { border-top: 1px dashed #000; margin: 12px 0; }
-        .items { margin-bottom: 12px; }
-        .item { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        .total { font-weight: bold; margin-top: 8px; }
-        .footer { margin-top: 16px; text-align: center; font-size: 0.9em; color: #666; }
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .mb-2 { margin-bottom: 8px; }
-        .discount { color: #e53e3e; }
-        .thank-you { text-align: center; margin-top: 16px; font-size: 1.1em; font-weight: 500; }
-        .org-name { font-size: 1.3rem; font-weight: 900; margin-bottom: 4px; }
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
+        * { 
+          font-family: 'Tajawal', sans-serif; 
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+          box-sizing: border-box;
+        }
+        body { 
+          margin: 0; 
+          padding: 8px 10px 8px 6px; 
+          font-size: 11px; 
+          color: #000; 
+          font-weight: 600;
+          width: 80mm;
+          max-width: 80mm;
+          text-align: center;
+        }
+        .header { 
+          text-align: center; 
+          margin-bottom: 8px;
+          margin-top: 0;
+          font-weight: 700;
+          border-bottom: 2px dashed #000;
+          padding-bottom: 6px;
+        }
+        .org-name { 
+          font-size: 1.4em; 
+          font-weight: 900; 
+          margin-bottom: 6px; 
+          color: #000;
+        }
+        .title { 
+          font-size: 1.1em; 
+          font-weight: 800; 
+          margin-bottom: 6px; 
+          color: #000;
+        }
+        .info { 
+          margin-bottom: 4px; 
+          font-weight: 600;
+          font-size: 0.9em;
+        }
+        .divider { 
+          border-top: 2px dashed #000; 
+          margin: 10px 0; 
+        }
+        .section-title {
+          font-size: 1.1em;
+          font-weight: 800;
+          margin: 10px 0 6px 0;
+          text-align: center;
+          background: #e0e0e0;
+          padding: 4px;
+          border-radius: 4px;
+        }
+        .items-table { 
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 10px;
+          font-size: 0.85em;
+          border: 2px solid #000;
+          table-layout: fixed;
+        }
+        .items-table thead {
+          background: #e0e0e0;
+          font-weight: 800;
+        }
+        .items-table th {
+          padding: 4px 3px;
+          text-align: right;
+          border: 1.5px solid #000;
+          font-size: 0.9em;
+          word-wrap: break-word;
+        }
+        .items-table td {
+          padding: 3px 3px;
+          text-align: right;
+          border: 1px solid #000;
+          font-weight: 600;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+        .items-table .item-name {
+          text-align: left;
+          font-weight: 700;
+          padding-left: 5px;
+          width: 50% !important;
+        }
+        .items-table .item-quantity {
+          width: 16.67% !important;
+        }
+        .items-table .item-paid {
+          width: 16.67% !important;
+        }
+        .items-table .item-total {
+          width: 16.66% !important;
+        }
+        .items-table.sessions-table .item-quantity {
+          width: 25% !important;
+        }
+        .items-table.sessions-table .item-total {
+          width: 25% !important;
+        }
+        .items-table th:first-child {
+          text-align: left;
+          padding-left: 5px;
+        }
+        .total-section { 
+          margin-top: 12px;
+          text-align: center;
+          font-weight: 800;
+        }
+        .total-row {
+          text-align: center;
+          padding: 6px 8px;
+          margin-bottom: 4px;
+          font-size: 1.1em;
+          font-weight: 700;
+        }
+        .total-row.grand-total {
+          font-size: 1.4em;
+          font-weight: 900;
+          background: #000;
+          color: #fff;
+          border-radius: 4px;
+          margin-top: 8px;
+          margin-bottom: 8px;
+          padding: 8px;
+        }
+        .total-row.paid {
+          font-size: 1.3em;
+          font-weight: 900;
+          color: #4caf50;
+        }
+        .total-row.remaining {
+          font-size: 1.3em;
+          font-weight: 900;
+          color: #ff9800;
+        }
+        .footer { 
+          margin-top: 12px; 
+          text-align: center; 
+          font-size: 0.85em; 
+          color: #333;
+          border-top: 2px dashed #000;
+          padding-top: 8px;
+          padding-bottom: 8px;
+          font-weight: 700;
+        }
+        .thank-you { 
+          text-align: center; 
+          margin-top: 10px; 
+          margin-bottom: 8px;
+          font-size: 1.1em; 
+          font-weight: 700; 
+        }
+        strong { 
+          font-weight: 800; 
+        }
+        
+        @media print {
+          @page { 
+            size: 80mm auto; 
+            margin: 0; 
+          }
+          body { 
+            margin: 0; 
+            padding: 4px 8px 4px 4px; 
+            font-weight: 600;
+            width: 80mm;
+          }
+          .no-print { display: none !important; }
+          .items-table {
+            border: 2px solid #000 !important;
+          }
+          .items-table th,
+          .items-table td {
+            border: 1px solid #000 !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+        
+        @media screen {
+          body {
+            max-width: 80mm;
+            margin: 0 auto;
+            background: #fff;
+          }
+        }
       </style>
     </head>
     <body>
       <div class="header">
         ${organizationName ? `<div class="org-name">${organizationName}</div>` : ''}
         <div class="title">فاتورة ${bill.billNumber || ''}</div>
-        <div>${formatDate(bill.createdAt || new Date())}</div>
-        ${bill.customerName ? `<div>العميل: ${bill.customerName}</div>` : ''}
-        ${bill.customerPhone ? `<div>الهاتف: ${bill.customerPhone}</div>` : ''}
-        ${bill.discountPercentage && bill.discountPercentage > 0 ? 
-          `<div class="discount">نسبة الخصم: ${toArabicNumerals(bill.discountPercentage)}%</div>` : ''}
+        <div class="info">${formatDate(bill.createdAt || new Date())}</div>
+        ${bill.customerName ? `<div class="info">العميل: ${bill.customerName}</div>` : ''}
+        ${bill.customerPhone ? `<div class="info">الهاتف: ${bill.customerPhone}</div>` : ''}
       </div>
 
       <div class="divider"></div>
 
-      ${bill.orders && bill.orders.length > 0 ? `
-        <div class="items">
-          <div class="text-center mb-2">الطلبات</div>
-          ${generateOrderItems(bill.orders)}
+      ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total) : ''}
+
+      ${bill.sessions && bill.sessions.length > 0 ? generateSessionsTable(bill.sessions, bill.sessionPayments) : ''}
+
+      <div class="divider"></div>
+
+      <div class="total-section">
+        ${bill.discount && bill.discount > 0 ? `
+          <div class="total-row">
+            الخصم: ${formatNumber(bill.discount)}
+          </div>
+        ` : ''}
+        ${bill.tax && bill.tax > 0 ? `
+          <div class="total-row">
+            الضريبة: ${formatNumber(bill.tax)}
+          </div>
+        ` : ''}
+        <div class="total-row grand-total">
+          الإجمالي الكلي: ${formatNumber(bill.total || 0)}
         </div>
-      ` : ''}
-
-      ${bill.sessions && bill.sessions.length > 0 ? `
-        <div class="items">
-          <div class="text-center mb-2">الجلسات</div>
-          ${generateSessions(bill.sessions)}
+        <div class="total-row paid">
+          المدفوع: ${formatNumber(bill.paid || 0)}
         </div>
-      ` : ''}
-
-      ${generatePayments(bill.payments)}
-
-      <div class="total text-right">
-        <div>الإجمالي: ${formatCurrency(bill.subtotal || 0)}</div>
-        ${bill.discountPercentage && bill.discountPercentage > 0 ? 
-          `<div>نسبة الخصم: ${toArabicNumerals(bill.discountPercentage)}% (${formatCurrency((bill.subtotal || 0) * (bill.discountPercentage / 100))})</div>` : ''}
-        ${bill.discount && (!bill.discountPercentage || bill.discountPercentage === 0) ? 
-          `<div>الخصم: ${formatCurrency(bill.discount)}</div>` : ''}
-        ${bill.tax ? `<div>الضريبة: ${formatCurrency(bill.tax)}</div>` : ''}
-        <div>المجموع النهائي: ${formatCurrency(bill.total || 0)}</div>
-        <div>المدفوع: ${formatCurrency(bill.paid || 0)}</div>
-        <div>المتبقي: ${formatCurrency(bill.remaining || 0)}</div>
+        <div class="total-row remaining">
+          المتبقي: ${formatNumber(bill.remaining || 0)}
+        </div>
       </div>
 
       <div class="thank-you">شكراً لزيارتكم</div>
+      
       <div class="footer">
-        <div><strong style="font-weight: 900;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
-        <div>${formatDate(new Date())}</div>
+        <div><strong>العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
       </div>
 
-      <div class="no-print" style="margin-top: 20px; text-align: center;">
+      <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
         <button onclick="window.print()" style="
           background: #4CAF50;
           color: white;
@@ -219,8 +387,8 @@ export const printBill = (bill: Bill, organizationName?: string) => {
           text-align: center;
           text-decoration: none;
           display: inline-block;
-          font-size: 16px;
-          margin: 4px 2px;
+          font-size: 14px;
+          font-weight: 700;
           cursor: pointer;
           border-radius: 4px;
         ">
@@ -238,22 +406,17 @@ export const printBill = (bill: Bill, organizationName?: string) => {
     printWindow.document.write(receiptHTML);
     printWindow.document.close();
 
-    // Auto-print after content loads
     printWindow.onload = () => {
       setTimeout(() => {
-        // Add afterPrint event listener to close the window after printing
-        printWindow.onbeforeunload = null; // Prevent the confirmation dialog
+        printWindow.onbeforeunload = null;
         printWindow.onafterprint = () => {
-          // Close the window after a short delay to ensure printing has started
           setTimeout(() => {
             printWindow.close();
           }, 100);
         };
         
-        // Trigger the print dialog
         printWindow.print();
         
-        // Fallback in case onafterprint doesn't fire
         setTimeout(() => {
           if (!printWindow.closed) {
             printWindow.close();

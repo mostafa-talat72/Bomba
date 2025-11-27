@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo, memo } from 'react';
 import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle, Table as TableIcon, Search, X, Eye, Gamepad2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { api, Bill, Order, OrderItem } from '../services/api';
+import { api, Bill, Order, OrderItem, Session } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import ConfirmModal from '../components/ConfirmModal';
 import { printBill } from '../utils/printBill';
 import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
+import { aggregateItemsWithPayments } from '../utils/billAggregation';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -257,38 +258,12 @@ const Billing = () => {
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: boolean }>({});
   const [itemQuantities, setItemQuantities] = useState<{ [key: string]: number }>({});
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
-  const [statusFilter, setStatusFilter] = useState('unpaid'); // الافتراضي: غير مدفوع
+  const [statusFilter, setStatusFilter] = useState('all'); // الافتراضي: جميع الفواتير
   const [playstationStatusFilter, setPlaystationStatusFilter] = useState('unpaid'); // الافتراضي: غير مدفوع
-  const [dateFilter, setDateFilter] = useState<string>(() => {
-    if (isManagerOrOwner) {
-      // للمديرين وصاحب المنشأة - لا يوجد تاريخ افتراضي (جميع الفواتير)
-      return '';
-    }
-    // للموظفين - تاريخ اليوم الحالي
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
-
-  // تحديد الحد الأدنى للتاريخ (اليوم السابق للموظفين فقط)
-  const minDate = (() => {
-    if (isManagerOrOwner) {
-      // للمديرين وصاحب المنشأة - لا يوجد حد أدنى
-      return '';
-    }
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.toISOString().split('T')[0];
-  })();
-
-  // تحديد الحد الأقصى للتاريخ (اليوم الحالي للموظفين فقط)
-  const maxDate = (() => {
-    if (isManagerOrOwner) {
-      // للمديرين وصاحب المنشأة - لا يوجد حد أقصى
-      return '';
-    }
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  })();
+  // تم إزالة فلترة التاريخ - عرض جميع الفواتير بدون قيود تاريخية
+  const [dateFilter, setDateFilter] = useState<string>('');
+  const minDate = '';
+  const maxDate = '';
   const [paymentReference, setPaymentReference] = useState('');
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
   const [isCancelingBill, setIsCancelingBill] = useState(false);
@@ -304,6 +279,11 @@ const Billing = () => {
   const [playstationSearchQuery, setPlaystationSearchQuery] = useState('');
   const [isPlaystationSectionCollapsed, setIsPlaystationSectionCollapsed] = useState(false);
   const [collapsedDevices, setCollapsedDevices] = useState<Set<string>>(new Set());
+  const [showSessionPaymentModal, setShowSessionPaymentModal] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [sessionPaymentAmount, setSessionPaymentAmount] = useState('');
+  const [sessionPaymentMethod, setSessionPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [isProcessingSessionPayment, setIsProcessingSessionPayment] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -428,7 +408,12 @@ const Billing = () => {
       const map: Record<number, { hasUnpaid: boolean; bills: Bill[] }> = {};
       
       tables.forEach((table: Table) => {
-        const tableBills = bills.filter((bill: Bill) => bill.table?._id === table._id);
+        const tableIdStr = (table._id || table.id).toString();
+        const tableBills = bills.filter((bill: Bill) => {
+          if (!bill.table) return false;
+          const billTableId = (bill.table._id || bill.table.id || bill.table).toString();
+          return billTableId === tableIdStr;
+        });
         const hasUnpaid = tableBills.some((bill: Bill) => 
           bill.status === 'draft' || bill.status === 'partial' || bill.status === 'overdue'
         );
@@ -654,20 +639,8 @@ const Billing = () => {
     return bill.customerName || 'عميل';
   };
 
-  // فلترة الفواتير المتاحة للموظفين
+  // عرض جميع الفواتير بدون فلترة بالتاريخ
   let availableBills = bills;
-  if (!isManagerOrOwner) {
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    availableBills = bills.filter((bill: Bill) => {
-      if (!bill.createdAt) return false;
-      const billDate = new Date(bill.createdAt);
-      return billDate.toDateString() === today.toDateString() ||
-             billDate.toDateString() === yesterday.toDateString();
-    });
-  }
 
   // Helper: Check if bill has any unprepared items
   const hasUnpreparedItems = (bill: Bill) => {
@@ -686,23 +659,23 @@ const Billing = () => {
   const handlePartialPayment = async (bill: Bill) => {
     setSelectedBill(bill);
     setShowPartialPaymentModal(true);
-
-    try {
-      setSelectedItems({});
-      setItemQuantities({});
-
-      // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-      await updateBillStatus(bill.id || bill._id);
-    } catch (error) {
-      // Error loading bill items
-    }
+    
+    // إعادة تعيين العناصر المحددة
+    setSelectedItems({});
+    setItemQuantities({});
   };
 
   // دالة لتحديث حالة الفاتورة بناءً على الأصناف والجلسات
   const updateBillStatus = async (billId: string) => {
     try {
       // الحصول على عناصر الفاتورة
-      const aggItems = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || []);
+      const aggItems = aggregateItemsWithPayments(
+        selectedBill?.orders || [], 
+        selectedBill?.itemPayments || [],
+        selectedBill?.status,
+        selectedBill?.paid,
+        selectedBill?.total
+      );
 
       // التحقق من وجود جلسات نشطة
       const hasActive = selectedBill ? hasActiveSession(selectedBill) : false;
@@ -751,7 +724,13 @@ const Billing = () => {
     if (!selectedBill) return;
 
     // استخدم نفس منطق المفاتيح كما في aggregateItemsWithPayments
-    const aggItems = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || []);
+    const aggItems = aggregateItemsWithPayments(
+      selectedBill?.orders || [], 
+      selectedBill?.itemPayments || [],
+      selectedBill?.status,
+      selectedBill?.paid,
+      selectedBill?.total
+    );
     const selectedItemIds = Object.keys(selectedItems).filter(id => selectedItems[id]);
 
     if (selectedItemIds.length === 0) {
@@ -799,43 +778,170 @@ const Billing = () => {
 
     try {
       setIsProcessingPartialPayment(true);
-      const result = await addPartialPayment(selectedBill.id || selectedBill._id, {
-        orderId: firstItem.orderId,
-        items: itemsToPay.map(item => ({
-          itemName: item.itemName,
-          price: item.price,
-          quantity: item.quantity,
-          orderId: item.orderId,
-          orderNumber: item.orderNumber,
-          addons: item.addons || [],
-        })),
+      
+      // تحويل itemsToPay إلى الصيغة المطلوبة للـ API
+      // نحتاج إلى إيجاد itemId من bill.itemPayments بناءً على itemName و price
+      // ملاحظة: itemPayments لا يحتوي على addons، لذا نبحث فقط بناءً على name و price
+      const itemsToPayForAPI: Array<{ itemId: string; quantity: number }> = [];
+      
+      // نجمع الكميات للعناصر المتشابهة (نفس الاسم والسعر)
+      const quantityMap = new Map<string, number>();
+      itemsToPay.forEach(item => {
+        const key = `${item.itemName}|${item.price}`;
+        const currentQty = quantityMap.get(key) || 0;
+        quantityMap.set(key, currentQty + item.quantity);
+      });
+
+      // الآن نبحث عن itemPayments المطابقة ونوزع الكميات
+      quantityMap.forEach((totalQuantity, key) => {
+        const [itemName, priceStr] = key.split('|');
+        const price = parseFloat(priceStr);
+        
+        // البحث عن جميع itemPayments المطابقة
+        const matchingPayments = selectedBill?.itemPayments?.filter(ip => {
+          const nameMatch = ip.itemName.trim() === itemName.trim();
+          const priceMatch = ip.pricePerUnit === price;
+          const remainingQty = (ip.quantity || 0) - (ip.paidQuantity || 0);
+          return nameMatch && priceMatch && remainingQty > 0;
+        }) || [];
+
+        if (matchingPayments.length === 0) {
+          console.error('لم يتم العثور على itemPayment مطابق للعنصر:', { itemName, price });
+          return;
+        }
+
+        // توزيع الكمية على itemPayments المتاحة
+        let remainingToPay = totalQuantity;
+        matchingPayments.forEach(payment => {
+          if (remainingToPay <= 0) return;
+          
+          const availableQty = (payment.quantity || 0) - (payment.paidQuantity || 0);
+          const qtyToPay = Math.min(remainingToPay, availableQty);
+          
+          if (qtyToPay > 0) {
+            itemsToPayForAPI.push({
+              itemId: payment._id || payment.itemId,
+              quantity: qtyToPay
+            });
+            remainingToPay -= qtyToPay;
+          }
+        });
+
+        if (remainingToPay > 0) {
+          console.warn(`لم يتم دفع ${remainingToPay} من ${itemName} - الكمية المتبقية غير كافية`);
+        }
+      });
+
+      if (itemsToPayForAPI.length === 0) {
+        showNotification('لم يتم العثور على عناصر صالحة للدفع', 'error');
+        return;
+      }
+
+      console.log('Sending payment request:', {
+        billId: selectedBill.id || selectedBill._id,
+        items: itemsToPayForAPI,
         paymentMethod: partialPaymentMethod
       });
 
-      if (result) {
-        // تحديث بيانات الفاتورة المحلية
-        setSelectedBill(result);
+      const response = await api.payForItems(selectedBill.id || selectedBill._id, {
+        items: itemsToPayForAPI,
+        paymentMethod: partialPaymentMethod
+      });
+
+      if (response.success && response.data) {
+        // response.data يحتوي على { bill, paidItems, totalPaid, ... }
+        const updatedBill = (response.data as any).bill || response.data;
+        
+        // إعادة تحميل قائمة الفواتير أولاً
+        await fetchBills();
+
+        // إعادة تحميل الفاتورة من الـ API للحصول على أحدث البيانات
+        const refreshedBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
+        if (refreshedBillResponse.success && refreshedBillResponse.data) {
+          setSelectedBill(refreshedBillResponse.data);
+        } else {
+          // إذا فشل التحديث، استخدم البيانات من الاستجابة
+          setSelectedBill(updatedBill);
+        }
 
         // إعادة تعيين العناصر المحددة
         setSelectedItems({});
         setItemQuantities({});
 
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-        const updatedStatus = await updateBillStatus(selectedBill.id || selectedBill._id);
-
         // إذا كانت الفاتورة أصبحت مدفوعة بالكامل، تحديث حالة الطاولة
-        if (result.status === 'paid' || updatedStatus === 'paid') {
+        if (updatedBill.status === 'paid') {
           await fetchTables();
-          await fetchBills();
+          // إغلاق النافذة إذا تم دفع كل شيء
+          setShowPartialPaymentModal(false);
         }
 
         // إظهار رسالة نجاح
-        showNotification('تم تسجيل الدفع الجزئي بنجاح!');
+        showNotification('تم تسجيل الدفع الجزئي بنجاح!', 'success');
+      } else {
+        showNotification('فشل في تسجيل الدفع الجزئي', 'error');
       }
     } catch (error) {
-      showNotification('فشل في تسجيل الدفع الجزئي');
+      console.error('Error in partial payment:', error);
+      showNotification('فشل في تسجيل الدفع الجزئي', 'error');
     } finally {
       setIsProcessingPartialPayment(false);
+    }
+  };
+
+  // دالة الدفع الجزئي للجلسة
+  const handlePaySessionPartial = async () => {
+    if (!selectedBill || !selectedSession) return;
+
+    const amount = parseFloat(sessionPaymentAmount);
+    
+    if (isNaN(amount) || amount <= 0) {
+      showNotification('يرجى إدخال مبلغ صحيح', 'error');
+      return;
+    }
+
+    // التحقق من أن المبلغ لا يتجاوز المبلغ المتبقي للجلسة
+    const sessionRemaining = selectedSession.finalCost - (selectedSession.totalCost || 0);
+    if (amount > sessionRemaining) {
+      showNotification(`المبلغ المدخل (${formatCurrency(amount)}) أكبر من المبلغ المتبقي (${formatCurrency(sessionRemaining)})`, 'error');
+      return;
+    }
+
+    try {
+      setIsProcessingSessionPayment(true);
+      
+      const result = await api.paySessionPartial(selectedBill.id || selectedBill._id, {
+        sessionId: selectedSession._id || selectedSession.id,
+        amount: amount,
+        paymentMethod: sessionPaymentMethod
+      });
+
+      if (result.success && result.data) {
+        // تحديث بيانات الفاتورة المحلية
+        setSelectedBill(result.data);
+
+        // إعادة تعيين الحقول
+        setSessionPaymentAmount('');
+        setSelectedSession(null);
+        setShowSessionPaymentModal(false);
+
+        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
+        await updateBillStatus(selectedBill.id || selectedBill._id);
+
+        // إعادة تحميل البيانات
+        await Promise.all([
+          fetchTables(),
+          fetchBills()
+        ]);
+
+        // إظهار رسالة نجاح
+        showNotification('تم تسجيل الدفع الجزئي للجلسة بنجاح!', 'success');
+      } else {
+        showNotification(result.message || 'فشل في تسجيل الدفع الجزئي للجلسة', 'error');
+      }
+    } catch (error) {
+      showNotification('فشل في تسجيل الدفع الجزئي للجلسة', 'error');
+    } finally {
+      setIsProcessingSessionPayment(false);
     }
   };
 
@@ -988,20 +1094,8 @@ const Billing = () => {
 
   // Memoized filtered bills - optimized with useMemo
   const filteredBills = useMemo(() => {
-    // للموظفين - فلترة إضافية على التواريخ
+    // عرض جميع الفواتير بدون فلترة بالتاريخ
     let availableBills = bills;
-    if (!isManagerOrOwner) {
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      availableBills = bills.filter((bill: Bill) => {
-        if (!bill.createdAt) return false;
-        const billDate = new Date(bill.createdAt);
-        return billDate.toDateString() === today.toDateString() ||
-               billDate.toDateString() === yesterday.toDateString();
-      });
-    }
 
     return availableBills.filter(bill => {
       // استبعاد الفواتير الملغاة والمحذوفة من الإحصائيات
@@ -1047,16 +1141,11 @@ const Billing = () => {
         return false;
       }
 
-      // تصفية التاريخ إذا كان محددًا
-      if (dateFilter) {
-        const billDate = new Date(bill.createdAt);
-        const filterDate = new Date(dateFilter);
-        return billDate.toDateString() === filterDate.toDateString();
-      }
+      // تم إزالة فلترة التاريخ - عرض جميع الفواتير بدون قيود تاريخية
 
       return true;
     });
-  }, [bills, isManagerOrOwner, selectedTable, billTypeFilter, statusFilter, dateFilter]);
+  }, [bills, isManagerOrOwner, selectedTable, billTypeFilter, statusFilter]);
 
   // Memoized bill statistics - optimized with useMemo
   const billStats = useMemo(() => {
@@ -1081,60 +1170,7 @@ const Billing = () => {
     });
   }, [filteredBills]);
 
-  // دالة لتجميع الأصناف والإضافات مع حساب الكمية والمدفوع والمتبقي (نفس منطق BillView)
-  function aggregateItemsWithPayments(orders: Order[], partialPayments: Bill['partialPayments']) {
-    type AggregatedItem = {
-      name: string;
-      price: number;
-      totalQuantity: number;
-      paidQuantity: number;
-      remainingQuantity: number;
-      addons?: Array<{
-        name: string;
-        price: number;
-        totalQuantity: number;
-        paidQuantity: number;
-        remainingQuantity: number;
-      }>;
-    };
-    const map = new Map<string, AggregatedItem>();
-
-    // Helper لحساب المدفوع لصنف رئيسي فقط
-    function getPaidQty(itemName: string) {
-      let paid = 0;
-      if (partialPayments) {
-        partialPayments.forEach(payment => {
-          if (!payment.items || !Array.isArray(payment.items)) return;
-          payment.items.forEach((item: { itemName: string; quantity: number }) => {
-              if (item.itemName === itemName) {
-                paid += item.quantity;
-            }
-          });
-        });
-      }
-      return paid;
-    }
-
-    if (!orders || !Array.isArray(orders)) return [];
-
-    orders.forEach(order => {
-      if (!order.items) return; // تخطي الطلبات التي لا تحتوي على أصناف
-      order.items.forEach((item: OrderItem) => {
-        const key = `${item.name}|${item.price}`;
-      if (!map.has(key)) {
-          const paidQty = getPaidQty(item.name);
-        map.set(key, {
-            name: item.name,
-          price: item.price,
-          totalQuantity: item.quantity,
-          paidQuantity: paidQty,
-          remainingQuantity: item.quantity - paidQty,
-        });
-      }
-      });
-    });
-    return Array.from(map.values());
-  }
+  // Note: aggregateItemsWithPayments is now imported from utils/billAggregation.ts
 
   return (
     <div className="space-y-6">
@@ -1856,7 +1892,20 @@ const Billing = () => {
                         الجهاز النشط
                       </h5>
                       <div className="space-y-2 text-sm">
-                        {selectedBill.sessions?.filter(s => s.status === 'active').map((session, index) => (
+                        {selectedBill.sessions?.filter(s => {
+                          // عرض الجلسات النشطة فقط التي تنتمي لنفس الطاولة أو بدون طاولة محددة
+                          if (s.status !== 'active') return false;
+                          // إذا كانت الفاتورة مرتبطة بطاولة، تحقق من أن الجلسة تنتمي لنفس الطاولة
+                          if (selectedBill.table) {
+                            const billTableId = selectedBill.table._id || selectedBill.table.id || selectedBill.table;
+                            const sessionTableId = s.table?._id || s.table?.id || s.table;
+                            // إذا كانت الجلسة لها طاولة، تحقق من التطابق
+                            if (sessionTableId) {
+                              return billTableId.toString() === sessionTableId.toString();
+                            }
+                          }
+                          return true;
+                        }).map((session, index) => (
                           <div key={index} className="bg-white dark:bg-gray-800 p-3 rounded border border-red-100 dark:border-red-700">
                             <div className="flex justify-between items-center mb-2">
                               <span className="font-medium text-red-800 dark:text-red-200">{session.deviceName}</span>
@@ -1888,6 +1937,67 @@ const Billing = () => {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* تفاصيل الأصناف مع الكميات */}
+                  {selectedBill && (
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                      <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">تفاصيل الأصناف</h5>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {(() => {
+                          const items = aggregateItemsWithPayments(
+                            selectedBill?.orders || [], 
+                            selectedBill?.itemPayments || [],
+                            selectedBill?.status,
+                            selectedBill?.paid,
+                            selectedBill?.total
+                          );
+                          
+                          if (items.length === 0) {
+                            return (
+                              <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                                لا توجد أصناف في هذه الفاتورة
+                              </div>
+                            );
+                          }
+                          
+                          return items.map((item, index) => (
+                            <div key={index} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                              <div className="flex justify-between items-start mb-2">
+                                <span className="font-medium text-gray-900 dark:text-gray-100">{item.name}</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 text-xs">
+                                <div className="text-center p-2 bg-gray-100 dark:bg-gray-700 rounded">
+                                  <div className="text-gray-600 dark:text-gray-400">الكمية الكلية</div>
+                                  <div className="font-bold text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</div>
+                                </div>
+                                <div className="text-center p-2 bg-green-100 dark:bg-green-900 rounded">
+                                  <div className="text-green-700 dark:text-green-300">المدفوع</div>
+                                  <div className="font-bold text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity)}</div>
+                                </div>
+                                <div className="text-center p-2 bg-orange-100 dark:bg-orange-900 rounded">
+                                  <div className="text-orange-700 dark:text-orange-300">المتبقي</div>
+                                  <div className="font-bold text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity)}</div>
+                                </div>
+                              </div>
+                              {item.addons && item.addons.length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                                    {item.addons.map((addon, addonIdx) => (
+                                      <div key={addonIdx} className="flex justify-between">
+                                        <span>↳ {addon.name}</span>
+                                        <span>{formatCurrency(addon.price)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ));
+                        })()}
                       </div>
                     </div>
                   )}
@@ -1934,7 +2044,7 @@ const Billing = () => {
                       {/* أزرار الدفع - معطل إذا كانت هناك جلسات نشطة */}
                       <div className="mb-6">
                         <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">خيارات الدفع</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           {/* زر دفع الفاتورة بالكامل */}
                           <button
                             onClick={() => {
@@ -1971,6 +2081,31 @@ const Billing = () => {
                             <div className="font-medium dark:text-gray-100">دفع مشروب معين</div>
                             <div className="text-sm text-gray-600 dark:text-gray-300">اختيار مشروبات محددة للدفع</div>
                           </button>
+
+                          {/* زر دفع جزئي للجلسة */}
+                          {selectedBill?.sessions && selectedBill.sessions.length > 0 && (
+                            <button
+                              onClick={() => {
+                                // اختيار أول جلسة غير مدفوعة بالكامل
+                                const unpaidSession = selectedBill.sessions.find(s => 
+                                  (s.finalCost - (s.totalCost || 0)) > 0
+                                );
+                                if (unpaidSession) {
+                                  setSelectedSession(unpaidSession);
+                                  setSessionPaymentAmount('');
+                                  setSessionPaymentMethod('cash');
+                                  setShowSessionPaymentModal(true);
+                                } else {
+                                  showNotification('جميع الجلسات مدفوعة بالكامل', 'info');
+                                }
+                              }}
+                              className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500`}
+                            >
+                              <div className="text-2xl mb-2">🎮</div>
+                              <div className="font-medium dark:text-gray-100">دفع جزئي للجلسة</div>
+                              <div className="text-sm text-gray-600 dark:text-gray-300">دفع مبلغ جزئي لجلسة البلايستيشن</div>
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -2305,8 +2440,13 @@ const Billing = () => {
                 <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر المشروبات المطلوب دفعها</h4>
 
                 {(() => {
-                  const itemsWithRemaining = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                    .filter(item => item.remainingQuantity > 0);
+                  const itemsWithRemaining = aggregateItemsWithPayments(
+                    selectedBill?.orders || [], 
+                    selectedBill?.itemPayments || [],
+                    selectedBill?.status,
+                    selectedBill?.paid,
+                    selectedBill?.total
+                  ).filter(item => item.remainingQuantity > 0);
 
 
                   if (itemsWithRemaining.length === 0) {
@@ -2384,73 +2524,12 @@ const Billing = () => {
                       {/* عرض الإضافات */}
                       {item.addons && item.addons.length > 0 && (
                         <div className="mt-2 pl-4 border-r-2 border-yellow-200 dark:border-yellow-700">
-                            {item.addons
-                              .filter(addon => addon.remainingQuantity > 0) // عرض الإضافات التي لها كمية متبقية فقط
-                              .map((addon) => {
-                            const addonKey = itemKey + '|addon|' + addon.name + '|' + addon.price;
-                            const isAddonSelected = selectedItems[addonKey] || false;
-                            // إذا كانت الإضافة برسوم ثابتة، لا يوجد إدخال كمية
-                            return (
-                              <div key={addonKey} className="flex flex-col gap-1 mb-2">
-                                <div className="flex items-center gap-2 text-sm text-yellow-800 dark:text-yellow-300">
-                                  <span>↳ إضافة: {addon.name}</span>
-                                  <span>({formatCurrency(addon.price)})</span>
-                                  <span>الكمية: <b className="text-gray-900 dark:text-gray-100">{formatDecimal(addon.totalQuantity)}</b></span>
-                                  <span>المدفوع: <b className="text-green-700 dark:text-green-400">{formatDecimal(addon.paidQuantity)}</b></span>
-                                  <span>المتبقي: <b className="text-yellow-700 dark:text-yellow-400">{formatDecimal(addon.remainingQuantity)}</b></span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={isAddonSelected}
-                                    onChange={e => setSelectedItems({ ...selectedItems, [addonKey]: e.target.checked })}
-                                    className="rounded border-gray-300 dark:border-gray-600 text-orange-600 dark:text-orange-400 focus:ring-orange-500 dark:focus:ring-orange-400"
-                                  />
-                                    <div className="flex items-center justify-between gap-2 mt-2">
-                                      <div className="font-bold text-yellow-800 dark:text-yellow-300 flex-1 text-right">{addon.name}</div>
-                                      <div className="text-xs text-gray-500 dark:text-gray-400 w-20 text-center">{formatCurrency(addon.price)}</div>
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          type="button"
-                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-600 hover:bg-gray-100 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300"
-                                          onClick={() => {
-                                            const newQty = Math.max(0, (itemQuantities[addonKey] || 0) - 1);
-                                            setItemQuantities({ ...itemQuantities, [addonKey]: newQty });
-                                            setSelectedItems(prev => {
-                                              const updated = { ...prev };
-                                              if (newQty > 0) updated[addonKey] = true;
-                                              else delete updated[addonKey];
-                                              return updated;
-                                            });
-                                          }}
-                                          disabled={(itemQuantities[addonKey] || 0) <= 0}
-                                        >-</button>
-                                        <span className="mx-2 w-6 text-center select-none font-bold text-yellow-800 dark:text-yellow-300">{formatDecimal(itemQuantities[addonKey] || 0)}</span>
-                                        <button
-                                          type="button"
-                                          className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-600 hover:bg-gray-100 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300"
-                                          onClick={() => {
-                                            const newQty = Math.min(addon.remainingQuantity, (itemQuantities[addonKey] || 0) + 1);
-                                            setItemQuantities({ ...itemQuantities, [addonKey]: newQty });
-                                            setSelectedItems(prev => ({ ...prev, [addonKey]: newQty > 0 }));
-                                          }}
-                                          disabled={(itemQuantities[addonKey] || 0) >= addon.remainingQuantity}
-                                        >+</button>
-                                        <button
-                                          type="button"
-                                          className="ml-2 px-2 py-1 bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 rounded text-xs"
-                                          onClick={() => {
-                                            setItemQuantities({ ...itemQuantities, [addonKey]: addon.remainingQuantity });
-                                            setSelectedItems(prev => ({ ...prev, [addonKey]: addon.remainingQuantity > 0 }));
-                                          }}
-                                          disabled={(itemQuantities[addonKey] || 0) === addon.remainingQuantity}
-                                        >دفع الكمية بالكامل</button>
-                                      </div>
-                                    </div>
-                                </div>
+                            {item.addons.map((addon, addonIdx) => (
+                              <div key={addonIdx} className="flex items-center gap-2 text-sm text-yellow-800 dark:text-yellow-300">
+                                <span>↳ إضافة: {addon.name}</span>
+                                <span>({formatCurrency(addon.price)})</span>
                               </div>
-                            );
-                          })}
+                            ))}
                         </div>
                       )}
                     </div>
@@ -2460,8 +2539,13 @@ const Billing = () => {
               </div>
 
               {(() => {
-                const itemsWithRemaining = aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                  .filter(item => item.remainingQuantity > 0);
+                const itemsWithRemaining = aggregateItemsWithPayments(
+                  selectedBill?.orders || [], 
+                  selectedBill?.itemPayments || [],
+                  selectedBill?.status,
+                  selectedBill?.paid,
+                  selectedBill?.total
+                ).filter(item => item.remainingQuantity > 0);
                 return itemsWithRemaining.length > 0;
               })() && (
                 <div className="mb-6">
@@ -2500,8 +2584,13 @@ const Billing = () => {
                 <div className="mb-6 bg-orange-50 dark:bg-orange-900 p-4 rounded-lg border border-orange-200 dark:border-orange-700">
                   <h4 className="font-medium text-orange-900 dark:text-orange-100 mb-2">ملخص الدفع</h4>
                   <div className="space-y-2">
-                    {aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                      .filter(item => {
+                    {aggregateItemsWithPayments(
+                      selectedBill?.orders || [], 
+                      selectedBill?.itemPayments || [],
+                      selectedBill?.status,
+                      selectedBill?.paid,
+                      selectedBill?.total
+                    ).filter(item => {
                         const addonsKey = (item.addons || [])
                           .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
                           .sort()
@@ -2538,8 +2627,13 @@ const Billing = () => {
                         <span>المجموع:</span>
                         <span>
                           {formatCurrency(
-                            aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.partialPayments || [])
-                              .filter(item => {
+                            aggregateItemsWithPayments(
+                              selectedBill?.orders || [], 
+                              selectedBill?.itemPayments || [],
+                              selectedBill?.status,
+                              selectedBill?.paid,
+                              selectedBill?.total
+                            ).filter(item => {
                                 const addonsKey = (item.addons || [])
                                   .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
                                   .sort()
@@ -2694,6 +2788,184 @@ const Billing = () => {
         </div>
         );
       })()}
+
+      {/* Session Partial Payment Modal */}
+      {showSessionPaymentModal && selectedSession && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                دفع جزئي للجلسة
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                {selectedSession.deviceName} - {selectedSession.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
+              </p>
+            </div>
+
+            <div className="p-6">
+              {/* معلومات الجلسة */}
+              <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">معلومات الجلسة</h5>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-300">الجهاز:</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.deviceName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-300">النوع:</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                      {selectedSession.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
+                    </span>
+                  </div>
+                  {selectedSession.deviceType === 'playstation' && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-300">عدد الدراعات:</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.controllers || 1}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-300">التكلفة الإجمالية:</span>
+                    <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(selectedSession.finalCost)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-300">المدفوع:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">{formatCurrency(selectedSession.totalCost || 0)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-gray-200 dark:border-gray-600 pt-2">
+                    <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
+                    <span className="font-medium text-red-600 dark:text-red-400">
+                      {formatCurrency(selectedSession.finalCost - (selectedSession.totalCost || 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* إدخال المبلغ */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  المبلغ المطلوب دفعه
+                </label>
+                <input
+                  type="number"
+                  value={sessionPaymentAmount}
+                  onChange={(e) => setSessionPaymentAmount(e.target.value)}
+                  min="0"
+                  max={selectedSession.finalCost - (selectedSession.totalCost || 0)}
+                  step="0.01"
+                  placeholder="أدخل المبلغ"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  الحد الأقصى: {formatCurrency(selectedSession.finalCost - (selectedSession.totalCost || 0))}
+                </p>
+              </div>
+
+              {/* طريقة الدفع */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  طريقة الدفع
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setSessionPaymentMethod('cash')}
+                    className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
+                      sessionPaymentMethod === 'cash'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">💵</div>
+                    <div className="text-sm font-medium">نقداً</div>
+                  </button>
+                  <button
+                    onClick={() => setSessionPaymentMethod('card')}
+                    className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
+                      sessionPaymentMethod === 'card'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">💳</div>
+                    <div className="text-sm font-medium">بطاقة</div>
+                  </button>
+                  <button
+                    onClick={() => setSessionPaymentMethod('transfer')}
+                    className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
+                      sessionPaymentMethod === 'transfer'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">📱</div>
+                    <div className="text-sm font-medium">تحويل</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* ملخص الدفع */}
+              {sessionPaymentAmount && parseFloat(sessionPaymentAmount) > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
+                  <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">ملخص الدفع</h5>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-blue-800 dark:text-blue-200">المبلغ المدفوع:</span>
+                      <span className="font-bold text-blue-900 dark:text-blue-100">
+                        {formatCurrency(parseFloat(sessionPaymentAmount))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-blue-200 dark:border-blue-600 pt-2">
+                      <span className="text-blue-800 dark:text-blue-200">المتبقي بعد الدفع:</span>
+                      <span className="font-bold text-blue-900 dark:text-blue-100">
+                        {formatCurrency(
+                          selectedSession.finalCost - (selectedSession.totalCost || 0) - parseFloat(sessionPaymentAmount)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+              <button
+                onClick={() => {
+                  setShowSessionPaymentModal(false);
+                  setSelectedSession(null);
+                  setSessionPaymentAmount('');
+                }}
+                disabled={isProcessingSessionPayment}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                إلغاء
+              </button>
+
+              <button
+                onClick={handlePaySessionPartial}
+                disabled={
+                  isProcessingSessionPayment ||
+                  !sessionPaymentAmount ||
+                  parseFloat(sessionPaymentAmount) <= 0 ||
+                  parseFloat(sessionPaymentAmount) > (selectedSession.finalCost - (selectedSession.totalCost || 0))
+                }
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
+              >
+                {isProcessingSessionPayment ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الدفع...
+                  </>
+                ) : (
+                  'تأكيد الدفع'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Change Table Modal */}
       {showChangeTableModal && selectedBill && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

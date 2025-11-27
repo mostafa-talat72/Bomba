@@ -10,7 +10,8 @@ import {
   FilePdfOutlined,
   CalendarOutlined,
   BarChartOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  PrinterOutlined
 } from '@ant-design/icons';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -20,7 +21,7 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import 'dayjs/locale/ar';
 import arEG from 'antd/locale/ar_EG';
 import { useApp } from '../context/AppContext';
-import { Bill, Session } from '../services/api';
+import { Order, Session } from '../services/api';
 import api from '../services/api';
 
 // تعيين اللغة الافتراضية ليوم جي إس إلى العربية
@@ -33,18 +34,16 @@ const toArabicNumbers = (num: number | string): string => {
   return String(num).replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
 };
 
-// دالة لتنسيق الأرقام مع فواصل الآلاف وتحويلها للعربية
+// دالة لتنسيق الأرقام مع فواصل الآلاف وتحويلها للعربية - بدون أرقام عشرية
 const formatNumber = (num: number): string => {
-  // Check if number is integer
-  const isInteger = num % 1 === 0;
-  
+  const rounded = Math.round(num);
   const formatted = new Intl.NumberFormat('ar-EG', {
-    minimumFractionDigits: isInteger ? 0 : 2,
-    maximumFractionDigits: 2
-  }).format(num);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(rounded);
   
-  // Replace dot with Arabic comma and convert to Arabic numbers
-  return toArabicNumbers(formatted.replace('.', '،'));
+  // Convert to Arabic numbers
+  return toArabicNumbers(formatted);
 };
 
 // Extend dayjs with plugins
@@ -63,7 +62,7 @@ interface ConsumptionItem {
 }
 
 const ConsumptionReport = () => {
-  const { menuItems, fetchMenuItems, fetchBills, bills, menuSections, fetchMenuSections } = useApp();
+  const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user } = useApp();
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
     dayjs().set('hour', 0).set('minute', 0).set('second', 0),
     dayjs().set('hour', 23).set('minute', 59).set('second', 59)
@@ -163,9 +162,9 @@ const ConsumptionReport = () => {
     },
   ], []);
 
-  const processBills = useCallback((billsToProcess: Bill[], sessionsToProcess: Session[]) => {
-    console.log('📦 processBills called with:', {
-      bills: billsToProcess.length,
+  const processOrdersAndSessions = useCallback((ordersToProcess: Order[], sessionsToProcess: Session[]) => {
+    console.log('📦 processOrdersAndSessions called with:', {
+      orders: ordersToProcess.length,
       sessions: sessionsToProcess.length
     });
     
@@ -179,59 +178,55 @@ const ConsumptionReport = () => {
     // Add PlayStation section
     itemsBySection['البلايستيشن'] = [];
 
-    // Process cafe orders from bills
-    billsToProcess.forEach((bill) => {
-      if (!bill.orders || !Array.isArray(bill.orders)) return;
+    // Process cafe orders directly
+    ordersToProcess.forEach((order) => {
+      if (!order.items || !Array.isArray(order.items)) return;
 
-      bill.orders.forEach((order) => {
-        if (!order.items || !Array.isArray(order.items)) return;
+      order.items.forEach((item) => {
+        if (!item.name) return;
 
-        order.items.forEach((item) => {
-          if (!item.name) return;
+        const menuItem = menuItems.find((m) => m.name === item.name);
+        if (!menuItem) return;
 
-          const menuItem = menuItems.find((m) => m.name === item.name);
-          if (!menuItem) return;
-
-          // Get the section name from the menu item's category
-          let sectionName = 'أخرى';
-          if (menuItem.category) {
-            const categoryObj = typeof menuItem.category === 'string' 
-              ? null 
-              : menuItem.category;
+        // Get the section name from the menu item's category
+        let sectionName = 'أخرى';
+        if (menuItem.category) {
+          const categoryObj = typeof menuItem.category === 'string' 
+            ? null 
+            : menuItem.category;
+          
+          if (categoryObj && categoryObj.section) {
+            const sectionObj = typeof categoryObj.section === 'string'
+              ? menuSections.find(s => s._id === categoryObj.section || s.id === categoryObj.section)
+              : categoryObj.section;
             
-            if (categoryObj && categoryObj.section) {
-              const sectionObj = typeof categoryObj.section === 'string'
-                ? menuSections.find(s => s._id === categoryObj.section || s.id === categoryObj.section)
-                : categoryObj.section;
-              
-              if (sectionObj) {
-                sectionName = sectionObj.name;
-              }
+            if (sectionObj) {
+              sectionName = sectionObj.name;
             }
           }
+        }
 
-          const itemPrice = Number(item.price) || 0;
-          const itemQuantity = Number(item.quantity) || 0;
+        const itemPrice = Number(item.price) || 0;
+        const itemQuantity = Number(item.quantity) || 0;
 
-          if (!itemsBySection[sectionName]) {
-            itemsBySection[sectionName] = [];
-          }
+        if (!itemsBySection[sectionName]) {
+          itemsBySection[sectionName] = [];
+        }
 
-          const existingItem = itemsBySection[sectionName].find(i => i.name === item.name);
-          if (existingItem) {
-            existingItem.quantity += itemQuantity;
-            existingItem.total = existingItem.quantity * existingItem.price;
-          } else {
-            itemsBySection[sectionName].push({
-              id: (item as any)._id || Math.random().toString(),
-              name: item.name,
-              price: itemPrice,
-              quantity: itemQuantity,
-              total: itemPrice * itemQuantity,
-              category: sectionName
-            });
-          }
-        });
+        const existingItem = itemsBySection[sectionName].find(i => i.name === item.name);
+        if (existingItem) {
+          existingItem.quantity += itemQuantity;
+          existingItem.total = existingItem.quantity * existingItem.price;
+        } else {
+          itemsBySection[sectionName].push({
+            id: (item as any)._id || Math.random().toString(),
+            name: item.name,
+            price: itemPrice,
+            quantity: itemQuantity,
+            total: itemPrice * itemQuantity,
+            category: sectionName
+          });
+        }
       });
     });
 
@@ -317,44 +312,47 @@ const ConsumptionReport = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch basic data (menu items, sections, bills)
+      // Fetch basic data (menu items, sections)
       if (!hasLoadedInitialData.current || forceRefresh) {
         console.log('📊 Fetching data...');
         
         await Promise.all([
           menuItems.length === 0 ? fetchMenuItems() : Promise.resolve(),
           menuSections.length === 0 ? fetchMenuSections() : Promise.resolve(),
-          bills.length === 0 ? fetchBills() : Promise.resolve(),
         ]);
         
         hasLoadedInitialData.current = true;
       }
 
-      // Always fetch completed sessions directly from API for the report
-      console.log('🎮 Fetching completed PlayStation sessions...');
-      const sessionsResponse = await api.getSessions({ 
-        status: 'completed'
-      });
+      // Fetch orders and sessions directly from API
+      console.log('📦 Fetching orders and sessions...');
+      const [ordersResponse, sessionsResponse] = await Promise.all([
+        api.getOrders({ limit: 1000 }), // Fetch all orders
+        api.getSessions({ status: 'completed' }) // Fetch completed sessions
+      ]);
       
-      if (sessionsResponse.success && sessionsResponse.data) {
+      if (ordersResponse.success && ordersResponse.data && sessionsResponse.success && sessionsResponse.data) {
+        const allOrders = ordersResponse.data;
         const allCompletedSessions = sessionsResponse.data;
-        console.log('🎮 Fetched completed sessions:', {
-          total: allCompletedSessions.length,
+        
+        console.log('📦 Fetched data:', {
+          orders: allOrders.length,
+          sessions: allCompletedSessions.length,
           playstation: allCompletedSessions.filter(s => s.deviceType === 'playstation').length
         });
 
-        // Filter bills by date and time range
-        const filteredBills = bills.filter((bill) => {
-          if (!bill.createdAt) return false;
+        // Filter orders by date using createdAt
+        const filteredOrders = allOrders.filter((order) => {
+          if (!order.createdAt) return false;
 
-          const billDate = dayjs(bill.createdAt);
+          const orderDate = dayjs(order.createdAt);
           return (
-            billDate.isAfter(dateRange[0]) &&
-            billDate.isBefore(dateRange[1])
+            orderDate.isAfter(dateRange[0]) &&
+            orderDate.isBefore(dateRange[1])
           );
         });
 
-        // Filter sessions by date and time range
+        // Filter sessions by date using endTime
         const filteredSessions = allCompletedSessions.filter((session) => {
           // Only include completed PlayStation sessions
           if (session.deviceType !== 'playstation' || session.status !== 'completed') return false;
@@ -370,19 +368,20 @@ const ConsumptionReport = () => {
           );
         });
         
-        console.log('🎮 Filtered sessions:', {
-          total: allCompletedSessions.length,
-          playstation: allCompletedSessions.filter(s => s.deviceType === 'playstation').length,
-          completed: allCompletedSessions.filter(s => s.status === 'completed').length,
-          filtered: filteredSessions.length,
+        console.log('📦 Filtered data:', {
+          orders: filteredOrders.length,
+          sessions: filteredSessions.length,
           dateRange: [dateRange[0].format(), dateRange[1].format()]
         });
 
-        const processedData = processBills(filteredBills, filteredSessions);
+        const processedData = processOrdersAndSessions(filteredOrders, filteredSessions);
         setConsumptionData(processedData);
       } else {
-        console.error('❌ Failed to fetch sessions:', sessionsResponse.message);
-        message.error('فشل في تحميل بيانات الجلسات');
+        console.error('❌ Failed to fetch data:', {
+          orders: ordersResponse.message,
+          sessions: sessionsResponse.message
+        });
+        message.error('فشل في تحميل البيانات');
       }
 
     } catch (error) {
@@ -393,11 +392,384 @@ const ConsumptionReport = () => {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, fetchMenuItems, fetchMenuSections, fetchBills, bills, menuItems, menuSections, processBills]);
+  }, [dateRange, fetchMenuItems, fetchMenuSections, menuItems, menuSections, processOrdersAndSessions]);
 
 
   const calculateTotal = (items: ConsumptionItem[]): number => {
     return items.reduce((sum, item) => sum + item.total, 0);
+  };
+
+  const printReport = () => {
+    try {
+      // Format date like in bill print
+      const formatDate = (date: Dayjs) => {
+        return date.format('YYYY/MM/DD - hh:mm A');
+      };
+
+      // Get organization name from user or use default
+      const organizationName = user?.organizationName || 'المنشأة';
+
+      // Create separate pages for each category
+      const categories = Object.entries(consumptionData).filter(([_, items]) => items.length > 0);
+      console.log('📄 Creating pages for categories:', categories.map(([cat]) => cat));
+      
+      const categoryPages = categories
+        .map(([category, items], index) => {
+          const categoryTotal = calculateTotal(items);
+          const isLastPage = index === categories.length - 1;
+          console.log(`📄 Page ${index + 1}: ${category} with ${items.length} items, isLast: ${isLastPage}`);
+          
+          return `
+            <div class="page">
+              <div class="page-content">
+                <div class="header">
+                  <div class="org-name">${organizationName}</div>
+                  <div class="title">تقرير الاستهلاك</div>
+                  <div class="category-name">${category}</div>
+                  <div class="date-info"><strong>من:</strong> ${formatDate(dateRange[0])}</div>
+                  <div class="date-info"><strong>إلى:</strong> ${formatDate(dateRange[1])}</div>
+                  <div class="date-info"><strong>تاريخ:</strong> ${formatDate(dayjs())}</div>
+                </div>
+
+                <div class="divider"></div>
+                
+                <table class="items-table">
+                  <thead>
+                    <tr>
+                      <th>الصنف</th>
+                      <th>الكمية</th>
+                      <th>السعر</th>
+                      <th>الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map(item => {
+                      const isPlayStation = item.category === 'البلايستيشن';
+                      const quantityDisplay = isPlayStation 
+                        ? `${toArabicNumbers(item.quantity.toFixed(2).replace('.', '،'))} س`
+                        : toArabicNumbers(Math.round(item.quantity));
+                      const unitPriceDisplay = isPlayStation 
+                        ? '-' 
+                        : formatNumber(item.price);
+                      
+                      return `
+                        <tr>
+                          <td class="item-name">${item.name}</td>
+                          <td class="item-quantity">${quantityDisplay}</td>
+                          <td class="item-price">${unitPriceDisplay}</td>
+                          <td class="item-total">${formatNumber(item.total)}</td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+
+                <div class="divider"></div>
+
+                <div class="category-total">
+                  <strong>إجمالي ${category}:</strong> ${formatNumber(categoryTotal)} ج.م
+                </div>
+
+                <div class="thank-you">شكراً لكم</div>
+              </div>
+              
+              <div class="footer">
+                <div><strong>العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      const printContent = `
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>تقرير الاستهلاك</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
+            * { 
+              font-family: 'Tajawal', sans-serif; 
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              box-sizing: border-box;
+            }
+            body { 
+              margin: 0; 
+              padding: 0 12px 0 4px; 
+              font-size: 11px; 
+              color: #000; 
+              font-weight: 600;
+              width: 80mm;
+              max-width: 80mm;
+              text-align: center;
+              direction: rtl;
+            }
+            .page {
+              padding: 8px 10px 8px 4px;
+            }
+            .page-content {
+              width: 100%;
+            }
+            .header { 
+              text-align: center; 
+              margin-bottom: 8px;
+              margin-top: 0;
+              font-weight: 700;
+              border-bottom: 2px dashed #000;
+              padding-bottom: 6px;
+            }
+            .org-name { 
+              font-size: 1.4em; 
+              font-weight: 900; 
+              margin-bottom: 6px; 
+              color: #000;
+            }
+            .title { 
+              font-size: 1.1em; 
+              font-weight: 800; 
+              margin-bottom: 6px; 
+              color: #000;
+            }
+            .category-name {
+              font-size: 1.2em;
+              font-weight: 800;
+              margin-bottom: 8px;
+              color: #000;
+              background: #e0e0e0;
+              padding: 6px;
+              border-radius: 4px;
+            }
+            .date-info { 
+              margin-bottom: 4px; 
+              font-weight: 600;
+              font-size: 0.9em;
+            }
+            .divider { 
+              border-top: 2px dashed #000; 
+              margin: 10px 0; 
+            }
+            .items-table { 
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 10px;
+              font-size: 0.85em;
+              border: 2px solid #000;
+              table-layout: fixed;
+              direction: rtl;
+            }
+            .items-table thead {
+              background: #e0e0e0;
+              font-weight: 800;
+            }
+            .items-table th {
+              padding: 4px 3px;
+              text-align: right;
+              border: 1.5px solid #000;
+              font-size: 0.9em;
+              word-wrap: break-word;
+            }
+            .items-table td {
+              padding: 3px 3px;
+              text-align: right;
+              border: 1px solid #000;
+              font-weight: 600;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+            }
+            .items-table th {
+              width: 16.67% !important;
+            }
+            .items-table th:first-child {
+              text-align: left;
+              padding-left: 5px;
+              width: 50% !important;
+            }
+            .items-table td {
+              width: 16.67% !important;
+            }
+            .items-table .item-name {
+              text-align: left;
+              font-weight: 700;
+              padding-left: 5px;
+              width: 50% !important;
+            }
+            .items-table .item-quantity {
+              font-weight: 600;
+            }
+            .items-table .item-price {
+              font-weight: 600;
+            }
+            .items-table .item-total {
+              font-weight: 800;
+              color: #000;
+            }
+            .category-total {
+              text-align: center;
+              font-size: 1.2em;
+              font-weight: 800;
+              color: #000;
+              padding: 10px;
+              background: #f0f0f0;
+              border-radius: 4px;
+              margin-top: 10px;
+            }
+            .footer { 
+              margin-top: auto;
+              text-align: center; 
+              font-size: 0.85em; 
+              color: #333;
+              border-top: 2px dashed #000;
+              padding-top: 8px;
+              padding-bottom: 8px;
+              font-weight: 700;
+            }
+            .thank-you { 
+              text-align: center; 
+              margin-top: 12px; 
+              margin-bottom: 10px;
+              font-size: 1.1em; 
+              font-weight: 700; 
+            }
+            strong { 
+              font-weight: 800; 
+            }
+            
+            @media print {
+              @page { 
+                size: 80mm auto;
+                margin: 0; 
+              }
+              html, body { 
+                margin: 0; 
+                padding: 0;
+                width: 80mm;
+              }
+              body { 
+                padding: 4px 8px 4px 2px; 
+                font-weight: 600;
+                direction: rtl;
+              }
+              .no-print { 
+                display: none !important; 
+              }
+              .page {
+                padding: 4px 6px !important;
+                page-break-after: always !important;
+                -webkit-page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                -webkit-page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              .page:last-child {
+                page-break-after: auto !important;
+                -webkit-page-break-after: auto !important;
+                break-after: auto !important;
+              }
+              .items-table {
+                border: 2px solid #000 !important;
+              }
+              .items-table th,
+              .items-table td {
+                border: 1px solid #000 !important;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+            }
+            
+            @media screen {
+              body {
+                max-width: 80mm;
+                margin: 0 auto;
+                background: #fff;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          ${categoryPages}
+          
+          <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
+            <button onclick="window.print()" style="
+              background: #4CAF50;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              text-align: center;
+              text-decoration: none;
+              display: inline-block;
+              font-size: 14px;
+              font-weight: 700;
+              cursor: pointer;
+              border-radius: 4px;
+            ">
+              طباعة التقرير
+            </button>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Create hidden iframe for printing
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+      
+      const iframeDoc = iframe.contentWindow?.document;
+      if (iframeDoc) {
+        iframeDoc.open();
+        iframeDoc.write(printContent);
+        iframeDoc.close();
+        
+        console.log('🖨️ Iframe created, waiting for content to load...');
+        
+        // Wait for content and fonts to load then print
+        iframe.contentWindow?.addEventListener('load', () => {
+          console.log('🖨️ Iframe loaded');
+          
+          setTimeout(() => {
+            const pages = iframeDoc.querySelectorAll('.page');
+            console.log(`🖨️ Found ${pages.length} pages in iframe`);
+            
+            // Ensure all pages are visible
+            pages.forEach((page, idx) => {
+              console.log(`🖨️ Page ${idx + 1} height: ${(page as HTMLElement).offsetHeight}px`);
+            });
+            
+            // Give extra time for rendering
+            setTimeout(() => {
+              console.log('🖨️ Triggering print dialog...');
+              iframe.contentWindow?.focus();
+              iframe.contentWindow?.print();
+              
+              // Remove iframe after printing
+              setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                  document.body.removeChild(iframe);
+                }
+              }, 1000);
+            }, 800);
+          }, 500);
+        });
+        
+        message.success('جاري فتح نافذة الطباعة...');
+      } else {
+        message.error('فشل في إنشاء نافذة الطباعة.');
+        document.body.removeChild(iframe);
+      }
+    } catch (error) {
+      message.error('حدث خطأ أثناء الطباعة');
+      console.error('Print error:', error);
+    }
   };
 
   const exportToPDF = () => {
@@ -841,6 +1213,14 @@ const ConsumptionReport = () => {
               className="w-full md:w-auto flex items-center justify-center gap-2"
             >
               <span>تحديث البيانات</span>
+            </Button>
+            <Button
+              type="default"
+              icon={<PrinterOutlined />}
+              onClick={() => printReport()}
+              className="w-full md:w-auto flex items-center justify-center gap-2"
+            >
+              <span>طباعة</span>
             </Button>
             <Dropdown
               overlay={

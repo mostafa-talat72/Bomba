@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
@@ -258,12 +258,12 @@ const Cafe: React.FC = () => {
       showNotification?.('انقطع الاتصال - جاري إعادة الاتصال...', 'warning');
     });
 
-    socket.on('reconnect', (attemptNumber) => {
+    socket.on('reconnect', async (attemptNumber) => {
       console.log('Socket.IO reconnected after', attemptNumber, 'attempts');
       showNotification?.('تم إعادة الاتصال', 'success');
       // Refresh data to sync state
+      await fetchBills();
       fetchAllTableStatuses();
-      fetchBills();
     });
 
     socket.on('reconnect_error', (error) => {
@@ -322,11 +322,11 @@ const Cafe: React.FC = () => {
     });
 
     // Listen for bill-updated event
-    socket.on('bill-update', (data: any) => {
+    socket.on('bill-update', async (data: any) => {
       if (data.type === 'payment-received' || data.type === 'created' || data.type === 'deleted') {
         // Refresh table statuses when bill is updated
+        await fetchBills();
         fetchAllTableStatuses();
-        fetchBills();
         
         // If a table is selected, refresh its orders
         const currentTable = selectedTableRef.current;
@@ -391,13 +391,7 @@ const Cafe: React.FC = () => {
   };
 
   // Fetch table statuses when tables or bills change - INSTANT!
-  useEffect(() => {
-    if (tables.length > 0) {
-      fetchAllTableStatuses();
-    }
-  }, [tables, bills]); // Update when tables or bills change (use full arrays to detect changes)
-
-  const fetchAllTableStatuses = () => {
+  const fetchAllTableStatuses = useCallback(() => {
     const statuses: Record<number, { hasUnpaid: boolean; orders: Order[] }> = {};
     
     // Use bills from state (already loaded) - filter unpaid bills
@@ -409,7 +403,7 @@ const Cafe: React.FC = () => {
     const tableBillsMap = new Map<string, any[]>();
     unpaidBills.forEach((bill: any) => {
       if (bill.table) {
-        const tableId = bill.table._id || bill.table.id || bill.table;
+        const tableId = (bill.table._id || bill.table.id || bill.table).toString();
         if (!tableBillsMap.has(tableId)) {
           tableBillsMap.set(tableId, []);
         }
@@ -419,7 +413,7 @@ const Cafe: React.FC = () => {
     
     // Process each table - INSTANT!
     for (const table of tables) {
-      const tableId = table._id || table.id;
+      const tableId = (table._id || table.id).toString();
       const tableBills = tableBillsMap.get(tableId) || [];
       
       // Table has unpaid bills if there are any bills in the map
@@ -432,7 +426,13 @@ const Cafe: React.FC = () => {
     }
     
     setTableStatuses(statuses);
-  };
+  }, [bills, tables]);
+
+  useEffect(() => {
+    if (tables.length > 0 && bills.length >= 0) {
+      fetchAllTableStatuses();
+    }
+  }, [tables, bills, fetchAllTableStatuses]); // Update when tables or bills change
 
   // Memoize active table sections
   const activeTableSections = useMemo(() => {

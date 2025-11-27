@@ -134,6 +134,43 @@ export interface InventoryItem {
   createdAt: Date;
 }
 
+export interface ItemPayment {
+  _id?: string;
+  orderId: string;
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  paidQuantity: number;
+  remainingQuantity: number;
+  pricePerUnit: number;
+  totalPrice: number;
+  paidAmount: number;
+  isPaid: boolean;
+  paidAt?: Date;
+  paidBy?: string;
+  paymentHistory?: Array<{
+    quantity: number;
+    amount: number;
+    paidAt: Date;
+    paidBy: string;
+    method: 'cash' | 'card' | 'transfer';
+  }>;
+}
+
+export interface SessionPayment {
+  _id?: string;
+  sessionId: string;
+  sessionCost: number;
+  paidAmount: number;
+  remainingAmount: number;
+  payments: Array<{
+    amount: number;
+    paidAt: Date;
+    paidBy: string;
+    method: 'cash' | 'card' | 'transfer';
+  }>;
+}
+
 export interface Bill {
   _id: string;
   id: string;
@@ -158,6 +195,8 @@ export interface Bill {
   paymentMethod: 'cash' | 'card' | 'transfer' | 'mixed';
   billType: 'cafe' | 'playstation' | 'computer';
   payments: Payment[];
+  itemPayments?: ItemPayment[];
+  sessionPayments?: SessionPayment[];
   partialPayments?: Array<{
     orderId: string;
     orderNumber: string;
@@ -326,6 +365,18 @@ export interface BillItem {
   isAddon?: boolean;
   mainItemName?: string;
   addonName?: string;
+}
+
+export interface PayForItemsRequest {
+  items: Array<{
+    itemId: string;
+    quantity: number;
+  }>;
+  paymentMethod: 'cash' | 'card' | 'transfer';
+}
+
+export interface PayForItemsResponse extends Bill {
+  itemPayments: ItemPayment[];
 }
 
 // API Client class
@@ -1015,7 +1066,7 @@ class ApiClient {
   }
 
   // Bills endpoints
-  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; date?: string; customerName?: string }): Promise<ApiResponse<Bill[]>> {
+  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string }): Promise<ApiResponse<Bill[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -1183,6 +1234,48 @@ class ApiClient {
     paymentMethod: 'cash' | 'card' | 'transfer';
   }): Promise<ApiResponse<Bill>> {
     const response = await this.request<Bill>(`/billing/${id}/partial-payment`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  /**
+   * Pay for specific quantities of items in a bill
+   * 
+   * @param id - Bill ID
+   * @param paymentData - Payment data including items with quantities and payment method
+   * @returns Updated bill with payment information
+   * 
+   * @throws {ApiResponse} Possible error messages:
+   * - "يجب إدخال كمية صحيحة أكبر من صفر" - Invalid quantity (zero or negative)
+   * - "الكمية المطلوبة ({quantity}) أكبر من الكمية المتبقية ({remainingQuantity})" - Quantity exceeds remaining
+   * - "الصنف '{itemName}' مدفوع بالكامل" - Item already fully paid
+   * - "الصنف غير موجود في الفاتورة" - Item not found in bill
+   * - "الفاتورة غير موجودة" - Bill not found
+   * - "لا يمكن دفع أصناف من فاتورة مدفوعة بالكامل" - Bill already paid
+   * - "لا يمكن دفع أصناف من فاتورة ملغاة" - Bill cancelled
+   */
+  async payForItems(id: string, paymentData: PayForItemsRequest): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(`/billing/${id}/pay-items`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async paySessionPartial(id: string, paymentData: {
+    sessionId: string;
+    amount: number;
+    paymentMethod: 'cash' | 'card' | 'transfer';
+  }): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(`/billing/${id}/pay-session-partial`, {
       method: 'POST',
       body: JSON.stringify(paymentData),
     });

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
+import { aggregateItemsWithPayments } from '../utils/billAggregation';
 
 interface OrderItem {
 	name: string;
@@ -79,6 +80,32 @@ interface Payment {
 	};
 }
 
+interface ItemPayment {
+	orderId: string;
+	itemId: string;
+	itemName: string;
+	quantity: number;
+	pricePerUnit: number;
+	totalPrice: number;
+	paidAmount: number;
+	isPaid: boolean;
+	paidAt?: string;
+	paidBy?: string;
+}
+
+interface SessionPayment {
+	sessionId: string;
+	sessionCost: number;
+	paidAmount: number;
+	remainingAmount: number;
+	payments: {
+		amount: number;
+		paidAt: string;
+		paidBy: string;
+		method: 'cash' | 'card' | 'transfer';
+	}[];
+}
+
 interface BillDetails {
 	_id: string;
 	billNumber: string;
@@ -106,6 +133,7 @@ interface BillDetails {
 	};
 	createdAt: string;
 	updatedAt?: string;
+	// Old system (deprecated)
 	partialPayments?: {
 		orderNumber: string;
 		totalPaid: number;
@@ -117,6 +145,9 @@ interface BillDetails {
 		paidAt: string;
 		paymentMethod: 'cash' | 'card' | 'transfer';
 	}[];
+	// New system
+	itemPayments?: ItemPayment[];
+	sessionPayments?: SessionPayment[];
 }
 
 // تعريف مؤقت لدعم خاصية controllersHistoryBreakdown القادمة من السيرفر
@@ -134,26 +165,28 @@ interface SessionWithBreakdown extends Session {
 
 const normalizeBillDates = (bill: Record<string, unknown>): BillDetails => ({
 	...bill,
-	createdAt: bill.createdAt?.toString(),
+	createdAt: bill.createdAt?.toString() || '',
 	updatedAt: bill.updatedAt?.toString(),
-	orders: bill.orders?.map((order: Record<string, unknown>) => ({
+	orders: (bill.orders as Record<string, unknown>[])?.map((order: Record<string, unknown>) => ({
 		...order,
-		createdAt: order.createdAt?.toString(),
+		createdAt: order.createdAt?.toString() || '',
 	})) || [],
-	sessions: bill.sessions?.map((session: Record<string, unknown>) => ({
+	sessions: (bill.sessions as Record<string, unknown>[])?.map((session: Record<string, unknown>) => ({
 		...session,
-		startTime: session.startTime?.toString(),
+		startTime: session.startTime?.toString() || '',
 		endTime: session.endTime?.toString(),
 	})) || [],
-	payments: bill.payments?.map((payment: Record<string, unknown>) => ({
+	payments: (bill.payments as Record<string, unknown>[])?.map((payment: Record<string, unknown>) => ({
 		...payment,
-		timestamp: payment.timestamp?.toString(),
+		timestamp: payment.timestamp?.toString() || '',
 	})) || [],
-	partialPayments: bill.partialPayments?.map((payment: Record<string, unknown>) => ({
+	partialPayments: (bill.partialPayments as Record<string, unknown>[])?.map((payment: Record<string, unknown>) => ({
 		...payment,
-		paidAt: payment.paidAt?.toString(),
+		paidAt: payment.paidAt?.toString() || '',
 	})) || [],
-});
+	itemPayments: bill.itemPayments as ItemPayment[] | undefined,
+	sessionPayments: bill.sessionPayments as SessionPayment[] | undefined,
+} as BillDetails);
 
 const BillView = () => {
 	const { billId } = useParams<{ billId: string }>();
@@ -161,9 +194,15 @@ const BillView = () => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [showOrdersModal, setShowOrdersModal] = useState(false);
+	const [showPaymentModal, setShowPaymentModal] = useState(false);
+	const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>({});
+	const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
+	const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+	const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+	const [paymentError, setPaymentError] = useState<string | null>(null);
 
 	// دالة لجلب سعر الساعة من الجلسة مباشرة
-	function getHourlyRateFromDevice(session: Session, controllers: number) {
+	function getHourlyRateFromDevice(session: Session, _controllers: number) {
 		// استخدام hourlyRate من الجلسة نفسها
 		return session.hourlyRate || 0;
 	}
@@ -190,7 +229,7 @@ const BillView = () => {
 			const response = await api.getBill(billId);
 
 			if (response.success && response.data) {
-				setBill(normalizeBillDates(response.data));
+				setBill(normalizeBillDates(response.data as unknown as Record<string, unknown>));
 			} else {
 				setError(response.message || 'لم يتم العثور على الفاتورة. تأكد من صحة الرابط أو أن الفاتورة لم تُحذف.');
 			}
@@ -261,75 +300,7 @@ const BillView = () => {
 		}
 	};
 
-	// دالة لتجميع الأصناف عبر جميع الطلبات مع احتساب الكمية والمدفوع والمتبقي
-	function aggregateItemsWithPayments(orders: Order[], partialPayments: BillDetails['partialPayments'], billStatus?: string, billPaid?: number, billTotal?: number) {
-		type AggregatedAddon = {
-			name: string;
-			price: number;
-			totalQuantity: number;
-			paidQuantity: number;
-			remainingQuantity: number;
-		};
-		type AggregatedItem = {
-			name: string;
-			price: number;
-			totalQuantity: number;
-			paidQuantity: number;
-			remainingQuantity: number;
-			addons?: AggregatedAddon[];
-		};
-		const map = new Map<string, AggregatedItem>();
-
-		function getPaidQty(itemName: string, itemPrice: number) {
-			let paid = 0;
-			if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal) {
-				let totalQty = 0;
-				orders.forEach(order => {
-					order.items.forEach(item => {
-						if (item.name === itemName && item.price === itemPrice) {
-							totalQty += item.quantity;
-						}
-					});
-				});
-				return totalQty;
-			}
-			if (!partialPayments) return 0;
-			partialPayments.forEach(payment => {
-				payment.items.forEach(item => {
-					if (item.itemName === itemName && item.price === itemPrice) {
-						paid += item.quantity;
-					}
-				});
-			});
-			return paid;
-		}
-
-		if (!orders || !Array.isArray(orders)) return [];
-
-		orders.forEach(order => {
-			if (!order.items) return;
-			order.items.forEach((item: OrderItem) => {
-				const key = `${item.name}|${item.price}`;
-				if (!map.has(key)) {
-					const paidQty = getPaidQty(item.name, item.price);
-					map.set(key, {
-						name: item.name,
-						price: item.price,
-						totalQuantity: item.quantity,
-						paidQuantity: paidQty,
-						remainingQuantity: item.quantity - paidQty,
-					});
-				} else {
-					const agg = map.get(key)!;
-					agg.totalQuantity += item.quantity;
-					// إعادة احتساب paid/remaining بعد جمع الكميات
-					agg.paidQuantity = getPaidQty(item.name, item.price);
-					agg.remainingQuantity = agg.totalQuantity - agg.paidQuantity;
-				}
-			});
-		});
-		return Array.from(map.values());
-	}
+	// Note: aggregateItemsWithPayments is now imported from utils/billAggregation.ts
 
 	// دالة لحساب إجمالي تكلفة الطلبات مع الإضافات
 	function getOrdersTotal(orders: Order[]) {
@@ -339,6 +310,87 @@ const BillView = () => {
 			), 0
 		);
 	}
+
+	// دالة لمعالجة الدفع الجزئي
+	const handlePaymentSubmit = async () => {
+		if (!bill) return;
+
+		setIsProcessingPayment(true);
+		setPaymentError(null);
+
+		try {
+			// تجميع العناصر المحددة مع الكميات
+			const itemsToPayFor = aggregateItemsWithPayments(
+				bill.orders || [],
+				bill.itemPayments || [],
+				bill.status,
+				bill.paid,
+				bill.total
+			)
+				.filter(item => {
+					const addonsKey = (item.addons || [])
+						.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+						.sort()
+						.join('|');
+					const itemKey = `${item.name}|${item.price}|${addonsKey}`;
+					return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
+				})
+				.map(item => {
+					const addonsKey = (item.addons || [])
+						.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+						.sort()
+						.join('|');
+					const itemKey = `${item.name}|${item.price}|${addonsKey}`;
+					
+					// البحث عن itemId من الطلبات
+					let itemId = '';
+					for (const order of bill.orders) {
+						const foundItem = order.items.find(
+							orderItem => orderItem.name === item.name && orderItem.price === item.price
+						);
+						if (foundItem) {
+							// استخدام اسم الصنف كـ itemId إذا لم يكن هناك _id
+							itemId = (foundItem as unknown as { _id?: string })._id || item.name;
+							break;
+						}
+					}
+
+					return {
+						itemId: itemId,
+						quantity: itemQuantities[itemKey] || 0
+					};
+				});
+
+			if (itemsToPayFor.length === 0) {
+				setPaymentError('الرجاء اختيار عناصر للدفع');
+				setIsProcessingPayment(false);
+				return;
+			}
+
+			const response = await api.payForItems(bill._id, {
+				items: itemsToPayFor,
+				paymentMethod: paymentMethod
+			});
+
+			if (response.success) {
+				// تحديث الفاتورة
+				await fetchBill(false);
+				
+				// إعادة تعيين الحالة
+				setShowPaymentModal(false);
+				setSelectedItems({});
+				setItemQuantities({});
+				setPaymentMethod('cash');
+				setPaymentError(null);
+			} else {
+				setPaymentError(response.message || 'حدث خطأ أثناء معالجة الدفع');
+			}
+		} catch (err) {
+			setPaymentError('حدث خطأ أثناء معالجة الدفع');
+		} finally {
+			setIsProcessingPayment(false);
+		}
+	};
 
 	if (loading) {
 		return (
@@ -374,14 +426,23 @@ const BillView = () => {
 							<p className="text-gray-600 text-sm">{bill.customerName || 'عميل'}</p>
 							<p className="text-gray-400 text-xs">{formatDate(bill.createdAt)}</p>
 						</div>
-						<div className="flex flex-col items-end">
+						<div className="flex flex-col items-end gap-2">
 							<span className={`px-3 py-1 rounded-full text-sm font-medium ${bill.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
 								{bill.status === 'paid' ? 'مدفوع' : 'غير مدفوع'}
 							</span>
+							{/* زر الدفع الجزئي */}
+							{bill.status !== 'paid' && bill.orders && bill.orders.length > 0 && (
+								<button
+									className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs"
+									onClick={() => setShowPaymentModal(true)}
+								>
+									دفع أصناف محددة
+								</button>
+							)}
 							{/* زر عرض الطلبات */}
 							{bill.orders && bill.orders.length > 0 && (
 								<button
-									                className="mt-2 px-3 py-1 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded text-xs"
+									className="px-3 py-1 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded text-xs"
 									onClick={() => setShowOrdersModal(true)}
 								>
 									عرض جميع الطلبات
@@ -405,15 +466,19 @@ const BillView = () => {
 										</tr>
 									</thead>
 									<tbody>
-										{aggregateItemsWithPayments(bill.orders, bill.partialPayments, bill.status, bill.paid, bill.total).map((item, idx) => {
+										{aggregateItemsWithPayments(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total).map((item, idx) => {
 											const colorClass = idx % 2 === 0 ? 'bg-white' : 'bg-blue-50';
 											const totalPrice = item.price * item.totalQuantity;
+											const isFullyPaid = item.remainingQuantity === 0;
 											return (
-												<tr key={`${item.name}-${item.price}-${idx}`} className={`border-b last:border-b-0 ${colorClass} ${item.remainingQuantity === 0 ? 'bg-green-100' : ''}`}>
-													<td className="py-2 px-2 font-medium text-gray-900">{item.name}</td>
+												<tr key={`${item.name}-${item.price}-${idx}`} className={`border-b last:border-b-0 ${colorClass} ${isFullyPaid ? 'bg-green-50' : ''}`}>
+													<td className="py-2 px-2 font-medium text-gray-900">
+														{item.name}
+														{isFullyPaid && <span className="mr-2 text-xs text-green-600 font-bold">✓ مدفوع بالكامل</span>}
+													</td>
 													<td className="py-2 px-2">{formatDecimal(item.totalQuantity)}</td>
-													<td className="py-2 px-2">{formatDecimal(item.paidQuantity)}</td>
-													<td className="py-2 px-2">{formatDecimal(item.remainingQuantity)}</td>
+													<td className="py-2 px-2 text-green-600 font-medium">{formatDecimal(item.paidQuantity)}</td>
+													<td className="py-2 px-2 text-orange-600 font-medium">{formatDecimal(item.remainingQuantity)}</td>
 													<td className="py-2 px-2">{formatCurrency(item.price)}</td>
 													<td className="py-2 px-2">{formatCurrency(totalPrice)}</td>
 												</tr>
@@ -448,7 +513,12 @@ const BillView = () => {
 								})()}
 							</h2>
 							<div className="space-y-6">
-								{(bill.sessions as SessionWithBreakdown[]).map((session) => (
+								{(bill.sessions as SessionWithBreakdown[]).map((session) => {
+									// Find session payment details
+									const sessionPayment = bill.sessionPayments?.find(sp => sp.sessionId === session._id);
+									const isSessionFullyPaid = sessionPayment && sessionPayment.remainingAmount === 0;
+									
+									return (
 									<div key={session._id} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
 										<div className="flex justify-between items-center mb-2">
 											<div>
@@ -599,7 +669,7 @@ const BillView = () => {
 															{session.controllersHistory && session.controllersHistory.length > 0 && session.controllersHistory
 																.filter((history, idx) => {
 																	// إخفاء آخر فترة إذا كانت الجلسة نشطة وليس لها to
-																	if (session.status === 'active' && idx === session.controllersHistory.length - 1 && !history.to) {
+																	if (session.status === 'active' && session.controllersHistory && idx === session.controllersHistory.length - 1 && !history.to) {
 																		return false;
 																	}
 																	return true;
@@ -644,98 +714,144 @@ const BillView = () => {
 												</div>
 											</div>
 										) : null}
-										{/* إجمالي تكلفة الجلسة - تظهر فقط بعد انتهاء الجلسة */}
-										{session.status !== 'active' && (
-																				<div className="flex justify-between items-center mt-2">
-											<span className="text-gray-700 font-medium">إجمالي تكلفة الجلسة:</span>
-											<span className="font-bold text-orange-600 dark:text-orange-400">
-												{(() => {
-													// حساب التكلفة الإجمالية من البيانات التفصيلية
-													let totalCost = 0;
+										{/* إجمالي تكلفة الجلسة - يظهر دائماً للجلسات النشطة والمنتهية */}
+										{(() => {
+											// حساب التكلفة الإجمالية
+											let totalCost = 0;
+											const isActive = session.status === 'active';
 
-													// إذا كان هناك controllersHistoryBreakdown، استخدمه
-													if (Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0) {
-														totalCost = session.controllersHistoryBreakdown.reduce((sum, period) => sum + period.cost, 0);
-													}
-													// وإلا استخدم controllersHistory لحساب التكلفة
-													else if (session.controllersHistory && session.controllersHistory.length > 0) {
-														totalCost = session.controllersHistory.reduce((sum, period) => {
-															if (period.from && period.to) {
-																const from = new Date(period.from);
-																const to = new Date(period.to);
-																const diffMs = to.getTime() - from.getTime();
-																const minutes = diffMs / (1000 * 60);
-																const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
-																const minuteRate = hourlyRate / 60;
-																return sum + (minutes * minuteRate);
-															}
-															return sum;
-														}, 0);
-													}
-													// وإلا استخدم session.finalCost
-													else {
-														totalCost = session.finalCost || 0;
-													}
+											if (isActive) {
+												// للجلسات النشطة: حساب التكلفة الحالية
+												const now = new Date();
+												
+												// إضافة تكلفة الفترات المكتملة
+												if (session.controllersHistory && session.controllersHistory.length > 0) {
+													totalCost = session.controllersHistory.reduce((sum, period) => {
+														if (period.from && period.to) {
+															const from = new Date(period.from);
+															const to = new Date(period.to);
+															const diffMs = to.getTime() - from.getTime();
+															const minutes = diffMs / (1000 * 60);
+															const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
+															const minuteRate = hourlyRate / 60;
+															return sum + (minutes * minuteRate);
+														}
+														return sum;
+													}, 0);
+												}
 
-													return formatCurrency(totalCost);
-												})()}
-											</span>
-										</div>
-										)}
-										{/* عرض التكلفة الحالية للجلسات النشطة */}
-										{session.status === 'active' && (() => {
-											// حساب التكلفة الحالية للجلسة النشطة
-											const now = new Date();
-											let totalCurrentCost = 0;
-
-											// إضافة تكلفة الفترات المكتملة
-											if (session.controllersHistory && session.controllersHistory.length > 0) {
-												totalCurrentCost = session.controllersHistory.reduce((sum, period) => {
-													if (period.from && period.to) {
-														const from = new Date(period.from);
-														const to = new Date(period.to);
-														const diffMs = to.getTime() - from.getTime();
-														const minutes = diffMs / (1000 * 60);
-														const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
-														const minuteRate = hourlyRate / 60;
-														return sum + (minutes * minuteRate);
+												// إضافة تكلفة الفترة الحالية
+												let periodStart = new Date(session.startTime);
+												if (session.controllersHistory && session.controllersHistory.length > 0) {
+													const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
+													if (lastPeriod.from) {
+														periodStart = new Date(lastPeriod.from);
 													}
-													return sum;
-												}, 0);
-											}
+												}
 
-											// إضافة تكلفة الفترة الحالية
-											let periodStart = new Date(session.startTime);
-											if (session.controllersHistory && session.controllersHistory.length > 0) {
-												const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
-												if (lastPeriod.from) {
-													periodStart = new Date(lastPeriod.from);
+												const diffMs = now.getTime() - periodStart.getTime();
+												const minutes = diffMs / (1000 * 60);
+												const hourlyRate = getHourlyRateFromDevice(session, session.controllers || 1);
+												const minuteRate = hourlyRate / 60;
+												const currentPeriodCost = minutes * minuteRate;
+												totalCost += currentPeriodCost;
+											} else {
+												// للجلسات المنتهية: حساب التكلفة النهائية
+												if (Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0) {
+													totalCost = session.controllersHistoryBreakdown.reduce((sum, period) => sum + period.cost, 0);
+												} else if (session.controllersHistory && session.controllersHistory.length > 0) {
+													totalCost = session.controllersHistory.reduce((sum, period) => {
+														if (period.from && period.to) {
+															const from = new Date(period.from);
+															const to = new Date(period.to);
+															const diffMs = to.getTime() - from.getTime();
+															const minutes = diffMs / (1000 * 60);
+															const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
+															const minuteRate = hourlyRate / 60;
+															return sum + (minutes * minuteRate);
+														}
+														return sum;
+													}, 0);
+												} else {
+													totalCost = session.finalCost || 0;
 												}
 											}
 
-											const diffMs = now.getTime() - periodStart.getTime();
-											const minutes = diffMs / (1000 * 60);
+											// تطبيق التقريب: إذا >= 0.5 يقرب لأعلى، وإلا يبقى كما هو
 											const hourlyRate = getHourlyRateFromDevice(session, session.controllers || 1);
-											const minuteRate = hourlyRate / 60;
-											const currentPeriodCost = minutes * minuteRate;
+											if (hourlyRate > 0) {
+												const hours = totalCost / hourlyRate;
+												const fractionalPart = hours - Math.floor(hours);
+												
+												if (fractionalPart >= 0.5) {
+													totalCost = Math.ceil(totalCost);
+												} else {
+													totalCost = Math.round(totalCost);
+												}
+											}
 
-											const finalCurrentCost = totalCurrentCost + currentPeriodCost;
-
-											// تظهر فقط إذا كانت التكلفة أكبر من 0
-											return finalCurrentCost > 0 ? (
-												<div className="flex justify-between items-center mt-2">
-													<span className="text-gray-600 text-sm">التكلفة الحالية:</span>
-													<div className="flex items-center gap-2">
-														<span className="text-sm font-medium text-green-600 animate-pulse">
-															{formatCurrency(finalCurrentCost)}
-														</span>
-														<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+											return (
+												<div className={`flex justify-between items-center mt-3 p-3 rounded-lg border ${
+													isActive 
+														? 'bg-green-50 border-green-200' 
+														: 'bg-orange-50 border-orange-200'
+												}`}>
+													<span className="text-gray-800 font-bold">
+														{isActive ? 'الإجمالي الحالي:' : 'إجمالي تكلفة الجلسة:'}
+													</span>
+													<span className={`font-bold text-lg ${
+														isActive 
+															? 'text-green-600 animate-pulse' 
+															: 'text-orange-600'
+													}`}>
+														{formatCurrency(totalCost)}
+													</span>
+												</div>
+											);
+										})()}
+										
+										{/* عرض تفاصيل الدفع الجزئي للجلسة */}
+										{sessionPayment && sessionPayment.payments && sessionPayment.payments.length > 0 && (
+											<div className="mt-4 border-t border-gray-200 pt-4">
+												<h4 className="font-medium text-gray-900 mb-3">تفاصيل الدفع الجزئي:</h4>
+												<div className="space-y-2 bg-blue-50 rounded-lg p-3">
+													<div className="flex justify-between items-center">
+														<span className="text-sm text-gray-700">التكلفة الإجمالية:</span>
+														<span className="text-sm font-medium">{formatCurrency(sessionPayment.sessionCost)}</span>
+													</div>
+													<div className="flex justify-between items-center">
+														<span className="text-sm text-gray-700">المدفوع:</span>
+														<span className="text-sm font-medium text-green-600">{formatCurrency(sessionPayment.paidAmount)}</span>
+													</div>
+													<div className="flex justify-between items-center">
+														<span className="text-sm text-gray-700">المتبقي:</span>
+														<span className="text-sm font-medium text-orange-600">{formatCurrency(sessionPayment.remainingAmount)}</span>
+													</div>
+													{isSessionFullyPaid && (
+														<div className="flex items-center justify-center gap-2 mt-2 pt-2 border-t border-green-200">
+															<span className="text-sm font-bold text-green-600">✓ مدفوع بالكامل</span>
+														</div>
+													)}
+													
+													{/* سجل الدفعات */}
+													<div className="mt-3 pt-3 border-t border-blue-200">
+														<h5 className="text-xs font-medium text-gray-700 mb-2">سجل الدفعات:</h5>
+														<div className="space-y-1">
+															{sessionPayment.payments.map((payment, idx) => (
+																<div key={idx} className="flex justify-between items-center text-xs bg-white rounded px-2 py-1">
+																	<span className="font-medium text-green-600">{formatCurrency(payment.amount)}</span>
+																	<span className="text-gray-500">{formatDate(payment.paidAt)}</span>
+																	<span className="text-gray-600">{payment.method === 'cash' ? 'نقدي' : payment.method === 'card' ? 'بطاقة' : 'تحويل'}</span>
+																</div>
+															))}
+														</div>
 													</div>
 												</div>
-											) : null;
-										})()}
+											</div>
+										)}
 									</div>
-								))}
+								);
+								})}
 							</div>
 						</div>
 					)}
@@ -819,6 +935,305 @@ const BillView = () => {
 									</div>
 								</div>
 							))}
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* نافذة الدفع الجزئي */}
+			{showPaymentModal && bill && (
+				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+					<div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+						<div className="p-6 border-b border-gray-200">
+							<h3 className="text-lg font-semibold text-gray-900">دفع أصناف محددة - فاتورة #{bill.billNumber}</h3>
+							<p className="text-sm text-gray-600 mt-1">اختر الأصناف والكميات المطلوب دفعها</p>
+						</div>
+
+						<div className="p-6">
+							{/* عرض رسالة الخطأ */}
+							{paymentError && (
+								<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+									{paymentError}
+								</div>
+							)}
+
+							<div className="mb-6">
+								<h4 className="font-medium text-gray-900 mb-4">اختر الأصناف والكميات</h4>
+
+								{(() => {
+									const itemsWithRemaining = aggregateItemsWithPayments(
+										bill.orders || [],
+										bill.itemPayments || [],
+										bill.status,
+										bill.paid,
+										bill.total
+									).filter(item => item.remainingQuantity > 0);
+
+									if (itemsWithRemaining.length === 0) {
+										return (
+											<div className="text-center py-8 bg-green-50 rounded-lg border border-green-200">
+												<div className="text-4xl mb-4">✅</div>
+												<h5 className="font-medium text-green-900 mb-2">جميع الأصناف مدفوعة بالكامل!</h5>
+												<p className="text-green-700">لا توجد أصناف متبقية للدفع في هذه الفاتورة</p>
+											</div>
+										);
+									}
+
+									return itemsWithRemaining.map((item) => {
+										const addonsKey = (item.addons || [])
+											.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+											.sort()
+											.join('|');
+										const itemKey = `${item.name}|${item.price}|${addonsKey}`;
+
+										return (
+											<div key={itemKey} className="bg-gray-50 rounded-lg p-4 border border-gray-200 mb-3">
+												<div className="flex items-center justify-between mb-2">
+													<div className="flex items-center gap-2 font-bold text-orange-700">
+														{item.name}
+														{/* زر - */}
+														<button
+															type="button"
+															className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100 text-gray-700"
+															onClick={() => {
+																const newQty = Math.max(0, (itemQuantities[itemKey] || 0) - 1);
+																setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
+																setSelectedItems(prev => {
+																	const updated = { ...prev };
+																	if (newQty > 0) updated[itemKey] = true;
+																	else delete updated[itemKey];
+																	return updated;
+																});
+															}}
+															disabled={(itemQuantities[itemKey] || 0) <= 0}
+														>
+															-
+														</button>
+														<span className="mx-2 w-6 text-center select-none font-bold text-orange-700">
+															{formatDecimal(itemQuantities[itemKey] || 0)}
+														</span>
+														{/* زر + */}
+														<button
+															type="button"
+															className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100 text-gray-700"
+															onClick={() => {
+																const newQty = Math.min(item.remainingQuantity, (itemQuantities[itemKey] || 0) + 1);
+																setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
+																setSelectedItems(prev => ({ ...prev, [itemKey]: newQty > 0 }));
+															}}
+															disabled={(itemQuantities[itemKey] || 0) >= item.remainingQuantity}
+														>
+															+
+														</button>
+														{/* زر دفع الكمية بالكامل */}
+														<button
+															type="button"
+															className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs hover:bg-orange-200"
+															onClick={() => {
+																setItemQuantities({ ...itemQuantities, [itemKey]: item.remainingQuantity });
+																setSelectedItems(prev => ({ ...prev, [itemKey]: true }));
+															}}
+															disabled={(itemQuantities[itemKey] || 0) === item.remainingQuantity}
+														>
+															دفع الكمية بالكامل
+														</button>
+													</div>
+													<div className="text-xs text-gray-500">{formatCurrency(item.price)}</div>
+												</div>
+												<div className="flex gap-4 text-sm text-gray-600">
+													<div>الكمية: <span className="font-bold text-gray-900">{formatDecimal(item.totalQuantity)}</span></div>
+													<div>المدفوع: <span className="text-green-700 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
+													<div>المتبقي: <span className="text-yellow-700 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>
+												</div>
+												{/* عرض الإضافات */}
+												{item.addons && item.addons.length > 0 && (
+													<div className="mt-2 pl-4 border-r-2 border-yellow-200">
+														{item.addons.map((addon, addonIdx) => (
+															<div key={addonIdx} className="flex items-center gap-2 text-sm text-yellow-800">
+																<span>↳ إضافة: {addon.name}</span>
+																<span>({formatCurrency(addon.price)})</span>
+															</div>
+														))}
+													</div>
+												)}
+											</div>
+										);
+									});
+								})()}
+							</div>
+
+							{/* طريقة الدفع */}
+							{aggregateItemsWithPayments(
+								bill.orders || [],
+								bill.itemPayments || [],
+								bill.status,
+								bill.paid,
+								bill.total
+							).filter(item => item.remainingQuantity > 0).length > 0 && (
+								<div className="mb-6">
+									<h4 className="font-medium text-gray-900 mb-4">طريقة الدفع</h4>
+									<div className="grid grid-cols-3 gap-3">
+										<button
+											onClick={() => setPaymentMethod('cash')}
+											className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
+												paymentMethod === 'cash'
+													? 'border-orange-500 bg-orange-50 text-orange-700'
+													: 'border-gray-200 hover:border-gray-300 bg-white text-gray-700'
+											}`}
+										>
+											<div className="text-2xl mb-1">💵</div>
+											<div className="text-sm font-medium">نقداً</div>
+										</button>
+										<button
+											onClick={() => setPaymentMethod('card')}
+											className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
+												paymentMethod === 'card'
+													? 'border-orange-500 bg-orange-50 text-orange-700'
+													: 'border-gray-200 hover:border-gray-300 bg-white text-gray-700'
+											}`}
+										>
+											<div className="text-2xl mb-1">💳</div>
+											<div className="text-sm font-medium">بطاقة</div>
+										</button>
+										<button
+											onClick={() => setPaymentMethod('transfer')}
+											className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
+												paymentMethod === 'transfer'
+													? 'border-orange-500 bg-orange-50 text-orange-700'
+													: 'border-gray-200 hover:border-gray-300 bg-white text-gray-700'
+											}`}
+										>
+											<div className="text-2xl mb-1">📱</div>
+											<div className="text-sm font-medium">تحويل</div>
+										</button>
+									</div>
+								</div>
+							)}
+
+							{/* ملخص الدفع */}
+							{Object.keys(selectedItems).some(id => selectedItems[id]) && (
+								<div className="mb-6 bg-orange-50 p-4 rounded-lg border border-orange-200">
+									<h4 className="font-medium text-orange-900 mb-2">ملخص الدفع</h4>
+									<div className="space-y-2">
+										{aggregateItemsWithPayments(
+											bill.orders || [],
+											bill.itemPayments || [],
+											bill.status,
+											bill.paid,
+											bill.total
+										)
+											.filter(item => {
+												const addonsKey = (item.addons || [])
+													.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+													.sort()
+													.join('|');
+												const itemKey = `${item.name}|${item.price}|${addonsKey}`;
+												return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
+											})
+											.map((item, index) => {
+												const addonsKey = (item.addons || [])
+													.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+													.sort()
+													.join('|');
+												const itemKey = `${item.name}|${item.price}|${addonsKey}`;
+												const quantity = itemQuantities[itemKey] || 0;
+												return (
+													<div key={index} className="flex flex-col text-sm mb-3 p-2 bg-orange-100 rounded border border-orange-200">
+														<span className="text-orange-800 font-medium">
+															{item.name}
+															{item.addons && item.addons.length > 0 && (
+																<span className="ml-2 text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded-full">
+																	إضافات
+																</span>
+															)}
+															{' '}× {formatDecimal(quantity)}
+														</span>
+														<span className="font-bold text-orange-900 mt-1">
+															المجموع: {formatCurrency(item.price * quantity)}
+														</span>
+													</div>
+												);
+											})}
+										<div className="border-t border-orange-200 pt-2 mt-2">
+											<div className="flex justify-between font-medium text-orange-900">
+												<span>المجموع:</span>
+												<span>
+													{formatCurrency(
+														aggregateItemsWithPayments(
+															bill.orders || [],
+															bill.itemPayments || [],
+															bill.status,
+															bill.paid,
+															bill.total
+														)
+															.filter(item => {
+																const addonsKey = (item.addons || [])
+																	.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+																	.sort()
+																	.join('|');
+																const itemKey = `${item.name}|${item.price}|${addonsKey}`;
+																return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
+															})
+															.reduce((sum, item) => {
+																const addonsKey = (item.addons || [])
+																	.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+																	.sort()
+																	.join('|');
+																const itemKey = `${item.name}|${item.price}|${addonsKey}`;
+																const quantity = itemQuantities[itemKey] || 0;
+																return sum + item.price * quantity;
+															}, 0)
+													)}
+												</span>
+											</div>
+										</div>
+									</div>
+								</div>
+							)}
+						</div>
+
+						<div className="p-6 border-t border-gray-200 flex justify-between">
+							<button
+								onClick={() => {
+									setShowPaymentModal(false);
+									setSelectedItems({});
+									setItemQuantities({});
+									setPaymentError(null);
+								}}
+								className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+							>
+								إلغاء
+							</button>
+
+							<button
+								onClick={handlePaymentSubmit}
+								disabled={
+									isProcessingPayment ||
+									!Object.keys(selectedItems).some(id => selectedItems[id] && (itemQuantities[id] || 0) > 0)
+								}
+								className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
+							>
+								{isProcessingPayment ? (
+									<>
+										<svg
+											className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline"
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+										>
+											<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+											<path
+												className="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+											></path>
+										</svg>
+										جاري الدفع...
+									</>
+								) : (
+									'تأكيد الدفع'
+								)}
+							</button>
 						</div>
 					</div>
 				</div>

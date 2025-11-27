@@ -455,10 +455,17 @@ const printAllSectionsInOnePage = (
             display: none !important;
           }
           .section-block {
-            page-break-after: always;
+            page-break-after: always !important;
+            -webkit-page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            -webkit-page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           .section-block:last-child {
-            page-break-after: auto;
+            page-break-after: auto !important;
+            -webkit-page-break-after: auto !important;
+            break-after: auto !important;
           }
         }
       </style>
