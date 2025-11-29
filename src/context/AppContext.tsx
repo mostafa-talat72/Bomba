@@ -503,11 +503,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isAuthenticated || isLoggingOut) return;
     
     try {
-      // جلب جميع الطلبات بدون حدود لضمان ظهور الطلبات المرتبطة بالفواتير القديمة
-      const response = await api.getOrders({ limit: 999999 });
+      // جلب جميع الطلبات
+      const response = await api.getOrders();
       if (response.success && response.data) {
-        console.log(`📦 Fetched ${response.data.length} orders (all orders without limits)`);
-        setOrders(response.data);
+        // فلترة: فقط الطلبات المرتبطة بفواتير غير مدفوعة بالكامل
+        const filteredOrders = response.data.filter((order: any) => {
+          // إذا لم يكن للطلب فاتورة، نعرضه
+          if (!order.bill) return true;
+          
+          // إذا كانت الفاتورة object، نتحقق من حالتها
+          if (typeof order.bill === 'object' && order.bill !== null) {
+            const billStatus = order.bill.status;
+            // نعرض فقط الطلبات المرتبطة بفواتير غير مدفوعة
+            return billStatus !== 'paid' && billStatus !== 'cancelled';
+          }
+          
+          // إذا كانت الفاتورة مجرد ID، نفترض أنها غير مدفوعة
+          return true;
+        });
+        
+        setOrders(filteredOrders);
       }
     } catch (error) {
       // Only log errors if still authenticated
@@ -531,10 +546,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isAuthenticated || isLoggingOut) return;
     
     try {
-      // جلب جميع الفواتير بدون أي حدود - لضمان ظهور جميع الفواتير القديمة والجديدة
-      const response = await api.getBills({ limit: 999999 });
+      // جلب جميع الفواتير بدون حد - لضمان ظهور الفواتير القديمة والطاولات المحجوزة
+      // تم إزالة limit: 100 لعرض جميع الفواتير بغض النظر عن التاريخ
+      const response = await api.getBills();
       if (response.success && response.data) {
-        console.log(`📊 Fetched ${response.data.length} bills (all bills without limits)`);
         setBills(response.data);
       }
     } catch (error) {
@@ -1481,9 +1496,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const createTable = async (tableData: any): Promise<any> => {
     try {
-      console.log('🔍 Frontend: Creating table with data:', tableData);
       const response = await api.createTable(tableData);
-      console.log('📥 Frontend: Response from API:', response);
       
       if (response.success && response.data) {
         await fetchTables();
@@ -1710,7 +1723,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // دالة تجبر تحديث notifications في الـcontext (مثلاً عند فتح نافذة الإشعارات)
   const forceRefreshNotifications = async (): Promise<void> => {
-    const notifs = await getNotifications({ limit: 100 });
+    const notifs = await getNotifications();
     setNotifications(notifs);
   };
 
@@ -1728,7 +1741,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.markNotificationAsRead(notificationId);
       if (response.success) {
         // تحديث notifications فوراً
-        const notifs = await getNotifications({ limit: 100 });
+        const notifs = await getNotifications();
         setNotifications(notifs);
       }
       return response.success;
@@ -1742,7 +1755,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.markAllNotificationsAsRead();
       if (response.success) {
         // تحديث notifications فوراً
-        const notifs = await getNotifications({ limit: 100 });
+        const notifs = await getNotifications();
         setNotifications(notifs);
       }
       return response.success;
@@ -1756,7 +1769,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.deleteNotification(notificationId);
       if (response.success) {
         // تحديث notifications فوراً بعد الحذف
-        const notifs = await getNotifications({ limit: 100 });
+        const notifs = await getNotifications();
         setNotifications(notifs);
       }
       return response.success;

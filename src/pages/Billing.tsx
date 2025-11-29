@@ -357,7 +357,6 @@ const Billing = () => {
 
     // Listen for payment-received event
     socket.on('payment-received', (data: any) => {
-      console.log('Billing: Received payment-received event', data);
       
       // Refresh bills list and tables when payment is received
       fetchBills();
@@ -371,7 +370,6 @@ const Billing = () => {
 
     // Listen for order-update event (affects bills)
     socket.on('order-update', (data: any) => {
-      console.log('Billing: Received order-update event', data);
       
       if (data.type === 'created' || data.type === 'updated' || data.type === 'deleted') {
         // Refresh bills when orders change
@@ -381,7 +379,6 @@ const Billing = () => {
 
     // Listen for table-status-update event
     socket.on('table-status-update', (data: { tableId: string; status: string }) => {
-      console.log('Billing: Received table-status-update event', data);
       
       // Refresh tables to update status
       fetchTables();
@@ -836,13 +833,6 @@ const Billing = () => {
         showNotification('لم يتم العثور على عناصر صالحة للدفع', 'error');
         return;
       }
-
-      console.log('Sending payment request:', {
-        billId: selectedBill.id || selectedBill._id,
-        items: itemsToPayForAPI,
-        paymentMethod: partialPaymentMethod
-      });
-
       const response = await api.payForItems(selectedBill.id || selectedBill._id, {
         items: itemsToPayForAPI,
         paymentMethod: partialPaymentMethod

@@ -212,7 +212,6 @@ const syncCategoryToInventory = async (categoryId) => {
         
         // Category name is now automatically available for inventory items
         // No need to update enum since we removed it
-        console.log(`✅ Category "${category.name}" is available for inventory items`);
     } catch (error) {
         console.error('Error syncing category:', error);
         // Don't throw error - this is not critical

@@ -163,11 +163,6 @@ const ConsumptionReport = () => {
   ], []);
 
   const processOrdersAndSessions = useCallback((ordersToProcess: Order[], sessionsToProcess: Session[]) => {
-    console.log('📦 processOrdersAndSessions called with:', {
-      orders: ordersToProcess.length,
-      sessions: sessionsToProcess.length
-    });
-    
     const itemsBySection: Record<string, ConsumptionItem[]> = {};
 
     // Initialize all menu sections with empty arrays
@@ -230,13 +225,7 @@ const ConsumptionReport = () => {
       });
     });
 
-    // Process PlayStation sessions
-    console.log('🎮 Processing PlayStation sessions:', {
-      total: sessionsToProcess.length,
-      playstation: sessionsToProcess.filter(s => s.deviceType === 'playstation').length,
-      completed: sessionsToProcess.filter(s => s.status === 'completed').length
-    });
-    
+   
     sessionsToProcess.forEach((session) => {
       // Only process PlayStation sessions
       if (session.deviceType !== 'playstation') return;
@@ -257,14 +246,6 @@ const ConsumptionReport = () => {
       const endTime = new Date(session.endTime).getTime();
       const durationMs = endTime - startTime;
       const hours = durationMs / (1000 * 60 * 60); // Convert to hours
-
-      console.log('🎮 Adding PlayStation session:', { 
-        deviceName, 
-        sessionCost, 
-        hours: hours.toFixed(2),
-        startTime: new Date(session.startTime).toLocaleString('ar-EG'),
-        endTime: new Date(session.endTime).toLocaleString('ar-EG')
-      });
 
       // Group by device name - sum hours and costs for each device
       const existingItem = itemsBySection['البلايستيشن'].find(i => i.name === deviceName);
@@ -296,12 +277,6 @@ const ConsumptionReport = () => {
       }
     });
 
-    console.log('📦 Final itemsBySection:', {
-      sections: Object.keys(itemsBySection),
-      playstation: itemsBySection['البلايستيشن']?.length || 0,
-      total: Object.values(itemsBySection).flat().length
-    });
-
     return itemsBySection;
   }, [menuItems, menuSections]);
 
@@ -314,7 +289,6 @@ const ConsumptionReport = () => {
 
       // Fetch basic data (menu items, sections)
       if (!hasLoadedInitialData.current || forceRefresh) {
-        console.log('📊 Fetching data...');
         
         await Promise.all([
           menuItems.length === 0 ? fetchMenuItems() : Promise.resolve(),
@@ -325,7 +299,6 @@ const ConsumptionReport = () => {
       }
 
       // Fetch orders and sessions directly from API
-      console.log('📦 Fetching orders and sessions...');
       const [ordersResponse, sessionsResponse] = await Promise.all([
         api.getOrders({ limit: 1000 }), // Fetch all orders
         api.getSessions({ status: 'completed' }) // Fetch completed sessions
@@ -335,12 +308,7 @@ const ConsumptionReport = () => {
         const allOrders = ordersResponse.data;
         const allCompletedSessions = sessionsResponse.data;
         
-        console.log('📦 Fetched data:', {
-          orders: allOrders.length,
-          sessions: allCompletedSessions.length,
-          playstation: allCompletedSessions.filter(s => s.deviceType === 'playstation').length
-        });
-
+        
         // Filter orders by date using createdAt
         const filteredOrders = allOrders.filter((order) => {
           if (!order.createdAt) return false;
@@ -368,12 +336,7 @@ const ConsumptionReport = () => {
           );
         });
         
-        console.log('📦 Filtered data:', {
-          orders: filteredOrders.length,
-          sessions: filteredSessions.length,
-          dateRange: [dateRange[0].format(), dateRange[1].format()]
-        });
-
+      
         const processedData = processOrdersAndSessions(filteredOrders, filteredSessions);
         setConsumptionData(processedData);
       } else {
@@ -411,13 +374,11 @@ const ConsumptionReport = () => {
 
       // Create separate pages for each category
       const categories = Object.entries(consumptionData).filter(([_, items]) => items.length > 0);
-      console.log('📄 Creating pages for categories:', categories.map(([cat]) => cat));
       
       const categoryPages = categories
         .map(([category, items], index) => {
           const categoryTotal = calculateTotal(items);
           const isLastPage = index === categories.length - 1;
-          console.log(`📄 Page ${index + 1}: ${category} with ${items.length} items, isLast: ${isLastPage}`);
           
           return `
             <div class="page">
@@ -730,24 +691,17 @@ const ConsumptionReport = () => {
         iframeDoc.write(printContent);
         iframeDoc.close();
         
-        console.log('🖨️ Iframe created, waiting for content to load...');
         
         // Wait for content and fonts to load then print
         iframe.contentWindow?.addEventListener('load', () => {
-          console.log('🖨️ Iframe loaded');
           
           setTimeout(() => {
             const pages = iframeDoc.querySelectorAll('.page');
-            console.log(`🖨️ Found ${pages.length} pages in iframe`);
             
-            // Ensure all pages are visible
-            pages.forEach((page, idx) => {
-              console.log(`🖨️ Page ${idx + 1} height: ${(page as HTMLElement).offsetHeight}px`);
-            });
+            
             
             // Give extra time for rendering
             setTimeout(() => {
-              console.log('🖨️ Triggering print dialog...');
               iframe.contentWindow?.focus();
               iframe.contentWindow?.print();
               

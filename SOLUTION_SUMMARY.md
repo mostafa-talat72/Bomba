@@ -217,11 +217,7 @@ node server/scripts/checkOrderBillLinking.js
    - تحقق من أن `bills` يحتوي على بيانات
 
 2. **تحقق من Socket.IO:**
-   ```javascript
-   // في console المتصفح:
-   console.log('Bills:', bills);
-   console.log('Table Statuses:', tableStatuses);
-   ```
+
 
 3. **أعد تشغيل الـ server:**
    ```bash

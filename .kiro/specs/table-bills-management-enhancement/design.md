@@ -654,3 +654,15 @@ try {
 
 **Validates: Requirements 7.2**
 
+### Property 19: Cafe page shows only unpaid bill orders
+
+*For any* table in Cafe page, when displaying orders, only orders linked to unpaid bills (or orders with no bill) should be shown.
+
+**Validates: Requirements 9.1, 9.2, 9.3**
+
+### Property 20: Cafe page hides paid bill orders
+
+*For any* order linked to a bill with status 'paid', that order should not appear in the table's order list in Cafe page.
+
+**Validates: Requirements 9.2, 9.4**
+

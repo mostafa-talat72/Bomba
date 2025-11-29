@@ -155,8 +155,7 @@ const response = await fetch('/api/performance/dashboard?timeRange=3600000', {
 });
 
 const { data } = await response.json();
-console.log('Health Status:', data.insights.healthStatus);
-console.log('Recommendations:', data.insights.recommendations);
+
 ```
 
 ### View Logs

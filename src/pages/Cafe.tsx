@@ -28,18 +28,18 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
     <button
       onClick={() => onClick(table)}
       className={`
-        p-4 rounded-lg border-2 transition-all duration-200
+        w-full min-h-[100px] p-4 rounded-lg border-2 transition-all duration-200 flex flex-col items-center justify-center
         ${isSelected 
-          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20' 
+          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 shadow-lg' 
           : isOccupied
-          ? 'border-red-300 bg-red-50 dark:bg-red-900/20 hover:border-red-400'
-          : 'border-green-300 bg-green-50 dark:bg-green-900/20 hover:border-green-400'
+          ? 'border-red-300 bg-red-50 dark:bg-red-900/20 hover:border-red-400 hover:shadow-md'
+          : 'border-green-300 bg-green-50 dark:bg-green-900/20 hover:border-green-400 hover:shadow-md'
         }
       `}
     >
-      <div className="text-center">
+      <div className="text-center w-full flex flex-col items-center justify-center gap-2">
         <div className={`
-          text-2xl font-bold mb-1
+          text-2xl sm:text-3xl font-bold break-words
           ${isSelected 
             ? 'text-orange-600 dark:text-orange-400' 
             : isOccupied
@@ -50,7 +50,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
           {table.number}
         </div>
         <div className={`
-          text-xs
+          text-sm font-medium
           ${isOccupied ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}
         `}>
           {isOccupied ? 'محجوزة' : 'فاضية'}
@@ -126,7 +126,7 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
         </div>
       </div>
       <div className="text-xs text-gray-500 dark:text-gray-400">
-        {order.items.length} عنصر
+        {order.items?.length || 0} عنصر
       </div>
     </div>
   );
@@ -166,6 +166,7 @@ const Cafe: React.FC = () => {
 
   // States
   const [loading, setLoading] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false); // State منفصل لحفظ الطلبات
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [tableOrders, setTableOrders] = useState<Order[]>([]);
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -372,20 +373,30 @@ const Cafe: React.FC = () => {
   const loadInitialData = async () => {
     setLoading(true);
     try {
+      // تحميل البيانات الأساسية أولاً (الأهم)
       await Promise.all([
         fetchTableSections(),
         fetchTables(),
         fetchAvailableMenuItems(),
         fetchMenuSections(),
         fetchMenuCategories(),
-        fetchBills(), // Fetch bills on initial load
-        fetchOrders(), // Fetch orders on initial load
       ]);
-      // Fetch table statuses after loading tables and bills - INSTANT!
-      fetchAllTableStatuses();
+      
+      // إخفاء شاشة التحميل فوراً
+      setLoading(false);
+      
+      // تحميل الفواتير والطلبات في الخلفية (غير متزامن)
+      Promise.all([
+        fetchBills(),
+        fetchOrders(),
+      ]).then(() => {
+        // Fetch table statuses after loading tables and bills
+        fetchAllTableStatuses();
+      }).catch(error => {
+        // Ignore errors in background loading
+      });
     } catch (error) {
       showNotification('خطأ في تحميل البيانات', 'error');
-    } finally {
       setLoading(false);
     }
   };
@@ -545,6 +556,11 @@ const Cafe: React.FC = () => {
   // Handle edit order
   const handleEditOrder = (order: Order) => {
     setSelectedOrder(order);
+    // Check if order.items exists and is an array
+    if (!order.items || !Array.isArray(order.items)) {
+      showNotification('خطأ: الطلب لا يحتوي على عناصر', 'error');
+      return;
+    }
     const items: LocalOrderItem[] = order.items.map(item => ({
       menuItem: (item as any).menuItem?._id || (item as any).menuItem || '',
       name: item.name,
@@ -680,23 +696,25 @@ const Cafe: React.FC = () => {
       showNotification('جاري حفظ الطلب...', 'info');
       
       // Create order in background
-      setLoading(true);
+      setSavingOrder(true);
       const order = await createOrder(orderData);
       
       if (order) {
         showNotification('تم إضافة الطلب بنجاح', 'success');
         
-        // Print order immediately
-        const menuItemsMap = new Map();
-        menuItems.forEach(item => {
-          menuItemsMap.set(item.id, item);
-          menuItemsMap.set(item._id, item);
-          menuItemsMap.set(String(item.id), item);
-          menuItemsMap.set(String(item._id), item);
-        });
-        
-        const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
-        printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
+        // Print order in background (non-blocking)
+        setTimeout(() => {
+          const menuItemsMap = new Map();
+          menuItems.forEach(item => {
+            menuItemsMap.set(item.id, item);
+            menuItemsMap.set(item._id, item);
+            menuItemsMap.set(String(item.id), item);
+            menuItemsMap.set(String(item._id), item);
+          });
+          
+          const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
+          printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
+        }, 0);
         
         // Update table status immediately (optimistic update)
         if (selectedTable) {
@@ -712,9 +730,11 @@ const Cafe: React.FC = () => {
           setTableOrders(prev => [...prev, order]);
         }
         
-        // Refresh data in background (non-blocking)
-        fetchOrders();
-        fetchBills();
+        // Refresh data in background (non-blocking) - لا ننتظرها
+        setTimeout(() => {
+          fetchOrders();
+          fetchBills();
+        }, 100);
       } else {
         // If order creation failed, revert optimistic updates
         setTableStatuses(previousTableStatuses);
@@ -735,7 +755,7 @@ const Cafe: React.FC = () => {
         showNotification('خطأ في إضافة الطلب', 'error');
       }
     } finally {
-      setLoading(false);
+      setSavingOrder(false);
     }
   };
 
@@ -769,23 +789,25 @@ const Cafe: React.FC = () => {
       showNotification('جاري تحديث الطلب...', 'info');
       
       // Update order in background
-      setLoading(true);
+      setSavingOrder(true);
       const updatedOrder = await updateOrder(selectedOrder.id, orderData);
       
       if (updatedOrder) {
         showNotification('تم تحديث الطلب بنجاح', 'success');
         
-        // Print updated order immediately
-        const menuItemsMap = new Map();
-        menuItems.forEach(item => {
-          menuItemsMap.set(item.id, item);
-          menuItemsMap.set(item._id, item);
-          menuItemsMap.set(String(item.id), item);
-          menuItemsMap.set(String(item._id), item);
-        });
-        
-        const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
-        printOrderBySections(updatedOrder, menuSections, menuItemsMap, establishmentName);
+        // Print updated order in background (non-blocking)
+        setTimeout(() => {
+          const menuItemsMap = new Map();
+          menuItems.forEach(item => {
+            menuItemsMap.set(item.id, item);
+            menuItemsMap.set(item._id, item);
+            menuItemsMap.set(String(item.id), item);
+            menuItemsMap.set(String(item._id), item);
+          });
+          
+          const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
+          printOrderBySections(updatedOrder, menuSections, menuItemsMap, establishmentName);
+        }, 0);
         
         // Update table orders immediately (optimistic)
         if (selectedTable) {
@@ -794,9 +816,11 @@ const Cafe: React.FC = () => {
           );
         }
         
-        // Refresh data in background (non-blocking)
-        fetchOrders();
-        fetchBills();
+        // Refresh data in background (non-blocking) - لا ننتظرها
+        setTimeout(() => {
+          fetchOrders();
+          fetchBills();
+        }, 100);
       } else {
         // If order update failed, revert optimistic updates
         setTableStatuses(previousTableStatuses);
@@ -817,12 +841,17 @@ const Cafe: React.FC = () => {
         showNotification('خطأ في تحديث الطلب', 'error');
       }
     } finally {
-      setLoading(false);
+      setSavingOrder(false);
     }
   };
 
   // Print order
   const handlePrintOrder = (order: Order) => {
+    // Check if order.items exists and is an array
+    if (!order.items || !Array.isArray(order.items)) {
+      showNotification('خطأ: الطلب لا يحتوي على عناصر', 'error');
+      return;
+    }
     const menuItemsMap = new Map();
     menuItems.forEach(item => {
       menuItemsMap.set(item.id, item);
@@ -964,61 +993,65 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Table Sections and Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-400px)]">
         {/* Left: Table Sections */}
-        <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">الأقسام والطاولات</h2>
+        <div className="lg:col-span-2 h-full">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-full flex flex-col">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">الأقسام والطاولات</h2>
+            </div>
             
-            {loading && tableSections.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">جاري التحميل...</div>
-            ) : tableSections.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">لا توجد أقسام</div>
-            ) : (
-              <div className="space-y-6">
-                {activeTableSections.map(section => {
-                    const sectionTables = getTablesBySection[section.id] || [];
-                    if (sectionTables.length === 0) return null;
+            <div className="flex-1 overflow-y-auto p-6">
+              {loading && tableSections.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">جاري التحميل...</div>
+              ) : tableSections.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">لا توجد أقسام</div>
+              ) : (
+                <div className="space-y-6">
+                  {activeTableSections.map(section => {
+                      const sectionTables = getTablesBySection[section.id] || [];
+                      if (sectionTables.length === 0) return null;
 
-                    return (
-                      <div key={section.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                          {section.name}
-                        </h3>
-                        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                          {sectionTables.map(table => {
-                            const status = tableStatuses[table.number];
-                            const isOccupied = status?.hasUnpaid || false;
-                            const isSelected = selectedTable?.id === table.id;
+                      return (
+                        <div key={section.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                            {section.name}
+                          </h3>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                            {sectionTables.map(table => {
+                              const status = tableStatuses[table.number];
+                              const isOccupied = status?.hasUnpaid || false;
+                              const isSelected = selectedTable?.id === table.id;
 
-                            return (
-                              <TableButton
-                                key={table.id}
-                                table={table}
-                                isSelected={isSelected}
-                                isOccupied={isOccupied}
-                                onClick={handleTableClick}
-                              />
-                            );
-                          })}
+                              return (
+                                <TableButton
+                                  key={table.id}
+                                  table={table}
+                                  isSelected={isSelected}
+                                  isOccupied={isOccupied}
+                                  onClick={handleTableClick}
+                                />
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
+                      );
+                    })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Right: Table Orders */}
-        <div className="lg:col-span-1">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                {selectedTable ? `طاولة ${selectedTable.number}` : 'اختر طاولة'}
-              </h2>
-              {selectedTable && (
-                <div className="flex items-center gap-2">
+        <div className="lg:col-span-1 h-full">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-full flex flex-col">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  {selectedTable ? `طاولة ${selectedTable.number}` : 'اختر طاولة'}
+                </h2>
+                {selectedTable && (
                   <button
                     onClick={handleAddOrder}
                     className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center text-sm transition-colors duration-200"
@@ -1026,31 +1059,33 @@ const Cafe: React.FC = () => {
                     <Plus className="h-4 w-4 ml-1" />
                     طلب جديد
                   </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {selectedTable ? (
+                <div className="space-y-3">
+                  {filteredTableOrders.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">لا توجد طلبات</div>
+                  ) : (
+                    filteredTableOrders.map(order => (
+                      <OrderItem
+                        key={order.id}
+                        order={order}
+                        onPrint={handlePrintOrder}
+                        onEdit={handleEditOrder}
+                        onDelete={handleDeleteOrder}
+                      />
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  اختر طاولة لعرض الطلبات
                 </div>
               )}
             </div>
-
-            {selectedTable ? (
-              <div className="space-y-3">
-                {filteredTableOrders.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">لا توجد طلبات</div>
-                ) : (
-                  filteredTableOrders.map(order => (
-                    <OrderItem
-                      key={order.id}
-                      order={order}
-                      onPrint={handlePrintOrder}
-                      onEdit={handleEditOrder}
-                      onDelete={handleDeleteOrder}
-                    />
-                  ))
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                اختر طاولة لعرض الطلبات
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1083,7 +1118,7 @@ const Cafe: React.FC = () => {
             setCurrentOrderItems([]);
             setOrderNotes('');
           }}
-          loading={loading}
+          loading={savingOrder}
           isEdit={false}
         />
       )}
@@ -1117,7 +1152,7 @@ const Cafe: React.FC = () => {
             setCurrentOrderItems([]);
             setOrderNotes('');
           }}
-          loading={loading}
+          loading={savingOrder}
           isEdit={true}
         />
       )}

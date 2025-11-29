@@ -61,8 +61,8 @@ const PlayStation: React.FC = () => {
   // تحميل الأجهزة - محسّن للسرعة
   const loadDevices = async () => {
     try {
-      // تحميل أجهزة البلايستيشن فقط من الـ API
-      const response = await api.getDevices({ type: 'playstation', limit: 100 });
+      // تحميل أجهزة البلايستيشن فقط من الـ API (بدون حد)
+      const response = await api.getDevices({ type: 'playstation' });
       if (response.success && response.data) {
         setDevices(response.data);
       }
@@ -109,17 +109,17 @@ const PlayStation: React.FC = () => {
           fetchSessions(),
         ]);
 
-        // تحميل باقي البيانات قبل إخفاء شاشة التحميل
-        await Promise.all([
+        // إخفاء شاشة التحميل فوراً بعد تحميل البيانات الأساسية
+        setIsInitialLoading(false);
+
+        // تحميل باقي البيانات في الخلفية (غير متزامن)
+        Promise.all([
           fetchBills(),
           fetchTables(),
           fetchTableSections()
         ]).catch(error => {
           // Ignore errors in secondary data loading
         });
-
-        // إخفاء شاشة التحميل بعد تحميل جميع البيانات
-        setIsInitialLoading(false);
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'حدث خطأ في تحميل البيانات';

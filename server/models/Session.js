@@ -149,7 +149,6 @@ function getPlayStationHourlyRate(controllers) {
 
 // تعديل دالة حساب التكلفة لتستخدم الأسعار من بيانات الجهاز
 sessionSchema.methods.calculateCost = async function () {
-    console.log('🔍 calculateCost STARTED for session:', this._id);
     
     // جلب بيانات الجهاز من قاعدة البيانات باستخدام deviceId
     const device = await Device.findById(this.deviceId);
@@ -158,12 +157,7 @@ sessionSchema.methods.calculateCost = async function () {
         throw new Error("لم يتم العثور على بيانات الجهاز لحساب التكلفة");
     }
     
-    console.log('✅ Device found:', {
-        deviceId: device._id,
-        type: device.type,
-        playstationRates: device.playstationRates,
-        hourlyRate: device.hourlyRate
-    });
+   
     const getRate = (controllers) => {
         if (device.type === "playstation" && device.playstationRates) {
             return device.playstationRates.get(String(controllers)) || 0;
@@ -255,22 +249,6 @@ sessionSchema.methods.calculateCost = async function () {
     this.markModified('totalCost');
     this.markModified('finalCost');
     
-    // Log for debugging
-    console.log('🔍 calculateCost result:', {
-        sessionId: this._id,
-        rawTotal: total,
-        totalCost: this.totalCost,
-        discount: this.discount,
-        finalCost: this.finalCost,
-        deviceId: this.deviceId,
-        deviceType: this.deviceType,
-        controllers: this.controllers,
-        startTime: this.startTime,
-        endTime: this.endTime,
-        isModified_totalCost: this.isModified('totalCost'),
-        isModified_finalCost: this.isModified('finalCost')
-    });
-    
     return this.finalCost;
 };
 
@@ -335,14 +313,7 @@ sessionSchema.methods.endSession = async function () {
     // Calculate final cost
     await this.calculateCost();
     
-    // Log for debugging
-    console.log('🔍 endSession - After calculateCost:', {
-        sessionId: this._id,
-        totalCost: this.totalCost,
-        finalCost: this.finalCost,
-        discount: this.discount
-    });
-
+    
     return this;
 };
 

@@ -120,10 +120,8 @@ export const getBills = async (req, res) => {
         
         query.organization = req.user.organization;
 
-        // إزالة الحد الأقصى للسماح بجلب جميع الفواتير
-        // هذا ضروري لضمان ظهور الفواتير القديمة غير المدفوعة والطاولات المحجوزة
-        const effectiveLimit = parseInt(limit) || 999999; // بدون حد أقصى
-        const effectivePage = parseInt(page) || 1;
+        // إزالة الحد - جلب جميع الفواتير بدون pagination
+        // تم إزالة effectiveLimit لعرض جميع الفواتير القديمة والجديدة
 
         const bills = await Bill.find({
             organization: req.user.organization,
@@ -136,41 +134,21 @@ export const getBills = async (req, res) => {
                 select: "number name section", // Populate table with number, name, and section
             })
             .populate({
+                path: "table",
+                select: "number name", // فقط الحقول الأساسية
+            })
+            .populate({
                 path: "orders",
-                select: "orderNumber status items total", // Limit order fields
-                options: { limit: 10 }, // Limit populated orders to 10
-                populate: {
-                    path: "items.menuItem",
-                    select: "name arabicName", // Only essential menu item fields
-                },
+                select: "orderNumber status total", // حقول أساسية فقط بدون items
+                options: { limit: 5 }, // تقليل العدد
             })
             .populate({
                 path: "sessions",
-                select: "deviceName deviceType status finalCost duration table", // Limit session fields + table
-                options: { limit: 5 }, // Limit populated sessions to 5
-                populate: [
-                    {
-                        path: "createdBy",
-                        select: "name",
-                    },
-                    {
-                        path: "table",
-                        select: "number name",
-                    },
-                ],
+                select: "deviceName deviceType status finalCost", // حقول أساسية فقط
+                options: { limit: 3 }, // تقليل العدد
             })
-            .populate("createdBy", "name")
-            .populate("updatedBy", "name")
-            .populate("payments.user", "name")
-            .populate("partialPayments.items.paidBy", "name")
-            // NEW: Populate partial payment fields
-            .populate("itemPayments.paidBy", "name")
-            .populate("sessionPayments.payments.paidBy", "name")
-            .populate("paymentHistory.paidBy", "name")
             .sort({ createdAt: -1 })
-            .limit(effectiveLimit)
-            .skip((effectivePage - 1) * effectiveLimit)
-            .lean(); // Convert to plain JS objects for better performance
+            .lean(); // Convert to plain JS objects for better performance - جلب جميع الفواتير بدون حد
 
         // Update bills that have orders but zero total
         // Note: Since we're using .lean(), we need to update the database directly
@@ -191,36 +169,26 @@ export const getBills = async (req, res) => {
 
         const queryExecutionTime = Date.now() - queryStartTime;
 
-        // Log query performance
+        // Log query performance - بدون pagination
         Logger.queryPerformance('/api/bills', queryExecutionTime, bills.length, {
             filters: { status, table, tableNumber, customerName },
-            page: effectivePage,
-            limit: effectiveLimit,
             totalRecords: total
         });
 
-        // Record query metrics
+        // Record query metrics - بدون pagination
         performanceMetrics.recordQuery({
             endpoint: '/api/bills',
             executionTime: queryExecutionTime,
             recordCount: bills.length,
             filters: { status, table, tableNumber, customerName },
-            page: effectivePage,
-            limit: effectiveLimit,
         });
 
-        // Enhanced pagination metadata
+        // Response بدون pagination metadata
         res.json({
             success: true,
             count: bills.length,
             total,
-            data: bills,
-            pagination: {
-                page: effectivePage,
-                limit: effectiveLimit,
-                hasMore: (effectivePage * effectiveLimit) < total,
-                totalPages: Math.ceil(total / effectiveLimit)
-            }
+            data: bills
         });
     } catch (error) {
         Logger.error("خطأ في جلب الفواتير", {
@@ -879,46 +847,41 @@ export const addPayment = async (req, res) => {
             Logger.info(`✓ [addPayment] QR code already exists for bill: ${bill.billNumber}`);
         }
 
+        // Populate only essential fields for response
         await bill.populate([
-            { path: "table", select: "number name section" },
-            { path: "orders", select: "orderNumber items status total" },
-            { path: "sessions", select: "deviceName deviceNumber status totalCost" },
-            { path: "createdBy", select: "name" },
-            { path: "updatedBy", select: "name" },
-            { path: "payments.user", select: "name" }
+            { path: "table", select: "number name" }
         ]);
 
-        // Update table status based on all unpaid bills (Requirement 2.4)
+        // Update table status in background (non-blocking)
         if (bill.table) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+            updateTableStatusIfNeeded(bill.table, req.user.organization, req.io).catch(err => {
+                Logger.error("Error updating table status:", err);
+            });
         }
 
-        // Notify via Socket.IO
+        // Notify via Socket.IO (non-blocking)
         if (req.io) {
-            req.io.notifyBillUpdate("payment-received", bill);
+            setImmediate(() => {
+                req.io.notifyBillUpdate("payment-received", bill);
+            });
         }
 
-        // Create notification for payment
-        try {
+        // Create notification in background (non-blocking)
+        setImmediate(() => {
             if (bill.status === "paid") {
-                await NotificationService.createBillingNotification(
+                NotificationService.createBillingNotification(
                     "paid",
                     bill,
                     req.user._id
-                );
+                ).catch(err => Logger.error("Failed to create payment notification:", err));
             } else if (bill.paid > 0) {
-                await NotificationService.createBillingNotification(
+                NotificationService.createBillingNotification(
                     "partial_payment",
                     bill,
                     req.user._id
-                );
+                ).catch(err => Logger.error("Failed to create payment notification:", err));
             }
-        } catch (notificationError) {
-            Logger.error(
-                "Failed to create payment notification:",
-                notificationError
-            );
-        }
+        });
 
         res.json({
             success: true,

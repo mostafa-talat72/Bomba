@@ -68,10 +68,10 @@ export const printBill = (bill: Bill, organizationName?: string) => {
       
       return `
         <tr>
-          <td class="item-name" style="width: 50%;">${item.name}${addonsText}</td>
-          <td class="item-quantity" style="width: 16.67%;">${formatQuantity(item.totalQuantity)}</td>
-          <td class="item-paid" style="width: 16.67%;">${formatNumber(paidAmount)}</td>
-          <td class="item-total" style="width: 16.66%;">${formatNumber(item.price * item.totalQuantity)}</td>
+          <td class="item-name">${item.name}${addonsText}</td>
+          <td class="item-quantity">${formatQuantity(item.totalQuantity)}</td>
+          <td class="item-paid">${formatNumber(paidAmount)}</td>
+          <td class="item-total">${formatNumber(item.price * item.totalQuantity)}</td>
         </tr>
       `;
     }).join('');
@@ -106,9 +106,9 @@ export const printBill = (bill: Bill, organizationName?: string) => {
       
       return `
         <tr>
-          <td class="item-name" style="width: 50%;">${session.deviceName || session.deviceNumber || 'غير محدد'}</td>
-          <td class="item-quantity" style="width: 25%;">${formatQuantity(parseFloat(duration.toFixed(1)))} س</td>
-          <td class="item-total" style="width: 25%;">${formatNumber(finalCost)}</td>
+          <td class="item-name">${session.deviceName || session.deviceNumber || 'غير محدد'}</td>
+          <td class="item-quantity">${formatQuantity(parseFloat(duration.toFixed(1)))} س</td>
+          <td class="item-total">${formatNumber(finalCost)}</td>
         </tr>
       `;
     }).join('');
@@ -148,7 +148,7 @@ export const printBill = (bill: Bill, organizationName?: string) => {
         }
         body { 
           margin: 0; 
-          padding: 8px 10px 8px 6px; 
+          padding: 8px 8px; 
           font-size: 11px; 
           color: #000; 
           font-weight: 600;
@@ -306,7 +306,7 @@ export const printBill = (bill: Bill, organizationName?: string) => {
           }
           body { 
             margin: 0; 
-            padding: 4px 8px 4px 4px; 
+            padding: 4px 6px; 
             font-weight: 600;
             width: 80mm;
           }

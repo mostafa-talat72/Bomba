@@ -225,12 +225,10 @@ export const createTable = async (req, res) => {
             createdBy: req.user.id,
         };
 
-        console.log('🔍 Creating table with data:', tableData);
 
         const table = new Table(tableData);
         await table.save();
         
-        console.log('✅ Table saved successfully:', table);
 
         await table.populate("section", "name");
         await table.populate("createdBy", "name");

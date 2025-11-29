@@ -11,7 +11,6 @@ dotenv.config({ path: join(__dirname, '../.env') });
 async function addOrganizationToBills() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ Connected to MongoDB\n');
 
     const db = mongoose.connection.db;
     const billsCollection = db.collection('bills');
@@ -24,28 +23,23 @@ async function addOrganizationToBills() {
       '6922483a4611677dc2823b34'  // 33 جنيه
     ];
 
-    console.log('🔄 إضافة organization للفواتير...\n');
 
     // Get organization from an existing order
     const sampleOrder = await ordersCollection.findOne({ organization: { $exists: true } });
     
     if (!sampleOrder || !sampleOrder.organization) {
-      console.log('❌ لا يمكن العثور على organization!');
       return;
     }
 
     const organizationId = sampleOrder.organization;
-    console.log(`📊 Organization ID: ${organizationId}\n`);
 
     for (const billId of billIds) {
       const bill = await billsCollection.findOne({ _id: new mongoose.Types.ObjectId(billId) });
       
       if (!bill) {
-        console.log(`❌ الفاتورة ${billId} غير موجودة!\n`);
         continue;
       }
 
-      console.log(`📋 ${bill.billNumber}:`);
 
       // Get createdBy from one of the orders
       let createdBy = null;
@@ -76,19 +70,13 @@ async function addOrganizationToBills() {
         { $set: updateData }
       );
 
-      console.log(`   ✅ تم إضافة organization${createdBy ? ' و createdBy' : ''}\n`);
     }
-
-    console.log('='  .repeat(80));
-    console.log('✅ تم إضافة organization لجميع الفواتير!');
-    console.log('='.repeat(80));
 
   } catch (error) {
     console.error('❌ Error:', error);
     console.error(error.stack);
   } finally {
     await mongoose.disconnect();
-    console.log('\n✅ Disconnected from MongoDB');
   }
 }
 

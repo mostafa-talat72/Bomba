@@ -66,56 +66,41 @@ export const getOrders = async (req, res) => {
             }
         }
 
-        // إزالة الحد الأقصى للسماح بجلب جميع الطلبات
-        // هذا ضروري لضمان ظهور جميع الطلبات المرتبطة بالفواتير القديمة
-        const effectiveLimit = parseInt(limit) || 999999; // بدون حد أقصى
-        const effectivePage = parseInt(page) || 1;
+        // إزالة الحد - جلب جميع الطلبات بدون pagination
+        // تم إزالة effectiveLimit لعرض جميع الطلبات القديمة والجديدة
 
-        // Selective field projection - only required fields
+        // Selective field projection - only essential fields + bill status + items
         const orders = await Order.find(query)
-            .select('orderNumber customerName table status items total createdAt')
-            .populate('createdBy', 'name')
-            .populate('bill', 'billNumber status')
+            .select('orderNumber table status total createdAt bill items')
             .populate('table', 'number name')
+            .populate('bill', 'status') // إضافة populate للفاتورة لمعرفة حالتها
             .sort({ createdAt: -1 })
-            .limit(effectiveLimit)
-            .skip((effectivePage - 1) * effectiveLimit)
-            .lean(); // Convert to plain JS objects for better performance
+            .lean(); // Convert to plain JS objects for better performance - جلب جميع الطلبات بدون حد
 
         const total = await Order.countDocuments(query);
 
         const queryExecutionTime = Date.now() - queryStartTime;
 
-        // Log query performance
+        // Log query performance - بدون pagination
         Logger.queryPerformance('/api/orders', queryExecutionTime, orders.length, {
             filters: { status, table, startDate, endDate },
-            page: effectivePage,
-            limit: effectiveLimit,
             totalRecords: total
         });
 
-        // Record query metrics
+        // Record query metrics - بدون pagination
         performanceMetrics.recordQuery({
             endpoint: '/api/orders',
             executionTime: queryExecutionTime,
             recordCount: orders.length,
             filters: { status, table, startDate, endDate },
-            page: effectivePage,
-            limit: effectiveLimit,
         });
 
-        // Enhanced pagination metadata
+        // Response بدون pagination metadata
         res.json({
             success: true,
             count: orders.length,
             total,
-            data: orders,
-            pagination: {
-                page: effectivePage,
-                limit: effectiveLimit,
-                hasMore: (effectivePage * effectiveLimit) < total,
-                totalPages: Math.ceil(total / effectiveLimit)
-            }
+            data: orders
         });
     } catch (error) {
         Logger.error("خطأ في جلب الطلبات", {
@@ -475,77 +460,70 @@ export const createOrder = async (req, res) => {
 
         await order.save();
 
-        // Populate the order with related data for response
+        // Populate only essential fields for response
         const populatedOrder = await Order.findById(order._id)
-            .populate("createdBy", "name")
-            .populate("bill")
             .populate("table", "number name")
-            .populate("organization", "name")
-            .populate({
-                path: "items.menuItem",
-                populate: {
-                    path: "category",
-                    populate: {
-                        path: "section"
-                    }
-                }
-            });
+            .lean();
 
-        // Add order to bill if bill exists
-        if (billToUse) {
-            try {
-                const billDoc = await Bill.findById(billToUse);
-                if (billDoc) {
-                    // التأكد من أن الطلب غير موجود بالفعل في الفاتورة
-                    if (!billDoc.orders.includes(order._id)) {
-                        billDoc.orders.push(order._id);
-                    }
-                    await billDoc.save();
-
-                    // Recalculate bill totals
-                    await billDoc.calculateSubtotal();
-                }
-            } catch (error) {
-                Logger.error('خطأ في إضافة الطلب للفاتورة:', error);
-            }
-        }
-
-        // Create notification for new order
-        try {
-            await NotificationService.createOrderNotification(
-                "created",
-                populatedOrder,
-                req.user._id
-            );
-        } catch (notificationError) {
-            //
-        }
-
-        // Emit Socket.IO event for order creation
-        if (req.io) {
-            try {
-                req.io.notifyOrderUpdate("created", populatedOrder);
-            } catch (socketError) {
-                Logger.error('فشل إرسال حدث Socket.IO', socketError);
-            }
-        }
-
-        // Emit table status update event if table is linked
-        if (table && req.io) {
-            try {
-                req.io.emit('table-status-update', { 
-                    tableId: table, 
-                    status: 'occupied' 
-                });
-            } catch (socketError) {
-                Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
-            }
-        }
-
+        // إرسال الاستجابة فوراً قبل العمليات الإضافية
         res.status(201).json({
             success: true,
             message: "تم إنشاء الطلب بنجاح",
             data: populatedOrder,
+        });
+
+        // تنفيذ العمليات الإضافية في الخلفية (non-blocking)
+        setImmediate(async () => {
+            // Add order to bill if bill exists
+            if (billToUse) {
+                try {
+                    const billDoc = await Bill.findById(billToUse);
+                    if (billDoc) {
+                        // التأكد من أن الطلب غير موجود بالفعل في الفاتورة
+                        if (!billDoc.orders.includes(order._id)) {
+                            billDoc.orders.push(order._id);
+                        }
+                        await billDoc.save();
+
+                        // Recalculate bill totals
+                        await billDoc.calculateSubtotal();
+                    }
+                } catch (error) {
+                    Logger.error('خطأ في إضافة الطلب للفاتورة:', error);
+                }
+            }
+
+            // Create notification for new order
+            try {
+                await NotificationService.createOrderNotification(
+                    "created",
+                    populatedOrder,
+                    req.user._id
+                );
+            } catch (notificationError) {
+                //
+            }
+
+            // Emit Socket.IO event for order creation
+            if (req.io) {
+                try {
+                    req.io.notifyOrderUpdate("created", populatedOrder);
+                } catch (socketError) {
+                    Logger.error('فشل إرسال حدث Socket.IO', socketError);
+                }
+            }
+
+            // Emit table status update event if table is linked
+            if (table && req.io) {
+                try {
+                    req.io.emit('table-status-update', { 
+                        tableId: table, 
+                        status: 'occupied' 
+                    });
+                } catch (socketError) {
+                    Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
+                }
+            }
         });
     } catch (error) {
         if (error.name === "ValidationError") {
@@ -781,45 +759,33 @@ export const updateOrder = async (req, res) => {
 
         await order.save();
 
-        // Populate the order with related data for response
+        // Populate only essential fields for response
         const updatedOrder = await Order.findById(order._id)
-            .populate({
-                path: "items.menuItem",
-                select: "name arabicName",
-                populate: {
-                    path: "category",
-                    populate: {
-                        path: "section"
-                    }
-                }
-            })
-            .populate("bill", "billNumber customerName")
             .populate("table", "number name")
-            .populate("organization", "name")
-            .populate("createdBy", "name")
-            .populate("preparedBy", "name")
-            .populate("deliveredBy", "name");
+            .lean();
 
-        // Update bill totals if order is linked to a bill
+        // Update bill totals in background (non-blocking)
         if (order.bill) {
-            try {
-                const billDoc = await Bill.findById(order.bill);
-                if (billDoc) {
-                    // Recalculate bill totals
-                    await billDoc.calculateSubtotal();
-                }
-            } catch (error) {
-                //
-            }
+            setImmediate(() => {
+                Bill.findById(order.bill).then(billDoc => {
+                    if (billDoc) {
+                        return billDoc.calculateSubtotal();
+                    }
+                }).catch(err => {
+                    Logger.error('Error updating bill totals:', err);
+                });
+            });
         }
 
-        // Emit Socket.IO event for order update
+        // Emit Socket.IO event in background (non-blocking)
         if (req.io) {
-            try {
-                req.io.notifyOrderUpdate("updated", updatedOrder);
-            } catch (socketError) {
-                Logger.error('فشل إرسال حدث Socket.IO', socketError);
-            }
+            setImmediate(() => {
+                try {
+                    req.io.notifyOrderUpdate("updated", updatedOrder);
+                } catch (socketError) {
+                    Logger.error('فشل إرسال حدث Socket.IO', socketError);
+                }
+            });
         }
 
         res.json({

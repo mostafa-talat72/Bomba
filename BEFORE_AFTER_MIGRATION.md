@@ -177,10 +177,6 @@ const bills = await Bill.find({ table: tableId })
 const bill = await Bill.findById(billId)
     .populate('table');  // ✅ بيانات الطاولة متاحة في bill.table
 
-console.log(bill.table.number);  // "A1"
-console.log(bill.table.section);  // ObjectId
-```
-
 ---
 
 ## 🎨 الكود في Frontend

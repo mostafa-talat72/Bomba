@@ -44,7 +44,6 @@ const syncCategoryToInventory = async (categoryId) => {
         const category = await MenuCategory.findById(categoryId);
         if (!category) return;
         
-        console.log(`✅ Category "${category.name}" is available for inventory items`);
     } catch (error) {
         console.error('Error syncing category:', error);
     }

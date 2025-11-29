@@ -15,7 +15,6 @@
 استخدم breakpoints في VS Code أو المتصفح بدلاً من console.log:
 ```typescript
 // ❌ Bad
-console.log('User data:', user);
 
 // ✅ Good
 // Use breakpoint here and inspect variables

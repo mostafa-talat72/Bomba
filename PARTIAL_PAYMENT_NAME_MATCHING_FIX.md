@@ -38,13 +38,10 @@ const nameMatch = paymentNameTrimmed === itemNameTrimmed;
 تم إضافة console.log مفصل لتشخيص المشكلة:
 
 ```typescript
-console.log(`  Item name length: ${item.itemName.length}, charCodes:`, 
   item.itemName.split('').map((c: string) => c.charCodeAt(0)));
 
 if (!nameMatch) {
-  console.log(`  ❌ Name mismatch: "${payment.itemName}" (len: ${payment.itemName.length}) vs "${item.itemName}" (len: ${item.itemName.length})`);
-  console.log(`     Payment charCodes:`, 
-    payment.itemName.split('').map((c: string) => c.charCodeAt(0)));
+  
 }
 ```
 

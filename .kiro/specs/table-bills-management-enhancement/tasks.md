@@ -10,6 +10,24 @@
   - التأكد من أن جميع الفواتير تُعرض بغض النظر عن تاريخ الإنشاء
   - _Requirements: 1.1, 1.2, 1.3_
 
+- [x] 1.2 إزالة جميع حدود البيانات من Frontend و Backend
+
+
+
+
+
+
+
+
+  - تحديث `fetchBills()` في `AppContext.tsx` لإزالة `limit: 100`
+  - تحديث `fetchOrders()` في `AppContext.tsx` لإزالة `limit: 100`
+  - تحديث `getNotifications()` في `AppContext.tsx` لإزالة `limit: 100`
+  - تحديث `getBills()` في `billingController.js` لإزالة `effectiveLimit`
+  - تحديث `getOrders()` في `orderController.js` لإزالة `effectiveLimit`
+  - جلب جميع البيانات بدون حد لضمان ظهور البيانات القديمة
+  - التأكد من أن الطاولات القديمة تظهر محجوزة إذا كان عليها فواتير غير مدفوعة
+  - _Requirements: 1.1, 2.1, 9.1_
+
 - [ ] 1.1 كتابة property test لإزالة فلترة التاريخ
 
 

@@ -51,6 +51,12 @@ export const printOrderBySections = (
   menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }>,
   establishmentName: string = 'اسم المنشأة'
 ) => {
+  // Check if order.items exists and is an array
+  if (!order.items || !Array.isArray(order.items)) {
+    console.error('Order items is undefined or not an array:', order);
+    return;
+  }
+
   // تجميع العناصر حسب قسم المنيو
   const itemsBySection = new Map<string, OrderItem[]>();
 
