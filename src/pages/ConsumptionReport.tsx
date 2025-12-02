@@ -11,7 +11,9 @@ import {
   CalendarOutlined,
   BarChartOutlined,
   ExclamationCircleOutlined,
-  PrinterOutlined
+  PrinterOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined
 } from '@ant-design/icons';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -76,6 +78,8 @@ const ConsumptionReport = () => {
   const [loading, setLoading] = useState(false);
   const [consumptionData, setConsumptionData] = useState<Record<string, ConsumptionItem[]>>({});
   const [error, setError] = useState<string | null>(null);
+  const [showTotalSales, setShowTotalSales] = useState(false);
+  const [showSectionTotals, setShowSectionTotals] = useState<Record<string, boolean>>({});
   
   // Track if initial data has been loaded
   const hasLoadedInitialData = useRef(false);
@@ -238,14 +242,27 @@ const ConsumptionReport = () => {
 
       const deviceName = session.deviceName || `جهاز ${session.deviceNumber}`;
       
-      // Use totalCost as the session cost
-      const sessionCost = Number(session.totalCost) || Number(session.finalCost) || 0;
+      // Use finalCost (after discount) as the session cost
+      // finalCost = totalCost - discount
+      const sessionCost = Number(session.finalCost) || 0;
       
       // Calculate hours from startTime and endTime
       const startTime = new Date(session.startTime).getTime();
       const endTime = new Date(session.endTime).getTime();
       const durationMs = endTime - startTime;
       const hours = durationMs / (1000 * 60 * 60); // Convert to hours
+
+      console.log('📊 PlayStation Session:', {
+        deviceName,
+        startTime: new Date(session.startTime),
+        endTime: new Date(session.endTime),
+        hours: hours.toFixed(2),
+        totalCost: session.totalCost,
+        discount: session.discount,
+        finalCost: session.finalCost,
+        sessionCost,
+        fullSession: session
+      });
 
       // Group by device name - sum hours and costs for each device
       const existingItem = itemsBySection['البلايستيشن'].find(i => i.name === deviceName);
@@ -972,7 +989,16 @@ const ConsumptionReport = () => {
                   align="center"
                   className="font-bold text-blue-600"
                 >
-                  {formatNumber(totalSales)} ج.م
+                  <div className="flex items-center justify-center gap-2">
+                    <span>{showTotalSales ? `${formatNumber(totalSales)} ج.م` : '••••••'}</span>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={showTotalSales ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                      onClick={() => setShowTotalSales(!showTotalSales)}
+                      title={showTotalSales ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                    />
+                  </div>
                 </Table.Summary.Cell>
               </Table.Summary.Row>
             )}
@@ -1061,7 +1087,16 @@ const ConsumptionReport = () => {
                     align="center"
                     className="font-bold text-blue-600"
                   >
-                    {formatNumber(sectionTotal)} ج.م
+                    <div className="flex items-center justify-center gap-2">
+                      <span>{showSectionTotals[sectionName] ? `${formatNumber(sectionTotal)} ج.م` : '••••••'}</span>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={showSectionTotals[sectionName] ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                        onClick={() => setShowSectionTotals(prev => ({ ...prev, [sectionName]: !prev[sectionName] }))}
+                        title={showSectionTotals[sectionName] ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                      />
+                    </div>
                   </Table.Summary.Cell>
                 </Table.Summary.Row>
               )}
@@ -1072,7 +1107,7 @@ const ConsumptionReport = () => {
     });
 
     return [allTab, ...sectionTabs];
-  }, [allItems, columns, consumptionData, error, loading, totalSales]);
+  }, [allItems, columns, consumptionData, error, loading, totalSales, showTotalSales, showSectionTotals, menuSections, pageSize]);
 
 
   // Add custom styles
@@ -1306,8 +1341,17 @@ const ConsumptionReport = () => {
             </div>
             <div className="p-5 space-y-6">
               <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600 mb-1">
-                  {toArabicNumbers(formatNumber(totalSales))} ج.م
+                <div className="flex items-center justify-center gap-3">
+                  <div className="text-3xl font-bold text-blue-600 mb-1">
+                    {showTotalSales ? `${toArabicNumbers(formatNumber(totalSales))} ج.م` : '••••••'}
+                  </div>
+                  <Button
+                    type="text"
+                    icon={showTotalSales ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                    onClick={() => setShowTotalSales(!showTotalSales)}
+                    title={showTotalSales ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                    className="hover:bg-gray-100"
+                  />
                 </div>
                 <div className="text-gray-500 text-sm">إجمالي المبيعات</div>
               </div>

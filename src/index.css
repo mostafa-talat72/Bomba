@@ -379,3 +379,65 @@ body {
 .dark .overflow-y-auto::-webkit-scrollbar-thumb:hover {
 	background: #dc2626;
 }
+
+/* Custom Scrollbar for Sections/Tables Area */
+.sections-scroll::-webkit-scrollbar {
+	width: 8px;
+}
+
+.sections-scroll::-webkit-scrollbar-track {
+	background: #e5e7eb;
+	border-radius: 4px;
+}
+
+.sections-scroll::-webkit-scrollbar-thumb {
+	background: #9ca3af;
+	border-radius: 4px;
+}
+
+.sections-scroll::-webkit-scrollbar-thumb:hover {
+	background: #6b7280;
+}
+
+.dark .sections-scroll::-webkit-scrollbar-track {
+	background: #374151;
+}
+
+.dark .sections-scroll::-webkit-scrollbar-thumb {
+	background: #6b7280;
+}
+
+.dark .sections-scroll::-webkit-scrollbar-thumb:hover {
+	background: #9ca3af;
+}
+
+/* Custom Scrollbar for Orders Area */
+.orders-scroll::-webkit-scrollbar {
+	width: 8px;
+}
+
+.orders-scroll::-webkit-scrollbar-track {
+	background: #fed7aa;
+	border-radius: 4px;
+}
+
+.orders-scroll::-webkit-scrollbar-thumb {
+	background: #ea580c;
+	border-radius: 4px;
+}
+
+.orders-scroll::-webkit-scrollbar-thumb:hover {
+	background: #dc2626;
+}
+
+.dark .orders-scroll::-webkit-scrollbar-track {
+	background: #374151;
+}
+
+.dark .orders-scroll::-webkit-scrollbar-thumb {
+	background: #ea580c;
+}
+
+.dark .orders-scroll::-webkit-scrollbar-thumb:hover {
+	background: #dc2626;
+}

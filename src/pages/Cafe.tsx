@@ -1001,7 +1001,7 @@ const Cafe: React.FC = () => {
               <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">الأقسام والطاولات</h2>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 sections-scroll">
               {loading && tableSections.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">جاري التحميل...</div>
               ) : tableSections.length === 0 ? (
@@ -1063,7 +1063,7 @@ const Cafe: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 orders-scroll">
               {selectedTable ? (
                 <div className="space-y-3">
                   {filteredTableOrders.length === 0 ? (

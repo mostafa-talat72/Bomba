@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, memo } from 'react';
-import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle, Table as TableIcon, Search, X, Eye, Gamepad2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle, Table as TableIcon, Search, X, Eye, EyeOff, Gamepad2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem, Session } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
@@ -301,6 +301,8 @@ const Billing = () => {
   const [sessionPaymentAmount, setSessionPaymentAmount] = useState('');
   const [sessionPaymentMethod, setSessionPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [isProcessingSessionPayment, setIsProcessingSessionPayment] = useState(false);
+  const [showPaidAmount, setShowPaidAmount] = useState(false);
+  const [showRemainingAmount, setShowRemainingAmount] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -1233,34 +1235,60 @@ const Billing = () => {
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="mr-3 sm:mr-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                  المبلغ المحصل
+                </p>
+                <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
+                  {showPaidAmount ? formatCurrency(billStats.totalPaid) : '••••••'}
+                </p>
+              </div>
             </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
-                المبلغ المحصل
-              </p>
-              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
-                {formatCurrency(billStats.totalPaid)}
-              </p>
-            </div>
+            <button
+              onClick={() => setShowPaidAmount(!showPaidAmount)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={showPaidAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+            >
+              {showPaidAmount ? (
+                <EyeOff className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              ) : (
+                <Eye className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              )}
+            </button>
           </div>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600 dark:text-yellow-400" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
+                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div className="mr-3 sm:mr-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                  المبلغ المتبقي
+                </p>
+                <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
+                  {showRemainingAmount ? formatCurrency(billStats.totalRemaining) : '••••••'}
+                </p>
+              </div>
             </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
-                المبلغ المتبقي
-              </p>
-              <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
-                {formatCurrency(billStats.totalRemaining)}
-              </p>
-            </div>
+            <button
+              onClick={() => setShowRemainingAmount(!showRemainingAmount)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={showRemainingAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+            >
+              {showRemainingAmount ? (
+                <EyeOff className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              ) : (
+                <Eye className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              )}
+            </button>
           </div>
         </div>
 
