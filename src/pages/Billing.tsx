@@ -23,22 +23,24 @@ interface Table {
 // Memoized Bill Item Component for PlayStation devices
 const PlaystationBillItem = memo(({ 
   bill, 
-  onPaymentClick, 
+  onPaymentClick,
+  onChangeTableClick,
   getStatusColor, 
   getStatusText, 
   formatCurrency 
 }: { 
   bill: Bill; 
   onPaymentClick: (bill: Bill) => void;
+  onChangeTableClick?: (bill: Bill) => void;
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
 }) => (
-  <div
-    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer"
-    onClick={() => onPaymentClick(bill)}
-  >
-    <div className="flex-1">
+  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+    <div 
+      className="flex-1 cursor-pointer"
+      onClick={() => onPaymentClick(bill)}
+    >
       <div className="flex items-center gap-2 mb-1">
         <span className="font-medium text-gray-900 dark:text-gray-100">
           #{bill.billNumber || bill.id || bill._id}
@@ -67,11 +69,26 @@ const PlaystationBillItem = memo(({
         <span>{formatCurrency(bill.total || 0)}</span>
       </div>
     </div>
-    <div className="text-left">
-      <div className="text-sm font-bold text-orange-600 dark:text-orange-400">
-        {formatCurrency(bill.remaining || 0)}
+    <div className="flex items-center gap-2">
+      <div className="text-left">
+        <div className="text-sm font-bold text-orange-600 dark:text-orange-400">
+          {formatCurrency(bill.remaining || 0)}
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">متبقي</div>
       </div>
-      <div className="text-xs text-gray-500 dark:text-gray-400">متبقي</div>
+      {onChangeTableClick && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onChangeTableClick(bill);
+          }}
+          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors flex items-center gap-1"
+          title="تغيير الطاولة"
+        >
+          <TableIcon className="h-3 w-3" />
+          تغيير
+        </button>
+      )}
     </div>
   </div>
 ));
@@ -322,15 +339,12 @@ const Billing = () => {
 
     // Connection event handlers
     socket.on('connect', () => {
-      console.log('Billing: Socket.IO connected');
     });
 
     socket.on('disconnect', () => {
-      console.log('Billing: Socket.IO disconnected');
     });
 
     socket.on('reconnect', () => {
-      console.log('Billing: Socket.IO reconnected');
       // Refresh bills data on reconnection
       fetchBills();
       fetchTables();
@@ -346,7 +360,6 @@ const Billing = () => {
 
     // Listen for bill-update event
     socket.on('bill-update', (data: any) => {
-      console.log('📡 Received bill-update event:', data);
       
       if (data.type === 'created' || data.type === 'updated' || data.type === 'deleted') {
         // الحذف يتم الآن مباشرة من Local و Atlas
@@ -936,6 +949,13 @@ const Billing = () => {
     }
   };
 
+  // دالة لفتح modal تغيير الطاولة
+  const handleOpenChangeTableModal = (bill: Bill) => {
+    setSelectedBill(bill);
+    setShowChangeTableModal(true);
+    setNewTableNumber(null);
+  };
+
   // دالة تغيير الطاولة
   const handleChangeTable = async () => {
     if (!selectedBill || newTableNumber === null) return;
@@ -1373,6 +1393,8 @@ const Billing = () => {
                       const isLinkedToTable = !!bill.table;
                       const hasActiveSession = session.status === 'active';
                       
+                     
+                      
                       if (!deviceMap.has(deviceKey)) {
                         deviceMap.set(deviceKey, {
                           deviceName: deviceKey,
@@ -1401,7 +1423,7 @@ const Billing = () => {
                         if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
                           deviceData.bills.push(bill);
                         }
-                      }
+                      } 
                     });
                   }
                 });
@@ -1553,6 +1575,7 @@ const Billing = () => {
                                   key={bill.id || bill._id}
                                   bill={bill}
                                   onPaymentClick={handlePaymentClick}
+                                  onChangeTableClick={handleOpenChangeTableModal}
                                   getStatusColor={getStatusColor}
                                   getStatusText={getStatusText}
                                   formatCurrency={formatCurrency}
@@ -1583,7 +1606,6 @@ const Billing = () => {
           // استبعاد فواتير البلايستيشن والكمبيوتر لأنها تظهر في أقسامها الخاصة
           // تحقق من billType أولاً
           if (bill.billType === 'playstation' || bill.billType === 'computer') {
-            console.log('🚫 استبعاد فاتورة بسبب billType:', bill.billNumber, bill.billType);
             return false;
           }
           
@@ -1593,23 +1615,14 @@ const Billing = () => {
               s.deviceType === 'playstation' || s.deviceType === 'computer'
             );
             if (hasGamingSessions) {
-              console.log('🚫 استبعاد فاتورة بسبب جلسات الألعاب:', bill.billNumber);
               return false;
             }
           }
           
           // هذه فاتورة كافيه - يجب أن تظهر
-          console.log('✅ فاتورة كافيه غير مرتبطة بطاولة:', bill.billNumber);
           return true;
         });
 
-        console.log('📋 فواتير غير مرتبطة بطاولة (كافيه فقط):', unlinkedBills.length);
-        console.log('📋 تفاصيل:', unlinkedBills.map(b => ({
-          id: b.billNumber,
-          type: b.billType,
-          hasSessions: !!b.sessions?.length
-        })));
-    
         if (unlinkedBills.length === 0) return null;
 
         return (
