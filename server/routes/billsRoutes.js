@@ -9,6 +9,7 @@ import {
     addSessionToBill,
     getBillByQR,
     cancelBill,
+    deleteBill,
     getAvailableBillsForSession,
     payForItems,
     paySessionPartial,
@@ -35,7 +36,8 @@ router
 router
     .route("/:id")
     .get(authorize("billing", "all"), getBill)
-    .put(authorize("billing", "all"), updateBill);
+    .put(authorize("billing", "all"), updateBill)
+    .delete(authorize("billing", "all"), deleteBill);
 
 router.post("/:id/payment", authorize("billing", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "all"), addPayment);

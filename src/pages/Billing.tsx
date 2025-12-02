@@ -1343,6 +1343,11 @@ const Billing = () => {
                   (bill.sessions && bill.sessions.some((s: any) => s.deviceType === 'playstation'))
                 );
 
+                console.log('🎮 إجمالي فواتير البلايستيشن:', allPlaystationBills.length);
+                console.log('🎮 فواتير بلايستيشن غير مرتبطة بطاولة:', 
+                  allPlaystationBills.filter(b => !b.table).length
+                );
+
                 // تجميع الأجهزة حسب الاسم
                 const deviceMap = new Map<string, { 
                   deviceName: string; 
@@ -1387,9 +1392,16 @@ const Billing = () => {
                         deviceData.allBills.push(bill);
                       }
                       
+                      // إضافة الفاتورة إلى قائمة bills إذا لم تكن مرتبطة بطاولة
+                      // هذا يضمن ظهور فواتير الجلسات غير المرتبطة بطاولة في قسم أجهزة البلايستيشن
                       if (!isLinkedToTable) {
-                        // إضافة الفاتورة فقط إذا لم تكن مرتبطة بطاولة
                         if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
+                          console.log(`✅ إضافة فاتورة غير مرتبطة بطاولة للجهاز ${deviceKey}:`, {
+                            billId: bill.id || bill._id,
+                            billNumber: bill.billNumber,
+                            customerName: bill.customerName,
+                            status: bill.status
+                          });
                           deviceData.bills.push(bill);
                         }
                       }
@@ -1443,6 +1455,12 @@ const Billing = () => {
                   .map(deviceData => {
                     // فلترة الفواتير حسب الحالة المختارة
                     let filteredBills = deviceData.bills;
+                    
+                    console.log(`📊 الجهاز ${deviceData.deviceName}:`, {
+                      totalBills: deviceData.bills.length,
+                      unlinkedBills: deviceData.bills.filter(b => !b.table).length,
+                      hasActiveSession: deviceData.hasActiveSession
+                    });
                     
                     if (playstationStatusFilter === 'unpaid') {
                       // إظهار الفواتير غير المدفوعة فقط
@@ -1571,6 +1589,13 @@ const Billing = () => {
           bill.billType !== 'computer' &&
           !bill.sessions?.some((s: any) => s.deviceType === 'playstation' || s.deviceType === 'computer')
         );
+
+        console.log('📋 فواتير غير مرتبطة بطاولة (كافيه فقط):', unlinkedBills.length);
+        console.log('📋 تفاصيل:', unlinkedBills.map(b => ({
+          id: b.billNumber,
+          type: b.billType,
+          hasSessions: !!b.sessions?.length
+        })));
 
         if (unlinkedBills.length === 0) return null;
 

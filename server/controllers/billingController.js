@@ -1232,8 +1232,11 @@ export const deleteBill = async (req, res) => {
             Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders associated with bill ${bill.billNumber}`);
         }
 
-        // Remove bill reference from sessions before deletion
-        await Session.updateMany({ bill: bill._id }, { $unset: { bill: 1 } });
+        // Delete all sessions associated with this bill (cascade delete)
+        if (bill.sessions && bill.sessions.length > 0) {
+            const sessionDeleteResult = await Session.deleteMany({ _id: { $in: bill.sessions } });
+            Logger.info(`✓ Deleted ${sessionDeleteResult.deletedCount} sessions associated with bill ${bill.billNumber}`);
+        }
 
         // Delete the bill
         await bill.deleteOne();
