@@ -93,57 +93,6 @@ const PlaystationBillItem = memo(({
   </div>
 ));
 
-// Memoized Bill Item Component for unlinked bills
-const UnlinkedBillItem = memo(({ 
-  bill, 
-  onPaymentClick, 
-  getStatusColor, 
-  getStatusText, 
-  formatCurrency 
-}: { 
-  bill: Bill; 
-  onPaymentClick: (bill: Bill) => void;
-  getStatusColor: (status: string) => string;
-  getStatusText: (status: string) => string;
-  formatCurrency: (amount: number) => string;
-}) => (
-  <div
-    className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors cursor-pointer border border-purple-200 dark:border-purple-700"
-    onClick={() => onPaymentClick(bill)}
-  >
-    <div className="flex-1">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="font-medium text-gray-900 dark:text-gray-100">
-          #{bill.billNumber || bill.id || bill._id}
-        </span>
-        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(bill.status)}`}>
-          {getStatusText(bill.status)}
-        </span>
-        {bill.billType && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-            {bill.billType === 'playstation' ? '🎮 بلايستيشن' : bill.billType === 'computer' ? '💻 كمبيوتر' : '☕ كافيه'}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
-        {bill.customerName && (
-          <span className="flex items-center text-purple-600 dark:text-purple-400 font-medium">
-            👤 {bill.customerName}
-          </span>
-        )}
-        <span>الإجمالي: {formatCurrency(bill.total || 0)}</span>
-        <span>المدفوع: {formatCurrency(bill.paid || 0)}</span>
-      </div>
-    </div>
-    <div className="text-left">
-      <div className="text-sm font-bold text-orange-600 dark:text-orange-400">
-        {formatCurrency(bill.remaining || 0)}
-      </div>
-      <div className="text-xs text-gray-500 dark:text-gray-400">متبقي</div>
-    </div>
-  </div>
-));
-
 // Memoized Bill Item Component for table bills modal
 const TableBillItem = memo(({ 
   bill, 
@@ -492,7 +441,7 @@ const Billing = () => {
       if (interval) clearInterval(interval);
     };
     // الاعتماد فقط على وجود جلسة نشطة
-  }, [bills.length, bills.map(b => b.sessions.map(s => s.status).join(',')).join(',')]);
+  }, [bills.length, bills.map(b => (b.sessions || []).map(s => s.status).join(',')).join(',')]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1622,63 +1571,7 @@ const Billing = () => {
         </div>
       )}
 
-      {/* Unlinked Bills Section - فواتير غير مرتبطة بطاولة (باستثناء فواتير البلايستيشن والكمبيوتر) */}
-      {(() => {
-        const unlinkedBills = bills.filter((bill: Bill) => {
-          // يجب أن تكون غير مرتبطة بطاولة
-          if (bill.table) return false;
-          
-          // يجب أن تكون غير مدفوعة
-          if (!['draft', 'partial', 'overdue'].includes(bill.status)) return false;
-          
-          // استبعاد فواتير البلايستيشن والكمبيوتر لأنها تظهر في أقسامها الخاصة
-          // تحقق من billType أولاً
-          if (bill.billType === 'playstation' || bill.billType === 'computer') {
-            return false;
-          }
-          
-          // تحقق من وجود جلسات بلايستيشن أو كمبيوتر
-          if (bill.sessions && bill.sessions.length > 0) {
-            const hasGamingSessions = bill.sessions.some((s: any) => 
-              s.deviceType === 'playstation' || s.deviceType === 'computer'
-            );
-            if (hasGamingSessions) {
-              return false;
-            }
-          }
-          
-          // هذه فاتورة كافيه - يجب أن تظهر
-          return true;
-        });
 
-        if (unlinkedBills.length === 0) return null;
-
-        return (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                <Receipt className="h-5 w-5 ml-2 text-purple-600 dark:text-purple-400" />
-                فواتير غير مرتبطة بطاولة
-              </h2>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {unlinkedBills.length} {unlinkedBills.length === 1 ? 'فاتورة' : 'فواتير'}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {unlinkedBills.map((bill: Bill) => (
-                <UnlinkedBillItem
-                  key={bill.id || bill._id}
-                  bill={bill}
-                  onPaymentClick={handlePaymentClick}
-                  getStatusColor={getStatusColor}
-                  getStatusText={getStatusText}
-                  formatCurrency={formatCurrency}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Tables by Sections */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">

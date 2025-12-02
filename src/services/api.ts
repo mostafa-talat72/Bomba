@@ -700,7 +700,7 @@ class ApiClient {
   }
 
   // Sessions endpoints
-  async getSessions(params?: { status?: string; device?: string; page?: number; limit?: number }): Promise<ApiResponse<Session[]>> {
+  async getSessions(params?: { status?: string; device?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Session[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -849,7 +849,7 @@ class ApiClient {
   }
 
   // Orders endpoints
-  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number }): Promise<ApiResponse<Order[]>> {
+  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Order[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {

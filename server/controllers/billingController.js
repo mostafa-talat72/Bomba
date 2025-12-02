@@ -1242,9 +1242,13 @@ export const deleteBill = async (req, res) => {
             
             // Delete all orders associated with this bill (cascade delete)
             if (bill.orders && bill.orders.length > 0) {
+                Logger.info(`🗑️ Deleting ${bill.orders.length} orders associated with bill ${bill.billNumber}`, {
+                    orderIds: bill.orders
+                });
+                
                 // حذف من Local
                 const deleteResult = await Order.deleteMany({ _id: { $in: bill.orders } });
-                Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local`);
+                Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local MongoDB`);
                 
                 // حذف من Atlas مباشرة
                 if (atlasConnection) {
@@ -1253,36 +1257,43 @@ export const deleteBill = async (req, res) => {
                         const atlasDeleteResult = await atlasOrdersCollection.deleteMany({ 
                             _id: { $in: bill.orders } 
                         });
-                        Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} orders from Atlas`);
+                        Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} orders from Atlas MongoDB`);
                     } catch (atlasError) {
-                        Logger.warn(`⚠️ Failed to delete orders from Atlas: ${atlasError.message}`);
+                        Logger.error(`❌ Failed to delete orders from Atlas: ${atlasError.message}`);
                     }
+                } else {
+                    Logger.warn(`⚠️ Atlas connection not available - orders will be synced for deletion later`);
                 }
+            } else {
+                Logger.info(`ℹ️ No orders to delete for bill ${bill.billNumber}`);
             }
 
-            // Remove bill reference from sessions (but keep the sessions)
-            // الجلسات يجب أن تبقى حتى بعد حذف الفاتورة لأنها سجل تاريخي
+            // Delete all sessions associated with this bill (cascade delete)
             if (bill.sessions && bill.sessions.length > 0) {
-                // تحديث في Local
-                const sessionUpdateResult = await Session.updateMany(
-                    { _id: { $in: bill.sessions } },
-                    { $unset: { bill: 1 } }
-                );
-                Logger.info(`✓ Removed bill reference from ${sessionUpdateResult.modifiedCount} sessions in Local`);
+                Logger.info(`🗑️ Deleting ${bill.sessions.length} sessions associated with bill ${bill.billNumber}`, {
+                    sessionIds: bill.sessions
+                });
                 
-                // تحديث في Atlas مباشرة
+                // حذف من Local
+                const sessionDeleteResult = await Session.deleteMany({ _id: { $in: bill.sessions } });
+                Logger.info(`✓ Deleted ${sessionDeleteResult.deletedCount} sessions from Local MongoDB`);
+                
+                // حذف من Atlas مباشرة
                 if (atlasConnection) {
                     try {
                         const atlasSessionsCollection = atlasConnection.collection('sessions');
-                        const atlasUpdateResult = await atlasSessionsCollection.updateMany(
-                            { _id: { $in: bill.sessions } },
-                            { $unset: { bill: 1 } }
-                        );
-                        Logger.info(`✓ Removed bill reference from ${atlasUpdateResult.modifiedCount} sessions in Atlas`);
+                        const atlasDeleteResult = await atlasSessionsCollection.deleteMany({ 
+                            _id: { $in: bill.sessions } 
+                        });
+                        Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} sessions from Atlas MongoDB`);
                     } catch (atlasError) {
-                        Logger.warn(`⚠️ Failed to update sessions in Atlas: ${atlasError.message}`);
+                        Logger.error(`❌ Failed to delete sessions from Atlas: ${atlasError.message}`);
                     }
+                } else {
+                    Logger.warn(`⚠️ Atlas connection not available - sessions will be synced for deletion later`);
                 }
+            } else {
+                Logger.info(`ℹ️ No sessions to delete for bill ${bill.billNumber}`);
             }
 
             // Delete the bill from Local MongoDB

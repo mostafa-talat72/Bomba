@@ -246,36 +246,50 @@ const ConsumptionReport = () => {
       // finalCost = totalCost - discount
       const sessionCost = Number(session.finalCost) || 0;
       
-      // Calculate hours from startTime and endTime
-      const startTime = new Date(session.startTime).getTime();
-      const endTime = new Date(session.endTime).getTime();
-      const durationMs = endTime - startTime;
-      const hours = durationMs / (1000 * 60 * 60); // Convert to hours
+      // Calculate total hours from controllersHistory if available
+      let totalHours = 0;
+      
+      if (session.controllersHistory && Array.isArray(session.controllersHistory) && session.controllersHistory.length > 0) {
+        // Use controllersHistory for accurate hour calculation
+        session.controllersHistory.forEach((period: any) => {
+          const periodStart = new Date(period.from).getTime();
+          const periodEnd = period.to ? new Date(period.to).getTime() : new Date(session.endTime).getTime();
+          const periodDurationMs = periodEnd - periodStart;
+          const periodHours = periodDurationMs / (1000 * 60 * 60);
+          totalHours += periodHours;
+        });
+      } else {
+        // Fallback: Calculate from startTime and endTime
+        const startTime = new Date(session.startTime).getTime();
+        const endTime = new Date(session.endTime).getTime();
+        const durationMs = endTime - startTime;
+        totalHours = durationMs / (1000 * 60 * 60);
+      }
 
       console.log('📊 PlayStation Session:', {
         deviceName,
         startTime: new Date(session.startTime),
         endTime: new Date(session.endTime),
-        hours: hours.toFixed(2),
+        totalHours: totalHours.toFixed(2),
+        controllersHistory: session.controllersHistory,
         totalCost: session.totalCost,
         discount: session.discount,
         finalCost: session.finalCost,
-        sessionCost,
-        fullSession: session
+        sessionCost
       });
 
       // Group by device name - sum hours and costs for each device
       const existingItem = itemsBySection['البلايستيشن'].find(i => i.name === deviceName);
       
       if (existingItem) {
-        existingItem.quantity += hours; // Add hours
+        existingItem.quantity += totalHours; // Add hours
         existingItem.total += sessionCost; // Add total cost
       } else {
         itemsBySection['البلايستيشن'].push({
           id: session._id || session.id || Math.random().toString(),
           name: deviceName,
           price: 0, // Will show as "-" in the table
-          quantity: hours, // Total hours
+          quantity: totalHours, // Total hours from controllersHistory
           total: sessionCost, // Total cost
           category: 'البلايستيشن'
         });
@@ -315,44 +329,58 @@ const ConsumptionReport = () => {
         hasLoadedInitialData.current = true;
       }
 
-      // Fetch orders and sessions directly from API
+      // Fetch orders and sessions directly from API with date filtering
+      // Convert dayjs to Date object to preserve local timezone, then to ISO string
+      // This ensures the backend receives the correct local time
+      const startDateISO = dateRange[0].toDate().toISOString();
+      const endDateISO = dateRange[1].toDate().toISOString();
+      
+      console.log('📅 Sending date range to backend:', {
+        start: {
+          local: dateRange[0].format('YYYY-MM-DD HH:mm:ss'),
+          iso: startDateISO
+        },
+        end: {
+          local: dateRange[1].format('YYYY-MM-DD HH:mm:ss'),
+          iso: endDateISO
+        }
+      });
+      
       const [ordersResponse, sessionsResponse] = await Promise.all([
-        api.getOrders({ limit: 1000 }), // Fetch all orders
-        api.getSessions({ status: 'completed' }) // Fetch completed sessions
+        api.getOrders({ 
+          limit: 10000,
+          startDate: startDateISO,
+          endDate: endDateISO
+        }), // Fetch orders in date range
+        api.getSessions({ 
+          status: 'completed', 
+          limit: 10000,
+          startDate: startDateISO,
+          endDate: endDateISO
+        }) // Fetch completed sessions in date range
       ]);
       
       if (ordersResponse.success && ordersResponse.data && sessionsResponse.success && sessionsResponse.data) {
-        const allOrders = ordersResponse.data;
-        const allCompletedSessions = sessionsResponse.data;
+        // Data is already filtered by backend based on date range
+        const filteredOrders = ordersResponse.data;
+        const allSessions = sessionsResponse.data;
         
-        
-        // Filter orders by date using createdAt
-        const filteredOrders = allOrders.filter((order) => {
-          if (!order.createdAt) return false;
-
-          const orderDate = dayjs(order.createdAt);
-          return (
-            orderDate.isAfter(dateRange[0]) &&
-            orderDate.isBefore(dateRange[1])
-          );
-        });
-
-        // Filter sessions by date using endTime
-        const filteredSessions = allCompletedSessions.filter((session) => {
-          // Only include completed PlayStation sessions
-          if (session.deviceType !== 'playstation' || session.status !== 'completed') return false;
-          
-          // Use endTime for filtering
-          if (!session.endTime) return false;
-          
-          const sessionDate = dayjs(session.endTime);
-          
-          return (
-            sessionDate.isAfter(dateRange[0]) &&
-            sessionDate.isBefore(dateRange[1])
-          );
+        // Filter PlayStation sessions only (backend already filtered by date and status)
+        const filteredSessions = allSessions.filter((session) => {
+          return session.deviceType === 'playstation' && session.endTime;
         });
         
+        console.log('📊 Data from Backend (already filtered by date):', {
+          orders: filteredOrders.length,
+          allSessions: allSessions.length,
+          playstationSessions: filteredSessions.length,
+          dateRange: {
+            start: dateRange[0].format('YYYY-MM-DD HH:mm'),
+            end: dateRange[1].format('YYYY-MM-DD HH:mm')
+          },
+          sampleSession: filteredSessions[0],
+          hasControllersHistory: filteredSessions.some(s => s.controllersHistory && s.controllersHistory.length > 0)
+        });
       
         const processedData = processOrdersAndSessions(filteredOrders, filteredSessions);
         setConsumptionData(processedData);

@@ -9,12 +9,35 @@ const sessionController = {
     // Get all sessions
     getSessions: async (req, res) => {
         try {
-            const { status, deviceType, page = 1, limit = 10 } = req.query;
+            const { status, deviceType, page = 1, limit = 10, startDate, endDate } = req.query;
 
             const query = {};
             if (status) query.status = status;
             if (deviceType) query.deviceType = deviceType;
             query.organization = req.user.organization;
+            
+            // Add date filtering if provided
+            if (startDate || endDate) {
+                query.endTime = {};
+                if (startDate) {
+                    const startDateTime = new Date(startDate);
+                    query.endTime.$gte = startDateTime;
+                    Logger.info('📅 Session date filter - start:', {
+                        received: startDate,
+                        parsed: startDateTime.toISOString(),
+                        local: startDateTime.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' })
+                    });
+                }
+                if (endDate) {
+                    const endDateTime = new Date(endDate);
+                    query.endTime.$lte = endDateTime;
+                    Logger.info('📅 Session date filter - end:', {
+                        received: endDate,
+                        parsed: endDateTime.toISOString(),
+                        local: endDateTime.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' })
+                    });
+                }
+            }
 
             const sessions = await Session.find(query)
                 .populate("createdBy", "name")
