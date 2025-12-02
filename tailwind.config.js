@@ -35,6 +35,22 @@ export default {
                     700: "#b91c1c",
                 },
             },
+            animation: {
+                'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                'bounce-slow': 'bounce 2s infinite',
+                'shimmer': 'shimmer 2s linear infinite',
+                'glow': 'glow 2s ease-in-out infinite',
+            },
+            keyframes: {
+                shimmer: {
+                    '0%': { backgroundPosition: '-200% 0' },
+                    '100%': { backgroundPosition: '200% 0' },
+                },
+                glow: {
+                    '0%, 100%': { boxShadow: '0 0 5px rgba(239, 68, 68, 0.5)' },
+                    '50%': { boxShadow: '0 0 20px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 0.6)' },
+                },
+            },
         },
     },
     plugins: [],

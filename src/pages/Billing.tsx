@@ -8,6 +8,7 @@ import { printBill } from '../utils/printBill';
 import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
+import '../styles/billing-animations.css';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -35,63 +36,73 @@ const PlaystationBillItem = memo(({
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
-}) => (
-  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-    <div 
-      className="flex-1 cursor-pointer"
-      onClick={() => onPaymentClick(bill)}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <span className="font-medium text-gray-900 dark:text-gray-100">
-          #{bill.billNumber || bill.id || bill._id}
-        </span>
-        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(bill.status)}`}>
-          {getStatusText(bill.status)}
-        </span>
-      </div>
-      <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
-        {bill.table?.number ? (
-          <span className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
-            🪑 طاولة: {bill.table.number}
+}) => {
+  const isUnpaid = ['draft', 'partial', 'overdue'].includes(bill.status);
+  
+  return (
+    <div className={`
+      flex items-center justify-between p-4 rounded-lg transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg border-2
+      ${isUnpaid 
+        ? 'bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-300 dark:border-orange-700 hover:border-orange-400 dark:hover:border-orange-600 hover:shadow-orange-200 dark:hover:shadow-orange-900/50' 
+        : 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-300 dark:border-green-700 hover:border-green-400 dark:hover:border-green-600 hover:shadow-green-200 dark:hover:shadow-green-900/50'
+      }
+    `}>
+      <div 
+        className="flex-1 cursor-pointer"
+        onClick={() => onPaymentClick(bill)}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <span className="font-semibold text-gray-900 dark:text-gray-100">
+            #{bill.billNumber || bill.id || bill._id}
           </span>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="flex items-center text-gray-500 dark:text-gray-400">
-              ⚠️ غير مرتبطة بطاولة
-            </span>
-            {bill.customerName && (
-              <span className="flex items-center text-purple-600 dark:text-purple-400 font-medium">
-                👤 {bill.customerName}
-              </span>
-            )}
-          </div>
-        )}
-        <span>{formatCurrency(bill.total || 0)}</span>
-      </div>
-    </div>
-    <div className="flex items-center gap-2">
-      <div className="text-left">
-        <div className="text-sm font-bold text-orange-600 dark:text-orange-400">
-          {formatCurrency(bill.remaining || 0)}
+          <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-sm ${getStatusColor(bill.status)}`}>
+            {getStatusText(bill.status)}
+          </span>
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">متبقي</div>
+        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+          {bill.table?.number ? (
+            <span className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
+              🪑 طاولة: {bill.table.number}
+            </span>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="flex items-center text-gray-500 dark:text-gray-400">
+                ⚠️ غير مرتبطة بطاولة
+              </span>
+              {bill.customerName && (
+                <span className="flex items-center text-purple-600 dark:text-purple-400 font-medium">
+                  👤 {bill.customerName}
+                </span>
+              )}
+            </div>
+          )}
+          <span className="font-medium">{formatCurrency(bill.total || 0)}</span>
+        </div>
       </div>
-      {onChangeTableClick && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onChangeTableClick(bill);
-          }}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors flex items-center gap-1"
-          title="تغيير الطاولة"
-        >
-          <TableIcon className="h-3 w-3" />
-          تغيير
-        </button>
-      )}
+      <div className="flex items-center gap-3">
+        <div className="text-left bg-white dark:bg-gray-800 px-3 py-2 rounded-lg shadow-sm">
+          <div className={`text-base font-bold ${isUnpaid ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
+            {formatCurrency(bill.remaining || 0)}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">متبقي</div>
+        </div>
+        {onChangeTableClick && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onChangeTableClick(bill);
+            }}
+            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center gap-1 shadow-md hover:shadow-lg"
+            title="تغيير الطاولة"
+          >
+            <TableIcon className="h-4 w-4" />
+            تغيير
+          </button>
+        )}
+      </div>
     </div>
-  </div>
-));
+  );
+});
 
 // Memoized Bill Item Component for table bills modal
 const TableBillItem = memo(({ 
@@ -110,72 +121,82 @@ const TableBillItem = memo(({
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
-}) => (
-  <div
-    className="bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 p-4 hover:shadow-md transition-shadow cursor-pointer"
-    onClick={() => onPaymentClick(bill)}
-  >
-    <div className="flex items-center justify-between">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-semibold text-gray-900 dark:text-gray-100">
-            #{bill.billNumber || bill.id || bill._id}
-          </span>
-          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(bill.status)}`}>
-            {getStatusText(bill.status)}
-          </span>
-        </div>
-        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-          <span className="flex items-center">
-            <Calendar className="h-4 w-4 ml-1" />
-            {bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('ar-EG') : '-'}
-          </span>
-          {bill.customerName && (
-            <span className="flex items-center">
-              <User className="h-4 w-4 ml-1" />
-              {bill.customerName}
+}) => {
+  const isUnpaid = ['draft', 'partial', 'overdue'].includes(bill.status);
+  
+  return (
+    <div
+      className={`
+        rounded-lg border-2 p-5 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl cursor-pointer
+        ${isUnpaid 
+          ? 'bg-gradient-to-br from-orange-50 via-red-50 to-pink-50 dark:from-orange-900/20 dark:via-red-900/20 dark:to-pink-900/20 border-orange-300 dark:border-orange-700 hover:border-orange-400 dark:hover:border-orange-600 hover:shadow-orange-200 dark:hover:shadow-orange-900/50' 
+          : 'bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-teal-900/20 border-green-300 dark:border-green-700 hover:border-green-400 dark:hover:border-green-600 hover:shadow-green-200 dark:hover:shadow-green-900/50'
+        }
+      `}
+      onClick={() => onPaymentClick(bill)}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="font-bold text-lg text-gray-900 dark:text-gray-100">
+              #{bill.billNumber || bill.id || bill._id}
             </span>
-          )}
+            <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-md ${getStatusColor(bill.status)}`}>
+              {getStatusText(bill.status)}
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+            <span className="flex items-center bg-white dark:bg-gray-800 px-2 py-1 rounded-md shadow-sm">
+              <Calendar className="h-4 w-4 ml-1" />
+              {bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('ar-EG') : '-'}
+            </span>
+            {bill.customerName && (
+              <span className="flex items-center bg-white dark:bg-gray-800 px-2 py-1 rounded-md shadow-sm">
+                <User className="h-4 w-4 ml-1" />
+                {bill.customerName}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="text-left ml-4">
-        <div className="text-lg font-bold text-orange-600 dark:text-orange-400 mb-1">
-          {formatCurrency(bill.total || 0)}
+        <div className="text-left ml-4 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-md">
+          <div className="text-xl font-bold text-orange-600 dark:text-orange-400 mb-2">
+            {formatCurrency(bill.total || 0)}
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+            مدفوع: <span className="text-green-600 dark:text-green-400 font-semibold">{formatCurrency(bill.paid || 0)}</span>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            متبقي: <span className={`font-bold ${(bill.remaining || 0) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+              {formatCurrency(bill.remaining || 0)}
+            </span>
+          </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          مدفوع: <span className="text-green-600 dark:text-green-400">{formatCurrency(bill.paid || 0)}</span>
+        <div className="flex flex-col gap-2 ml-4">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewClick(bill);
+            }}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center gap-2 shadow-md hover:shadow-lg"
+            title="فتح الفاتورة في نافذة جديدة"
+          >
+            <Eye className="h-4 w-4" />
+            عرض
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditClick(bill);
+            }}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
+          >
+            تعديل
+          </button>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          متبقي: <span className={`font-semibold ${(bill.remaining || 0) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-            {formatCurrency(bill.remaining || 0)}
-          </span>
-        </div>
-      </div>
-      <div className="flex flex-col gap-2 ml-4">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewClick(bill);
-          }}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1"
-          title="فتح الفاتورة في نافذة جديدة"
-        >
-          <Eye className="h-4 w-4" />
-          عرض
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditClick(bill);
-          }}
-          className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition-colors"
-        >
-          تعديل
-        </button>
       </div>
     </div>
-  </div>
-));
+  );
+});
 
 const Billing = () => {
   const { bills, fetchBills, cancelBill, addPartialPayment, showNotification, user, tables, fetchTables, fetchTableSections, tableSections, getTableStatus } = useApp();
@@ -1167,90 +1188,90 @@ const Billing = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-xl shadow-md border-2 border-blue-200 dark:border-blue-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
           <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Receipt className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+              <p className="text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-300">
                 إجمالي الفواتير
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
+              <p className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
                 {formatDecimal(billStats.totalBills)}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/20 rounded-xl shadow-md border-2 border-green-200 dark:border-green-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                <DollarSign className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
               </div>
               <div className="mr-3 sm:mr-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                <p className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
                   المبلغ المحصل
                 </p>
-                <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
+                <p className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400">
                   {showPaidAmount ? formatCurrency(billStats.totalPaid) : '••••••'}
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowPaidAmount(!showPaidAmount)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg transition-all duration-200 transform hover:scale-110"
               title={showPaidAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
             >
               {showPaidAmount ? (
-                <EyeOff className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                <EyeOff className="h-5 w-5 text-green-600 dark:text-green-400" />
               ) : (
-                <Eye className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                <Eye className="h-5 w-5 text-green-600 dark:text-green-400" />
               )}
             </button>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="bg-gradient-to-br from-orange-50 to-red-100 dark:from-orange-900/30 dark:to-red-800/20 rounded-xl shadow-md border-2 border-orange-200 dark:border-orange-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600 dark:text-yellow-400" />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+                <DollarSign className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
               </div>
               <div className="mr-3 sm:mr-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+                <p className="text-xs sm:text-sm font-semibold text-orange-700 dark:text-orange-300">
                   المبلغ المتبقي
                 </p>
-                <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
+                <p className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400">
                   {showRemainingAmount ? formatCurrency(billStats.totalRemaining) : '••••••'}
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowRemainingAmount(!showRemainingAmount)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all duration-200 transform hover:scale-110"
               title={showRemainingAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
             >
               {showRemainingAmount ? (
-                <EyeOff className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                <EyeOff className="h-5 w-5 text-orange-600 dark:text-orange-400" />
               ) : (
-                <Eye className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                <Eye className="h-5 w-5 text-orange-600 dark:text-orange-400" />
               )}
             </button>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/20 rounded-xl shadow-md border-2 border-purple-200 dark:border-purple-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
           <div className="flex items-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
-              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 dark:text-purple-400" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Receipt className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
             </div>
             <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+              <p className="text-xs sm:text-sm font-semibold text-purple-700 dark:text-purple-300">
                 فواتير جزئية
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400">
+              <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">
                 {formatDecimal(billStats.partialBills)}
               </p>
             </div>
@@ -1260,21 +1281,21 @@ const Billing = () => {
 
       {/* PlayStation Devices Section */}
       {(billTypeFilter === 'all' || billTypeFilter === 'playstation') && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl shadow-lg border-2 border-blue-200 dark:border-blue-700 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3 flex-1">
               <button
                 onClick={() => setIsPlaystationSectionCollapsed(!isPlaystationSectionCollapsed)}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                className="p-2 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-lg transition-all duration-200 transform hover:scale-110"
               >
                 {isPlaystationSectionCollapsed ? (
-                  <ChevronDown className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  <ChevronDown className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 ) : (
-                  <ChevronUp className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  <ChevronUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 )}
               </button>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                <Gamepad2 className="h-5 w-5 ml-2 text-blue-600 dark:text-blue-400" />
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                <Gamepad2 className="h-6 w-6 ml-2 text-blue-600 dark:text-blue-400" />
                 أجهزة البلايستيشن
               </h2>
             </div>
@@ -1509,34 +1530,34 @@ const Billing = () => {
                   const isDeviceCollapsed = collapsedDevices.has(deviceData.deviceName);
                   
                   return (
-                    <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div key={index} className="border-2 border-blue-200 dark:border-blue-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-md hover:shadow-xl transition-all duration-300">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2 flex-1">
+                        <div className="flex items-center gap-3 flex-1">
                           <button
                             onClick={() => toggleDeviceCollapse(deviceData.deviceName)}
-                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-lg transition-all duration-200 transform hover:scale-110"
                           >
                             {isDeviceCollapsed ? (
-                              <ChevronDown className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              <ChevronDown className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                             ) : (
-                              <ChevronUp className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              <ChevronUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                             )}
                           </button>
-                          <Gamepad2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{deviceData.deviceName}</h3>
+                          <Gamepad2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                          <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{deviceData.deviceName}</h3>
                           {deviceData.hasActiveSession && (
-                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs font-medium rounded-full">
-                              جلسة نشطة
+                            <span className="px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold rounded-full shadow-md animate-pulse">
+                              🎮 جلسة نشطة
                             </span>
                           )}
                           {deviceData.linkedToTable && deviceData.hasActiveSession && (
-                            <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-medium rounded-full">
+                            <span className="px-3 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-bold rounded-full shadow-md">
                               🪑 طاولة {deviceData.tableNumber}
                             </span>
                           )}
                         </div>
                         {deviceData.bills.length > 0 && (
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                          <div className="text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900 px-3 py-1 rounded-full">
                             {deviceData.bills.length} {deviceData.bills.length === 1 ? 'فاتورة' : 'فواتير'}
                           </div>
                         )}
@@ -1574,10 +1595,10 @@ const Billing = () => {
 
 
       {/* Tables by Sections */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-            <TableIcon className="h-5 w-5 ml-2 text-orange-600 dark:text-orange-400" />
+      <div className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 rounded-xl shadow-lg border-2 border-orange-200 dark:border-orange-700 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <TableIcon className="h-6 w-6 ml-2 text-orange-600 dark:text-orange-400" />
             الطاولات
           </h2>
         </div>
@@ -1595,10 +1616,10 @@ const Billing = () => {
           
           return (
             <div key={section.id} className="mb-6 last:mb-0">
-              <h3 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-orange-800 dark:text-orange-200 mb-4 pb-3 border-b-2 border-orange-300 dark:border-orange-600">
                 {section.name}
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {sectionTables.map((table: Table) => {
                   const tableData = tableBillsMap[table.number];
                   const hasUnpaid = tableData?.hasUnpaid || false;
@@ -1611,29 +1632,53 @@ const Billing = () => {
                         setShowTableBillsModal(true);
                       }}
                       className={`
-                        relative p-4 rounded-lg border-2 transition-all duration-200
+                        group relative p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-110 hover:shadow-2xl hover:-translate-y-1
                         ${hasUnpaid 
-                          ? 'border-red-400 bg-red-50 dark:bg-red-900/20 hover:border-red-500' 
-                          : 'border-green-300 bg-green-50 dark:bg-green-900/20 hover:border-green-400'
+                          ? 'border-red-400 bg-gradient-to-br from-red-50 via-orange-50 to-red-100 dark:from-red-900/40 dark:via-orange-900/30 dark:to-red-800/30 hover:border-red-500 hover:shadow-red-300 dark:hover:shadow-red-900/70' 
+                          : 'border-green-400 bg-gradient-to-br from-green-50 via-emerald-50 to-green-100 dark:from-green-900/40 dark:via-emerald-900/30 dark:to-green-800/30 hover:border-green-500 hover:shadow-green-300 dark:hover:shadow-green-900/70'
                         }
                       `}
                     >
-                      {hasUnpaid && (
-                        <span className="absolute top-1 left-1 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                          محجوزة
-                        </span>
-                      )}
-                      {!hasUnpaid && (
-                        <span className="absolute top-1 left-1 bg-green-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                          فارغة
-                        </span>
-                      )}
-                      <div className="flex flex-col items-center justify-center">
-                        <TableIcon className={`h-8 w-8 mb-2 ${hasUnpaid ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
-                        <span className={`text-lg font-bold ${hasUnpaid ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                      {/* Status Badge */}
+                      <div className="absolute -top-2 -right-2">
+                        {hasUnpaid ? (
+                          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
+                            محجوزة
+                          </span>
+                        ) : (
+                          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
+                            فارغة
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Table Content */}
+                      <div className="flex flex-col items-center justify-center pt-2">
+                        <div className={`
+                          w-16 h-16 rounded-2xl flex items-center justify-center mb-3 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6
+                          ${hasUnpaid 
+                            ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-lg shadow-red-300 dark:shadow-red-900/50' 
+                            : 'bg-gradient-to-br from-green-400 to-green-600 shadow-lg shadow-green-300 dark:shadow-green-900/50'
+                          }
+                        `}>
+                          <TableIcon className="h-8 w-8 text-white" />
+                        </div>
+                        <span className={`text-2xl font-bold transition-colors ${hasUnpaid ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
                           {table.number}
                         </span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          طاولة
+                        </span>
                       </div>
+
+                      {/* Hover Effect Overlay */}
+                      <div className={`
+                        absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
+                        ${hasUnpaid 
+                          ? 'bg-gradient-to-br from-red-400/10 to-orange-400/10' 
+                          : 'bg-gradient-to-br from-green-400/10 to-emerald-400/10'
+                        }
+                      `} />
                     </button>
                   );
                 })}
@@ -1647,7 +1692,7 @@ const Billing = () => {
       {/* Table Bills Modal */}
       {showTableBillsModal && selectedTable && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
           onClick={() => {
             setShowTableBillsModal(false);
             setSelectedTable(null);
@@ -1656,18 +1701,24 @@ const Billing = () => {
           }}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-orange-200 dark:border-orange-800 animate-bounce-in"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  فواتير الطاولة رقم {selectedTable.number}
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {tableBillsMap[selectedTable.number]?.bills.length || 0} {tableBillsMap[selectedTable.number]?.bills.length === 1 ? 'فاتورة' : 'فواتير'}
-                </p>
+            <div className="p-6 bg-gradient-to-r from-orange-500 to-red-500 dark:from-orange-600 dark:to-red-600 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg">
+                  <TableIcon className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                    فواتير الطاولة رقم {selectedTable.number}
+                  </h2>
+                  <p className="text-sm text-orange-100 mt-1 flex items-center gap-2">
+                    <Receipt className="h-4 w-4" />
+                    {tableBillsMap[selectedTable.number]?.bills.length || 0} {tableBillsMap[selectedTable.number]?.bills.length === 1 ? 'فاتورة' : 'فواتير'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => {
@@ -1676,45 +1727,48 @@ const Billing = () => {
                   setTableBillsFilter('unpaid');
                   setSearchQuery('');
                 }}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
               >
                 <X className="h-6 w-6" />
               </button>
             </div>
 
             {/* Filter and Search */}
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-4">
-              <div className="flex items-center gap-4">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">فلترة حسب الحالة:</label>
+            <div className="p-6 bg-white/50 dark:bg-gray-800/50 border-b border-orange-200 dark:border-orange-800 space-y-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                  فلترة حسب الحالة:
+                </label>
                 <select
                   value={tableBillsFilter}
                   onChange={(e) => setTableBillsFilter(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="border-2 border-orange-300 dark:border-orange-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:shadow-md transition-all"
                 >
-                  <option value="all">جميع الفواتير</option>
-                  <option value="unpaid">غير مدفوع</option>
-                  <option value="paid">مدفوع بالكامل</option>
-                  <option value="partial">مدفوع جزئياً</option>
-                  <option value="overdue">متأخر</option>
-                  <option value="cancelled">ملغية</option>
+                  <option value="all">🔍 جميع الفواتير</option>
+                  <option value="unpaid">💰 غير مدفوع</option>
+                  <option value="paid">✅ مدفوع بالكامل</option>
+                  <option value="partial">⚡ مدفوع جزئياً</option>
+                  <option value="overdue">⚠️ متأخر</option>
+                  <option value="cancelled">❌ ملغية</option>
                 </select>
               </div>
               {/* Search Section */}
               <div className="flex items-center gap-3">
                 <div className="relative flex-1">
-                  <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-orange-500" />
                   <input
                     type="text"
-                    placeholder="بحث عن فاتورة برقمها أو معرفها..."
+                    placeholder="🔎 بحث عن فاتورة برقمها أو معرفها..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pr-10 pl-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full pr-12 pl-4 py-3 border-2 border-orange-300 dark:border-orange-700 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm hover:shadow-md transition-all font-medium"
                   />
                 </div>
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    className="w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all duration-200 flex items-center justify-center hover:scale-110 transform shadow-md"
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -1723,7 +1777,7 @@ const Billing = () => {
             </div>
 
             {/* Bills List */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
               {(() => {
                 const tableBills = tableBillsMap[selectedTable.number]?.bills || [];
                 let filteredTableBills = tableBills.filter((bill: Bill) => {
@@ -1745,10 +1799,12 @@ const Billing = () => {
 
                 if (filteredTableBills.length === 0) {
                   return (
-                    <div className="text-center py-12">
-                      <Receipt className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">لا توجد فواتير</h3>
-                      <p className="text-gray-600 dark:text-gray-300">
+                    <div className="text-center py-16">
+                      <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                        <Receipt className="h-12 w-12 text-orange-500 dark:text-orange-400" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3">لا توجد فواتير</h3>
+                      <p className="text-gray-600 dark:text-gray-300 text-lg">
                         {tableBillsFilter === 'all' ? 'لا توجد فواتير لهذه الطاولة' : `لا توجد فواتير بحالة "${getStatusText(tableBillsFilter)}"`}
                       </p>
                     </div>
