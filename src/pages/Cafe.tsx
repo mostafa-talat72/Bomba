@@ -209,6 +209,7 @@ const Cafe: React.FC = () => {
   
   // Confirm modal states
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showTableOrdersModal, setShowTableOrdersModal] = useState(false);
   const [confirmModalData, setConfirmModalData] = useState<{
     title: string;
     message: string;
@@ -559,22 +560,8 @@ const Cafe: React.FC = () => {
   // Handle table click
   const handleTableClick = (table: Table) => {
     setSelectedTable(table);
+    setShowTableOrdersModal(true);
     // Orders will be updated automatically by useEffect above
-    
-    // Scroll the sections container to top
-    const sectionsScroll = document.querySelector('.sections-scroll');
-    if (sectionsScroll) {
-      sectionsScroll.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    }
-    
-    // Also scroll main window to top
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
   };
 
   // Handle add order
@@ -1028,9 +1015,9 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Table Sections and Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-400px)]">
-        {/* Left: Table Sections */}
-        <div className="lg:col-span-2 h-full">
+      <div className="h-[calc(100vh-350px)]">
+        {/* Table Sections */}
+        <div className="h-full">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col overflow-hidden">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -1076,52 +1063,6 @@ const Cafe: React.FC = () => {
                         </div>
                       );
                     })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Table Orders */}
-        <div className="lg:col-span-1 h-full">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col overflow-hidden">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {selectedTable ? `طاولة ${selectedTable.number}` : 'اختر طاولة'}
-                </h2>
-                {selectedTable && (
-                  <button
-                    onClick={handleAddOrder}
-                    className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center text-sm transition-colors duration-200"
-                  >
-                    <Plus className="h-4 w-4 ml-1" />
-                    طلب جديد
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 orders-scroll">
-              {selectedTable ? (
-                <div className="space-y-3">
-                  {filteredTableOrders.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">لا توجد طلبات</div>
-                  ) : (
-                    filteredTableOrders.map(order => (
-                      <OrderItem
-                        key={order.id}
-                        order={order}
-                        onPrint={handlePrintOrder}
-                        onEdit={handleEditOrder}
-                        onDelete={handleDeleteOrder}
-                      />
-                    ))
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  اختر طاولة لعرض الطلبات
                 </div>
               )}
             </div>
@@ -1323,7 +1264,7 @@ const Cafe: React.FC = () => {
 
       {/* Confirm Modal */}
       {showConfirmModal && confirmModalData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
@@ -1359,6 +1300,150 @@ const Cafe: React.FC = () => {
                 className={`px-4 py-2 text-white rounded-lg transition-colors ${confirmModalData.confirmColor || 'bg-red-600 hover:bg-red-700'}`}
               >
                 {confirmModalData.confirmText || 'تأكيد'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Table Orders Modal */}
+      {showTableOrdersModal && selectedTable && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4 md:p-6 animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-slideUp">
+            {/* Header */}
+            <div className="relative p-4 sm:p-6 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex-shrink-0">
+              {/* Decorative circles - contained within header */}
+              <div className="absolute top-2 right-2 w-20 h-20 bg-white/10 rounded-full"></div>
+              <div className="absolute bottom-2 left-2 w-16 h-16 bg-white/10 rounded-full"></div>
+              
+              <div className="relative flex items-center justify-between z-10">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/30">
+                    <ShoppingCart className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                      طاولة {selectedTable.number}
+                    </h2>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
+                        <p className="text-xs sm:text-sm text-white font-medium">
+                          {filteredTableOrders.length} {filteredTableOrders.length === 1 ? 'طلب' : 'طلبات'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTableOrdersModal(false)}
+                  className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110"
+                >
+                  <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                </button>
+              </div>
+            </div>
+
+            {/* Orders List */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900">
+              {filteredTableOrders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 sm:py-16">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                    <ShoppingCart className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
+                  </div>
+                  <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg font-semibold">لا توجد طلبات</p>
+                  <p className="text-gray-400 dark:text-gray-500 text-xs sm:text-sm mt-2 text-center px-4">اضغط على "طلب جديد" لإضافة طلب</p>
+                </div>
+              ) : (
+                <div className="space-y-3 sm:space-y-4">
+                  {filteredTableOrders.map(order => (
+                    <div
+                      key={order.id}
+                      className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 sm:p-4 hover:shadow-xl hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-300 hover:scale-[1.02]"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 sm:w-12 sm:h-12 bg-gradient-to-br from-orange-400 via-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                            <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-gray-900 dark:text-gray-100 text-sm sm:text-base truncate">
+                              {order.orderNumber}
+                            </div>
+                            <div className="text-xs sm:text-sm font-semibold text-orange-600 dark:text-orange-400 truncate">
+                              {(() => {
+                                // Calculate total from items if not available
+                                if (order.finalAmount) return formatCurrency(order.finalAmount);
+                                if (order.totalAmount) return formatCurrency(order.totalAmount);
+                                
+                                // Calculate from items
+                                if (order.items && Array.isArray(order.items)) {
+                                  const total = order.items.reduce((sum: number, item: any) => {
+                                    const itemTotal = (item.price || 0) * (item.quantity || 0);
+                                    return sum + itemTotal;
+                                  }, 0);
+                                  return formatCurrency(total);
+                                }
+                                
+                                return formatCurrency(0);
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => handlePrintOrder(order)}
+                            className="p-2 sm:p-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-blue-200 dark:hover:border-blue-700"
+                            title="طباعة"
+                          >
+                            <Printer className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                          </button>
+                          <button
+                            onClick={() => handleEditOrder(order)}
+                            className="p-2 sm:p-2.5 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-green-200 dark:hover:border-green-700"
+                            title="تعديل"
+                          >
+                            <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteOrder(order)}
+                            className="p-2 sm:p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-red-200 dark:hover:border-red-700"
+                            title="حذف"
+                          >
+                            <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                      {order.items && order.items.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <div className="space-y-2">
+                            {order.items.slice(0, 3).map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between items-center gap-2 text-xs sm:text-sm bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+                                <span className="text-gray-700 dark:text-gray-300 font-medium truncate flex-1 min-w-0">{item.name}</span>
+                                <span className="text-gray-500 dark:text-gray-400 font-semibold flex-shrink-0">×{item.quantity}</span>
+                              </div>
+                            ))}
+                            {order.items.length > 3 && (
+                              <div className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2 font-medium">
+                                +{order.items.length - 3} عناصر أخرى
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <button
+                onClick={handleAddOrder}
+                className="w-full bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
+              >
+                <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
+                طلب جديد
               </button>
             </div>
           </div>
@@ -1478,37 +1563,60 @@ const OrderModal: React.FC<OrderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-7xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {isEdit ? 'تعديل الطلب' : 'إضافة طلب'} - طاولة {table.number}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <X className="h-6 w-6" />
-          </button>
+        <div className="relative p-4 sm:p-6 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex-shrink-0">
+          {/* Decorative circles */}
+          <div className="absolute top-2 right-2 w-20 h-20 bg-white/10 rounded-full"></div>
+          <div className="absolute bottom-2 left-2 w-16 h-16 bg-white/10 rounded-full"></div>
+          
+          <div className="relative flex items-center justify-between z-10">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/30">
+                <ShoppingCart className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                  {isEdit ? 'تعديل الطلب' : 'طلب جديد'}
+                </h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
+                    <p className="text-xs sm:text-sm text-white font-medium">
+                      طاولة {table.number}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110"
+            >
+              <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex-1 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 overflow-hidden">
           {/* Left: Menu */}
-          <div className="space-y-4">
+          <div className="flex flex-col space-y-4 overflow-hidden">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">المنيو</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full"></div>
+                المنيو
+              </h3>
             </div>
             {/* Search Input */}
-            <div className="relative">
+            <div className="relative flex-shrink-0">
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="بحث عن عنصر..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pr-10 pl-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="w-full pr-10 pl-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
               />
               {searchQuery && (
                 <button
@@ -1519,7 +1627,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 </button>
               )}
             </div>
-            <div className="space-y-3">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
               {searchQuery.trim() ? (
                 // Show all matching items when searching
                 <div className="space-y-2">
@@ -1625,9 +1733,17 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
 
           {/* Right: Order Items */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الطلبات</h3>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="flex flex-col space-y-4 overflow-hidden">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 flex-shrink-0">
+              <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full"></div>
+              الطلبات
+              {orderItems.length > 0 && (
+                <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs font-bold rounded-full">
+                  {orderItems.length}
+                </span>
+              )}
+            </h3>
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
               {orderItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">لا توجد عناصر في الطلب</div>
               ) : (
@@ -1747,25 +1863,47 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
   getTablesBySection,
 }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الأقسام والطاولات</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <X className="h-6 w-6" />
-          </button>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
+        {/* Header */}
+        <div className="relative p-4 sm:p-6 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
+          {/* Decorative circles */}
+          <div className="absolute top-2 right-2 w-20 h-20 bg-white/10 rounded-full"></div>
+          <div className="absolute bottom-2 left-2 w-16 h-16 bg-white/10 rounded-full"></div>
+          
+          <div className="relative flex items-center justify-between z-10">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/30">
+                <Settings className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                  إدارة الأقسام والطاولات
+                </h2>
+                <p className="text-xs sm:text-sm text-white/80 mt-1">
+                  {tableSections.length} أقسام • {tables.length} طاولات
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110"
+            >
+              <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900">
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الأقسام</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="w-1 h-6 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full"></div>
+                الأقسام
+              </h3>
               <button
                 onClick={onAddSection}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center text-sm"
+                className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center text-sm font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
               >
                 <Plus className="h-4 w-4 ml-1" />
                 إضافة قسم
@@ -1779,67 +1917,71 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                   return (
                     <div
                       key={section.id}
-                      className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                      className="bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-2xl p-4 sm:p-5 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all duration-300"
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h4 className="font-semibold text-gray-900 dark:text-gray-100">{section.name}</h4>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">{section.name}</h4>
+                            <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-full">
+                              {sectionTables.length} طاولة
+                            </span>
+                          </div>
                           {section.description && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{section.description}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{section.description}</p>
                           )}
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            {sectionTables.length} طاولة
-                          </p>
                         </div>
-                        <div className="flex items-center space-x-2 space-x-reverse">
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => onEditSection(section)}
-                            className="text-orange-600 hover:text-orange-700 p-2"
+                            className="p-2.5 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-orange-200 dark:hover:border-orange-700"
                             title="تعديل"
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                           </button>
                           <button
                             onClick={() => onDeleteSection(section.id)}
-                            className="text-red-600 hover:text-red-700 p-2"
+                            className="p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-red-200 dark:hover:border-red-700"
                             title="حذف"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
                           </button>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
                         <div className="flex flex-wrap gap-2">
                           {sectionTables.map(table => (
                             <div
                               key={table.id}
-                              className="flex items-center space-x-2 space-x-reverse bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded"
+                              className="group flex items-center gap-2 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 hover:shadow-md transition-all duration-300"
                             >
-                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                طاولة {table.number}
+                              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                                {table.number}
                               </span>
-                              <button
-                                onClick={() => onEditTable(table)}
-                                className="text-orange-600 hover:text-orange-700"
-                                title="تعديل"
-                              >
-                                <Edit className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={() => onDeleteTable(table.id)}
-                                className="text-red-600 hover:text-red-700"
-                                title="حذف"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => onEditTable(table)}
+                                  className="p-1 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all duration-300"
+                                  title="تعديل"
+                                >
+                                  <Edit className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                                </button>
+                                <button
+                                  onClick={() => onDeleteTable(table.id)}
+                                  className="p-1 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-all duration-300"
+                                  title="حذف"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
                         <button
                           onClick={() => onAddTable(section.id)}
-                          className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
+                          className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-1 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105"
                         >
-                          <Plus className="h-4 w-4 ml-1" />
+                          <Plus className="h-4 w-4" />
                           إضافة طاولة
                         </button>
                       </div>
@@ -1880,20 +2022,32 @@ const SectionModal: React.FC<SectionModalProps> = ({
   onClose,
 }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            {editingSection ? 'تعديل القسم' : 'إضافة قسم'}
-          </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="h-6 w-6" />
-          </button>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Header */}
+        <div className="relative p-5 bg-gradient-to-br from-blue-500 to-indigo-600">
+          <div className="absolute top-2 right-2 w-16 h-16 bg-white/10 rounded-full"></div>
+          <div className="relative flex items-center justify-between z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
+                <Settings className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white drop-shadow-lg">
+                {editingSection ? 'تعديل القسم' : 'إضافة قسم'}
+              </h2>
+            </div>
+            <button 
+              onClick={onClose} 
+              className="p-2 hover:bg-white/20 backdrop-blur-sm rounded-lg transition-all duration-300 border border-white/30"
+            >
+              <X className="h-5 w-5 text-white" />
+            </button>
+          </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5 bg-gray-50 dark:bg-gray-900">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
               اسم القسم *
             </label>
             <input
@@ -1968,20 +2122,32 @@ const TableModal: React.FC<TableModalProps> = ({
   onClose,
 }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            {editingTable ? 'تعديل الطاولة' : 'إضافة طاولة'}
-          </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="h-6 w-6" />
-          </button>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Header */}
+        <div className="relative p-5 bg-gradient-to-br from-green-500 to-emerald-600">
+          <div className="absolute top-2 right-2 w-16 h-16 bg-white/10 rounded-full"></div>
+          <div className="relative flex items-center justify-between z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
+                <Plus className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white drop-shadow-lg">
+                {editingTable ? 'تعديل الطاولة' : 'إضافة طاولة'}
+              </h2>
+            </div>
+            <button 
+              onClick={onClose} 
+              className="p-2 hover:bg-white/20 backdrop-blur-sm rounded-lg transition-all duration-300 border border-white/30"
+            >
+              <X className="h-5 w-5 text-white" />
+            </button>
+          </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5 bg-gray-50 dark:bg-gray-900">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
               رقم/اسم الطاولة *
             </label>
             <input
