@@ -28,34 +28,54 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
     <button
       onClick={() => onClick(table)}
       className={`
-        w-full min-h-[100px] p-4 rounded-lg border-2 transition-all duration-200 flex flex-col items-center justify-center
+        group relative w-full p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center justify-center gap-3 overflow-hidden
         ${isSelected 
-          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 shadow-lg' 
+          ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-900/20 shadow-xl ring-2 ring-orange-300' 
           : isOccupied
-          ? 'border-red-300 bg-red-50 dark:bg-red-900/20 hover:border-red-400 hover:shadow-md'
-          : 'border-green-300 bg-green-50 dark:bg-green-900/20 hover:border-green-400 hover:shadow-md'
+          ? 'border-red-300 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-900/20 hover:border-red-400 hover:shadow-lg animate-pulse'
+          : 'border-green-300 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-900/20 hover:border-green-400 hover:shadow-lg'
         }
       `}
+      style={{ minHeight: '110px' }}
     >
-      <div className="text-center w-full flex flex-col items-center justify-center gap-2">
+      {/* Background decoration with animation for occupied tables */}
+      <div className={`
+        absolute inset-0 opacity-10 transition-opacity duration-300 group-hover:opacity-20
+        ${isSelected ? 'bg-orange-400' : isOccupied ? 'bg-red-400 animate-pulse' : 'bg-green-400'}
+      `} />
+      
+      {/* Pulsing ring for occupied tables */}
+      {isOccupied && !isSelected && (
+        <div className="absolute inset-0 rounded-xl border-2 border-red-400 animate-ping opacity-20" />
+      )}
+      
+      {/* Table Number - auto height to fit content */}
+      <div className="relative flex items-center justify-center px-3 py-2 flex-1">
         <div className={`
-          text-2xl sm:text-3xl font-bold break-words
+          text-xl sm:text-2xl font-bold text-center w-full
           ${isSelected 
             ? 'text-orange-600 dark:text-orange-400' 
             : isOccupied
             ? 'text-red-600 dark:text-red-400'
             : 'text-green-600 dark:text-green-400'
           }
-        `}>
+        `}
+        style={{ 
+          lineHeight: '1.2',
+          wordBreak: 'normal',
+          overflowWrap: 'break-word',
+          whiteSpace: 'normal'
+        }}>
           {table.number}
         </div>
-        <div className={`
-          text-sm font-medium
-          ${isOccupied ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}
-        `}>
-          {isOccupied ? 'محجوزة' : 'فاضية'}
-        </div>
       </div>
+      
+      {/* Status Badge - always at bottom */}
+      {isOccupied && (
+        <div className="relative text-xs font-semibold px-3 py-1 rounded-full transition-all duration-300 bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-200 animate-pulse">
+          🔴 محجوزة
+        </div>
+      )}
     </button>
   );
 });
@@ -540,6 +560,21 @@ const Cafe: React.FC = () => {
   const handleTableClick = (table: Table) => {
     setSelectedTable(table);
     // Orders will be updated automatically by useEffect above
+    
+    // Scroll the sections container to top
+    const sectionsScroll = document.querySelector('.sections-scroll');
+    if (sectionsScroll) {
+      sectionsScroll.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+    
+    // Also scroll main window to top
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
   };
 
   // Handle add order
@@ -942,50 +977,50 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-lg shadow-lg p-6 text-white">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="group bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-100 dark:text-blue-200 text-sm font-medium mb-1">عدد الأقسام</p>
-              <p className="text-3xl font-bold">{tableStats.totalSections}</p>
+              <p className="text-blue-100 dark:text-blue-200 text-sm font-medium mb-2">عدد الأقسام</p>
+              <p className="text-4xl font-bold">{tableStats.totalSections}</p>
             </div>
-            <div className="bg-white/20 rounded-full p-3">
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
               <Settings className="h-8 w-8" />
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-lg shadow-lg p-6 text-white">
+        <div className="group bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 dark:text-green-200 text-sm font-medium mb-1">إجمالي الطاولات</p>
-              <p className="text-3xl font-bold">{tableStats.totalTables}</p>
+              <p className="text-green-100 dark:text-green-200 text-sm font-medium mb-2">إجمالي الطاولات</p>
+              <p className="text-4xl font-bold">{tableStats.totalTables}</p>
             </div>
-            <div className="bg-white/20 rounded-full p-3">
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
               <ShoppingCart className="h-8 w-8" />
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 rounded-lg shadow-lg p-6 text-white">
+        <div className="group bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-emerald-100 dark:text-emerald-200 text-sm font-medium mb-1">الطاولات الفارغة</p>
-              <p className="text-3xl font-bold">{tableStats.emptyTables}</p>
+              <p className="text-emerald-100 dark:text-emerald-200 text-sm font-medium mb-2">الطاولات الفارغة</p>
+              <p className="text-4xl font-bold">{tableStats.emptyTables}</p>
             </div>
-            <div className="bg-white/20 rounded-full p-3">
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
               <CheckCircle className="h-8 w-8" />
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-red-500 to-red-600 dark:from-red-600 dark:to-red-700 rounded-lg shadow-lg p-6 text-white">
+        <div className="group bg-gradient-to-br from-red-500 to-red-600 dark:from-red-600 dark:to-red-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-red-100 dark:text-red-200 text-sm font-medium mb-1">الطاولات المحجوزة</p>
-              <p className="text-3xl font-bold">{tableStats.occupiedTables}</p>
+              <p className="text-red-100 dark:text-red-200 text-sm font-medium mb-2">الطاولات المحجوزة</p>
+              <p className="text-4xl font-bold">{tableStats.occupiedTables}</p>
             </div>
-            <div className="bg-white/20 rounded-full p-3">
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
               <AlertTriangle className="h-8 w-8" />
             </div>
           </div>
@@ -996,9 +1031,12 @@ const Cafe: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-400px)]">
         {/* Left: Table Sections */}
         <div className="lg:col-span-2 h-full">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-full flex flex-col">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">الأقسام والطاولات</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
+                الأقسام والطاولات
+              </h2>
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 sections-scroll">
@@ -1013,11 +1051,12 @@ const Cafe: React.FC = () => {
                       if (sectionTables.length === 0) return null;
 
                       return (
-                        <div key={section.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                        <div key={section.id} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md hover:shadow-lg transition-shadow duration-300">
+                          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+                            <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full"></div>
                             {section.name}
                           </h3>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 auto-cols-fr">
                             {sectionTables.map(table => {
                               const status = tableStatuses[table.number];
                               const isOccupied = status?.hasUnpaid || false;
@@ -1045,8 +1084,8 @@ const Cafe: React.FC = () => {
 
         {/* Right: Table Orders */}
         <div className="lg:col-span-1 h-full">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-full flex flex-col">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                   {selectedTable ? `طاولة ${selectedTable.number}` : 'اختر طاولة'}
