@@ -10,6 +10,7 @@ import User from "../models/User.js";
 import { sendSubscriptionNotification } from "./notificationController.js";
 import { createFawryPayment } from "../services/fawryService.js";
 import performanceMetrics from "../utils/performanceMetrics.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 // دالة لتحويل الأرقام الإنجليزية إلى العربية
 const convertToArabicNumbers = (str) => {
@@ -1226,20 +1227,71 @@ export const deleteBill = async (req, res) => {
         const tableId = bill.table?._id || bill.table;
         const organizationId = bill.organization;
 
+        // الحذف المباشر من Local و Atlas في نفس الوقت
+        const localConnection = dualDatabaseManager.getLocalConnection();
+        const atlasConnection = dualDatabaseManager.getAtlasConnection();
+        
         // Delete all orders associated with this bill (cascade delete)
         if (bill.orders && bill.orders.length > 0) {
+            // حذف من Local
             const deleteResult = await Order.deleteMany({ _id: { $in: bill.orders } });
-            Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders associated with bill ${bill.billNumber}`);
+            Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local`);
+            
+            // حذف من Atlas مباشرة
+            if (atlasConnection) {
+                try {
+                    const atlasOrdersCollection = atlasConnection.collection('orders');
+                    const atlasDeleteResult = await atlasOrdersCollection.deleteMany({ 
+                        _id: { $in: bill.orders } 
+                    });
+                    Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} orders from Atlas`);
+                } catch (atlasError) {
+                    Logger.warn(`⚠️ Failed to delete orders from Atlas: ${atlasError.message}`);
+                }
+            }
         }
 
-        // Delete all sessions associated with this bill (cascade delete)
+        // Remove bill reference from sessions (but keep the sessions)
+        // الجلسات يجب أن تبقى حتى بعد حذف الفاتورة لأنها سجل تاريخي
         if (bill.sessions && bill.sessions.length > 0) {
-            const sessionDeleteResult = await Session.deleteMany({ _id: { $in: bill.sessions } });
-            Logger.info(`✓ Deleted ${sessionDeleteResult.deletedCount} sessions associated with bill ${bill.billNumber}`);
+            // تحديث في Local
+            const sessionUpdateResult = await Session.updateMany(
+                { _id: { $in: bill.sessions } },
+                { $unset: { bill: 1 } }
+            );
+            Logger.info(`✓ Removed bill reference from ${sessionUpdateResult.modifiedCount} sessions in Local`);
+            
+            // تحديث في Atlas مباشرة
+            if (atlasConnection) {
+                try {
+                    const atlasSessionsCollection = atlasConnection.collection('sessions');
+                    const atlasUpdateResult = await atlasSessionsCollection.updateMany(
+                        { _id: { $in: bill.sessions } },
+                        { $unset: { bill: 1 } }
+                    );
+                    Logger.info(`✓ Removed bill reference from ${atlasUpdateResult.modifiedCount} sessions in Atlas`);
+                } catch (atlasError) {
+                    Logger.warn(`⚠️ Failed to update sessions in Atlas: ${atlasError.message}`);
+                }
+            }
         }
 
-        // Delete the bill
+        // Delete the bill from Local MongoDB
         await bill.deleteOne();
+        Logger.info(`✓ Deleted bill ${bill.billNumber} from Local`);
+        
+        // Delete the bill from Atlas MongoDB مباشرة
+        if (atlasConnection) {
+            try {
+                const atlasBillsCollection = atlasConnection.collection('bills');
+                const atlasDeleteResult = await atlasBillsCollection.deleteOne({ _id: bill._id });
+                Logger.info(`✓ Deleted bill ${bill.billNumber} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
+            } catch (atlasError) {
+                Logger.warn(`⚠️ Failed to delete bill from Atlas: ${atlasError.message}`);
+            }
+        } else {
+            Logger.warn(`⚠️ Atlas connection not available - bill will be synced later`);
+        }
 
         // Update table status based on remaining unpaid bills (Requirement 2.5)
         if (tableId) {

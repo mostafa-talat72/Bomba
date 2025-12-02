@@ -346,10 +346,11 @@ const Billing = () => {
 
     // Listen for bill-update event
     socket.on('bill-update', (data: any) => {
-      console.log('Billing: Received bill-update event', data);
+      console.log('📡 Received bill-update event:', data);
       
       if (data.type === 'created' || data.type === 'updated' || data.type === 'deleted') {
-        // Refresh bills list when bill is created, updated, or deleted
+        // الحذف يتم الآن مباشرة من Local و Atlas
+        // لذلك يمكن إعادة جلب الفواتير فوراً
         fetchBills();
         fetchTables();
       }
@@ -1065,13 +1066,18 @@ const Billing = () => {
     
     try {
       setIsCancelingBill(true);
-      const result = await api.deleteBill(selectedBill.id || selectedBill._id);
+      const billId = selectedBill.id || selectedBill._id;
+      
+      const result = await api.deleteBill(billId);
       if (result && result.success) {
         showNotification('تم حذف الفاتورة بنجاح', 'success');
         setShowCancelConfirmModal(false);
         setShowPaymentModal(false);
-        await fetchBills();
         setSelectedBill(null);
+        
+        // الحذف يتم الآن مباشرة من Local و Atlas في نفس الوقت
+        // لذلك يمكن إعادة جلب الفواتير فوراً بدون تأخير
+        await Promise.all([fetchBills(), fetchTables()]);
       } else {
         showNotification('فشل في حذف الفاتورة', 'error');
       }
@@ -1343,10 +1349,7 @@ const Billing = () => {
                   (bill.sessions && bill.sessions.some((s: any) => s.deviceType === 'playstation'))
                 );
 
-                console.log('🎮 إجمالي فواتير البلايستيشن:', allPlaystationBills.length);
-                console.log('🎮 فواتير بلايستيشن غير مرتبطة بطاولة:', 
-                  allPlaystationBills.filter(b => !b.table).length
-                );
+              
 
                 // تجميع الأجهزة حسب الاسم
                 const deviceMap = new Map<string, { 
@@ -1396,12 +1399,6 @@ const Billing = () => {
                       // هذا يضمن ظهور فواتير الجلسات غير المرتبطة بطاولة في قسم أجهزة البلايستيشن
                       if (!isLinkedToTable) {
                         if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
-                          console.log(`✅ إضافة فاتورة غير مرتبطة بطاولة للجهاز ${deviceKey}:`, {
-                            billId: bill.id || bill._id,
-                            billNumber: bill.billNumber,
-                            customerName: bill.customerName,
-                            status: bill.status
-                          });
                           deviceData.bills.push(bill);
                         }
                       }
@@ -1456,12 +1453,7 @@ const Billing = () => {
                     // فلترة الفواتير حسب الحالة المختارة
                     let filteredBills = deviceData.bills;
                     
-                    console.log(`📊 الجهاز ${deviceData.deviceName}:`, {
-                      totalBills: deviceData.bills.length,
-                      unlinkedBills: deviceData.bills.filter(b => !b.table).length,
-                      hasActiveSession: deviceData.hasActiveSession
-                    });
-                    
+                   
                     if (playstationStatusFilter === 'unpaid') {
                       // إظهار الفواتير غير المدفوعة فقط
                       filteredBills = deviceData.bills.filter(bill => 
@@ -1581,14 +1573,35 @@ const Billing = () => {
 
       {/* Unlinked Bills Section - فواتير غير مرتبطة بطاولة (باستثناء فواتير البلايستيشن والكمبيوتر) */}
       {(() => {
-        const unlinkedBills = bills.filter((bill: Bill) => 
-          !bill.table && 
-          (bill.status === 'draft' || bill.status === 'partial' || bill.status === 'overdue') &&
+        const unlinkedBills = bills.filter((bill: Bill) => {
+          // يجب أن تكون غير مرتبطة بطاولة
+          if (bill.table) return false;
+          
+          // يجب أن تكون غير مدفوعة
+          if (!['draft', 'partial', 'overdue'].includes(bill.status)) return false;
+          
           // استبعاد فواتير البلايستيشن والكمبيوتر لأنها تظهر في أقسامها الخاصة
-          bill.billType !== 'playstation' && 
-          bill.billType !== 'computer' &&
-          !bill.sessions?.some((s: any) => s.deviceType === 'playstation' || s.deviceType === 'computer')
-        );
+          // تحقق من billType أولاً
+          if (bill.billType === 'playstation' || bill.billType === 'computer') {
+            console.log('🚫 استبعاد فاتورة بسبب billType:', bill.billNumber, bill.billType);
+            return false;
+          }
+          
+          // تحقق من وجود جلسات بلايستيشن أو كمبيوتر
+          if (bill.sessions && bill.sessions.length > 0) {
+            const hasGamingSessions = bill.sessions.some((s: any) => 
+              s.deviceType === 'playstation' || s.deviceType === 'computer'
+            );
+            if (hasGamingSessions) {
+              console.log('🚫 استبعاد فاتورة بسبب جلسات الألعاب:', bill.billNumber);
+              return false;
+            }
+          }
+          
+          // هذه فاتورة كافيه - يجب أن تظهر
+          console.log('✅ فاتورة كافيه غير مرتبطة بطاولة:', bill.billNumber);
+          return true;
+        });
 
         console.log('📋 فواتير غير مرتبطة بطاولة (كافيه فقط):', unlinkedBills.length);
         console.log('📋 تفاصيل:', unlinkedBills.map(b => ({
@@ -1596,7 +1609,7 @@ const Billing = () => {
           type: b.billType,
           hasSessions: !!b.sessions?.length
         })));
-
+    
         if (unlinkedBills.length === 0) return null;
 
         return (
