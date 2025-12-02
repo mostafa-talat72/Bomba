@@ -17,7 +17,16 @@
     "generate:qrcodes": "node scripts/generateMissingQRCodes.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "backup": "node scripts/backup.js",
-    "restore": "node scripts/restore.js"
+    "restore": "node scripts/restore.js",
+    "sync:initial": "node scripts/initialSync.js",
+    "test:atlas": "node scripts/testAtlasConnection.js",
+    "test:sync": "node scripts/quickSyncTest.js",
+    "test:auto-sync": "node scripts/testAutoSync.js",
+    "test:local-to-atlas": "node scripts/testLocalToAtlasSync.js",
+    "diagnose:sync": "node scripts/diagnoseSyncIssues.js",
+    "sync:apply-all": "node scripts/applySyncToAllModels.js",
+    "sync:atlas-to-local": "node scripts/syncAtlasToLocal.js",
+    "check:replica": "node scripts/checkReplicaSet.js"
   },
   "dependencies": {
     "axios": "^1.10.0",
@@ -43,7 +52,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.1",
-    "socket.io": "^4.7.4"
+    "socket.io": "^4.7.4",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "fast-check": "^4.3.0",

@@ -211,4 +211,8 @@ inventoryItemSchema.index({ currentStock: 1 });
 inventoryItemSchema.index({ isActive: 1 });
 inventoryItemSchema.index({ barcode: 1 }, { sparse: true });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(inventoryItemSchema);
+
 export default mongoose.model("InventoryItem", inventoryItemSchema);

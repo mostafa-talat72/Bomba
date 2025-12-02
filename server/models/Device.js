@@ -93,5 +93,9 @@ deviceSchema.pre("save", function (next) {
     next();
 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(deviceSchema);
+
 const Device = mongoose.model("Device", deviceSchema);
 export default Device;

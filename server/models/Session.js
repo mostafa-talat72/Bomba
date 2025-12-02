@@ -522,5 +522,9 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
     };
 };
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(sessionSchema);
+
 const Session = mongoose.model("Session", sessionSchema);
 export default Session;

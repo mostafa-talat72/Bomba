@@ -45,6 +45,10 @@ tableSectionSchema.index({ name: 1 });
 tableSectionSchema.index({ organization: 1 });
 tableSectionSchema.index({ sortOrder: 1 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(tableSectionSchema);
+
 export default mongoose.model("TableSection", tableSectionSchema);
 
 

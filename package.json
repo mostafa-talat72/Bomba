@@ -30,7 +30,10 @@
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "seed:admin": "cd server && node scripts/seedAdmin.js",
-    "migrate:tables": "cd server && node scripts/migrateTableReferences.js"
+    "migrate:tables": "cd server && node scripts/migrateTableReferences.js",
+    "check:replica": "node server/scripts/checkReplicaSet.js",
+    "init:replica": "node server/scripts/initializeReplicaSet.js",
+    "sync:initial": "node server/scripts/initialSync.js"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

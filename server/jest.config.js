@@ -9,4 +9,7 @@ export default {
   ],
   coverageDirectory: 'coverage',
   verbose: true,
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
 };

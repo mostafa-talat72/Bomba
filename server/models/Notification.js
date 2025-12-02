@@ -457,5 +457,9 @@ notificationSchema.statics.cleanExpired = function (organization) {
     });
 };
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(notificationSchema);
+
 const Notification = mongoose.model("Notification", notificationSchema);
 export default Notification;

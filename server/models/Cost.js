@@ -234,4 +234,8 @@ costSchema.index({ date: 1 });
 costSchema.index({ dueDate: 1 });
 costSchema.index({ createdBy: 1 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(costSchema);
+
 export default mongoose.model("Cost", costSchema);

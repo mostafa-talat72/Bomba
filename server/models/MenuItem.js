@@ -126,4 +126,8 @@ menuItemSchema.index({ organization: 1, isAvailable: 1, sortOrder: 1 }); // لل
 menuItemSchema.index({ isPopular: 1, organization: 1 }); // للعناصر الشائعة
 menuItemSchema.index({ section: 1, organization: 1 }); // للبحث حسب القسم
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(menuItemSchema);
+
 export default mongoose.model("MenuItem", menuItemSchema);

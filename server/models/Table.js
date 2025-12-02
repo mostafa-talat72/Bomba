@@ -47,4 +47,8 @@ tableSchema.index({ section: 1 });
 tableSchema.index({ organization: 1 });
 tableSchema.index({ isActive: 1 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(tableSchema);
+
 export default mongoose.model("Table", tableSchema);

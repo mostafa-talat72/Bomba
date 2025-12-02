@@ -251,4 +251,8 @@ orderSchema.index({ organization: 1, table: 1, createdAt: -1 });
 orderSchema.index({ organization: 1, createdAt: -1 });
 orderSchema.index({ table: 1, status: 1 }); // Index for table-status queries
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(orderSchema);
+
 export default mongoose.model("Order", orderSchema);

@@ -45,5 +45,9 @@ menuSectionSchema.index({ name: 1 });
 menuSectionSchema.index({ organization: 1 });
 menuSectionSchema.index({ sortOrder: 1 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(menuSectionSchema);
+
 export default mongoose.model("MenuSection", menuSectionSchema);
 

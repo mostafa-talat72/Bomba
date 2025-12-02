@@ -1192,4 +1192,8 @@ billSchema.post("deleteOne", { document: true, query: false }, async function (d
     }
 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(billSchema);
+
 export default mongoose.model("Bill", billSchema);

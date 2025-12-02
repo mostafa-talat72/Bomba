@@ -230,4 +230,8 @@ userSchema.methods.canAccessPage = function (page) {
     return this.hasAnyPermission(requiredPermissions);
 };
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(userSchema);
+
 export default mongoose.model("User", userSchema);

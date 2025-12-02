@@ -15,4 +15,8 @@ const OrganizationSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(OrganizationSchema);
+
 export default mongoose.model("Organization", OrganizationSchema);
