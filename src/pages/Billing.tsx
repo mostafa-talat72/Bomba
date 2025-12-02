@@ -415,7 +415,8 @@ const Billing = () => {
   useEffect(() => {
     // Don't update selectedBill from bills array if payment modal is open
     // because bills array doesn't include qrCode field
-    if (selectedBill && bills.length > 0 && !showPaymentModal) {
+    // Also don't update if partial payment modal is open to prevent bill switching
+    if (selectedBill && bills.length > 0 && !showPaymentModal && !showPartialPaymentModal && !showSessionPaymentModal) {
       const updatedBill = bills.find((bill: Bill) =>
         bill.id === selectedBill.id || bill._id === selectedBill._id
       );
@@ -423,7 +424,7 @@ const Billing = () => {
         setSelectedBill(updatedBill);
       }
     }
-  }, [bills, selectedBill, showPaymentModal]);
+  }, [bills, selectedBill, showPaymentModal, showPartialPaymentModal, showSessionPaymentModal]);
 
   // تحديث تلقائي لمبالغ الجلسات والفواتير كل دقيقة إذا كان هناك جلسة نشطة
   useEffect(() => {
@@ -439,7 +440,12 @@ const Billing = () => {
             .map(async session => {
               await api.updateSessionCost(session._id || session.id);
               // تحديث الفاتورة المختارة إذا كانت هي نفسها
-              if (selectedBill && (selectedBill._id === bill._id || selectedBill.id === bill.id)) {
+              // ولكن فقط إذا لم تكن أي نافذة دفع مفتوحة
+              if (selectedBill && 
+                  (selectedBill._id === bill._id || selectedBill.id === bill.id) &&
+                  !showPaymentModal && 
+                  !showPartialPaymentModal && 
+                  !showSessionPaymentModal) {
                 const billRes = await api.getBill(bill._id || bill.id);
                 if (billRes.success && billRes.data) {
                   setSelectedBill(billRes.data);
@@ -461,8 +467,8 @@ const Billing = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-    // الاعتماد فقط على وجود جلسة نشطة
-  }, [bills.length, bills.map(b => (b.sessions || []).map(s => s.status).join(',')).join(',')]);
+    // الاعتماد فقط على وجود جلسة نشطة وحالة النوافذ
+  }, [bills.length, bills.map(b => (b.sessions || []).map(s => s.status).join(',')).join(','), showPaymentModal, showPartialPaymentModal, showSessionPaymentModal]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1842,61 +1848,88 @@ const Billing = () => {
 
       {/* Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">إدارة الدفع - فاتورة #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-blue-200 dark:border-blue-800 animate-bounce-in">
+            <div className="sticky top-0 z-10 p-6 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg">
+                  <DollarSign className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">إدارة الدفع</h3>
+                  <p className="text-sm text-blue-100 mt-1">فاتورة #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
+              >
+                <X className="h-6 w-6" />
+              </button>
             </div>
 
             <div className="p-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Payment Section */}
                 <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">معلومات الدفع</h4>
+                  <h4 className="font-bold text-xl text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    معلومات الدفع
+                  </h4>
 
                   {/* معلومات الفاتورة */}
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">معلومات الفاتورة</h5>
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-5 rounded-xl mb-6 border-2 border-blue-200 dark:border-blue-800 shadow-md">
+                    <h5 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
+                      <Receipt className="h-5 w-5" />
+                      معلومات الفاتورة
+                    </h5>
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">رقم الفاتورة:</span>
-                        <span className="font-medium mr-2 dark:text-gray-100">#{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</span>
+                      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">رقم الفاتورة</span>
+                        <span className="font-bold text-gray-900 dark:text-gray-100">#{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</span>
                       </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">العميل:</span>
-                        <span className="font-medium mr-2 dark:text-gray-100">{selectedBill && (getCustomerDisplay(selectedBill) as string)}</span>
+                      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">العميل</span>
+                        <span className="font-bold text-gray-900 dark:text-gray-100">{selectedBill && (getCustomerDisplay(selectedBill) as string)}</span>
                       </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
-                        <span className="font-medium text-green-600 dark:text-green-400 mr-2">{formatCurrency(selectedBill?.total || 0)}</span>
+                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-3 rounded-lg shadow-sm border border-green-200 dark:border-green-800">
+                        <span className="text-green-700 dark:text-green-300 text-xs block mb-1">المبلغ الكلي</span>
+                        <span className="font-bold text-xl text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.total || 0)}</span>
                       </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">المدفوع مسبقاً:</span>
-                        <span className="font-medium text-blue-600 dark:text-blue-400 mr-2">{formatCurrency(selectedBill?.paid || 0)}</span>
+                      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 p-3 rounded-lg shadow-sm border border-blue-200 dark:border-blue-800">
+                        <span className="text-blue-700 dark:text-blue-300 text-xs block mb-1">المدفوع مسبقاً</span>
+                        <span className="font-bold text-xl text-blue-600 dark:text-blue-400">{formatCurrency(selectedBill?.paid || 0)}</span>
                       </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
-                        <span className="font-medium text-red-600 dark:text-red-400 mr-2">{formatCurrency(selectedBill?.remaining || 0)}</span>
+                      <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/30 dark:to-orange-900/30 p-3 rounded-lg shadow-sm border border-red-200 dark:border-red-800">
+                        <span className="text-red-700 dark:text-red-300 text-xs block mb-1">المتبقي</span>
+                        <span className="font-bold text-xl text-red-600 dark:text-red-400">{formatCurrency(selectedBill?.remaining || 0)}</span>
                       </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-300">الحالة:</span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full mr-2 ${getStatusColor(selectedBill?.status || 'draft')}`}>
+                      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">الحالة</span>
+                        <span className={`px-3 py-1.5 text-xs font-bold rounded-full inline-block shadow-sm ${getStatusColor(selectedBill?.status || 'draft')}`}>
                           {getStatusText(selectedBill?.status || 'draft')}
                         </span>
                       </div>
                       {selectedBill?.table && (
-                        <div className="col-span-2">
-                          <span className="text-gray-600 dark:text-gray-300">الطاولة:</span>
-                          <span className="font-medium mr-2 dark:text-gray-100">طاولة {selectedBill.table.number}</span>
-                          <button
-                            onClick={() => {
-                              setNewTableNumber(selectedBill.table?._id || selectedBill.table?.id || null);
-                              setShowChangeTableModal(true);
-                            }}
-                            className="mr-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
-                          >
-                            تغيير الطاولة
-                          </button>
+                        <div className="col-span-2 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-lg shadow-sm border border-purple-200 dark:border-purple-800">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <TableIcon className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                              <div>
+                                <span className="text-purple-700 dark:text-purple-300 text-xs block">الطاولة</span>
+                                <span className="font-bold text-lg text-purple-900 dark:text-purple-100">طاولة {selectedBill.table.number}</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setNewTableNumber(selectedBill.table?._id || selectedBill.table?.id || null);
+                                setShowChangeTableModal(true);
+                              }}
+                              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-bold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-md"
+                            >
+                              تغيير الطاولة
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1904,9 +1937,10 @@ const Billing = () => {
 
                   {/* تفاصيل الجهاز النشط */}
                   {selectedBill && hasActiveSession(selectedBill) && (
-                    <div className="bg-red-50 dark:bg-red-900 p-4 rounded-lg mb-6 border border-red-200 dark:border-red-700">
-                      <h5 className="font-medium text-red-900 dark:text-red-100 mb-3 flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                    <div className="bg-gradient-to-br from-red-50 via-orange-50 to-red-50 dark:from-red-900/40 dark:via-orange-900/30 dark:to-red-900/40 p-5 rounded-xl mb-6 border-2 border-red-300 dark:border-red-700 shadow-lg animate-pulse-slow">
+                      <h5 className="font-bold text-lg text-red-900 dark:text-red-100 mb-4 flex items-center gap-3">
+                        <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse shadow-lg"></div>
+                        <Gamepad2 className="h-6 w-6" />
                         الجهاز النشط
                       </h5>
                       <div className="space-y-2 text-sm">
@@ -1961,9 +1995,12 @@ const Billing = () => {
 
                   {/* تفاصيل الأصناف مع الكميات */}
                   {selectedBill && (
-                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                      <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">تفاصيل الأصناف</h5>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                    <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-5 rounded-xl mb-6 border-2 border-purple-200 dark:border-purple-800 shadow-md">
+                      <h5 className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-4 flex items-center gap-2">
+                        <Receipt className="h-5 w-5" />
+                        تفاصيل الأصناف
+                      </h5>
+                      <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
                         {(() => {
                           const items = aggregateItemsWithPayments(
                             selectedBill?.orders || [], 
@@ -1982,23 +2019,23 @@ const Billing = () => {
                           }
                           
                           return items.map((item, index) => (
-                            <div key={index} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
-                              <div className="flex justify-between items-start mb-2">
-                                <span className="font-medium text-gray-900 dark:text-gray-100">{item.name}</span>
-                                <span className="text-sm text-gray-600 dark:text-gray-400">{formatCurrency(item.price)}</span>
+                            <div key={index} className="bg-white dark:bg-gray-800 p-4 rounded-xl border-2 border-purple-200 dark:border-purple-700 shadow-sm hover:shadow-md transition-all">
+                              <div className="flex justify-between items-start mb-3">
+                                <span className="font-bold text-gray-900 dark:text-gray-100">{item.name}</span>
+                                <span className="text-sm font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-1 rounded-lg">{formatCurrency(item.price)}</span>
                               </div>
-                              <div className="grid grid-cols-3 gap-2 text-xs">
-                                <div className="text-center p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                  <div className="text-gray-600 dark:text-gray-400">الكمية الكلية</div>
-                                  <div className="font-bold text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</div>
+                              <div className="grid grid-cols-3 gap-3 text-xs">
+                                <div className="text-center p-3 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-lg shadow-sm">
+                                  <div className="text-gray-600 dark:text-gray-400 font-semibold mb-1">الكمية الكلية</div>
+                                  <div className="font-bold text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</div>
                                 </div>
-                                <div className="text-center p-2 bg-green-100 dark:bg-green-900 rounded">
-                                  <div className="text-green-700 dark:text-green-300">المدفوع</div>
-                                  <div className="font-bold text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity)}</div>
+                                <div className="text-center p-3 bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/50 dark:to-emerald-900/50 rounded-lg shadow-sm">
+                                  <div className="text-green-700 dark:text-green-300 font-semibold mb-1">المدفوع</div>
+                                  <div className="font-bold text-lg text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity)}</div>
                                 </div>
-                                <div className="text-center p-2 bg-orange-100 dark:bg-orange-900 rounded">
-                                  <div className="text-orange-700 dark:text-orange-300">المتبقي</div>
-                                  <div className="font-bold text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity)}</div>
+                                <div className="text-center p-3 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/50 dark:to-red-900/50 rounded-lg shadow-sm">
+                                  <div className="text-orange-700 dark:text-orange-300 font-semibold mb-1">المتبقي</div>
+                                  <div className="font-bold text-lg text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity)}</div>
                                 </div>
                               </div>
                               {item.addons && item.addons.length > 0 && (
@@ -2446,16 +2483,36 @@ const Billing = () => {
 
       {/* Partial Payment Modal */}
       {showPartialPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">دفع مشروبات محددة - فاتورة #{selectedBill?.billNumber}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">اختر المشروبات المطلوب دفعها من هذه الفاتورة</p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-green-200 dark:border-green-800 animate-bounce-in">
+            <div className="sticky top-0 z-10 p-6 bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-700 dark:to-emerald-700 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg">
+                  <Receipt className="h-8 w-8 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">دفع مشروبات محددة</h3>
+                  <p className="text-sm text-green-100 mt-1">فاتورة #{selectedBill?.billNumber}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPartialPaymentModal(false);
+                  setSelectedItems({});
+                  setItemQuantities({});
+                }}
+                className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
+              >
+                <X className="h-6 w-6" />
+              </button>
             </div>
 
             <div className="p-6">
               <div className="mb-6">
-                <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">اختر المشروبات المطلوب دفعها</h4>
+                <h4 className="font-bold text-xl text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                  اختر المشروبات المطلوب دفعها
+                </h4>
 
                 {(() => {
                   const itemsWithRemaining = aggregateItemsWithPayments(
@@ -2469,10 +2526,12 @@ const Billing = () => {
 
                   if (itemsWithRemaining.length === 0) {
                     return (
-                      <div className="text-center py-8 bg-green-50 dark:bg-green-900 rounded-lg border border-green-200 dark:border-green-700">
-                        <div className="text-4xl mb-4">✅</div>
-                        <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">جميع العناصر مدفوعة بالكامل!</h5>
-                        <p className="text-green-700 dark:text-green-300">
+                      <div className="text-center py-12 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 rounded-xl border-2 border-green-300 dark:border-green-700 shadow-lg">
+                        <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                          <CheckCircle className="h-10 w-10 text-white" />
+                        </div>
+                        <h5 className="font-bold text-xl text-green-900 dark:text-green-100 mb-2">جميع العناصر مدفوعة بالكامل!</h5>
+                        <p className="text-green-700 dark:text-green-300 text-lg">
                           لا توجد عناصر متبقية للدفع في هذه الفاتورة
                         </p>
                       </div>
@@ -2487,14 +2546,19 @@ const Billing = () => {
                     .join('|');
                     const itemKey = `${item.name}|${item.price}|${addonsKey}`;
                   return (
-                    <div key={itemKey} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600 flex flex-col gap-2">
+                    <div key={itemKey} className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-700 dark:to-gray-800 rounded-xl p-5 border-2 border-green-200 dark:border-green-700 flex flex-col gap-3 shadow-md hover:shadow-lg transition-all">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-bold text-orange-700 dark:text-orange-400">
-                            {item.name}
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center shadow-md">
+                            <Receipt className="h-5 w-5 text-white" />
+                          </div>
+                          <span className="font-bold text-lg text-gray-900 dark:text-gray-100">{item.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3 bg-green-100 dark:bg-green-900/50 px-4 py-2 rounded-lg">
                           {/* زر - للصنف الرئيسي */}
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-600 hover:bg-gray-100 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={() => {
                               const newQty = Math.max(0, (itemQuantities[itemKey] || 0) - 1);
                               setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
@@ -2507,11 +2571,11 @@ const Billing = () => {
                             }}
                             disabled={(itemQuantities[itemKey] || 0) <= 0}
                           >-</button>
-                                                      <span className="mx-2 w-6 text-center select-none font-bold text-orange-700 dark:text-orange-400">{formatDecimal(itemQuantities[itemKey] || 0)}</span>
+                          <span className="mx-2 w-12 text-center select-none font-bold text-2xl text-green-700 dark:text-green-300">{formatDecimal(itemQuantities[itemKey] || 0)}</span>
                           {/* زر + للصنف الرئيسي */}
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-500 text-lg font-bold bg-white dark:bg-gray-600 hover:bg-gray-100 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={() => {
                               const newQty = Math.min(item.remainingQuantity, (itemQuantities[itemKey] || 0) + 1);
                               setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
@@ -2519,20 +2583,45 @@ const Billing = () => {
                             }}
                             disabled={(itemQuantities[itemKey] || 0) >= item.remainingQuantity}
                           >+</button>
-                          {/* زر دفع الكمية بالكامل للصنف الرئيسي */}
+                        </div>
+                      </div>
+                      
+                      {/* معلومات الصنف */}
+                      <div className="flex items-center justify-between bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 p-3 rounded-lg">
+                        <div className="flex gap-6 text-sm">
+                          <div className="flex flex-col items-center">
+                            <span className="text-gray-600 dark:text-gray-400 text-xs mb-1">الكمية الكلية</span>
+                            <span className="font-bold text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-green-600 dark:text-green-400 text-xs mb-1">المدفوع</span>
+                            <span className="font-bold text-lg text-green-700 dark:text-green-300">{formatDecimal(item.paidQuantity)}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-orange-600 dark:text-orange-400 text-xs mb-1">المتبقي</span>
+                            <span className="font-bold text-lg text-orange-700 dark:text-orange-300">{formatDecimal(item.remainingQuantity)}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-sm font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-3 py-1 rounded-lg">
+                            {formatCurrency(item.price)}
+                          </div>
+                          {/* زر دفع الكمية بالكامل */}
                           <button
                             type="button"
-                            className="ml-2 px-2 py-1 bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 rounded text-xs"
+                            className="px-4 py-1.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white text-xs font-bold rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={() => {
                               setItemQuantities({ ...itemQuantities, [itemKey]: item.remainingQuantity });
                               setSelectedItems(prev => ({ ...prev, [itemKey]: item.remainingQuantity > 0 }));
                             }}
                             disabled={(itemQuantities[itemKey] || 0) === item.remainingQuantity}
-                          >دفع الكمية بالكامل</button>
+                          >
+                            دفع الكمية بالكامل
+                          </button>
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{formatCurrency(item.price)}</div>
                       </div>
-                      <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-300">
+                      
+                      <div className="hidden gap-4 text-sm text-gray-600 dark:text-gray-300">
                         <div>الكمية: <span className="font-bold text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</span></div>
                         <div>المدفوع: <span className="text-green-700 dark:text-green-400 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
                         <div>المتبقي: <span className="text-yellow-700 dark:text-yellow-400 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>

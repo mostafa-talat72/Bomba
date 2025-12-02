@@ -28,54 +28,71 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
     <button
       onClick={() => onClick(table)}
       className={`
-        group relative w-full p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center justify-center gap-3 overflow-hidden
+        group relative p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-110 hover:shadow-2xl hover:-translate-y-1
         ${isSelected 
-          ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-900/20 shadow-xl ring-2 ring-orange-300' 
+          ? 'border-orange-400 bg-gradient-to-br from-orange-50 via-yellow-50 to-orange-100 dark:from-orange-900/40 dark:via-yellow-900/30 dark:to-orange-800/30 shadow-xl ring-4 ring-orange-300 dark:ring-orange-700' 
           : isOccupied
-          ? 'border-red-300 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-900/20 hover:border-red-400 hover:shadow-lg animate-pulse'
-          : 'border-green-300 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-900/20 hover:border-green-400 hover:shadow-lg'
+          ? 'border-red-400 bg-gradient-to-br from-red-50 via-orange-50 to-red-100 dark:from-red-900/40 dark:via-orange-900/30 dark:to-red-800/30 hover:border-red-500 hover:shadow-red-300 dark:hover:shadow-red-900/70'
+          : 'border-green-400 bg-gradient-to-br from-green-50 via-emerald-50 to-green-100 dark:from-green-900/40 dark:via-emerald-900/30 dark:to-green-800/30 hover:border-green-500 hover:shadow-green-300 dark:hover:shadow-green-900/70'
         }
       `}
-      style={{ minHeight: '110px' }}
     >
-      {/* Background decoration with animation for occupied tables */}
-      <div className={`
-        absolute inset-0 opacity-10 transition-opacity duration-300 group-hover:opacity-20
-        ${isSelected ? 'bg-orange-400' : isOccupied ? 'bg-red-400 animate-pulse' : 'bg-green-400'}
-      `} />
-      
-      {/* Pulsing ring for occupied tables */}
-      {isOccupied && !isSelected && (
-        <div className="absolute inset-0 rounded-xl border-2 border-red-400 animate-ping opacity-20" />
-      )}
-      
-      {/* Table Number - auto height to fit content */}
-      <div className="relative flex items-center justify-center px-3 py-2 flex-1">
-        <div className={`
-          text-xl sm:text-2xl font-bold text-center w-full
-          ${isSelected 
-            ? 'text-orange-600 dark:text-orange-400' 
-            : isOccupied
-            ? 'text-red-600 dark:text-red-400'
-            : 'text-green-600 dark:text-green-400'
-          }
-        `}
-        style={{ 
-          lineHeight: '1.2',
-          wordBreak: 'normal',
-          overflowWrap: 'break-word',
-          whiteSpace: 'normal'
-        }}>
-          {table.number}
-        </div>
+      {/* Status Badge */}
+      <div className="absolute -top-2 -right-2">
+        {isSelected ? (
+          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
+            مختارة
+          </span>
+        ) : isOccupied ? (
+          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
+            محجوزة
+          </span>
+        ) : (
+          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
+            فارغة
+          </span>
+        )}
       </div>
-      
-      {/* Status Badge - always at bottom */}
-      {isOccupied && (
-        <div className="relative text-xs font-semibold px-3 py-1 rounded-full transition-all duration-300 bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-200 animate-pulse">
-          🔴 محجوزة
+
+      {/* Table Content */}
+      <div className="flex flex-col items-center justify-center pt-2">
+        <div className={`
+          w-16 h-16 rounded-2xl flex items-center justify-center mb-3 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6
+          ${isSelected
+            ? 'bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-300 dark:shadow-orange-900/50'
+            : isOccupied 
+            ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-lg shadow-red-300 dark:shadow-red-900/50' 
+            : 'bg-gradient-to-br from-green-400 to-green-600 shadow-lg shadow-green-300 dark:shadow-green-900/50'
+          }
+        `}>
+          <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
         </div>
-      )}
+        <span className={`text-2xl font-bold transition-colors ${
+          isSelected 
+            ? 'text-orange-700 dark:text-orange-300' 
+            : isOccupied
+            ? 'text-red-700 dark:text-red-300'
+            : 'text-green-700 dark:text-green-300'
+        }`}>
+          {table.number}
+        </span>
+        <span className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+          طاولة
+        </span>
+      </div>
+
+      {/* Hover Effect Overlay */}
+      <div className={`
+        absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
+        ${isSelected
+          ? 'bg-gradient-to-br from-orange-400/10 to-yellow-400/10'
+          : isOccupied 
+          ? 'bg-gradient-to-br from-red-400/10 to-orange-400/10' 
+          : 'bg-gradient-to-br from-green-400/10 to-emerald-400/10'
+        }
+      `} />
     </button>
   );
 });
@@ -713,6 +730,7 @@ const Cafe: React.FC = () => {
 
       // Close modal immediately for better UX
       setShowOrderModal(false);
+      setSelectedTable(null);
       setCurrentOrderItems([]);
       setOrderNotes('');
       showNotification('جاري حفظ الطلب...', 'info');
@@ -805,6 +823,7 @@ const Cafe: React.FC = () => {
 
       // Close modal immediately for better UX
       setShowEditOrderModal(false);
+      setSelectedTable(null);
       setSelectedOrder(null);
       setCurrentOrderItems([]);
       setOrderNotes('');
@@ -1095,6 +1114,7 @@ const Cafe: React.FC = () => {
           onSave={handleSaveOrder}
           onClose={() => {
             setShowOrderModal(false);
+            setSelectedTable(null);
             setCurrentOrderItems([]);
             setOrderNotes('');
           }}
@@ -1128,6 +1148,7 @@ const Cafe: React.FC = () => {
           onSave={handleUpdateOrder}
           onClose={() => {
             setShowEditOrderModal(false);
+            setSelectedTable(null);
             setSelectedOrder(null);
             setCurrentOrderItems([]);
             setOrderNotes('');
@@ -1335,7 +1356,10 @@ const Cafe: React.FC = () => {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowTableOrdersModal(false)}
+                  onClick={() => {
+                    setShowTableOrdersModal(false);
+                    setSelectedTable(null);
+                  }}
                   className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110"
                 >
                   <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
