@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle, Folder, FolderOpen, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle, Folder, FolderOpen, ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory } from '../services/api';
 import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
+import '../styles/menu-animations.css';
 
 const Menu: React.FC = () => {
 	const {
@@ -430,10 +431,6 @@ const Menu: React.FC = () => {
 	});
 
 
-	const getStatusColor = (isAvailable: boolean) => {
-		return isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-	};
-
 	const getStatusText = (isAvailable: boolean) => {
 		return isAvailable ? 'متاح' : 'غير متاح';
 	};
@@ -560,60 +557,75 @@ const Menu: React.FC = () => {
 
 
 	return (
-		<div className="space-y-6">
-			{/* Header */}
-			<div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
-				<div className="flex items-center xs:w-full xs:justify-between">
-					<h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
-						<Utensils className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
-						إدارة المنيو
-					</h1>
-					<p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">إدارة قائمة الطعام والمشروبات</p>
-				</div>
-				<div className="flex items-center gap-2 xs:w-full xs:flex-col">
-					<button
-						onClick={handleAddSection}
-						className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
-					>
-						<Layers className="h-5 w-5 ml-2" />
-						إضافة قسم
-					</button>
-					<button
-						onClick={() => handleAddCategory()}
-						className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
-					>
-						<Folder className="h-5 w-5 ml-2" />
-						إضافة فئة
-					</button>
-					<button
-						onClick={() => handleAddItem()}
-						className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
-					>
-						<Plus className="h-5 w-5 ml-2" />
-						إضافة عنصر
-					</button>
+		<div className="space-y-6 p-4">
+			{/* Header with gradient background */}
+			<div className="bg-gradient-to-r from-orange-50 via-white to-orange-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border border-orange-100 dark:border-gray-700 p-6">
+				<div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-4 xs:w-full">
+					<div className="flex flex-col xs:w-full">
+						<div className="flex items-center gap-3 mb-2">
+							<div className="p-3 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg">
+								<Utensils className="h-7 w-7 text-white" />
+							</div>
+							<div>
+								<h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent dark:from-orange-400 dark:to-orange-300">
+									إدارة المنيو
+								</h1>
+								<p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
+									<Sparkles className="h-4 w-4" />
+									إدارة قائمة الطعام والمشروبات بأناقة
+								</p>
+							</div>
+						</div>
+					</div>
+					<div className="flex items-center gap-2 xs:w-full xs:flex-col">
+						<button
+							onClick={handleAddSection}
+							className="action-button bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 dark:from-blue-500 dark:to-blue-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
+						>
+							<Layers className="h-5 w-5" />
+							<span className="font-medium">إضافة قسم</span>
+						</button>
+						<button
+							onClick={() => handleAddCategory()}
+							className="action-button bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 dark:from-green-500 dark:to-green-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
+						>
+							<Folder className="h-5 w-5" />
+							<span className="font-medium">إضافة فئة</span>
+						</button>
+						<button
+							onClick={() => handleAddItem()}
+							className="action-button bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
+						>
+							<Plus className="h-5 w-5" />
+							<span className="font-medium">إضافة عنصر</span>
+						</button>
+					</div>
 				</div>
 			</div>
 
-			{/* Search */}
-			<div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-				<div className="flex items-center gap-4">
-					<div className="flex-1">
-						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">البحث</label>
+			{/* Search with enhanced design */}
+			<div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl transition-shadow duration-300">
+				<div className="flex items-center gap-4 flex-wrap">
+					<div className="flex-1 min-w-[250px]">
+						<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+							<Search className="h-4 w-4 text-orange-500" />
+							البحث السريع
+						</label>
 						<div className="relative">
-							<Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+							<Search className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
 							<input
 								type="text"
 								value={searchTerm}
 								onChange={(e) => setSearchTerm(e.target.value)}
-								placeholder="البحث في الأقسام والفئات والعناصر..."
-								className="w-full pr-10 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+								placeholder="ابحث في الأقسام والفئات والعناصر..."
+								className="search-input w-full pr-12 pl-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 focus:bg-white dark:focus:bg-gray-600 transition-all duration-200"
 							/>
 						</div>
 					</div>
 					<div className="flex items-end">
-						<div className="text-sm text-gray-600 dark:text-gray-400">
-							إجمالي العناصر: {filteredMenuItems.length}
+						<div className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 px-6 py-3 rounded-xl border border-orange-200 dark:border-orange-700">
+							<div className="text-xs text-gray-600 dark:text-gray-400 mb-1">إجمالي العناصر</div>
+							<div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{filteredMenuItems.length}</div>
 						</div>
 					</div>
 				</div>
@@ -621,67 +633,73 @@ const Menu: React.FC = () => {
 
 			{/* Hierarchical Menu Display */}
 			{loading ? (
-				<div className="text-center py-8">
-					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 dark:border-orange-400 mx-auto"></div>
-					<p className="mt-2 text-gray-600 dark:text-gray-300">جاري التحميل...</p>
+				<div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
+					<div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-200 border-t-orange-600 dark:border-orange-800 dark:border-t-orange-400 mx-auto"></div>
+					<p className="mt-4 text-gray-600 dark:text-gray-300 font-medium">جاري التحميل...</p>
 				</div>
 			) : menuSections.length === 0 ? (
-				<div className="text-center py-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-					<Layers className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-					<p className="text-gray-500 dark:text-gray-400">لا توجد أقسام في المنيو</p>
-					<p className="text-sm text-gray-400 dark:text-gray-500 mt-2">ابدأ بإضافة قسم جديد</p>
+				<div className="empty-state text-center py-16 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+					<div className="bg-gradient-to-br from-orange-100 to-orange-50 dark:from-orange-900/20 dark:to-orange-800/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+						<Layers className="h-10 w-10 text-orange-600 dark:text-orange-400" />
+					</div>
+					<p className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">لا توجد أقسام في المنيو</p>
+					<p className="text-sm text-gray-500 dark:text-gray-400">ابدأ بإضافة قسم جديد لتنظيم قائمة الطعام</p>
 				</div>
 			) : (
-				<div className="space-y-4">
+				<div className="space-y-6">
 					{menuSections
 						.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
 						.map((section) => {
 							const sectionCategories = getCategoriesForSection(section.id);
-							const isExpanded = expandedSections[section.id] ?? true;
+							const isExpanded = expandedSections[section.id] ?? false;
 							
 							return (
-								<div key={section.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-									{/* Section Header */}
-									<div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-b border-gray-200 dark:border-gray-700">
+								<div key={section.id} className="menu-card bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+									{/* Section Header with enhanced gradient */}
+									<div className="section-header p-5 border-b-2 border-blue-200 dark:border-blue-700">
 										<div className="flex items-center justify-between">
-											<div className="flex items-center gap-3 flex-1">
+											<div className="flex items-center gap-4 flex-1">
 												<button
 													onClick={() => toggleSection(section.id)}
-													className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+													className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-all duration-200"
 												>
-													{isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+													{isExpanded ? <ChevronDown className="h-6 w-6" /> : <ChevronRight className="h-6 w-6" />}
 												</button>
-												<Layers className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-												<h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{section.name}</h2>
-												{section.description && (
-													<p className="text-sm text-gray-600 dark:text-gray-400 mr-2">{section.description}</p>
-												)}
+												<div className="p-2.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md">
+													<Layers className="h-5 w-5 text-white" />
+												</div>
+												<div className="flex-1">
+													<h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1">{section.name}</h2>
+													{section.description && (
+														<p className="text-sm text-gray-600 dark:text-gray-400">{section.description}</p>
+													)}
+												</div>
 											</div>
 											<div className="flex items-center gap-2">
 												<button
 													onClick={() => handleAddCategory(section.id)}
-													className="p-2 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+													className="action-button p-2.5 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
 													title="إضافة فئة"
 												>
-													<Plus className="h-4 w-4" />
+													<Plus className="h-5 w-5" />
 												</button>
 												<button
 													onClick={() => handleEditSection(section)}
-													className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+													className="action-button p-2.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
 													title="تعديل القسم"
 												>
-													<Edit className="h-4 w-4" />
+													<Edit className="h-5 w-5" />
 												</button>
 												<button
 													onClick={() => openDeleteModal(section.id, 'section')}
 													disabled={deletingSections[section.id]}
-													className={`p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors ${deletingSections[section.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+													className={`action-button p-2.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md ${deletingSections[section.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
 													title="حذف القسم"
 												>
 													{deletingSections[section.id] ? (
-														<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+														<div className="animate-spin rounded-full h-5 w-5 border-2 border-red-200 border-t-red-600"></div>
 													) : (
-														<Trash2 className="h-4 w-4" />
+														<Trash2 className="h-5 w-5" />
 													)}
 												</button>
 											</div>
@@ -690,15 +708,16 @@ const Menu: React.FC = () => {
 
 									{/* Categories */}
 									{isExpanded && (
-										<div className="p-4 space-y-4">
+										<div className="p-5 space-y-4 bg-gray-50/50 dark:bg-gray-900/20">
 											{sectionCategories.length === 0 ? (
-												<div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-													لا توجد فئات في هذا القسم
+												<div className="empty-state text-center py-8 bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600">
+													<Folder className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+													<p className="text-gray-500 dark:text-gray-400 text-sm">لا توجد فئات في هذا القسم</p>
 												</div>
 											) : (
 												sectionCategories.map((category) => {
 													const categoryItems = getItemsForCategory(category.id);
-													const isCategoryExpanded = expandedCategories[category.id] ?? true;
+													const isCategoryExpanded = expandedCategories[category.id] ?? false;
 													const filteredCategoryItems = searchTerm
 														? categoryItems.filter(item => 
 															item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -707,49 +726,57 @@ const Menu: React.FC = () => {
 														: categoryItems;
 
 													return (
-														<div key={category.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+														<div key={category.id} className="menu-card border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-md">
 															{/* Category Header */}
-															<div className="p-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+															<div className="category-header p-4 border-b-2 border-gray-200 dark:border-gray-700">
 																<div className="flex items-center justify-between">
-																	<div className="flex items-center gap-2 flex-1">
+																	<div className="flex items-center gap-3 flex-1">
 																		<button
 																			onClick={() => toggleCategory(category.id)}
-																			className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+																			className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-all duration-200"
 																		>
-																			{isCategoryExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+																			{isCategoryExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
 																		</button>
-																		<FolderOpen className="h-4 w-4 text-green-600 dark:text-green-400" />
-																		<h3 className="text-md font-medium text-gray-900 dark:text-gray-100">{category.name}</h3>
-																		{category.description && (
-																			<p className="text-xs text-gray-600 dark:text-gray-400 mr-2">{category.description}</p>
-																		)}
-																		<span className="text-xs text-gray-500 dark:text-gray-400">({filteredCategoryItems.length} عنصر)</span>
+																		<div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-sm">
+																			<FolderOpen className="h-4 w-4 text-white" />
+																		</div>
+																		<div className="flex-1">
+																			<div className="flex items-center gap-2">
+																				<h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{category.name}</h3>
+																				<span className="badge px-2.5 py-1 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
+																					{filteredCategoryItems.length} عنصر
+																				</span>
+																			</div>
+																			{category.description && (
+																				<p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{category.description}</p>
+																			)}
+																		</div>
 																	</div>
 																	<div className="flex items-center gap-2">
 																		<button
 																			onClick={() => handleAddItem(category.id)}
-																			className="p-1.5 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 rounded transition-colors"
+																			className="action-button p-2 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
 																			title="إضافة عنصر"
 																		>
-																			<Plus className="h-3.5 w-3.5" />
+																			<Plus className="h-4 w-4" />
 																		</button>
 																		<button
 																			onClick={() => handleEditCategory(category)}
-																			className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded transition-colors"
+																			className="action-button p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
 																			title="تعديل الفئة"
 																		>
-																			<Edit className="h-3.5 w-3.5" />
+																			<Edit className="h-4 w-4" />
 																		</button>
 																		<button
 																			onClick={() => openDeleteModal(category.id, 'category')}
 																			disabled={deletingCategories[category.id]}
-																			className={`p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded transition-colors ${deletingCategories[category.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+																			className={`action-button p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md ${deletingCategories[category.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
 																			title="حذف الفئة"
 																		>
 																			{deletingCategories[category.id] ? (
-																				<div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-red-600"></div>
+																				<div className="animate-spin rounded-full h-4 w-4 border-2 border-red-200 border-t-red-600"></div>
 																			) : (
-																				<Trash2 className="h-3.5 w-3.5" />
+																				<Trash2 className="h-4 w-4" />
 																			)}
 																		</button>
 																	</div>
@@ -758,75 +785,82 @@ const Menu: React.FC = () => {
 
 															{/* Items Grid */}
 															{isCategoryExpanded && (
-																<div className="p-4">
+																<div className="p-5 bg-gradient-to-br from-gray-50 to-white dark:from-gray-900/30 dark:to-gray-800/30">
 																	{filteredCategoryItems.length === 0 ? (
-																		<div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-																			{searchTerm ? 'لا توجد نتائج' : 'لا توجد عناصر في هذه الفئة'}
+																		<div className="empty-state text-center py-8 bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600">
+																			<Utensils className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+																			<p className="text-gray-500 dark:text-gray-400 text-sm">
+																				{searchTerm ? 'لا توجد نتائج للبحث' : 'لا توجد عناصر في هذه الفئة'}
+																			</p>
 																		</div>
 																	) : (
-																		<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+																		<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 																			{filteredCategoryItems.map((item) => (
-																				<div key={item.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+																				<div key={item.id} className="item-card bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 hover:border-orange-300 dark:hover:border-orange-600 transition-all duration-300">
 																					<div className="flex items-start justify-between mb-4">
 																						<div className="flex-1">
-																							<div className="flex items-center gap-2 mb-1">
-																								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{item.name}</h3>
+																							<div className="flex items-center gap-2 mb-2 flex-wrap">
+																								<h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{item.name}</h3>
 																								{item.isNew && (
-																									<span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">جديد</span>
+																									<span className="badge px-2.5 py-1 text-xs font-semibold bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full shadow-sm">جديد</span>
 																								)}
 																								{item.isPopular && (
-																									<Star className="h-4 w-4 text-yellow-500" />
+																									<Star className="popular-star h-5 w-5 text-yellow-500 fill-yellow-500" />
 																								)}
 																							</div>
 																							{item.description && (
-																								<p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{item.description}</p>
+																								<p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">{item.description}</p>
 																							)}
 																							{item.ingredients && item.ingredients.length > 0 && (
-																								<div className="text-xs text-blue-600 dark:text-blue-400 mb-2">
-																									الخامات: {item.ingredients.map(ing => {
+																								<div className="text-xs text-blue-600 dark:text-blue-400 mb-3 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
+																									<span className="font-semibold">الخامات:</span> {item.ingredients.map(ing => {
 																										const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
 																										return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
 																									}).join(', ')}
 																								</div>
 																							)}
 																						</div>
-																						<span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.isAvailable)}`}>
+																						<span className={`badge px-3 py-1.5 text-xs font-bold rounded-full shadow-sm ${item.isAvailable ? 'status-available bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
 																							{getStatusText(item.isAvailable)}
 																						</span>
 																					</div>
 
-																					<div className="space-y-2 mb-4">
+																					<div className="space-y-3 mb-5 pb-5 border-b border-gray-200 dark:border-gray-700">
 																						<div className="flex items-center justify-between">
-																							<span className="text-xl font-bold text-green-600">{formatCurrency(item.price)}</span>
-																							<div className="flex items-center text-sm text-gray-500">
-																								<TrendingUp className="h-4 w-4 ml-1" />
-																								{formatDecimal(item.orderCount)} طلب
+																							<span className="price-tag text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">{formatCurrency(item.price)}</span>
+																							<div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-full">
+																								<TrendingUp className="h-4 w-4" />
+																								<span className="font-semibold">{formatDecimal(item.orderCount)}</span>
 																							</div>
 																						</div>
-																						<div className="flex items-center text-sm text-gray-500">
-																							<Clock className="h-4 w-4 ml-1" />
-																							{formatDecimal(item.preparationTime)} دقيقة للتحضير
+																						<div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+																							<Clock className="h-4 w-4 text-orange-500" />
+																							<span>{formatDecimal(item.preparationTime)} دقيقة</span>
 																						</div>
 																					</div>
 
-																					<div className="flex items-center justify-end space-x-2 space-x-reverse">
+																					<div className="flex items-center justify-end gap-2">
 																						<button
 																							onClick={() => handleEditItem(item)}
-																							className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors duration-200"
+																							className="action-button flex-1 p-2.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
 																							title="تعديل"
 																						>
 																							<Edit className="h-4 w-4" />
+																							<span className="text-sm font-medium">تعديل</span>
 																						</button>
 																						<button
 																							onClick={() => openDeleteModal(item.id, 'item')}
 																							disabled={deletingItems[item.id]}
-																							className={`p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200 ${deletingItems[item.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+																							className={`action-button flex-1 p-2.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 ${deletingItems[item.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
 																							title="حذف"
 																						>
 																							{deletingItems[item.id] ? (
-																								<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 dark:border-red-400"></div>
+																								<div className="animate-spin rounded-full h-4 w-4 border-2 border-red-200 border-t-red-600"></div>
 																							) : (
-																								<Trash2 className="h-4 w-4" />
+																								<>
+																									<Trash2 className="h-4 w-4" />
+																									<span className="text-sm font-medium">حذف</span>
+																								</>
 																							)}
 																						</button>
 																					</div>
@@ -852,47 +886,52 @@ const Menu: React.FC = () => {
 			{/* Add/Edit Modal */}
 			{showAddModal && (
 				<div
-					className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+					className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
 					onClick={(e) => {
 						if (e.target === e.currentTarget) {
 							setShowAddModal(false);
 						}
 					}}
 				>
-					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-						<div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
+						<div className="sticky top-0 bg-gradient-to-r from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 px-6 py-5 rounded-t-2xl shadow-lg">
 							<div className="flex items-center justify-between">
-								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-									{editingItem ? 'تعديل العنصر' : 'إضافة عنصر جديد'}
-								</h3>
+								<div className="flex items-center gap-3">
+									<div className="p-2 bg-white/20 rounded-lg">
+										<Utensils className="h-6 w-6 text-white" />
+									</div>
+									<h3 className="text-xl font-bold text-white">
+										{editingItem ? 'تعديل العنصر' : 'إضافة عنصر جديد'}
+									</h3>
+								</div>
 								<button
 									onClick={() => setShowAddModal(false)}
-									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+									className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-all duration-200"
 								>
 									<X className="h-6 w-6" />
 								</button>
 							</div>
 						</div>
-						<div className="p-6">
+						<div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم العنصر *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">اسم العنصر *</label>
 								<input
 									type="text"
 									value={formData.name}
 									onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
 									placeholder="مثال: قهوة تركية"
 								/>
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">السعر (ج.م) *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">السعر (ج.م) *</label>
 								<input
 									type="number"
 									value={formData.price}
 									onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
 									placeholder="0.00"
 									min="0"
 									step="0.01"
@@ -900,11 +939,11 @@ const Menu: React.FC = () => {
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">الفئة *</label>
 								<select
 									value={formData.category}
 									onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
 								>
 									<option value="">اختر الفئة</option>
 									{menuCategories.map(category => {
@@ -954,11 +993,11 @@ const Menu: React.FC = () => {
 							</div>
 
 							<div className="md:col-span-2">
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
 								<textarea
 									value={formData.description}
 									onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
 									rows={3}
 									placeholder="وصف مختصر للعنصر..."
 								/>
@@ -1127,11 +1166,11 @@ const Menu: React.FC = () => {
 						</div>
 					</div>
 
-					<div className="mt-6 flex justify-end space-x-3 space-x-reverse">
+					<div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
 							<button
 									type="button"
 								onClick={() => setShowAddModal(false)}
-								className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200"
+								className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 font-medium shadow-sm hover:shadow-md"
 							>
 								إلغاء
 							</button>
@@ -1139,17 +1178,17 @@ const Menu: React.FC = () => {
 									type="button"
 								onClick={handleSaveItem}
 								disabled={savingItem}
-									className="px-6 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+									className="action-button px-8 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
 								>
 									{savingItem ? (
 										<>
-											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
-											{editingItem ? 'جاري التحديث...' : 'جاري الإضافة...'}
+											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
+											<span>{editingItem ? 'جاري التحديث...' : 'جاري الإضافة...'}</span>
 										</>
 									) : (
 										<>
-											<CheckCircle className="h-4 w-4 ml-2" />
-											{editingItem ? 'تحديث العنصر' : 'إضافة العنصر'}
+											<CheckCircle className="h-5 w-5" />
+											<span>{editingItem ? 'تحديث العنصر' : 'إضافة العنصر'}</span>
 										</>
 									)}
 							</button>
@@ -1161,14 +1200,19 @@ const Menu: React.FC = () => {
 
 			{/* Delete Confirmation Modal */}
 			{showDeleteModal.show && (
-				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+				<div className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
 						<div className="p-6">
-							<div className="flex items-center justify-between mb-4">
-								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">تأكيد الحذف</h3>
+							<div className="flex items-center justify-between mb-6">
+								<div className="flex items-center gap-3">
+									<div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
+										<Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+									</div>
+									<h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">تأكيد الحذف</h3>
+								</div>
 								<button
 									onClick={closeDeleteModal}
-									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+									className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200"
 									disabled={
 										(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
 										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
@@ -1179,13 +1223,18 @@ const Menu: React.FC = () => {
 								</button>
 							</div>
 
-							<p className="text-gray-600 dark:text-gray-300 mb-6">
-								{showDeleteModal.type === 'section' && 'هل أنت متأكد من رغبتك في حذف هذا القسم؟ لا يمكن التراجع عن هذه العملية.'}
-								{showDeleteModal.type === 'category' && 'هل أنت متأكد من رغبتك في حذف هذه الفئة؟ لا يمكن التراجع عن هذه العملية.'}
-								{showDeleteModal.type === 'item' && 'هل أنت متأكد من رغبتك في حذف هذا العنصر؟ لا يمكن التراجع عن هذه العملية.'}
-							</p>
+							<div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
+								<p className="text-gray-700 dark:text-gray-300 text-center font-medium">
+									{showDeleteModal.type === 'section' && 'هل أنت متأكد من رغبتك في حذف هذا القسم؟'}
+									{showDeleteModal.type === 'category' && 'هل أنت متأكد من رغبتك في حذف هذه الفئة؟'}
+									{showDeleteModal.type === 'item' && 'هل أنت متأكد من رغبتك في حذف هذا العنصر؟'}
+								</p>
+								<p className="text-sm text-red-600 dark:text-red-400 text-center mt-2">
+									⚠️ لا يمكن التراجع عن هذه العملية
+								</p>
+							</div>
 
-							<div className="flex justify-end space-x-3 space-x-reverse">
+							<div className="flex justify-end gap-3">
 								<button
 									onClick={closeDeleteModal}
 									disabled={
@@ -1193,7 +1242,7 @@ const Menu: React.FC = () => {
 										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
 										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
 									}
-									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200 disabled:opacity-50"
+									className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium shadow-sm hover:shadow-md"
 								>
 									إلغاء
 								</button>
@@ -1208,19 +1257,19 @@ const Menu: React.FC = () => {
 										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
 										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
 									}
-									className="px-6 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center"
+									className="action-button px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 dark:from-red-500 dark:to-red-600 text-white rounded-xl transition-all duration-200 disabled:opacity-50 flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
 								>
 									{((showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
 										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
 										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])) ? (
 										<>
-											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
-											جاري الحذف...
+											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
+											<span>جاري الحذف...</span>
 										</>
 									) : (
 										<>
-											<Trash2 className="h-4 w-4 ml-2" />
-											حذف
+											<Trash2 className="h-5 w-5" />
+											<span>حذف نهائياً</span>
 										</>
 									)}
 								</button>
@@ -1233,79 +1282,84 @@ const Menu: React.FC = () => {
 			{/* Add/Edit Section Modal */}
 			{showSectionModal && (
 				<div
-					className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+					className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
 					onClick={(e) => {
 						if (e.target === e.currentTarget) {
 							setShowSectionModal(false);
 						}
 					}}
 				>
-					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-						<div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
+						<div className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 px-6 py-5 rounded-t-2xl">
 							<div className="flex items-center justify-between">
-								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-									{editingSection ? 'تعديل القسم' : 'إضافة قسم جديد'}
-								</h3>
+								<div className="flex items-center gap-3">
+									<div className="p-2 bg-white/20 rounded-lg">
+										<Layers className="h-6 w-6 text-white" />
+									</div>
+									<h3 className="text-xl font-bold text-white">
+										{editingSection ? 'تعديل القسم' : 'إضافة قسم جديد'}
+									</h3>
+								</div>
 								<button
 									onClick={() => setShowSectionModal(false)}
-									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+									className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-all duration-200"
 								>
 									<X className="h-6 w-6" />
 								</button>
 							</div>
 						</div>
-						<div className="p-6 space-y-4">
+						<div className="p-6 space-y-5">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم القسم *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">اسم القسم *</label>
 								<input
 									type="text"
 									value={sectionFormData.name}
 									onChange={(e) => setSectionFormData({ ...sectionFormData, name: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
 									placeholder="مثال: المشروبات"
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
 								<textarea
 									value={sectionFormData.description}
 									onChange={(e) => setSectionFormData({ ...sectionFormData, description: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
 									rows={3}
 									placeholder="وصف القسم..."
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ترتيب العرض</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ترتيب العرض</label>
 								<input
 									type="number"
 									value={sectionFormData.sortOrder}
 									onChange={(e) => setSectionFormData({ ...sectionFormData, sortOrder: parseInt(e.target.value) || 0 })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
 									min="0"
 								/>
 							</div>
-							<div className="flex justify-end space-x-3 space-x-reverse pt-4">
+							<div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
 								<button
 									onClick={() => setShowSectionModal(false)}
-									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200"
+									className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 font-medium shadow-sm hover:shadow-md"
 								>
 									إلغاء
 								</button>
 								<button
 									onClick={handleSaveSection}
 									disabled={savingSection}
-									className="px-6 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+									className="action-button px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 dark:from-blue-500 dark:to-blue-600 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
 								>
 									{savingSection ? (
 										<>
-											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
-											{editingSection ? 'جاري التحديث...' : 'جاري الإضافة...'}
+											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
+											<span>{editingSection ? 'جاري التحديث...' : 'جاري الإضافة...'}</span>
 										</>
 									) : (
 										<>
-											<CheckCircle className="h-4 w-4 ml-2" />
-											{editingSection ? 'تحديث القسم' : 'إضافة القسم'}
+											<CheckCircle className="h-5 w-5" />
+											<span>{editingSection ? 'تحديث القسم' : 'إضافة القسم'}</span>
 										</>
 									)}
 								</button>
@@ -1318,44 +1372,49 @@ const Menu: React.FC = () => {
 			{/* Add/Edit Category Modal */}
 			{showCategoryModal && (
 				<div
-					className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+					className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
 					onClick={(e) => {
 						if (e.target === e.currentTarget) {
 							setShowCategoryModal(false);
 						}
 					}}
 				>
-					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-						<div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
+						<div className="bg-gradient-to-r from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 px-6 py-5 rounded-t-2xl">
 							<div className="flex items-center justify-between">
-								<h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-									{editingCategory ? 'تعديل الفئة' : 'إضافة فئة جديدة'}
-								</h3>
+								<div className="flex items-center gap-3">
+									<div className="p-2 bg-white/20 rounded-lg">
+										<Folder className="h-6 w-6 text-white" />
+									</div>
+									<h3 className="text-xl font-bold text-white">
+										{editingCategory ? 'تعديل الفئة' : 'إضافة فئة جديدة'}
+									</h3>
+								</div>
 								<button
 									onClick={() => setShowCategoryModal(false)}
-									className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+									className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-all duration-200"
 								>
 									<X className="h-6 w-6" />
 								</button>
 							</div>
 						</div>
-						<div className="p-6 space-y-4">
+						<div className="p-6 space-y-5">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم الفئة *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">اسم الفئة *</label>
 								<input
 									type="text"
 									value={categoryFormData.name}
 									onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
 									placeholder="مثال: المشروبات الساخنة"
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">القسم *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">القسم *</label>
 								<select
 									value={categoryFormData.section}
 									onChange={(e) => setCategoryFormData({ ...categoryFormData, section: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
 								>
 									<option value="">اختر القسم</option>
 									{menuSections.map(section => (

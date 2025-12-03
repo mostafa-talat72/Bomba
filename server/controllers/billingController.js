@@ -1227,6 +1227,32 @@ export const deleteBill = async (req, res) => {
         // Store table reference before deletion
         const tableId = bill.table?._id || bill.table;
         const organizationId = bill.organization;
+        
+        // Store order and session IDs before deletion
+        let orderIds = bill.orders || [];
+        let sessionIds = bill.sessions || [];
+
+        // Fallback: البحث عن الطلبات والجلسات المرتبطة بالفاتورة مباشرة من قاعدة البيانات
+        // في حالة عدم وجودها في bill.orders أو bill.sessions
+        if (orderIds.length === 0) {
+            const relatedOrders = await Order.find({ bill: bill._id }).select('_id');
+            orderIds = relatedOrders.map(o => o._id);
+            Logger.info(`📋 Found ${orderIds.length} orders by searching with bill reference`);
+        }
+        
+        if (sessionIds.length === 0) {
+            const relatedSessions = await Session.find({ bill: bill._id }).select('_id');
+            sessionIds = relatedSessions.map(s => s._id);
+            Logger.info(`🎮 Found ${sessionIds.length} sessions by searching with bill reference`);
+        }
+
+        Logger.info(`🗑️ Starting bill deletion: ${bill.billNumber}`, {
+            billId: bill._id,
+            ordersCount: orderIds.length,
+            sessionsCount: sessionIds.length,
+            orderIds: orderIds,
+            sessionIds: sessionIds
+        });
 
         // تعطيل Sync Middleware مؤقتاً لتجنب إعادة المزامنة
         const originalSyncEnabled = syncConfig.enabled;
@@ -1241,13 +1267,11 @@ export const deleteBill = async (req, res) => {
             const atlasConnection = dualDatabaseManager.getAtlasConnection();
             
             // Delete all orders associated with this bill (cascade delete)
-            if (bill.orders && bill.orders.length > 0) {
-                Logger.info(`🗑️ Deleting ${bill.orders.length} orders associated with bill ${bill.billNumber}`, {
-                    orderIds: bill.orders
-                });
+            if (orderIds.length > 0) {
+                Logger.info(`🗑️ Deleting ${orderIds.length} orders associated with bill ${bill.billNumber}`);
                 
                 // حذف من Local
-                const deleteResult = await Order.deleteMany({ _id: { $in: bill.orders } });
+                const deleteResult = await Order.deleteMany({ _id: { $in: orderIds } });
                 Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local MongoDB`);
                 
                 // حذف من Atlas مباشرة
@@ -1255,7 +1279,7 @@ export const deleteBill = async (req, res) => {
                     try {
                         const atlasOrdersCollection = atlasConnection.collection('orders');
                         const atlasDeleteResult = await atlasOrdersCollection.deleteMany({ 
-                            _id: { $in: bill.orders } 
+                            _id: { $in: orderIds } 
                         });
                         Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} orders from Atlas MongoDB`);
                     } catch (atlasError) {
@@ -1269,13 +1293,11 @@ export const deleteBill = async (req, res) => {
             }
 
             // Delete all sessions associated with this bill (cascade delete)
-            if (bill.sessions && bill.sessions.length > 0) {
-                Logger.info(`🗑️ Deleting ${bill.sessions.length} sessions associated with bill ${bill.billNumber}`, {
-                    sessionIds: bill.sessions
-                });
+            if (sessionIds.length > 0) {
+                Logger.info(`🗑️ Deleting ${sessionIds.length} sessions associated with bill ${bill.billNumber}`);
                 
                 // حذف من Local
-                const sessionDeleteResult = await Session.deleteMany({ _id: { $in: bill.sessions } });
+                const sessionDeleteResult = await Session.deleteMany({ _id: { $in: sessionIds } });
                 Logger.info(`✓ Deleted ${sessionDeleteResult.deletedCount} sessions from Local MongoDB`);
                 
                 // حذف من Atlas مباشرة
@@ -1283,7 +1305,7 @@ export const deleteBill = async (req, res) => {
                     try {
                         const atlasSessionsCollection = atlasConnection.collection('sessions');
                         const atlasDeleteResult = await atlasSessionsCollection.deleteMany({ 
-                            _id: { $in: bill.sessions } 
+                            _id: { $in: sessionIds } 
                         });
                         Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} sessions from Atlas MongoDB`);
                     } catch (atlasError) {
