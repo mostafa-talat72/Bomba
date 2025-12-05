@@ -587,8 +587,11 @@ const Cafe: React.FC = () => {
       showNotification('يرجى اختيار طاولة أولاً', 'error');
       return;
     }
+    // إعادة تعيين كل شيء كأنها المرة الأولى
     setCurrentOrderItems([]);
     setOrderNotes('');
+    setExpandedSections({});
+    setExpandedCategories({});
     setShowOrderModal(true);
   };
 
@@ -609,6 +612,9 @@ const Cafe: React.FC = () => {
     }));
     setCurrentOrderItems(items);
     setOrderNotes(order.notes || '');
+    // إعادة تعيين الأقسام والفئات المفتوحة
+    setExpandedSections({});
+    setExpandedCategories({});
     setShowEditOrderModal(true);
   };
 
@@ -1536,6 +1542,33 @@ const OrderModal: React.FC<OrderModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const sectionRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const orderItemRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Reset search query and focus when modal opens
+  useEffect(() => {
+    setSearchQuery('');
+    
+    // Multiple attempts to ensure focus works
+    const focusInput = () => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+    };
+    
+    // Try immediately
+    focusInput();
+    
+    // Try after a short delay
+    const timer1 = setTimeout(focusInput, 50);
+    const timer2 = setTimeout(focusInput, 150);
+    const timer3 = setTimeout(focusInput, 300);
+    
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  }, []);
   
   // Scroll to section when clicked
   const scrollToSection = (sectionId: string) => {
@@ -1587,8 +1620,17 @@ const OrderModal: React.FC<OrderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-7xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
+    <div 
+      className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-7xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700"
+      >
         {/* Header */}
         <div className="relative p-4 sm:p-6 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex-shrink-0">
           {/* Decorative circles */}
@@ -1634,8 +1676,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
             {/* Search Input */}
             <div className="relative flex-shrink-0">
-              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="بحث عن عنصر..."
                 value={searchQuery}
@@ -2046,6 +2089,17 @@ const SectionModal: React.FC<SectionModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  
+  // Reset focus when modal opens
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      nameInputRef.current?.focus();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -2076,9 +2130,11 @@ const SectionModal: React.FC<SectionModalProps> = ({
               اسم القسم *
             </label>
             <input
+              ref={nameInputRef}
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              autoFocus
               className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               placeholder="اسم القسم"
             />
@@ -2146,6 +2202,17 @@ const TableModal: React.FC<TableModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const numberInputRef = useRef<HTMLInputElement>(null);
+  
+  // Reset focus when modal opens
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      numberInputRef.current?.focus();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -2176,9 +2243,11 @@ const TableModal: React.FC<TableModalProps> = ({
               رقم/اسم الطاولة *
             </label>
             <input
+              ref={numberInputRef}
               type="text"
               value={formData.number}
               onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+              autoFocus
               className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               placeholder="مثال: 1، واحد، A1، VIP، شرفة 1"
             />
