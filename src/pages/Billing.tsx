@@ -769,38 +769,69 @@ const Billing = () => {
       setIsProcessingPartialPayment(true);
       
       // تحويل itemsToPay إلى الصيغة المطلوبة للـ API
-      // نحتاج إلى إيجاد itemId من bill.itemPayments بناءً على itemName و price
-      // ملاحظة: itemPayments لا يحتوي على addons، لذا نبحث فقط بناءً على name و price
       const itemsToPayForAPI: Array<{ itemId: string; quantity: number }> = [];
       
-      // نجمع الكميات للعناصر المتشابهة (نفس الاسم والسعر)
-      const quantityMap = new Map<string, number>();
+      // معالجة كل عنصر على حدة (بدون تجميع)
       itemsToPay.forEach(item => {
-        const key = `${item.itemName}|${item.price}`;
-        const currentQty = quantityMap.get(key) || 0;
-        quantityMap.set(key, currentQty + item.quantity);
-      });
-
-      // الآن نبحث عن itemPayments المطابقة ونوزع الكميات
-      quantityMap.forEach((totalQuantity, key) => {
-        const [itemName, priceStr] = key.split('|');
-        const price = parseFloat(priceStr);
+        console.log('🔍 البحث عن itemPayments للعنصر:', {
+          itemName: item.itemName,
+          price: item.price,
+          quantity: item.quantity,
+          addons: item.addons
+        });
         
         // البحث عن جميع itemPayments المطابقة
         const matchingPayments = selectedBill?.itemPayments?.filter(ip => {
-          const nameMatch = ip.itemName.trim() === itemName.trim();
-          const priceMatch = ip.pricePerUnit === price;
+          const nameMatch = ip.itemName.trim() === item.itemName.trim();
+          const priceMatch = ip.pricePerUnit === item.price;
           const remainingQty = (ip.quantity || 0) - (ip.paidQuantity || 0);
-          return nameMatch && priceMatch && remainingQty > 0;
+          
+          // مطابقة الإضافات
+          const itemAddonsKey = (item.addons || [])
+            .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+            .sort()
+            .join('|');
+          const paymentAddonsKey = (ip.addons || [])
+            .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+            .sort()
+            .join('|');
+          const addonsMatch = itemAddonsKey === paymentAddonsKey;
+          
+          console.log('  ↳ مقارنة مع itemPayment:', {
+            id: ip._id,
+            name: ip.itemName,
+            price: ip.pricePerUnit,
+            remaining: remainingQty,
+            nameMatch,
+            priceMatch,
+            addonsMatch,
+            matches: nameMatch && priceMatch && addonsMatch && remainingQty > 0
+          });
+          
+          return nameMatch && priceMatch && addonsMatch && remainingQty > 0;
         }) || [];
 
+        console.log(`✓ تم العثور على ${matchingPayments.length} itemPayments مطابقة`);
+
         if (matchingPayments.length === 0) {
-          console.error('لم يتم العثور على itemPayment مطابق للعنصر:', { itemName, price });
+          console.error('❌ لم يتم العثور على itemPayment مطابق للعنصر:', { 
+            itemName: item.itemName, 
+            price: item.price,
+            addons: item.addons,
+            availableItemPayments: selectedBill?.itemPayments?.map(ip => ({
+              id: ip._id,
+              name: ip.itemName,
+              price: ip.pricePerUnit,
+              quantity: ip.quantity,
+              paidQuantity: ip.paidQuantity,
+              remaining: (ip.quantity || 0) - (ip.paidQuantity || 0)
+            }))
+          });
           return;
         }
 
         // توزيع الكمية على itemPayments المتاحة
-        let remainingToPay = totalQuantity;
+        let remainingToPay = item.quantity;
         matchingPayments.forEach(payment => {
           if (remainingToPay <= 0) return;
           
@@ -817,7 +848,7 @@ const Billing = () => {
         });
 
         if (remainingToPay > 0) {
-          console.warn(`لم يتم دفع ${remainingToPay} من ${itemName} - الكمية المتبقية غير كافية`);
+          console.warn(`لم يتم دفع ${remainingToPay} من ${item.itemName} - الكمية المتبقية غير كافية`);
         }
       });
 
@@ -882,7 +913,13 @@ const Billing = () => {
     }
 
     // التحقق من أن المبلغ لا يتجاوز المبلغ المتبقي للجلسة
-    const sessionRemaining = selectedSession.finalCost - (selectedSession.totalCost || 0);
+    // استخدام sessionPayments للحصول على المبلغ المتبقي الصحيح
+    const sessionId = selectedSession._id || selectedSession.id;
+    const sessionPayment = selectedBill.sessionPayments?.find(
+      sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+    );
+    const sessionRemaining = sessionPayment?.remainingAmount || selectedSession.finalCost;
+    
     if (amount > sessionRemaining) {
       showNotification(`المبلغ المدخل (${formatCurrency(amount)}) أكبر من المبلغ المتبقي (${formatCurrency(sessionRemaining)})`, 'error');
       return;
@@ -949,12 +986,32 @@ const Billing = () => {
       });
       
       if (result && result.success) {
-        showNotification(`✅ تم نقل الفاتورة إلى الطاولة ${targetTable?.number || newTableNumber} بنجاح`, 'success');
-        
-        // تحديث البيانات
+        // تحديث البيانات أولاً
         await Promise.all([fetchBills(), fetchTables()]);
         
-        // إغلاق النافذة
+        // جلب الفاتورة المحدثة بكل التفاصيل (orders و sessions populated)
+        if (result.data && result.data._id) {
+          try {
+            const fullBillResponse = await api.getBill(result.data._id);
+            if (fullBillResponse && fullBillResponse.success && fullBillResponse.data) {
+              setSelectedBill(fullBillResponse.data);
+            } else {
+              setSelectedBill(result.data);
+            }
+          } catch (fetchError) {
+            console.error('خطأ في جلب تفاصيل الفاتورة:', fetchError);
+            setSelectedBill(result.data);
+          }
+          
+          // إذا كانت رسالة تشير إلى دمج الفواتير
+          if (result.message && result.message.includes('دمج')) {
+            showNotification(`✅ ${result.message}`, 'success');
+          } else {
+            showNotification(`✅ تم نقل الفاتورة إلى الطاولة ${targetTable?.number || newTableNumber} بنجاح`, 'success');
+          }
+        }
+        
+        // إغلاق نافذة تغيير الطاولة
         setShowChangeTableModal(false);
         setNewTableNumber(null);
       } else {
@@ -2141,10 +2198,32 @@ const Billing = () => {
                           {selectedBill?.sessions && selectedBill.sessions.length > 0 && (
                             <button
                               onClick={() => {
+                                console.log('🔍 البحث عن جلسات غير مدفوعة:', {
+                                  sessions: selectedBill.sessions,
+                                  sessionPayments: selectedBill.sessionPayments
+                                });
+                                
                                 // اختيار أول جلسة غير مدفوعة بالكامل
-                                const unpaidSession = selectedBill.sessions.find(s => 
-                                  (s.finalCost - (s.totalCost || 0)) > 0
-                                );
+                                // نستخدم sessionPayments للحصول على المبلغ المتبقي
+                                const unpaidSession = selectedBill.sessions.find(s => {
+                                  const sessionId = s._id || s.id;
+                                  const sessionPayment = selectedBill.sessionPayments?.find(
+                                    sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+                                  );
+                                  
+                                  const remaining = sessionPayment?.remainingAmount || 0;
+                                  console.log(`  ↳ جلسة ${s.deviceName}:`, {
+                                    sessionId,
+                                    finalCost: s.finalCost,
+                                    paidAmount: sessionPayment?.paidAmount || 0,
+                                    remaining
+                                  });
+                                  
+                                  return remaining > 0;
+                                });
+                                
+                                console.log('✓ نتيجة البحث:', unpaidSession ? `وُجدت جلسة: ${unpaidSession.deviceName}` : 'لا توجد جلسات غير مدفوعة');
+                                
                                 if (unpaidSession) {
                                   setSelectedSession(unpaidSession);
                                   setSessionPaymentAmount('');
@@ -2911,61 +2990,95 @@ const Billing = () => {
 
             <div className="p-6">
               {/* معلومات الجلسة */}
-              <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">معلومات الجلسة</h5>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">الجهاز:</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.deviceName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">النوع:</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">
-                      {selectedSession.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
-                    </span>
-                  </div>
-                  {selectedSession.deviceType === 'playstation' && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-300">عدد الدراعات:</span>
-                      <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.controllers || 1}</span>
+              {(() => {
+                // الحصول على بيانات الدفع من sessionPayments
+                const sessionId = selectedSession._id || selectedSession.id;
+                const sessionPayment = selectedBill?.sessionPayments?.find(
+                  sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+                );
+                
+                const paidAmount = sessionPayment?.paidAmount || 0;
+                const remainingAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
+                
+                return (
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">معلومات الجلسة</h5>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-300">الجهاز:</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.deviceName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-300">النوع:</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          {selectedSession.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
+                        </span>
+                      </div>
+                      {selectedSession.deviceType === 'playstation' && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-300">عدد الدراعات:</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.controllers || 1}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-300">التكلفة الإجمالية:</span>
+                        <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(selectedSession.finalCost)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-300">المدفوع:</span>
+                        <span className="font-medium text-blue-600 dark:text-blue-400">{formatCurrency(paidAmount)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-200 dark:border-gray-600 pt-2">
+                        <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
+                        <span className="font-medium text-red-600 dark:text-red-400">
+                          {formatCurrency(remainingAmount)}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">التكلفة الإجمالية:</span>
-                    <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(selectedSession.finalCost)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">المدفوع:</span>
-                    <span className="font-medium text-blue-600 dark:text-blue-400">{formatCurrency(selectedSession.totalCost || 0)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-200 dark:border-gray-600 pt-2">
-                    <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
-                    <span className="font-medium text-red-600 dark:text-red-400">
-                      {formatCurrency(selectedSession.finalCost - (selectedSession.totalCost || 0))}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* إدخال المبلغ */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  المبلغ المطلوب دفعه
-                </label>
-                <input
-                  type="number"
-                  value={sessionPaymentAmount}
-                  onChange={(e) => setSessionPaymentAmount(e.target.value)}
-                  min="0"
-                  max={selectedSession.finalCost - (selectedSession.totalCost || 0)}
-                  step="0.01"
-                  placeholder="أدخل المبلغ"
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  الحد الأقصى: {formatCurrency(selectedSession.finalCost - (selectedSession.totalCost || 0))}
-                </p>
-              </div>
+              {(() => {
+                const sessionId = selectedSession._id || selectedSession.id;
+                const sessionPayment = selectedBill?.sessionPayments?.find(
+                  sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+                );
+                const maxAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
+                
+                return (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      المبلغ المطلوب دفعه
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={sessionPaymentAmount}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // السماح بالأرقام الصحيحة الموجبة فقط
+                        if (value === '' || /^\d+$/.test(value)) {
+                          setSessionPaymentAmount(value);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const value = parseInt(e.target.value);
+                        if (!isNaN(value) && value > maxAmount) {
+                          setSessionPaymentAmount(Math.floor(maxAmount).toString());
+                          showNotification(`الحد الأقصى للدفع هو ${formatCurrency(maxAmount)}`, 'warning');
+                        }
+                      }}
+                      placeholder="أدخل المبلغ (أرقام صحيحة فقط)"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      الحد الأقصى: {formatCurrency(maxAmount)}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* طريقة الدفع */}
               <div className="mb-6">
@@ -3010,27 +3123,33 @@ const Billing = () => {
               </div>
 
               {/* ملخص الدفع */}
-              {sessionPaymentAmount && parseFloat(sessionPaymentAmount) > 0 && (
-                <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
-                  <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">ملخص الدفع</h5>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-blue-800 dark:text-blue-200">المبلغ المدفوع:</span>
-                      <span className="font-bold text-blue-900 dark:text-blue-100">
-                        {formatCurrency(parseFloat(sessionPaymentAmount))}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-t border-blue-200 dark:border-blue-600 pt-2">
-                      <span className="text-blue-800 dark:text-blue-200">المتبقي بعد الدفع:</span>
-                      <span className="font-bold text-blue-900 dark:text-blue-100">
-                        {formatCurrency(
-                          selectedSession.finalCost - (selectedSession.totalCost || 0) - parseFloat(sessionPaymentAmount)
-                        )}
-                      </span>
+              {sessionPaymentAmount && parseFloat(sessionPaymentAmount) > 0 && (() => {
+                const sessionId = selectedSession._id || selectedSession.id;
+                const sessionPayment = selectedBill?.sessionPayments?.find(
+                  sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+                );
+                const remainingAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
+                
+                return (
+                  <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
+                    <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">ملخص الدفع</h5>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-blue-800 dark:text-blue-200">المبلغ المدفوع:</span>
+                        <span className="font-bold text-blue-900 dark:text-blue-100">
+                          {formatCurrency(parseFloat(sessionPaymentAmount))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-blue-200 dark:border-blue-600 pt-2">
+                        <span className="text-blue-800 dark:text-blue-200">المتبقي بعد الدفع:</span>
+                        <span className="font-bold text-blue-900 dark:text-blue-100">
+                          {formatCurrency(remainingAmount - parseFloat(sessionPaymentAmount))}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
@@ -3048,12 +3167,22 @@ const Billing = () => {
 
               <button
                 onClick={handlePaySessionPartial}
-                disabled={
-                  isProcessingSessionPayment ||
-                  !sessionPaymentAmount ||
-                  parseFloat(sessionPaymentAmount) <= 0 ||
-                  parseFloat(sessionPaymentAmount) > (selectedSession.finalCost - (selectedSession.totalCost || 0))
-                }
+                disabled={(() => {
+                  const sessionId = selectedSession._id || selectedSession.id;
+                  const sessionPayment = selectedBill?.sessionPayments?.find(
+                    sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+                  );
+                  const maxAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
+                  const amount = parseFloat(sessionPaymentAmount);
+                  
+                  return (
+                    isProcessingSessionPayment ||
+                    !sessionPaymentAmount ||
+                    isNaN(amount) ||
+                    amount <= 0 ||
+                    amount > maxAmount
+                  );
+                })()}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
               >
                 {isProcessingSessionPayment ? (
@@ -3082,12 +3211,24 @@ const Billing = () => {
             </h3>
             
             <div className="mb-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                الفاتورة الحالية: #{selectedBill.billNumber}
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                الفاتورة الحالية: <span className="font-semibold text-gray-900 dark:text-gray-100">#{selectedBill.billNumber}</span>
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                الطاولة الحالية: {selectedBill.table?.number}
-              </p>
+              {(() => {
+                const currentTableId = selectedBill.table?._id || selectedBill.table?.id || selectedBill.table;
+                const currentTable = tables.find((t: any) => (t._id || t.id) === currentTableId);
+                
+                if (currentTable) {
+                  return (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mt-3">
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        📍 الطاولة الحالية: <span className="font-bold">طاولة {currentTable.number}</span>
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
             
             <div className="mb-6">

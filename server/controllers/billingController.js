@@ -210,6 +210,14 @@ export const getBills = async (req, res) => {
 // @access  Public (for QR code access)
 export const getBill = async (req, res) => {
     try {
+        // تحقق من صحة معرف الفاتورة أولاً
+        if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({
+                success: false,
+                message: "معرف الفاتورة غير صحيح",
+            });
+        }
+
         // إذا كان الطلب من /public/:id (أي لم يوجد req.user أو organization)
         if (!req.user || !req.user.organization) {
             // السماح بعرض الفاتورة للجميع إذا كان الطلب من المسار العام
@@ -297,13 +305,6 @@ export const getBill = async (req, res) => {
                     "المستخدم غير مصرح أو لا يوجد منشأة مرتبطة به. يرجى إعادة تسجيل الدخول.",
             });
         }
-        // تحقق من صحة معرف الفاتورة
-        if (!req.params.id || req.params.id.length !== 24) {
-            return res.status(400).json({
-                success: false,
-                message: "معرف الفاتورة غير صحيح",
-            });
-        }
         // جلب الفاتورة للمستخدم المسجل والمنشأة
         const bill = await Bill.findOne({
             _id: req.params.id,
@@ -371,6 +372,34 @@ export const getBill = async (req, res) => {
             Logger.info(`💾 [getBill] QR code saved to database`);
         } else {
             Logger.info(`✓ [getBill] QR code already exists for bill: ${bill.billNumber}`);
+        }
+
+        // إصلاح sessionPayments إذا كانت remainingAmount خاطئة
+        if (bill.sessions && bill.sessions.length > 0 && bill.sessionPayments && bill.sessionPayments.length > 0) {
+            let needsUpdate = false;
+            bill.sessions.forEach(session => {
+                const sessionPayment = bill.sessionPayments.find(
+                    sp => sp.sessionId?.toString() === session._id?.toString()
+                );
+                
+                if (sessionPayment) {
+                    const sessionCost = session.finalCost || session.totalCost || 0;
+                    const correctRemaining = sessionCost - (sessionPayment.paidAmount || 0);
+                    
+                    // إذا كان remainingAmount خاطئ، نصلحه
+                    if (sessionPayment.remainingAmount !== correctRemaining || sessionPayment.sessionCost !== sessionCost) {
+                        sessionPayment.sessionCost = sessionCost;
+                        sessionPayment.remainingAmount = correctRemaining;
+                        needsUpdate = true;
+                    }
+                }
+            });
+            
+            // حفظ التحديثات إذا لزم الأمر
+            if (needsUpdate) {
+                await bill.save();
+                Logger.info(`✓ تم تحديث sessionPayments للفاتورة ${bill.billNumber}`);
+            }
         }
 
         // تحويل bill إلى object أولاً
@@ -616,21 +645,129 @@ export const updateBill = async (req, res) => {
             const oldTableId = bill.table ? bill.table.toString() : null;
             const newTableId = table ? table.toString() : null;
             
-            if (oldTableId !== newTableId) {
-                bill.table = table || null;
-                Logger.info(`✓ تم تغيير الطاولة من ${oldTableId} إلى ${newTableId}`);
+            if (oldTableId !== newTableId && newTableId) {
+                Logger.info(`🔄 تغيير الطاولة من ${oldTableId} إلى ${newTableId}`);
                 
-                // تحديث جميع الطلبات المرتبطة بهذه الفاتورة
-                if (bill.orders && bill.orders.length > 0) {
-                    try {
-                        const Order = (await import('../models/Order.js')).default;
+                // البحث عن فاتورة موجودة في الطاولة الجديدة (غير مدفوعة بالكامل)
+                const existingBillInNewTable = await Bill.findOne({
+                    _id: { $ne: bill._id }, // ليست نفس الفاتورة
+                    table: newTableId,
+                    organization: req.user.organization,
+                    status: { $in: ['draft', 'partial', 'overdue'] }
+                }).sort({ createdAt: -1 });
+
+                if (existingBillInNewTable) {
+                    // دمج الفاتورة الحالية مع الفاتورة الموجودة في الطاولة الجديدة
+                    Logger.info(`🔗 دمج الفاتورة ${bill.billNumber} مع الفاتورة الموجودة ${existingBillInNewTable.billNumber}`);
+                    
+                    // حفظ معلومات الفاتورة القديمة قبل الحذف
+                    const oldBillId = bill._id;
+                    const oldBillNumber = bill.billNumber;
+                    const oldBillOrders = [...(bill.orders || [])];
+                    const oldBillSessions = [...(bill.sessions || [])];
+                    
+                    // نقل الطلبات
+                    if (oldBillOrders.length > 0) {
+                        existingBillInNewTable.orders.push(...oldBillOrders);
+                        
+                        // تحديث table و bill في الطلبات
                         await Order.updateMany(
-                            { _id: { $in: bill.orders } },
-                            { $set: { table: table } }
+                            { _id: { $in: oldBillOrders } },
+                            { $set: { table: newTableId, bill: existingBillInNewTable._id } }
                         );
-                        Logger.info(`✓ تم تحديث ${bill.orders.length} طلب للطاولة الجديدة`);
-                    } catch (orderUpdateError) {
-                        Logger.error('خطأ في تحديث الطلبات:', orderUpdateError);
+                        Logger.info(`✓ تم نقل ${oldBillOrders.length} طلب إلى الفاتورة ${existingBillInNewTable.billNumber}`);
+                    }
+                    
+                    // نقل الجلسات
+                    if (oldBillSessions.length > 0) {
+                        existingBillInNewTable.sessions.push(...oldBillSessions);
+                        
+                        // تحديث bill في الجلسات
+                        await Session.updateMany(
+                            { _id: { $in: oldBillSessions } },
+                            { $set: { bill: existingBillInNewTable._id } }
+                        );
+                        Logger.info(`✓ تم نقل ${oldBillSessions.length} جلسة إلى الفاتورة ${existingBillInNewTable.billNumber}`);
+                    }
+                    
+                    // حفظ الفاتورة أولاً لتحديث arrays
+                    await existingBillInNewTable.save();
+                    
+                    // إعادة تحميل الفاتورة من قاعدة البيانات مع populate كامل
+                    const reloadedBill = await Bill.findById(existingBillInNewTable._id)
+                        .populate('orders')
+                        .populate('sessions')
+                        .populate('table');
+                    
+                    if (!reloadedBill) {
+                        throw new Error('فشل في إعادة تحميل الفاتورة المدمجة');
+                    }
+                    
+                    Logger.info(`✓ تم إعادة تحميل الفاتورة مع ${reloadedBill.orders.length} طلب و ${reloadedBill.sessions.length} جلسة`);
+                    
+                    // إعادة حساب المجاميع
+                    await reloadedBill.calculateSubtotal();
+                    await reloadedBill.save();
+                    
+                    Logger.info(`✅ تم حفظ الفاتورة المدمجة ${reloadedBill.billNumber}`, {
+                        subtotal: reloadedBill.subtotal,
+                        total: reloadedBill.total
+                    });
+                    
+                    // حذف الفاتورة القديمة بعد نقل كل شيء
+                    const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
+                    await deleteFromBothDatabases(bill, 'bills', `bill ${oldBillNumber}`);
+                    Logger.info(`✓ تم حذف الفاتورة القديمة ${oldBillNumber}`);
+                    
+                    // تحديث حالة الطاولة القديمة
+                    if (oldTableId) {
+                        await updateTableStatusIfNeeded(oldTableId, req.user.organization, req.io);
+                    }
+                    
+                    // Emit Socket.IO event
+                    if (req.io) {
+                        req.io.notifyBillUpdate("deleted", { _id: oldBillId, billNumber: oldBillNumber });
+                        req.io.notifyBillUpdate("updated", reloadedBill);
+                    }
+                    
+                    Logger.info(`✅ تم دمج الفواتير بنجاح`);
+                    
+                    // إرجاع الفاتورة المدمجة (محمّلة بالفعل مع orders و sessions)
+                    return res.json({
+                        success: true,
+                        message: "تم دمج الفاتورة مع الفاتورة الموجودة في الطاولة الجديدة",
+                        data: reloadedBill,
+                    });
+                } else {
+                    // لا توجد فاتورة في الطاولة الجديدة - فقط غير الطاولة
+                    bill.table = newTableId;
+                    
+                    // تحديث اسم العميل ليكون اسم الطاولة الجديدة
+                    const Table = (await import('../models/Table.js')).default;
+                    const newTableDoc = await Table.findById(newTableId);
+                    if (newTableDoc) {
+                        bill.customerName = `طاولة ${newTableDoc.number}`;
+                        Logger.info(`✓ تم تحديث اسم العميل إلى: ${bill.customerName}`);
+                    }
+                    
+                    Logger.info(`✓ تم تغيير الطاولة إلى ${newTableId}`);
+                    
+                    // تحديث جميع الطلبات المرتبطة بهذه الفاتورة
+                    if (bill.orders && bill.orders.length > 0) {
+                        try {
+                            await Order.updateMany(
+                                { _id: { $in: bill.orders } },
+                                { $set: { table: newTableId } }
+                            );
+                            Logger.info(`✓ تم تحديث ${bill.orders.length} طلب للطاولة الجديدة`);
+                        } catch (orderUpdateError) {
+                            Logger.error('خطأ في تحديث الطلبات:', orderUpdateError);
+                        }
+                    }
+                    
+                    // تحديث حالة الطاولة القديمة
+                    if (oldTableId) {
+                        await updateTableStatusIfNeeded(oldTableId, req.user.organization, req.io);
                     }
                 }
             }
@@ -1032,9 +1169,15 @@ export const removeOrderFromBill = async (req, res) => {
             (!updatedBill.orders || updatedBill.orders.length === 0) &&
             (!updatedBill.sessions || updatedBill.sessions.length === 0)
         ) {
-            // Delete the bill if it has no orders or sessions
-            // Remove bill reference from orders and sessions before deletion (already done above)
-            await updatedBill.deleteOne();
+            // Delete the bill if it has no orders or sessions from Local and Atlas
+            Logger.info(`🗑️ Deleting empty bill ${updatedBill.billNumber} after removing order`);
+            const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
+            await deleteFromBothDatabases(updatedBill, 'bills', `bill ${updatedBill.billNumber}`);
+            
+            // Update table status if bill had a table
+            if (updatedBill.table) {
+                await updateTableStatusIfNeeded(updatedBill.table, req.user.organization, req.io);
+            }
         }
 
         await bill.populate(

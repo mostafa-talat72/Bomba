@@ -670,7 +670,7 @@ const Cafe: React.FC = () => {
   };
 
   // Update item quantity
-  const updateItemQuantity = (menuItemId: string, delta: number) => {
+  const updateItemQuantity = useCallback((menuItemId: string, delta: number) => {
     setCurrentOrderItems(prev =>
       prev.map(item => {
         if (item.menuItem === menuItemId) {
@@ -683,21 +683,21 @@ const Cafe: React.FC = () => {
         return item;
       }).filter(Boolean) as LocalOrderItem[]
     );
-  };
+  }, []);
 
   // Update item notes
-  const updateItemNotes = (menuItemId: string, notes: string) => {
+  const updateItemNotes = useCallback((menuItemId: string, notes: string) => {
     setCurrentOrderItems(prev =>
       prev.map(item =>
         item.menuItem === menuItemId ? { ...item, notes } : item
       )
     );
-  };
+  }, []);
 
   // Remove item from order
-  const removeItemFromOrder = (menuItemId: string) => {
+  const removeItemFromOrder = useCallback((menuItemId: string) => {
     setCurrentOrderItems(prev => prev.filter(item => item.menuItem !== menuItemId));
-  };
+  }, []);
 
   // Calculate order total
   const calculateOrderTotal = () => {
@@ -1592,8 +1592,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
         {/* Header */}
         <div className="relative p-4 sm:p-6 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex-shrink-0">
           {/* Decorative circles */}
-          <div className="absolute top-2 right-2 w-20 h-20 bg-white/10 rounded-full"></div>
-          <div className="absolute bottom-2 left-2 w-16 h-16 bg-white/10 rounded-full"></div>
+          <div className="absolute top-2 right-2 w-20 h-20 bg-white/10 rounded-full pointer-events-none"></div>
+          <div className="absolute bottom-2 left-2 w-16 h-16 bg-white/10 rounded-full pointer-events-none"></div>
           
           <div className="relative flex items-center justify-between z-10">
             <div className="flex items-center gap-3 sm:gap-4">
@@ -1623,9 +1623,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 overflow-hidden">
+        <div className="flex-1 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 overflow-y-auto">
           {/* Left: Menu */}
-          <div className="flex flex-col space-y-4 overflow-hidden">
+          <div className="flex flex-col space-y-4 h-full">
             <div className="flex items-center justify-between">
               <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full"></div>
@@ -1640,6 +1640,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 placeholder="بحث عن عنصر..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
                 className="w-full pr-10 pl-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
               />
               {searchQuery && (
@@ -1757,7 +1758,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
 
           {/* Right: Order Items */}
-          <div className="flex flex-col space-y-4 overflow-hidden">
+          <div className="flex flex-col space-y-4 h-full">
             <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 flex-shrink-0">
               <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full"></div>
               الطلبات

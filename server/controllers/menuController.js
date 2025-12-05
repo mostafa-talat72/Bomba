@@ -332,7 +332,7 @@ export const deleteMenuItem = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const menuItem = await MenuItem.findOneAndDelete({
+        const menuItem = await MenuItem.findOne({
             _id: id,
             organization: req.user.organization,
         });
@@ -343,6 +343,10 @@ export const deleteMenuItem = async (req, res) => {
                 message: "عنصر القائمة غير موجود",
             });
         }
+
+        // Delete from both Local and Atlas
+        const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
+        await deleteFromBothDatabases(menuItem, 'menuitems', `menu item ${menuItem.name}`);
 
         res.json({
             success: true,

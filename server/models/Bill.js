@@ -426,16 +426,29 @@ billSchema.pre("save", async function (next) {
         this.isModified("sessions")
     ) {
         // تهيئة itemPayments من الطلبات
-        if (
-            this.orders &&
-            this.orders.length > 0 &&
-            (!this.itemPayments || this.itemPayments.length === 0)
-        ) {
+        if (this.orders && this.orders.length > 0) {
             try {
                 await this.populate("orders");
-                this.itemPayments = [];
+                
+                // إذا لم يكن هناك itemPayments، نبدأ من الصفر
+                if (!this.itemPayments) {
+                    this.itemPayments = [];
+                }
+                
+                // نجمع الـ orderIds الموجودة في itemPayments
+                const existingOrderIds = new Set(
+                    this.itemPayments.map(ip => ip.orderId?.toString()).filter(Boolean)
+                );
 
+                // نضيف فقط الطلبات الجديدة (اللي مش موجودة في itemPayments)
                 this.orders.forEach((order) => {
+                    const orderIdStr = order._id?.toString();
+                    
+                    // إذا كان الطلب موجود بالفعل في itemPayments، نتخطاه
+                    if (existingOrderIds.has(orderIdStr)) {
+                        return;
+                    }
+                    
                     if (order.items && order.items.length > 0) {
                         order.items.forEach((item, index) => {
                             const itemName =
@@ -445,6 +458,7 @@ billSchema.pre("save", async function (next) {
                                 "Unknown";
                             const price = item.price || 0;
                             const quantity = item.quantity || 1;
+                            const addons = item.addons || [];
 
                             this.itemPayments.push({
                                 orderId: order._id,
@@ -456,6 +470,7 @@ billSchema.pre("save", async function (next) {
                                 totalPrice: price * quantity,
                                 paidAmount: 0,
                                 isPaid: false,
+                                addons: addons,
                                 paymentHistory: [],
                             });
                         });
@@ -468,18 +483,44 @@ billSchema.pre("save", async function (next) {
         }
 
         // تهيئة sessionPayments من الجلسات
-        if (
-            this.sessions &&
-            this.sessions.length > 0 &&
-            (!this.sessionPayments || this.sessionPayments.length === 0)
-        ) {
+        if (this.sessions && this.sessions.length > 0) {
             try {
                 await this.populate("sessions");
-                this.sessionPayments = [];
+                
+                // إذا لم يكن هناك sessionPayments، نبدأ من الصفر
+                if (!this.sessionPayments) {
+                    this.sessionPayments = [];
+                }
+                
+                // نجمع الـ sessionIds الموجودة في sessionPayments
+                const existingSessionIds = new Set(
+                    this.sessionPayments.map(sp => sp.sessionId?.toString()).filter(Boolean)
+                );
 
+                // نضيف فقط الجلسات الجديدة (اللي مش موجودة في sessionPayments)
                 for (const session of this.sessions) {
-                    const sessionCost =
-                        session.finalCost || session.totalCost || 0;
+                    const sessionIdStr = session._id?.toString();
+                    
+                    // إذا كانت الجلسة موجودة بالفعل في sessionPayments، نحدث بياناتها
+                    if (existingSessionIds.has(sessionIdStr)) {
+                        const existingPayment = this.sessionPayments.find(
+                            sp => sp.sessionId?.toString() === sessionIdStr
+                        );
+                        
+                        if (existingPayment) {
+                            const sessionCost = session.finalCost || session.totalCost || 0;
+                            
+                            // تحديث sessionCost إذا تغير
+                            if (existingPayment.sessionCost !== sessionCost) {
+                                existingPayment.sessionCost = sessionCost;
+                                // تحديث remainingAmount بناءً على المدفوع
+                                existingPayment.remainingAmount = sessionCost - (existingPayment.paidAmount || 0);
+                            }
+                        }
+                        continue;
+                    }
+                    
+                    const sessionCost = session.finalCost || session.totalCost || 0;
                     this.sessionPayments.push({
                         sessionId: session._id,
                         sessionCost,
@@ -542,13 +583,14 @@ billSchema.pre("save", function (next) {
             }
             
             // Also check sessionPayments if they exist
+            let allSessionsFullyPaid = true;
             if (this.sessionPayments && this.sessionPayments.length > 0) {
                 for (const session of this.sessionPayments) {
                     const remaining = session.remainingAmount || 0;
                     const paid = session.paidAmount || 0;
                     
                     if (remaining > 0) {
-                        allItemsFullyPaid = false;
+                        allSessionsFullyPaid = false;
                         
                         if (paid > 0) {
                             someItemsPartiallyPaid = true;
@@ -557,12 +599,13 @@ billSchema.pre("save", function (next) {
                 }
             }
             
-            // Set status based on item payment status
-            if (allItemsFullyPaid && this.paid > 0) {
-                // All items fully paid
+            // Set status based on item and session payment status
+            // الفاتورة تكون مدفوعة بالكامل فقط إذا كانت كل الأصناف والجلسات مدفوعة
+            if (allItemsFullyPaid && allSessionsFullyPaid && this.paid > 0) {
+                // All items and sessions fully paid
                 this.status = "paid";
             } else if (someItemsPartiallyPaid || this.paid > 0) {
-                // Some items partially paid
+                // Some items/sessions partially paid
                 this.status = "partial";
             } else {
                 // No items paid

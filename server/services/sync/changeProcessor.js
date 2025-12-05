@@ -460,6 +460,11 @@ class ChangeProcessor {
             return true;
         }
 
+        // Mixed type accepts anything
+        if (expectedType === 'Mixed') {
+            return true;
+        }
+
         // ObjectId compatibility
         if (expectedType === 'ObjectId') {
             return actualType === 'ObjectId' || 

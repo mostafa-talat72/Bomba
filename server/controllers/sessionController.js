@@ -174,6 +174,7 @@ const sessionController = {
                     const tableDoc = await Table.findById(table);
                     tableNumber = tableDoc ? tableDoc.number : table;
                     
+                    // البحث عن فاتورة موجودة للطاولة (غير مدفوعة بالكامل)
                     const existingBill = await Bill.findOne({
                         table: table,
                         organization: req.user.organization,
@@ -182,12 +183,16 @@ const sessionController = {
 
                     if (existingBill) {
                         bill = existingBill;
-                        Logger.info(`✓ تم العثور على فاتورة موجودة للطاولة ${tableNumber}:`, {
+                        Logger.info(`✓ تم العثور على فاتورة موجودة للطاولة ${tableNumber} - سيتم ربط الجلسة بها:`, {
                             billId: bill._id,
                             billNumber: bill.billNumber,
                             billType: bill.billType,
-                            status: bill.status
+                            status: bill.status,
+                            existingOrders: bill.orders?.length || 0,
+                            existingSessions: bill.sessions?.length || 0
                         });
+                    } else {
+                        Logger.info(`ℹ️ لم يتم العثور على فاتورة موجودة للطاولة ${tableNumber} - سيتم إنشاء فاتورة جديدة`);
                     }
                 }
 
@@ -225,6 +230,11 @@ const sessionController = {
 
                 // Link session to bill
                 session.bill = bill._id;
+                Logger.info(`🔗 ربط الجلسة بالفاتورة:`, {
+                    sessionId: session._id,
+                    billId: bill._id,
+                    billNumber: bill.billNumber
+                });
 
                 // Save session with bill reference
                 await session.save();
@@ -233,6 +243,9 @@ const sessionController = {
                 // Add session to bill (تأكد من عدم التكرار)
                 if (!bill.sessions.includes(session._id)) {
                     bill.sessions.push(session._id);
+                    Logger.info(`✓ تمت إضافة الجلسة إلى الفاتورة ${bill.billNumber}`);
+                } else {
+                    Logger.info(`ℹ️ الجلسة موجودة بالفعل في الفاتورة ${bill.billNumber}`);
                 }
                 await bill.save();
                 await bill.populate(["sessions", "createdBy"], "name");

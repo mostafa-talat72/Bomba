@@ -318,7 +318,38 @@ export const deleteCost = async (req, res) => {
             });
         }
 
-        await cost.deleteOne();
+        // Delete from Local and Atlas
+        const costId = cost._id;
+        
+        // Import required modules
+        const syncConfig = (await import('../config/syncConfig.js')).default;
+        const dualDatabaseManager = (await import('../config/dualDatabaseManager.js')).default;
+        const Logger = (await import('../middleware/logger.js')).default;
+        const originalSyncEnabled = syncConfig.enabled;
+        
+        try {
+            syncConfig.enabled = false;
+            Logger.info(`🔒 Sync middleware disabled for direct delete operation`);
+            
+            // حذف من Local
+            await cost.deleteOne();
+            Logger.info(`✓ Deleted cost from Local MongoDB`);
+            
+            // حذف من Atlas
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const atlasCollection = atlasConnection.collection('costs');
+                    const atlasDeleteResult = await atlasCollection.deleteOne({ _id: costId });
+                    Logger.info(`✓ Deleted cost from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
+                } catch (atlasError) {
+                    Logger.warn(`⚠️ Failed to delete cost from Atlas: ${atlasError.message}`);
+                }
+            }
+        } finally {
+            syncConfig.enabled = originalSyncEnabled;
+            Logger.info(`🔓 Sync middleware re-enabled`);
+        }
 
         res.json({
             success: true,

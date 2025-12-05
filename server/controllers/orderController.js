@@ -933,8 +933,11 @@ export const deleteOrder = async (req, res) => {
                         // Remove bill reference from any remaining orders and sessions before deletion
                         await Order.updateMany({ bill: billId }, { $unset: { bill: 1 } });
                         await Session.updateMany({ bill: billId }, { $unset: { bill: 1 } });
-                        // Delete the bill
-                        await billDoc.deleteOne();
+                        
+                        // Delete the bill from Local and Atlas
+                        Logger.info(`🗑️ Deleting empty bill ${billDoc.billNumber}`);
+                        const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
+                        await deleteFromBothDatabases(billDoc, 'bills', `bill ${billDoc.billNumber}`);
 
                         // Update table status to 'empty' if bill is deleted
                         if (tableIdToUpdate) {
@@ -966,8 +969,42 @@ export const deleteOrder = async (req, res) => {
             }
         }
 
-        // Delete the order
-        await order.deleteOne();
+        // Delete the order from Local and Atlas
+        const orderId = order._id;
+        const orderNumber = order.orderNumber;
+        
+        // تعطيل Sync Middleware مؤقتاً لتجنب إعادة المزامنة
+        const syncConfig = (await import('../config/syncConfig.js')).default;
+        const dualDatabaseManager = (await import('../config/dualDatabaseManager.js')).default;
+        const originalSyncEnabled = syncConfig.enabled;
+        
+        try {
+            // تعطيل المزامنة التلقائية
+            syncConfig.enabled = false;
+            Logger.info(`🔒 Sync middleware disabled for direct delete operation`);
+            
+            // حذف من Local
+            await order.deleteOne();
+            Logger.info(`✓ Deleted order ${orderNumber} from Local MongoDB`);
+            
+            // حذف من Atlas مباشرة
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const atlasOrdersCollection = atlasConnection.collection('orders');
+                    const atlasDeleteResult = await atlasOrdersCollection.deleteOne({ _id: orderId });
+                    Logger.info(`✓ Deleted order ${orderNumber} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
+                } catch (atlasError) {
+                    Logger.warn(`⚠️ Failed to delete order from Atlas: ${atlasError.message}`);
+                }
+            } else {
+                Logger.warn(`⚠️ Atlas connection not available - order will be synced later`);
+            }
+        } finally {
+            // إعادة تفعيل المزامنة
+            syncConfig.enabled = originalSyncEnabled;
+            Logger.info(`🔓 Sync middleware re-enabled`);
+        }
 
         // Emit Socket.IO event for order deletion
         if (req.io) {
@@ -983,6 +1020,7 @@ export const deleteOrder = async (req, res) => {
             message: "تم حذف الطلب بنجاح",
         });
     } catch (error) {
+        Logger.error("خطأ في حذف الطلب", error);
         res.status(500).json({
             success: false,
             message: "خطأ في حذف الطلب",
