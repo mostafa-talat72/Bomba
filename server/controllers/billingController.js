@@ -936,6 +936,34 @@ export const addPayment = async (req, res) => {
                     await bill.save();
                 }
             }
+
+            // Mark all sessions as paid if bill is fully paid
+            if (status === 'paid' && bill.sessionPayments && bill.sessionPayments.length > 0) {
+                let sessionsUpdated = false;
+                bill.sessionPayments.forEach(sessionPayment => {
+                    const remainingAmount = sessionPayment.remainingAmount || 0;
+                    if (remainingAmount > 0) {
+                        // دفع المبلغ المتبقي للجلسة
+                        if (!sessionPayment.payments) {
+                            sessionPayment.payments = [];
+                        }
+                        sessionPayment.payments.push({
+                            amount: remainingAmount,
+                            method: method || 'cash',
+                            paidBy: req.user._id,
+                            paidAt: new Date(),
+                            reference: reference || null
+                        });
+                        sessionPayment.paidAmount = (sessionPayment.paidAmount || 0) + remainingAmount;
+                        sessionPayment.remainingAmount = 0;
+                        sessionPayment.isPaid = true;
+                        sessionsUpdated = true;
+                    }
+                });
+                if (sessionsUpdated) {
+                    await bill.save();
+                }
+            }
         } else {
             // الطريقة القديمة (للتوافق مع الكود القديم)
             if (amount <= 0) {

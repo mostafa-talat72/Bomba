@@ -583,8 +583,15 @@ const Billing = () => {
       
       // Determine the new status based on the payment
       let newStatus = selectedBill.status || 'draft';
-      if (newPaidAmount >= billTotal) {
-        newStatus = 'paid';
+      
+      // إذا كان المتبقي = 0 أو المدفوع >= الإجمالي، الفاتورة مدفوعة
+      if (newRemaining === 0 || newPaidAmount >= billTotal) {
+        // التحقق من عدم وجود جلسات نشطة
+        if (!hasActiveSession(selectedBill)) {
+          newStatus = 'paid';
+        } else {
+          newStatus = 'partial';
+        }
       } else if (newPaidAmount > 0) {
         newStatus = 'partial';
       }
@@ -624,8 +631,8 @@ const Billing = () => {
         setPaymentMethod('cash');
         setPaymentReference('');
 
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-        await updateBillStatus(selectedBill.id || selectedBill._id);
+        // لا نستدعي updateBillStatus هنا لأن الـ Backend يتولى ذلك
+        // والاستدعاء هنا قد يُعيد حساب الحالة بشكل خاطئ
 
         // إعادة تحميل البيانات (Tables و Bills معاً)
         await Promise.all([
@@ -694,18 +701,29 @@ const Billing = () => {
       // التحقق من أن جميع الأصناف مدفوعة بالكامل
       const allItemsPaid = aggItems.every(item => item.remainingQuantity === 0);
 
+      // التحقق من المبلغ المدفوع والمتبقي
+      const billPaid = selectedBill?.paid || 0;
+      const billTotal = selectedBill?.total || 0;
+      const billRemaining = selectedBill?.remaining || 0;
+
       // تحديد الحالة الجديدة
       let newStatus: 'draft' | 'partial' | 'paid' | 'cancelled' | 'overdue';
 
-      if (allItemsPaid && !hasActive) {
+      // إذا كان المتبقي = 0 أو المدفوع >= الإجمالي، الفاتورة مدفوعة
+      if ((billRemaining === 0 || billPaid >= billTotal) && !hasActive) {
+        newStatus = 'paid';
+      } else if (allItemsPaid && !hasActive) {
         // جميع الأصناف مدفوعة ولا توجد جلسات نشطة
         newStatus = 'paid';
       } else if (hasActive) {
         // توجد جلسات نشطة (حتى لو كانت جميع الأصناف مدفوعة)
         newStatus = 'partial';
-      } else {
-        // بعض الأصناف غير مدفوعة ولا توجد جلسات نشطة
+      } else if (billPaid > 0) {
+        // تم دفع جزء من المبلغ
         newStatus = 'partial';
+      } else {
+        // لم يتم الدفع بعد
+        newStatus = 'draft';
       }
 
       // تحديث حالة الفاتورة في الباكند
