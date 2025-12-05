@@ -428,7 +428,10 @@ billSchema.pre("save", async function (next) {
         // تهيئة itemPayments من الطلبات
         if (this.orders && this.orders.length > 0) {
             try {
-                await this.populate("orders");
+                // Populate orders if not already populated
+                if (!this.populated('orders')) {
+                    await this.populate("orders");
+                }
                 
                 // إذا لم يكن هناك itemPayments، نبدأ من الصفر
                 if (!this.itemPayments) {
@@ -449,13 +452,16 @@ billSchema.pre("save", async function (next) {
                         return;
                     }
                     
+                    // التحقق من أن order تم populate بشكل صحيح
+                    if (!order.items) {
+                        return;
+                    }
+                    
                     if (order.items && order.items.length > 0) {
                         order.items.forEach((item, index) => {
-                            const itemName =
-                                item.menuItem?.name ||
-                                item.menuItem?.arabicName ||
-                                item.name ||
-                                "Unknown";
+                            // استخدام item.name مباشرة لأنه الاسم الصحيح المحفوظ في الطلب
+                            // item.menuItem قد يكون ObjectId فقط وليس populated
+                            const itemName = item.name || item.menuItem?.name || item.menuItem?.arabicName || "Unknown";
                             const price = item.price || 0;
                             const quantity = item.quantity || 1;
                             const addons = item.addons || [];

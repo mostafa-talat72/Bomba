@@ -481,9 +481,18 @@ export const createOrder = async (req, res) => {
                     if (billDoc) {
                         // التأكد من أن الطلب غير موجود بالفعل في الفاتورة
                         if (!billDoc.orders.includes(order._id)) {
+                            Logger.info(`✓ إضافة الطلب ${order.orderNumber} إلى الفاتورة ${billDoc.billNumber}`);
                             billDoc.orders.push(order._id);
+                            
+                            // Mark orders as modified to trigger pre-save hook
+                            billDoc.markModified('orders');
+                            
+                            // حفظ الفاتورة - سيُشغل pre-save hook لتحديث itemPayments
+                            await billDoc.save();
+                            Logger.info(`✓ تم حفظ الفاتورة وتحديث itemPayments`);
+                        } else {
+                            Logger.info(`⚠️ الطلب ${order.orderNumber} موجود بالفعل في الفاتورة ${billDoc.billNumber}`);
                         }
-                        await billDoc.save();
 
                         // Recalculate bill totals
                         await billDoc.calculateSubtotal();

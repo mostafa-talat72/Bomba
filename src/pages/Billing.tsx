@@ -816,29 +816,37 @@ const Billing = () => {
        
         // البحث عن جميع itemPayments المطابقة
         const matchingPayments = selectedBill?.itemPayments?.filter(ip => {
-          const nameMatch = ip.itemName.trim() === item.itemName.trim();
-          const priceMatch = ip.pricePerUnit === item.price;
+          // تنظيف الأسماء من المسافات الزائدة
+          const itemNameTrimmed = item.itemName.trim();
+          const paymentNameTrimmed = ip.itemName.trim();
+          
+          // مقارنة الأسماء (مع تجاهل الفروقات البسيطة)
+          const nameMatch = paymentNameTrimmed === itemNameTrimmed;
+          
+          // مقارنة السعر (مع تحمل فرق بسيط للأخطاء العشرية)
+          const priceMatch = Math.abs(ip.pricePerUnit - item.price) < 0.01;
+          
+          // التحقق من الكمية المتبقية
           const remainingQty = (ip.quantity || 0) - (ip.paidQuantity || 0);
           
-          // مطابقة الإضافات
-          const itemAddonsKey = (item.addons || [])
-            .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-            .sort()
-            .join('|');
-          const paymentAddonsKey = (ip.addons || [])
-            .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-            .sort()
-            .join('|');
-          const addonsMatch = itemAddonsKey === paymentAddonsKey;
-          
-         
+          // مقارنة addons إذا كانت موجودة
+          let addonsMatch = true;
+          if (item.addons && item.addons.length > 0 && ip.addons && ip.addons.length > 0) {
+            // ترتيب addons للمقارنة
+            const itemAddonsKey = item.addons.map((a: any) => `${a.name}:${a.price}`).sort().join('|');
+            const paymentAddonsKey = ip.addons.map((a: any) => `${a.name}:${a.price}`).sort().join('|');
+            addonsMatch = itemAddonsKey === paymentAddonsKey;
+          } else if ((item.addons && item.addons.length > 0) || (ip.addons && ip.addons.length > 0)) {
+            // إذا كان أحدهما لديه addons والآخر لا، فهما مختلفان
+            addonsMatch = false;
+          }
           
           return nameMatch && priceMatch && addonsMatch && remainingQty > 0;
         }) || [];
 
 
         if (matchingPayments.length === 0) {
-          console.error('❌ لم يتم العثور على itemPayment مطابق للعنصر:', { 
+          console.warn('⚠️ لم يتم العثور على itemPayment مطابق للعنصر:', { 
             itemName: item.itemName, 
             price: item.price,
             addons: item.addons,
@@ -848,7 +856,8 @@ const Billing = () => {
               price: ip.pricePerUnit,
               quantity: ip.quantity,
               paidQuantity: ip.paidQuantity,
-              remaining: (ip.quantity || 0) - (ip.paidQuantity || 0)
+              remaining: (ip.quantity || 0) - (ip.paidQuantity || 0),
+              addons: ip.addons
             }))
           });
           return;

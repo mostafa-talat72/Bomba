@@ -148,6 +148,10 @@ export interface ItemPayment {
   isPaid: boolean;
   paidAt?: Date;
   paidBy?: string;
+  addons?: Array<{
+    name: string;
+    price: number;
+  }>;
   paymentHistory?: Array<{
     quantity: number;
     amount: number;

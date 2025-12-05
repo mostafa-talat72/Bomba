@@ -33,6 +33,10 @@ interface ItemPayment {
   isPaid: boolean; // Kept for backward compatibility
   paidAt?: Date | string;
   paidBy?: string;
+  addons?: {
+    name: string;
+    price: number;
+  }[];
 }
 
 export interface AggregatedItem {
@@ -70,6 +74,7 @@ function createItemKey(itemName: string, itemPrice: number, addons?: { name: str
 function calculatePaidQuantity(
   itemName: string,
   itemPrice: number,
+  addons: { name: string; price: number }[] | undefined,
   orders: Order[],
   itemPayments?: ItemPayment[],
   billStatus?: string,
@@ -81,7 +86,9 @@ function calculatePaidQuantity(
     let totalQty = 0;
     orders.forEach(order => {
       order.items.forEach(item => {
-        if (item.name === itemName && item.price === itemPrice) {
+        const itemKey = createItemKey(item.name, item.price, item.addons);
+        const targetKey = createItemKey(itemName, itemPrice, addons);
+        if (itemKey === targetKey) {
           totalQty += item.quantity;
         }
       });
@@ -102,6 +109,9 @@ function calculatePaidQuantity(
     
     const nameMatch = paymentNameTrimmed === itemNameTrimmed;
     const priceMatch = payment.pricePerUnit === itemPrice;
+    
+    // TODO: يجب إضافة مقارنة addons هنا أيضاً في المستقبل
+    // لكن حالياً itemPayments لا تحتوي على معلومات addons
     
     if (nameMatch && priceMatch) {
       // Use paidQuantity if available (new system)
@@ -181,6 +191,7 @@ export function aggregateItemsWithPayments(
     const paidQty = calculatePaidQuantity(
       aggregated.name,
       aggregated.price,
+      aggregated.addons,
       orders,
       itemPayments,
       billStatus,
