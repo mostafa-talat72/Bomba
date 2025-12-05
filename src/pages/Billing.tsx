@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
 import '../styles/billing-animations.css';
+import React from 'react';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -470,6 +471,27 @@ const Billing = () => {
     // الاعتماد فقط على وجود جلسة نشطة وحالة النوافذ
   }, [bills.length, bills.map(b => (b.sessions || []).map(s => s.status).join(',')).join(','), showPaymentModal, showPartialPaymentModal, showSessionPaymentModal]);
 
+  // تحديث تلقائي للجلسات النشطة في نافذة الدفع الجزئي
+  useEffect(() => {
+    if (!showSessionPaymentModal || !selectedBill) return;
+    
+    const hasActiveSessions = selectedBill.sessions?.some((s: any) => s.status === 'active');
+    if (!hasActiveSessions) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const billRes = await api.getBill(selectedBill._id || selectedBill.id);
+        if (billRes.success && billRes.data) {
+          setSelectedBill(billRes.data);
+        }
+      } catch (error) {
+        console.error('خطأ في تحديث الجلسات:', error);
+      }
+    }, 10000); // كل 10 ثواني
+    
+    return () => clearInterval(interval);
+  }, [showSessionPaymentModal, selectedBill?._id, selectedBill?.id]);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
@@ -773,13 +795,7 @@ const Billing = () => {
       
       // معالجة كل عنصر على حدة (بدون تجميع)
       itemsToPay.forEach(item => {
-        console.log('🔍 البحث عن itemPayments للعنصر:', {
-          itemName: item.itemName,
-          price: item.price,
-          quantity: item.quantity,
-          addons: item.addons
-        });
-        
+       
         // البحث عن جميع itemPayments المطابقة
         const matchingPayments = selectedBill?.itemPayments?.filter(ip => {
           const nameMatch = ip.itemName.trim() === item.itemName.trim();
@@ -797,21 +813,11 @@ const Billing = () => {
             .join('|');
           const addonsMatch = itemAddonsKey === paymentAddonsKey;
           
-          console.log('  ↳ مقارنة مع itemPayment:', {
-            id: ip._id,
-            name: ip.itemName,
-            price: ip.pricePerUnit,
-            remaining: remainingQty,
-            nameMatch,
-            priceMatch,
-            addonsMatch,
-            matches: nameMatch && priceMatch && addonsMatch && remainingQty > 0
-          });
+         
           
           return nameMatch && priceMatch && addonsMatch && remainingQty > 0;
         }) || [];
 
-        console.log(`✓ تم العثور على ${matchingPayments.length} itemPayments مطابقة`);
 
         if (matchingPayments.length === 0) {
           console.error('❌ لم يتم العثور على itemPayment مطابق للعنصر:', { 
@@ -903,6 +909,7 @@ const Billing = () => {
 
   // دالة الدفع الجزئي للجلسة
   const handlePaySessionPartial = async () => {
+    
     if (!selectedBill || !selectedSession) return;
 
     const amount = parseFloat(sessionPaymentAmount);
@@ -913,12 +920,41 @@ const Billing = () => {
     }
 
     // التحقق من أن المبلغ لا يتجاوز المبلغ المتبقي للجلسة
-    // استخدام sessionPayments للحصول على المبلغ المتبقي الصحيح
     const sessionId = selectedSession._id || selectedSession.id;
     const sessionPayment = selectedBill.sessionPayments?.find(
       sp => (sp.sessionId?._id || sp.sessionId) === sessionId
     );
-    const sessionRemaining = sessionPayment?.remainingAmount || selectedSession.finalCost;
+    
+    // حساب المتبقي بنفس الطريقة المستخدمة في الـ UI
+    const isActive = selectedSession.status === 'active';
+    let totalCost = sessionPayment?.sessionCost || selectedSession.finalCost || selectedSession.totalCost || 0;
+    
+    // إذا كانت الجلسة نشطة ولم يكن هناك سعر، نحسب السعر الحالي
+    if (isActive && totalCost === 0 && selectedSession.startTime) {
+      const startTime = new Date(selectedSession.startTime);
+      const now = new Date();
+      const hours = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+      
+      
+      if (selectedSession.deviceType === 'playstation') {
+        const controllers = selectedSession.controllers || 1;
+        let hourlyRate = 20;
+        if (controllers >= 4) hourlyRate = 30;
+        else if (controllers >= 3) hourlyRate = 25;
+        totalCost = Math.ceil(hours * hourlyRate);
+      } else if (selectedSession.deviceType === 'computer') {
+        totalCost = Math.ceil(hours * 15);
+      }
+    }
+    
+    const paidAmount = sessionPayment?.paidAmount || 0;
+    const sessionRemaining = isActive 
+      ? (totalCost - paidAmount) 
+      : (sessionPayment?.remainingAmount !== undefined 
+          ? sessionPayment.remainingAmount 
+          : (totalCost - paidAmount));
+    
+    
     
     if (amount > sessionRemaining) {
       showNotification(`المبلغ المدخل (${formatCurrency(amount)}) أكبر من المبلغ المتبقي (${formatCurrency(sessionRemaining)})`, 'error');
@@ -935,22 +971,28 @@ const Billing = () => {
       });
 
       if (result.success && result.data) {
-        // تحديث بيانات الفاتورة المحلية
-        setSelectedBill(result.data);
-
-        // إعادة تعيين الحقول
-        setSessionPaymentAmount('');
-        setSelectedSession(null);
-        setShowSessionPaymentModal(false);
-
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-        await updateBillStatus(selectedBill.id || selectedBill._id);
-
-        // إعادة تحميل البيانات
+        // إعادة تحميل البيانات أولاً
         await Promise.all([
           fetchTables(),
           fetchBills()
         ]);
+
+        // جلب الفاتورة المحدثة بكل التفاصيل
+        try {
+          const fullBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
+          if (fullBillResponse && fullBillResponse.success && fullBillResponse.data) {
+            setSelectedBill(fullBillResponse.data);
+          } else {
+            setSelectedBill(result.data);
+          }
+        } catch (fetchError) {
+          console.error('خطأ في جلب تفاصيل الفاتورة:', fetchError);
+          setSelectedBill(result.data);
+        }
+
+        // إعادة تعيين الحقول فقط (بدون إغلاق النافذة)
+        setSessionPaymentAmount('');
+        setSelectedSession(null);
 
         // إظهار رسالة نجاح
         showNotification('تم تسجيل الدفع الجزئي للجلسة بنجاح!', 'success');
@@ -2194,50 +2236,17 @@ const Billing = () => {
                             <div className="text-sm text-gray-600 dark:text-gray-300">اختيار مشروبات محددة للدفع</div>
                           </button>
 
-                          {/* زر دفع جزئي للجلسة */}
+                          {/* زر دفع جزئي للجلسات */}
                           {selectedBill?.sessions && selectedBill.sessions.length > 0 && (
                             <button
                               onClick={() => {
-                                console.log('🔍 البحث عن جلسات غير مدفوعة:', {
-                                  sessions: selectedBill.sessions,
-                                  sessionPayments: selectedBill.sessionPayments
-                                });
-                                
-                                // اختيار أول جلسة غير مدفوعة بالكامل
-                                // نستخدم sessionPayments للحصول على المبلغ المتبقي
-                                const unpaidSession = selectedBill.sessions.find(s => {
-                                  const sessionId = s._id || s.id;
-                                  const sessionPayment = selectedBill.sessionPayments?.find(
-                                    sp => (sp.sessionId?._id || sp.sessionId) === sessionId
-                                  );
-                                  
-                                  const remaining = sessionPayment?.remainingAmount || 0;
-                                  console.log(`  ↳ جلسة ${s.deviceName}:`, {
-                                    sessionId,
-                                    finalCost: s.finalCost,
-                                    paidAmount: sessionPayment?.paidAmount || 0,
-                                    remaining
-                                  });
-                                  
-                                  return remaining > 0;
-                                });
-                                
-                                console.log('✓ نتيجة البحث:', unpaidSession ? `وُجدت جلسة: ${unpaidSession.deviceName}` : 'لا توجد جلسات غير مدفوعة');
-                                
-                                if (unpaidSession) {
-                                  setSelectedSession(unpaidSession);
-                                  setSessionPaymentAmount('');
-                                  setSessionPaymentMethod('cash');
-                                  setShowSessionPaymentModal(true);
-                                } else {
-                                  showNotification('جميع الجلسات مدفوعة بالكامل', 'info');
-                                }
+                                setShowSessionPaymentModal(true);
                               }}
                               className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500`}
                             >
                               <div className="text-2xl mb-2">🎮</div>
-                              <div className="font-medium dark:text-gray-100">دفع جزئي للجلسة</div>
-                              <div className="text-sm text-gray-600 dark:text-gray-300">دفع مبلغ جزئي لجلسة البلايستيشن</div>
+                              <div className="font-medium dark:text-gray-100">دفع جزئي للجلسات</div>
+                              <div className="text-sm text-gray-600 dark:text-gray-300">دفع مبالغ جزئية لجلسات البلايستيشن</div>
                             </button>
                           )}
                         </div>
@@ -2976,226 +2985,258 @@ const Billing = () => {
       })()}
 
       {/* Session Partial Payment Modal */}
-      {showSessionPaymentModal && selectedSession && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[80vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                دفع جزئي للجلسة
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                {selectedSession.deviceName} - {selectedSession.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
-              </p>
-            </div>
-
-            <div className="p-6">
-              {/* معلومات الجلسة */}
-              {(() => {
-                // الحصول على بيانات الدفع من sessionPayments
-                const sessionId = selectedSession._id || selectedSession.id;
-                const sessionPayment = selectedBill?.sessionPayments?.find(
-                  sp => (sp.sessionId?._id || sp.sessionId) === sessionId
-                );
-                
-                const paidAmount = sessionPayment?.paidAmount || 0;
-                const remainingAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
-                
-                return (
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">معلومات الجلسة</h5>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">الجهاز:</span>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.deviceName}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">النوع:</span>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {selectedSession.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
-                        </span>
-                      </div>
-                      {selectedSession.deviceType === 'playstation' && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600 dark:text-gray-300">عدد الدراعات:</span>
-                          <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSession.controllers || 1}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">التكلفة الإجمالية:</span>
-                        <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(selectedSession.finalCost)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-300">المدفوع:</span>
-                        <span className="font-medium text-blue-600 dark:text-blue-400">{formatCurrency(paidAmount)}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-gray-200 dark:border-gray-600 pt-2">
-                        <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
-                        <span className="font-medium text-red-600 dark:text-red-400">
-                          {formatCurrency(remainingAmount)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* إدخال المبلغ */}
-              {(() => {
-                const sessionId = selectedSession._id || selectedSession.id;
-                const sessionPayment = selectedBill?.sessionPayments?.find(
-                  sp => (sp.sessionId?._id || sp.sessionId) === sessionId
-                );
-                const maxAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
-                
-                return (
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      المبلغ المطلوب دفعه
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={sessionPaymentAmount}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // السماح بالأرقام الصحيحة الموجبة فقط
-                        if (value === '' || /^\d+$/.test(value)) {
-                          setSessionPaymentAmount(value);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        const value = parseInt(e.target.value);
-                        if (!isNaN(value) && value > maxAmount) {
-                          setSessionPaymentAmount(Math.floor(maxAmount).toString());
-                          showNotification(`الحد الأقصى للدفع هو ${formatCurrency(maxAmount)}`, 'warning');
-                        }
-                      }}
-                      placeholder="أدخل المبلغ (أرقام صحيحة فقط)"
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      الحد الأقصى: {formatCurrency(maxAmount)}
+      {showSessionPaymentModal && selectedBill && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      دفع جزئي للجلسات
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                      اختر الجلسات وحدد المبلغ المطلوب دفعه لكل جلسة
                     </p>
                   </div>
-                );
-              })()}
-
-              {/* طريقة الدفع */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  طريقة الدفع
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    onClick={() => setSessionPaymentMethod('cash')}
-                    className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-                      sessionPaymentMethod === 'cash'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">💵</div>
-                    <div className="text-sm font-medium">نقداً</div>
-                  </button>
-                  <button
-                    onClick={() => setSessionPaymentMethod('card')}
-                    className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-                      sessionPaymentMethod === 'card'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">💳</div>
-                    <div className="text-sm font-medium">بطاقة</div>
-                  </button>
-                  <button
-                    onClick={() => setSessionPaymentMethod('transfer')}
-                    className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-                      sessionPaymentMethod === 'transfer'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">📱</div>
-                    <div className="text-sm font-medium">تحويل</div>
-                  </button>
+                  {selectedBill.sessions?.some((s: any) => s.status === 'active') && (
+                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full">
+                      🔄 تحديث تلقائي
+                    </span>
+                  )}
                 </div>
               </div>
 
-              {/* ملخص الدفع */}
-              {sessionPaymentAmount && parseFloat(sessionPaymentAmount) > 0 && (() => {
-                const sessionId = selectedSession._id || selectedSession.id;
-                const sessionPayment = selectedBill?.sessionPayments?.find(
-                  sp => (sp.sessionId?._id || sp.sessionId) === sessionId
-                );
-                const remainingAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
-                
-                return (
-                  <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
-                    <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">ملخص الدفع</h5>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-blue-800 dark:text-blue-200">المبلغ المدفوع:</span>
-                        <span className="font-bold text-blue-900 dark:text-blue-100">
-                          {formatCurrency(parseFloat(sessionPaymentAmount))}
-                        </span>
+            <div className="p-6">
+              {/* قائمة الجلسات */}
+              <div className="space-y-4">
+                {selectedBill.sessions?.map((session: any) => {
+                  const sessionId = session._id || session.id;
+                  const sessionPayment = selectedBill.sessionPayments?.find(
+                    sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+                  );
+                  
+                  // تحديد حالة الجلسة أولاً
+                  const isActive = session.status === 'active';
+                  const isCompleted = session.status === 'completed';
+                  
+                  // استخدام sessionCost من sessionPayment أو finalCost من session
+                  // للجلسات النشطة، نحسب السعر الحالي
+                  let totalCost = sessionPayment?.sessionCost || session.finalCost || session.totalCost || 0;
+                  
+                  // إذا كانت الجلسة نشطة ولم يكن هناك سعر، نحاول حساب السعر الحالي
+                  if (isActive && totalCost === 0 && session.startTime) {
+                    const startTime = new Date(session.startTime);
+                    const now = new Date();
+                    const hours = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+                    
+                    // حساب السعر بناءً على نوع الجهاز
+                    if (session.deviceType === 'playstation') {
+                      const controllers = session.controllers || 1;
+                      let hourlyRate = 20; // السعر الافتراضي
+                      if (controllers >= 4) hourlyRate = 30;
+                      else if (controllers >= 3) hourlyRate = 25;
+                      totalCost = Math.ceil(hours * hourlyRate);
+                    } else if (session.deviceType === 'computer') {
+                      totalCost = Math.ceil(hours * 15); // 15 جنيه للساعة
+                    }
+                  }
+                  const paidAmount = sessionPayment?.paidAmount || 0;
+                  // حساب المتبقي بشكل صحيح - نستخدم الحساب اليدوي دائماً للجلسات النشطة
+                  const remainingAmount = isActive 
+                    ? (totalCost - paidAmount) 
+                    : (sessionPayment?.remainingAmount !== undefined 
+                        ? sessionPayment.remainingAmount 
+                        : (totalCost - paidAmount));
+                  // الجلسة تعتبر مدفوعة بالكامل فقط إذا كانت مكتملة والمتبقي صفر
+                  const isFullyPaid = !isActive && remainingAmount <= 0;
+                  
+                 
+                  
+                  return (
+                    <div 
+                      key={sessionId}
+                      className={`border-2 rounded-xl p-4 transition-all ${
+                        isFullyPaid 
+                          ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20' 
+                          : isActive
+                          ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20'
+                      }`}
+                    >
+                      {/* معلومات الجلسة */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                            isFullyPaid 
+                              ? 'bg-gradient-to-br from-green-500 to-emerald-500' 
+                              : isActive
+                              ? 'bg-gradient-to-br from-blue-500 to-cyan-500 animate-pulse'
+                              : 'bg-gradient-to-br from-orange-500 to-red-500'
+                          }`}>
+                            <span className="text-2xl">🎮</span>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-lg text-gray-900 dark:text-gray-100">
+                              {session.deviceName}
+                            </h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {session.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
+                              {session.deviceType === 'playstation' && ` - ${session.controllers || 1} دراع`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1 items-end">
+                          {isFullyPaid && (
+                            <span className="px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full">
+                              ✓ مدفوعة
+                            </span>
+                          )}
+                          {isActive && (
+                            <span className="px-3 py-1 bg-blue-500 text-white text-xs font-bold rounded-full animate-pulse">
+                              ⚡ نشطة
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex justify-between border-t border-blue-200 dark:border-blue-600 pt-2">
-                        <span className="text-blue-800 dark:text-blue-200">المتبقي بعد الدفع:</span>
-                        <span className="font-bold text-blue-900 dark:text-blue-100">
-                          {formatCurrency(remainingAmount - parseFloat(sessionPaymentAmount))}
-                        </span>
+
+                      {/* المبالغ */}
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div className={`text-center p-2 bg-white dark:bg-gray-700 rounded-lg ${isActive ? 'ring-2 ring-blue-400 animate-pulse' : ''}`}>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">الإجمالي</p>
+                          <p className="font-bold text-gray-900 dark:text-gray-100">{formatCurrency(totalCost)}</p>
+                          {isActive && <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">⚡ يتحدث</p>}
+                        </div>
+                        <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg">
+                          <p className="text-xs text-gray-600 dark:text-gray-400">المدفوع</p>
+                          <p className="font-bold text-blue-600 dark:text-blue-400">{formatCurrency(paidAmount)}</p>
+                        </div>
+                        <div className={`text-center p-2 bg-white dark:bg-gray-700 rounded-lg ${isActive ? 'ring-2 ring-orange-400 animate-pulse' : ''}`}>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">المتبقي</p>
+                          <p className="font-bold text-red-600 dark:text-red-400">{formatCurrency(remainingAmount)}</p>
+                          {isActive && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">⚡ يتحدث</p>}
+                        </div>
                       </div>
+
+                      {/* تنبيه للجلسات النشطة */}
+                      {isActive && (
+                        <div className="mb-3 p-3 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg">
+                          <p className="text-xs text-blue-800 dark:text-blue-200 flex items-center gap-2">
+                            <span>⚠️</span>
+                            <span>الجلسة نشطة - السعر يتغير تلقائياً. يمكنك الدفع جزئياً والمبلغ المتبقي سيتحدث عند انتهاء الجلسة.</span>
+                          </p>
+                        </div>
+                      )}
+
+                      {/* إدخال المبلغ وزر الدفع */}
+                      {!isFullyPaid && (
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="المبلغ"
+                              value={selectedSession?._id === sessionId || selectedSession?.id === sessionId ? sessionPaymentAmount : ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (value === '' || /^\d+$/.test(value)) {
+                                  setSessionPaymentAmount(value);
+                                  setSelectedSession(session);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = parseInt(e.target.value);
+                                if (!isNaN(value) && value > remainingAmount) {
+                                  setSessionPaymentAmount(Math.floor(remainingAmount).toString());
+                                  showNotification(`الحد الأقصى للدفع هو ${formatCurrency(remainingAmount)}`, 'warning');
+                                }
+                              }}
+                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                            />
+                            {/* رسائل التحذير */}
+                            {selectedSession?._id === sessionId || selectedSession?.id === sessionId ? (
+                              <>
+                                {sessionPaymentAmount && parseInt(sessionPaymentAmount) <= 0 && (
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">⚠️ المبلغ يجب أن يكون أكبر من صفر</p>
+                                )}
+                                {sessionPaymentAmount && parseInt(sessionPaymentAmount) > remainingAmount && (
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">⚠️ المبلغ يتجاوز المتبقي ({formatCurrency(remainingAmount)})</p>
+                                )}
+                                {sessionPaymentAmount && /[^\d]/.test(sessionPaymentAmount) && (
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">⚠️ يجب إدخال أرقام صحيحة فقط</p>
+                                )}
+                                {!sessionPaymentAmount && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">الحد الأقصى: {formatCurrency(remainingAmount)}</p>
+                                )}
+                              </>
+                            ) : null}
+                          </div>
+                          <button
+                            onClick={async () => {
+                              setSelectedSession(session);
+                              await handlePaySessionPartial();
+                              setSessionPaymentAmount('');
+                            }}
+                            disabled={(() => {
+                              // التحقق من أن هذه الجلسة هي المحددة
+                              const isThisSessionSelected = selectedSession?._id === sessionId || selectedSession?.id === sessionId;
+                              
+                              // التحقق من وجود مبلغ
+                              if (!sessionPaymentAmount || sessionPaymentAmount.trim() === '') return true;
+                              
+                              const amount = parseInt(sessionPaymentAmount);
+                              
+                              // التحقق من أن المبلغ رقم صحيح موجب
+                              if (isNaN(amount) || amount <= 0) return true;
+                              
+                              // التحقق من أن المبلغ لا يتجاوز المتبقي (فقط للجلسة المحددة)
+                              if (isThisSessionSelected && amount > remainingAmount) return true;
+                              
+                              
+                              return !isThisSessionSelected;
+                            })()}
+                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors"
+                          >
+                            دفع
+                          </button>
+                        </div>
+                      )}
+
+                      {/* عرض الدفعات السابقة */}
+                      {sessionPayment?.payments && sessionPayment.payments.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">الدفعات السابقة:</p>
+                          <div className="space-y-1">
+                            {sessionPayment.payments.map((payment: any, idx: number) => (
+                              <div key={idx} className="flex justify-between items-center text-xs bg-white dark:bg-gray-700 p-2 rounded">
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {formatCurrency(payment.amount)} - {payment.method === 'cash' ? 'نقداً' : payment.method === 'card' ? 'بطاقة' : 'تحويل'}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-500 text-xs">
+                                  {new Date(payment.paidAt).toLocaleString('ar-EG')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })}
+              </div>
+
+
             </div>
 
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
               <button
                 onClick={() => {
                   setShowSessionPaymentModal(false);
                   setSelectedSession(null);
                   setSessionPaymentAmount('');
                 }}
-                disabled={isProcessingSessionPayment}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-lg transition-colors"
               >
-                إلغاء
-              </button>
-
-              <button
-                onClick={handlePaySessionPartial}
-                disabled={(() => {
-                  const sessionId = selectedSession._id || selectedSession.id;
-                  const sessionPayment = selectedBill?.sessionPayments?.find(
-                    sp => (sp.sessionId?._id || sp.sessionId) === sessionId
-                  );
-                  const maxAmount = sessionPayment?.remainingAmount || selectedSession.finalCost;
-                  const amount = parseFloat(sessionPaymentAmount);
-                  
-                  return (
-                    isProcessingSessionPayment ||
-                    !sessionPaymentAmount ||
-                    isNaN(amount) ||
-                    amount <= 0 ||
-                    amount > maxAmount
-                  );
-                })()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
-              >
-                {isProcessingSessionPayment ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    جاري الدفع...
-                  </>
-                ) : (
-                  'تأكيد الدفع'
-                )}
+                إغلاق
               </button>
             </div>
           </div>

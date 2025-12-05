@@ -265,17 +265,6 @@ const ConsumptionReport = () => {
         totalHours = durationMs / (1000 * 60 * 60);
       }
 
-      console.log('📊 PlayStation Session:', {
-        deviceName,
-        startTime: new Date(session.startTime),
-        endTime: new Date(session.endTime),
-        totalHours: totalHours.toFixed(2),
-        controllersHistory: session.controllersHistory,
-        totalCost: session.totalCost,
-        discount: session.discount,
-        finalCost: session.finalCost,
-        sessionCost
-      });
 
       // Group by device name - sum hours and costs for each device
       const existingItem = itemsBySection['البلايستيشن'].find(i => i.name === deviceName);
@@ -334,16 +323,6 @@ const ConsumptionReport = () => {
       const startDateISO = dateRange[0].toDate().toISOString();
       const endDateISO = dateRange[1].toDate().toISOString();
       
-      console.log('📅 Sending date range to backend:', {
-        start: {
-          local: dateRange[0].format('YYYY-MM-DD HH:mm:ss'),
-          iso: startDateISO
-        },
-        end: {
-          local: dateRange[1].format('YYYY-MM-DD HH:mm:ss'),
-          iso: endDateISO
-        }
-      });
       
       const [ordersResponse, sessionsResponse] = await Promise.all([
         api.getOrders({ 
@@ -369,17 +348,7 @@ const ConsumptionReport = () => {
           return session.deviceType === 'playstation' && session.endTime;
         });
         
-        console.log('📊 Data from Backend (already filtered by date):', {
-          orders: filteredOrders.length,
-          allSessions: allSessions.length,
-          playstationSessions: filteredSessions.length,
-          dateRange: {
-            start: dateRange[0].format('YYYY-MM-DD HH:mm'),
-            end: dateRange[1].format('YYYY-MM-DD HH:mm')
-          },
-          sampleSession: filteredSessions[0],
-          hasControllersHistory: filteredSessions.some(s => s.controllersHistory && s.controllersHistory.length > 0)
-        });
+        
       
         const processedData = processOrdersAndSessions(filteredOrders, filteredSessions);
         setConsumptionData(processedData);

@@ -374,26 +374,38 @@ export const getBill = async (req, res) => {
             Logger.info(`✓ [getBill] QR code already exists for bill: ${bill.billNumber}`);
         }
 
-        // إصلاح sessionPayments إذا كانت remainingAmount خاطئة
+        // إصلاح sessionPayments وحساب السعر الحالي للجلسات النشطة
         if (bill.sessions && bill.sessions.length > 0 && bill.sessionPayments && bill.sessionPayments.length > 0) {
             let needsUpdate = false;
-            bill.sessions.forEach(session => {
+            
+            for (const session of bill.sessions) {
                 const sessionPayment = bill.sessionPayments.find(
                     sp => sp.sessionId?.toString() === session._id?.toString()
                 );
                 
                 if (sessionPayment) {
-                    const sessionCost = session.finalCost || session.totalCost || 0;
+                    let sessionCost = session.finalCost || session.totalCost || 0;
+                    
+                    // للجلسات النشطة، نحسب السعر الحالي
+                    if (session.status === 'active' && typeof session.calculateCurrentCost === 'function') {
+                        try {
+                            sessionCost = await session.calculateCurrentCost();
+                            Logger.info(`✓ تم حساب السعر الحالي للجلسة ${session.deviceName}: ${sessionCost}`);
+                        } catch (error) {
+                            Logger.error(`خطأ في حساب السعر الحالي للجلسة ${session.deviceName}:`, error);
+                        }
+                    }
+                    
                     const correctRemaining = sessionCost - (sessionPayment.paidAmount || 0);
                     
-                    // إذا كان remainingAmount خاطئ، نصلحه
+                    // إذا كان remainingAmount أو sessionCost خاطئ، نصلحه
                     if (sessionPayment.remainingAmount !== correctRemaining || sessionPayment.sessionCost !== sessionCost) {
                         sessionPayment.sessionCost = sessionCost;
                         sessionPayment.remainingAmount = correctRemaining;
                         needsUpdate = true;
                     }
                 }
-            });
+            }
             
             // حفظ التحديثات إذا لزم الأمر
             if (needsUpdate) {
