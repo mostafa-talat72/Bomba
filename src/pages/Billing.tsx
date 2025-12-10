@@ -1318,98 +1318,100 @@ const Billing = () => {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-xl shadow-md border-2 border-blue-200 dark:border-blue-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
-          <div className="flex items-center">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Receipt className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
-            </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-300">
-                إجمالي الفواتير
-              </p>
-              <p className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
-                {formatDecimal(billStats.totalBills)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/20 rounded-xl shadow-md border-2 border-green-200 dark:border-green-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
-          <div className="flex items-center justify-between">
+      {/* Stats - إخفاء الكروت المالية عن الموظفين */}
+      {user?.role !== 'staff' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-xl shadow-md border-2 border-blue-200 dark:border-blue-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
             <div className="flex items-center">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-                <DollarSign className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Receipt className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
               </div>
               <div className="mr-3 sm:mr-4">
-                <p className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
-                  المبلغ المحصل
+                <p className="text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  إجمالي الفواتير
                 </p>
-                <p className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400">
-                  {showPaidAmount ? formatCurrency(billStats.totalPaid) : '••••••'}
+                <p className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
+                  {formatDecimal(billStats.totalBills)}
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setShowPaidAmount(!showPaidAmount)}
-              className="p-2 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg transition-all duration-200 transform hover:scale-110"
-              title={showPaidAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
-            >
-              {showPaidAmount ? (
-                <EyeOff className="h-5 w-5 text-green-600 dark:text-green-400" />
-              ) : (
-                <Eye className="h-5 w-5 text-green-600 dark:text-green-400" />
-              )}
-            </button>
           </div>
-        </div>
 
-        <div className="bg-gradient-to-br from-orange-50 to-red-100 dark:from-orange-900/30 dark:to-red-800/20 rounded-xl shadow-md border-2 border-orange-200 dark:border-orange-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
-          <div className="flex items-center justify-between">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/20 rounded-xl shadow-md border-2 border-green-200 dark:border-green-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <DollarSign className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                </div>
+                <div className="mr-3 sm:mr-4">
+                  <p className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
+                    المبلغ المحصل
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400">
+                    {showPaidAmount ? formatCurrency(billStats.totalPaid) : '••••••'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPaidAmount(!showPaidAmount)}
+                className="p-2 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg transition-all duration-200 transform hover:scale-110"
+                title={showPaidAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+              >
+                {showPaidAmount ? (
+                  <EyeOff className="h-5 w-5 text-green-600 dark:text-green-400" />
+                ) : (
+                  <Eye className="h-5 w-5 text-green-600 dark:text-green-400" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-orange-50 to-red-100 dark:from-orange-900/30 dark:to-red-800/20 rounded-xl shadow-md border-2 border-orange-200 dark:border-orange-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <DollarSign className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                </div>
+                <div className="mr-3 sm:mr-4">
+                  <p className="text-xs sm:text-sm font-semibold text-orange-700 dark:text-orange-300">
+                    المبلغ المتبقي
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400">
+                    {showRemainingAmount ? formatCurrency(billStats.totalRemaining) : '••••••'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRemainingAmount(!showRemainingAmount)}
+                className="p-2 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all duration-200 transform hover:scale-110"
+                title={showRemainingAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+              >
+                {showRemainingAmount ? (
+                  <EyeOff className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                ) : (
+                  <Eye className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/20 rounded-xl shadow-md border-2 border-purple-200 dark:border-purple-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
             <div className="flex items-center">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-                <DollarSign className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Receipt className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
               </div>
               <div className="mr-3 sm:mr-4">
-                <p className="text-xs sm:text-sm font-semibold text-orange-700 dark:text-orange-300">
-                  المبلغ المتبقي
+                <p className="text-xs sm:text-sm font-semibold text-purple-700 dark:text-purple-300">
+                  فواتير جزئية
                 </p>
-                <p className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400">
-                  {showRemainingAmount ? formatCurrency(billStats.totalRemaining) : '••••••'}
+                <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">
+                  {formatDecimal(billStats.partialBills)}
                 </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowRemainingAmount(!showRemainingAmount)}
-              className="p-2 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all duration-200 transform hover:scale-110"
-              title={showRemainingAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
-            >
-              {showRemainingAmount ? (
-                <EyeOff className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-              ) : (
-                <Eye className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/20 rounded-xl shadow-md border-2 border-purple-200 dark:border-purple-700 p-4 sm:p-6 transition-all duration-300 hover:shadow-xl hover:scale-105 transform">
-          <div className="flex items-center">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Receipt className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
-            </div>
-            <div className="mr-3 sm:mr-4">
-              <p className="text-xs sm:text-sm font-semibold text-purple-700 dark:text-purple-300">
-                فواتير جزئية
-              </p>
-              <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">
-                {formatDecimal(billStats.partialBills)}
-              </p>
+                </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* PlayStation Devices Section */}
       {(billTypeFilter === 'all' || billTypeFilter === 'playstation') && (

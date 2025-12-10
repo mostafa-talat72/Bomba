@@ -1,4 +1,5 @@
 @import 'antd/dist/reset.css';
+@import './styles/cost-animations.css';
 
 @tailwind base;
 @tailwind components;

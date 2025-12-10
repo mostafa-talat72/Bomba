@@ -227,16 +227,10 @@ export const validateInventoryItem = [
 // Cost validation rules
 export const validateCost = [
     body("category")
-        .isIn([
-            "rent",
-            "utilities",
-            "salaries",
-            "maintenance",
-            "inventory",
-            "marketing",
-            "other",
-        ])
-        .withMessage("فئة التكلفة غير صحيحة"),
+        .notEmpty()
+        .withMessage("فئة التكلفة مطلوبة")
+        .isMongoId()
+        .withMessage("معرف القسم غير صحيح"),
     body("description").trim().notEmpty().withMessage("وصف التكلفة مطلوب"),
     body("amount")
         .isFloat({ min: 0 })

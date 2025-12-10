@@ -5,6 +5,7 @@ import Logger from "../middleware/logger.js";
 // Import all models
 import Bill from "../models/Bill.js";
 import Cost from "../models/Cost.js";
+import CostCategory from "../models/CostCategory.js";
 import Device from "../models/Device.js";
 import InventoryItem from "../models/InventoryItem.js";
 import MenuCategory from "../models/MenuCategory.js";
@@ -35,6 +36,7 @@ export function applySyncToAllModels() {
     const models = [
         { name: "Bill", model: Bill },
         { name: "Cost", model: Cost },
+        { name: "CostCategory", model: CostCategory },
         { name: "Device", model: Device },
         { name: "InventoryItem", model: InventoryItem },
         { name: "MenuCategory", model: MenuCategory },

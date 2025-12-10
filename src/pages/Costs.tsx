@@ -1,1023 +1,854 @@
-import React, { useState, useEffect } from 'react';
-import { Wallet, Plus, TrendingUp, TrendingDown, Calendar, Receipt, Filter, Edit, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { 
+  DollarSign, Plus, Filter, Search, 
+  TrendingUp, AlertCircle, CheckCircle,
+  Clock, XCircle, Edit, Trash2, Settings, Wallet, RefreshCw
+} from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Cost } from '../services/api';
-import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
+import { api } from '../services/api';
+import { formatCurrency } from '../utils/formatters';
+import * as LucideIcons from 'lucide-react';
+import CategoryManagerModal from '../components/CategoryManagerModal';
+import CostFormModal from '../components/CostFormModal';
+import PaymentAdditionModal from '../components/PaymentAdditionModal';
+import CostDetailsModal from '../components/CostDetailsModal';
+import { 
+  StatisticsCardsSkeleton, 
+  CategoriesFilterSkeleton, 
+  CostsTableSkeleton 
+} from '../components/CostsPageSkeleton';
+import '../styles/cost-animations.css';
+import '../styles/modern-costs.css';
+import '../styles/modern-enhancements.css';
+
+interface CostCategory {
+  _id: string;
+  name: string;
+  icon: string;
+  color: string;
+  description?: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+interface PaymentHistoryItem {
+  amount: number;
+  paymentMethod: string;
+  paidBy?: {
+    _id: string;
+    name: string;
+  };
+  paidAt: string;
+  notes?: string;
+  receipt?: string;
+}
+
+interface AmountHistoryItem {
+  addedAmount: number;
+  previousTotal: number;
+  newTotal: number;
+  addedBy?: {
+    _id: string;
+    name: string;
+  };
+  addedAt: string;
+  reason?: string;
+}
+
+interface Cost {
+  _id: string;
+  category: CostCategory;
+  description: string;
+  amount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  date: string;
+  dueDate?: string;
+  status: 'pending' | 'paid' | 'partially_paid' | 'overdue' | 'cancelled';
+  paymentMethod: string;
+  vendor?: string;
+  notes?: string;
+  paymentHistory?: PaymentHistoryItem[];
+  amountHistory?: AmountHistoryItem[];
+  createdAt: string;
+  updatedAt?: string;
+}
 
 const Costs = () => {
-  const { costs, fetchCosts, createCost, updateCost, deleteCost, showNotification } = useApp();
-  const [showAddCost, setShowAddCost] = useState(false);
-  const [showEditCost, setShowEditCost] = useState(false);
-  const [selectedCost, setSelectedCost] = useState<Cost | null>(null);
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [loading, setLoading] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [costToDelete, setCostToDelete] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    category: '',
-    description: '',
-    amount: '',
-    date: new Date().toISOString().split('T')[0],
-    status: 'pending',
-    paymentMethod: 'cash',
-    receipt: '',
-    vendor: '',
-    vendorContact: '',
-    notes: '',
-    paidAmount: '',
-    remainingAmount: ''
+  const { showNotification } = useApp();
+  const [costs, setCosts] = useState<Cost[]>([]);
+  const [categories, setCategories] = useState<CostCategory[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [showCostModal, setShowCostModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [editingCost, setEditingCost] = useState<Cost | null>(null);
+  const [selectedCostForPayment, setSelectedCostForPayment] = useState<Cost | null>(null);
+  const [selectedCostForDetails, setSelectedCostForDetails] = useState<Cost | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Statistics
+  const [stats, setStats] = useState({
+    total: 0,
+    paid: 0,
+    remaining: 0,
   });
 
-  const costCategories = [
-    { id: 'rent', name: 'الإيجار', color: 'bg-red-500', icon: '🏠' },
-    { id: 'utilities', name: 'المرافق', color: 'bg-blue-500', icon: '⚡' },
-    { id: 'salaries', name: 'المرتبات', color: 'bg-green-500', icon: '👥' },
-    { id: 'maintenance', name: 'الصيانة', color: 'bg-yellow-500', icon: '🔧' },
-    { id: 'inventory', name: 'المخزون', color: 'bg-purple-500', icon: '📦' },
-    { id: 'marketing', name: 'التسويق', color: 'bg-pink-500', icon: '📢' },
-    { id: 'insurance', name: 'التأمين', color: 'bg-indigo-500', icon: '🛡️' },
-    { id: 'other', name: 'أخرى', color: 'bg-gray-500', icon: '📋' },
-  ];
-
-  // تحميل البيانات عند بدء الصفحة
   useEffect(() => {
-    loadCosts();
+    fetchCategories();
   }, []);
 
-  const loadCosts = async () => {
-    try {
-      setLoading(true);
-      await fetchCosts();
-    } catch (error) {
-      showNotification('خطأ في تحميل التكاليف', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // فلترة التكاليف حسب الفترة المحددة
-  const getFilteredCosts = () => {
-    if (!costs || costs.length === 0) return [];
-
-    let startDate: Date;
-    let endDate: Date;
-
-    switch (selectedPeriod) {
-      case 'today':
-        startDate = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-        endDate = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1);
-        break;
-      case 'week': {
-        const dayOfWeek = new Date().getDay();
-        const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        startDate = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - daysToSubtract);
-        endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-        break;
-      }
-      case 'month': {
-        startDate = new Date(selectedYear, selectedMonth, 1);
-        endDate = new Date(selectedYear, selectedMonth + 1, 1);
-        break;
-      }
-      case 'quarter': {
-        const quarter = Math.floor(selectedMonth / 3);
-        startDate = new Date(selectedYear, quarter * 3, 1);
-        endDate = new Date(selectedYear, (quarter + 1) * 3, 1);
-        break;
-      }
-      case 'year':
-        startDate = new Date(selectedYear, 0, 1);
-        endDate = new Date(selectedYear + 1, 0, 1);
-        break;
-      default:
-        return costs;
-    }
-
-    return costs.filter(cost => {
-      const costDate = new Date(cost.date);
-      const matchesDate = costDate >= startDate && costDate < endDate;
-      const matchesCategory = filterCategory === 'all' || cost.category === filterCategory;
-      const matchesStatus = filterStatus === 'all' || cost.status === filterStatus;
-
-      return matchesDate && matchesCategory && matchesStatus;
-    });
-  };
-
-  const filteredCosts = getFilteredCosts();
-
-  // حساب الإحصائيات
-  const calculateStats = () => {
-    const totalAmount = filteredCosts.reduce((sum, cost) => sum + cost.amount, 0);
-    const paidAmount = filteredCosts.filter(cost => cost.status === 'paid').reduce((sum, cost) => sum + cost.amount, 0);
-    const pendingAmount = filteredCosts.filter(cost => cost.status === 'pending').reduce((sum, cost) => sum + cost.amount, 0);
-    const overdueAmount = filteredCosts.filter(cost => cost.status === 'overdue').reduce((sum, cost) => sum + cost.amount, 0);
-
-    // حساب التكاليف حسب الفئة
-    const categoryStats = costCategories.map(category => {
-      const categoryCosts = filteredCosts.filter(cost => cost.category === category.id);
-      const total = categoryCosts.reduce((sum, cost) => sum + cost.amount, 0);
-      const count = categoryCosts.length;
-      const percentage = totalAmount > 0 ? (total / totalAmount) * 100 : 0;
-
-      return {
-        ...category,
-        total,
-        count,
-        percentage
-      };
-    });
-
-    return {
-      totalAmount,
-      paidAmount,
-      pendingAmount,
-      overdueAmount,
-      totalCount: filteredCosts.length,
-      categoryStats
-    };
-  };
-
-  const stats = calculateStats();
-
-  // حساب متوسط التكاليف اليومية
-  const getDailyAverage = () => {
-    if (selectedPeriod === 'today') return stats.totalAmount;
-
-    let daysCount = 1;
-
-    switch (selectedPeriod) {
-      case 'week':
-        daysCount = 7;
-        break;
-      case 'month':
-        daysCount = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-        break;
-      case 'quarter':
-        daysCount = 90;
-        break;
-      case 'year':
-        daysCount = 365;
-        break;
-    }
-
-    return stats.totalAmount / daysCount;
-  };
-
-  // الحصول على بيانات الشهور السابقة للمقارنة
-  const getMonthlyComparison = () => {
-    const months = [];
-    const currentYear = new Date().getFullYear();
-
-    for (let i = 11; i >= 0; i--) {
-      const month = new Date(currentYear, new Date().getMonth() - i, 1);
-      const monthCosts = costs?.filter(cost => {
-        const costDate = new Date(cost.date);
-        return costDate.getFullYear() === month.getFullYear() &&
-          costDate.getMonth() === month.getMonth();
-      }) || [];
-
-      const total = monthCosts.reduce((sum, cost) => sum + cost.amount, 0);
-
-      months.push({
-        month: month.toLocaleDateString('ar-EG', { month: 'short', year: 'numeric' }),
-        total,
-        count: monthCosts.length
-      });
-    }
-
-    return months;
-  };
-
-  const monthlyData = getMonthlyComparison();
-
-  // حساب المبلغ المتبقي بناءً على حالة الدفع والمبلغ المدفوع
-  const calculateRemainingAmount = () => {
-    const totalAmount = parseFloat(formData.amount || '0');
-    const paidAmount = parseFloat(formData.paidAmount || '0');
-    return Math.max(0, totalAmount - paidAmount);
-  };
-
-  // تحديث حالة الدفع تلقائياً بناءً على المبلغ المدفوع
-  const updatePaymentStatus = () => {
-    const totalAmount = parseFloat(formData.amount || '0');
-    const paidAmount = parseFloat(formData.paidAmount || '0');
-
-    if (paidAmount >= totalAmount && totalAmount > 0) {
-      setFormData(prev => ({ ...prev, status: 'paid' }));
-    } else if (paidAmount > 0 && paidAmount < totalAmount) {
-      setFormData(prev => ({ ...prev, status: 'partially_paid' }));
-    } else {
-      setFormData(prev => ({ ...prev, status: 'pending' }));
-    }
-  };
-
-  // مراقبة تغييرات المبلغ والمبلغ المدفوع
+  // Real-time filtering with debounced search
   useEffect(() => {
-    updatePaymentStatus();
-  }, [formData.amount, formData.paidAmount]);
+    const timer = setTimeout(() => {
+      fetchCosts();
+    }, 300);
 
-  // معالجة النماذج
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    return () => clearTimeout(timer);
+  }, [selectedCategory, selectedStatus, searchTerm, dateFrom, dateTo]);
 
-    if (name === 'status' && value === 'paid') {
-      // إذا تم اختيار الحالة كـ "مدفوع"، تحديث المبلغ المدفوع والمتبقي تلقائياً
-      const amount = parseFloat(formData.amount) || 0;
-      setFormData(prev => ({
-        ...prev,
-        [name]: value,
-        paidAmount: amount.toString(),
-        remainingAmount: '0'
-      }));
-    } else if (name === 'amount' || name === 'paidAmount') {
-      // حساب المتبقي تلقائياً عند تغيير المبلغ أو المبلغ المدفوع
-      const currentAmount = name === 'amount' ? parseFloat(value) || 0 : parseFloat(formData.amount) || 0;
-      let currentPaidAmount = name === 'paidAmount' ? parseFloat(value) || 0 : parseFloat(formData.paidAmount) || 0;
-
-      // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
-      if (name === 'paidAmount' && currentPaidAmount > currentAmount) {
-        currentPaidAmount = currentAmount;
-      }
-
-      const remainingAmount = Math.max(0, currentAmount - currentPaidAmount);
-
-      setFormData(prev => ({
-        ...prev,
-        [name]: name === 'paidAmount' ? currentPaidAmount.toString() : value,
-        remainingAmount: remainingAmount.toString()
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
+  const fetchCategories = async () => {
+    try {
+      setCategoriesLoading(true);
+      setCategoriesError(null);
+      const response = await api.get('/cost-categories');
+      console.log('Categories API Response:', response);
+      // Handle both response formats: { data: [...] } or direct array
+      const categoriesData = Array.isArray(response) ? response : (response.data || []);
+      console.log('Categories data:', categoriesData);
+      setCategories(categoriesData);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'فشل في تحميل الأقسام';
+      setCategoriesError(errorMessage);
+      setCategories([]); // Ensure categories is always an array
+      showNotification(errorMessage, 'error');
+      console.error('Error fetching categories:', error);
+    } finally {
+      setCategoriesLoading(false);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      category: '',
-      description: '',
-      amount: '',
-      date: new Date().toISOString().split('T')[0],
-      status: 'pending',
-      paymentMethod: 'cash',
-      receipt: '',
-      vendor: '',
-      vendorContact: '',
-      notes: '',
-      paidAmount: '',
-      remainingAmount: ''
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const fetchCosts = async () => {
     try {
       setLoading(true);
+      setError(null);
+      const params: any = {};
+      
+      // Combine filters with AND logic
+      if (selectedCategory) params.category = selectedCategory;
+      if (selectedStatus !== 'all') params.status = selectedStatus;
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
 
-      const costData = {
-        ...formData,
-        amount: parseFloat(formData.amount),
-        paidAmount: parseFloat(formData.paidAmount || '0'),
-        remainingAmount: parseFloat(formData.remainingAmount || '0'),
-        date: new Date(formData.date)
-      };
-
-      if (showEditCost && selectedCost) {
-        const updatedCost = await updateCost(selectedCost.id, costData);
-        if (updatedCost) {
-          showNotification('تم تحديث التكلفة بنجاح', 'success');
-          setShowEditCost(false);
-          // إعادة تحميل البيانات للتأكد من التحديث
-          await loadCosts();
-        }
-      } else {
-        await createCost(costData);
-        showNotification('تم إضافة التكلفة بنجاح', 'success');
-        setShowAddCost(false);
-        // إعادة تحميل البيانات للتأكد من التحديث
-        await loadCosts();
-      }
-
-      resetForm();
-      setSelectedCost(null);
-      // await loadCosts(); // This line is removed as per the edit hint
-
-    } catch (error) {
-      showNotification('خطأ في حفظ التكلفة', 'error');
+      const response = await api.get('/costs', { params });
+      console.log('Costs API Response:', response);
+      // Handle both response formats: { data: [...] } or direct array
+      const costsData = Array.isArray(response) ? response : (response.data || []);
+      console.log('Costs data:', costsData);
+      setCosts(costsData);
+      calculateStats(costsData);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'فشل في تحميل التكاليف';
+      setError(errorMessage);
+      setCosts([]); // Ensure costs is always an array
+      showNotification(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = (cost: Cost) => {
-    setSelectedCost(cost);
-    setFormData({
-      category: cost.category,
-      description: cost.description,
-      amount: cost.amount.toString(),
-      date: new Date(cost.date).toISOString().split('T')[0],
-      status: cost.status,
-      paymentMethod: cost.paymentMethod,
-      receipt: cost.receipt || '',
-      vendor: cost.vendor || '',
-      vendorContact: cost.vendorContact || '',
-      notes: cost.notes || '',
-      paidAmount: cost.paidAmount?.toString() || '0',
-      remainingAmount: cost.remainingAmount?.toString() || '0'
-    });
-    setShowEditCost(true);
-  };
-
-  const handleDeleteClick = (costId: string) => {
-    setCostToDelete(costId);
-    setShowDeleteModal(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!costToDelete) return;
+  const calculateStats = (costsData: Cost[]) => {
+    // إجمالي التكاليف: مجموع كل المبالغ
+    const total = costsData.reduce((sum, cost) => sum + cost.amount, 0);
     
-    try {
-      setDeleteLoading(true);
-      await deleteCost(costToDelete);
-      showNotification('تم حذف التكلفة بنجاح', 'success');
-      await loadCosts();
-    } catch (error) {
-      showNotification('خطأ في حذف التكلفة', 'error');
-    } finally {
-      setDeleteLoading(false);
-      setShowDeleteModal(false);
-      setCostToDelete(null);
-    }
-  };
+    // المدفوع: مجموع المبالغ المدفوعة فعلياً
+    const paid = costsData.reduce((sum, cost) => sum + cost.paidAmount, 0);
+    
+    // المتبقي: مجموع المبالغ المتبقية
+    const remaining = costsData.reduce((sum, cost) => sum + cost.remainingAmount, 0);
 
-  const handleCancelDelete = () => {
-    setShowDeleteModal(false);
-    setCostToDelete(null);
-  };
-
-  const getCategoryName = (categoryId: string) => {
-    return costCategories.find(cat => cat.id === categoryId)?.name || 'غير معروف';
-  };
-
-  const getCategoryIcon = (categoryId: string) => {
-    return costCategories.find(cat => cat.id === categoryId)?.icon || '📋';
+    setStats({ total, paid, remaining });
   };
 
   const getStatusColor = (status: string) => {
+    const baseClasses = 'status-badge';
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'partially_paid': return 'bg-blue-100 text-blue-800';
-      case 'overdue': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'paid': return `${baseClasses} status-paid bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400`;
+      case 'partially_paid': return `${baseClasses} status-partially-paid bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400`;
+      case 'pending': return `${baseClasses} status-pending bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400`;
+      case 'overdue': return `${baseClasses} status-overdue bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400`;
+      case 'cancelled': return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400`;
+      default: return `${baseClasses} bg-gray-100 text-gray-800`;
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'paid': return <CheckCircle className="w-4 h-4" />;
+      case 'partially_paid': return <Clock className="w-4 h-4" />;
+      case 'pending': return <AlertCircle className="w-4 h-4" />;
+      case 'overdue': return <XCircle className="w-4 h-4" />;
+      default: return <Clock className="w-4 h-4" />;
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
       case 'paid': return 'مدفوع';
-      case 'pending': return 'معلق';
       case 'partially_paid': return 'مدفوع جزئياً';
+      case 'pending': return 'معلق';
       case 'overdue': return 'متأخر';
-      default: return 'غير معروف';
+      case 'cancelled': return 'ملغي';
+      default: return status;
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return formatCurrencyUtil(amount);
+  const getCategoryIcon = (iconName: string) => {
+    const Icon = (LucideIcons as any)[iconName] || DollarSign;
+    return <Icon className="w-5 h-5" />;
   };
 
-  const formatDate = (date: string | Date) => {
-    return new Date(date).toLocaleDateString('ar-EG', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+  const clearAllFilters = () => {
+    setSelectedCategory(null);
+    setSelectedStatus('all');
+    setSearchTerm('');
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const hasActiveFilters = selectedCategory !== null || selectedStatus !== 'all' || searchTerm.trim() !== '' || dateFrom !== '' || dateTo !== '';
+
+  const handleDeleteCost = async (costId: string) => {
+    try {
+      setActionLoading(`delete-${costId}`);
+      await api.delete(`/costs/${costId}`);
+      fetchCosts();
+      return Promise.resolve();
+    } catch (error: any) {
+      setActionLoading(null);
+      throw error;
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAddPayment = async (paymentAmount: number, paymentMethod: string, notes?: string) => {
+    if (!selectedCostForPayment) return;
+
+    try {
+      setActionLoading(`payment-${selectedCostForPayment._id}`);
+      await api.post(`/costs/${selectedCostForPayment._id}/payment`, {
+        paymentAmount,
+        paymentMethod,
+        reference: notes,
+      });
+      showNotification('تم إضافة الدفعة بنجاح', 'success');
+      fetchCosts();
+      setShowPaymentModal(false);
+      setSelectedCostForPayment(null);
+    } catch (error: any) {
+      throw error; // Let the modal handle the error
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const openPaymentModal = (cost: Cost) => {
+    setSelectedCostForPayment(cost);
+    setShowPaymentModal(true);
+  };
+
+  const handleRetry = () => {
+    if (error) {
+      fetchCosts();
+    }
+    if (categoriesError) {
+      fetchCategories();
+    }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
-        <div className="flex items-center xs:w-full xs:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
-            <Wallet className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+      <div className="flex justify-between items-center slide-up">
+        <div>
+          <h1 className="text-4xl font-bold gradient-text-animated">
             إدارة التكاليف
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">متابعة وتحليل المصروفات والتكاليف</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-2 text-lg">
+            تتبع وإدارة جميع تكاليف المشروع بأناقة وسهولة
+          </p>
         </div>
-        <div className="flex items-center space-x-3 space-x-reverse xs:w-full xs:justify-center xs:mt-2">
+        <div className="flex gap-3">
           <button
-            onClick={loadCosts}
-            disabled={loading}
-            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 disabled:opacity-50 xs:w-full xs:justify-center"
+            onClick={() => setShowCategoryModal(true)}
+            className="modern-action-btn modern-action-btn-secondary flex items-center gap-2"
           >
-            <Calendar className="h-5 w-5 ml-2" />
-            تحديث
+            <Settings className="w-5 h-5" />
+            إدارة الأقسام
           </button>
           <button
             onClick={() => {
-              resetForm();
-              setShowAddCost(true);
+              setEditingCost(null);
+              setShowCostModal(true);
             }}
-            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center"
+            className="modern-action-btn modern-action-btn-primary flex items-center gap-2"
           >
-            <Plus className="h-5 w-5 ml-2" />
-            إضافة مصروف
+            <Plus className="w-5 h-5" />
+            إضافة تكلفة
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">الفلترة والبحث</h3>
-          <Filter className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+      {/* Statistics Cards */}
+      {loading && !costs.length ? (
+        <StatisticsCardsSkeleton />
+      ) : (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Total Card */}
+        <div 
+          className="modern-stats-card stats-card hover-lift"
+          style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+            borderRight: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
+          } : {}}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">إجمالي التكاليف</p>
+              <p className="stats-number text-3xl font-bold text-gray-900 dark:text-white">
+                {formatCurrency(stats.total)}
+              </p>
+            </div>
+            <div 
+              className="modern-icon-container"
+              style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+                backgroundColor: `${categories.find(c => c._id === selectedCategory)?.color}20`,
+              } : {
+                backgroundColor: 'rgba(59, 130, 246, 0.15)'
+              }}
+            >
+              {selectedCategory && categories.find(c => c._id === selectedCategory) ? (
+                <div style={{ color: categories.find(c => c._id === selectedCategory)?.color }}>
+                  {getCategoryIcon(categories.find(c => c._id === selectedCategory)?.icon || 'DollarSign')}
+                </div>
+              ) : (
+                <DollarSign className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              )}
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفترة الزمنية</label>
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-            >
-              <option value="today">اليوم</option>
-              <option value="week">هذا الأسبوع</option>
-              <option value="month">هذا الشهر</option>
-              <option value="quarter">هذا الربع</option>
-              <option value="year">هذا العام</option>
-            </select>
-          </div>
 
-          {selectedPeriod === 'month' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الشهر</label>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i} value={i}>
-                      {new Date(2024, i).toLocaleDateString('ar-EG', { month: 'long' })}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">السنة</label>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                >
-                  {Array.from({ length: 5 }, (_, i) => {
-                    const year = new Date().getFullYear() - 2 + i;
-                    return (
-                      <option key={year} value={year}>{year}</option>
-                    );
-                  })}
-                </select>
-              </div>
-            </>
+        {/* Paid Card */}
+        <div 
+          className="modern-stats-card stats-card hover-lift"
+          style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+            borderRight: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
+          } : {}}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">المدفوع</p>
+              <p 
+                className="stats-number text-3xl font-bold cost-filter-transition"
+                style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+                  color: categories.find(c => c._id === selectedCategory)?.color,
+                } : {
+                  color: '#16a34a'
+                }}
+              >
+                {formatCurrency(stats.paid)}
+              </p>
+            </div>
+            <div 
+              className="modern-icon-container"
+              style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+                backgroundColor: `${categories.find(c => c._id === selectedCategory)?.color}20`,
+              } : {
+                backgroundColor: 'rgba(34, 197, 94, 0.15)'
+              }}
+            >
+              {selectedCategory && categories.find(c => c._id === selectedCategory) ? (
+                <div style={{ color: categories.find(c => c._id === selectedCategory)?.color }}>
+                  <CheckCircle className="w-8 h-8" />
+                </div>
+              ) : (
+                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Remaining Card */}
+        <div 
+          className="modern-stats-card stats-card hover-lift"
+          style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+            borderRight: `5px solid ${categories.find(c => c._id === selectedCategory)?.color}`,
+          } : {}}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">المتبقي</p>
+              <p 
+                className="stats-number text-3xl font-bold cost-filter-transition"
+                style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+                  color: categories.find(c => c._id === selectedCategory)?.color,
+                } : {
+                  color: '#ea580c'
+                }}
+              >
+                {formatCurrency(stats.remaining)}
+              </p>
+            </div>
+            <div 
+              className="modern-icon-container"
+              style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
+                backgroundColor: `${categories.find(c => c._id === selectedCategory)?.color}20`,
+              } : {
+                backgroundColor: 'rgba(234, 88, 12, 0.15)'
+              }}
+            >
+              {selectedCategory && categories.find(c => c._id === selectedCategory) ? (
+                <div style={{ color: categories.find(c => c._id === selectedCategory)?.color }}>
+                  <TrendingUp className="w-8 h-8" />
+                </div>
+              ) : (
+                <TrendingUp className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* Categories Filter */}
+      {categoriesLoading ? (
+        <CategoriesFilterSkeleton />
+      ) : categoriesError ? (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertCircle className="w-5 h-5" />
+              <span>{categoriesError}</span>
+            </div>
+            <button
+              onClick={fetchCategories}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              إعادة المحاولة
+            </button>
+          </div>
+        </div>
+      ) : (
+      <div className="modern-filter-section stagger-item">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600">
+            <Filter className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white">تصفية حسب القسم</h3>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className={`modern-category-btn transition-bounce ${
+              !selectedCategory ? 'modern-category-btn-selected' : ''
+            }`}
+            style={{
+              '--category-color': '#667eea',
+              '--category-color-dark': '#764ba2'
+            } as React.CSSProperties}
+          >
+            الكل
+          </button>
+          {categories?.map(category => (
+            <button
+              key={category._id}
+              onClick={() => setSelectedCategory(category._id)}
+              className={`modern-category-btn flex items-center gap-2 transition-bounce ${
+                selectedCategory === category._id ? 'modern-category-btn-selected' : ''
+              }`}
+              style={{
+                '--category-color': category.color,
+                '--category-color-dark': category.color,
+                backgroundColor: selectedCategory === category._id ? category.color : undefined,
+              } as React.CSSProperties}
+            >
+              {getCategoryIcon(category.icon)}
+              <span>{category.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      )}
+
+      {/* Filters and Search */}
+      <div className="modern-filter-section stagger-item">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600">
+            <Filter className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white">البحث والتصفية</h3>
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="mr-auto modern-action-btn modern-action-btn-secondary flex items-center gap-2"
+            >
+              <XCircle className="w-4 h-4" />
+              مسح الكل
+            </button>
           )}
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-            >
-              <option value="all">جميع الفئات</option>
-              {costCategories.map(category => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
-            </select>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Search Input */}
+          <div className="lg:col-span-2 modern-search-container">
+            <input
+              type="text"
+              placeholder="ابحث عن تكلفة، مورد، أو وصف..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="modern-search-input transition-smooth"
+            />
+            <Search className="modern-search-icon w-5 h-5" />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الحالة</label>
+          {/* Status Filter */}
+          <div className="relative">
             <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="modern-form-input transition-smooth w-full appearance-none"
+              style={{ paddingRight: '2.5rem' }}
             >
               <option value="all">جميع الحالات</option>
-              <option value="paid">مدفوع</option>
               <option value="pending">معلق</option>
-              <option value="overdue">متأخر</option>
+              <option value="partially_paid">مدفوع جزئياً</option>
+              <option value="paid">مدفوع</option>
             </select>
+            <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Date Range Toggle */}
+          <button
+            onClick={() => {
+              const dateSection = document.getElementById('date-filters');
+              if (dateSection) {
+                dateSection.classList.toggle('hidden');
+              }
+            }}
+            className="modern-action-btn modern-action-btn-secondary flex items-center justify-center gap-2"
+          >
+            <Clock className="w-4 h-4" />
+            فلترة بالتاريخ
+          </button>
+        </div>
+
+        {/* Date Range Filters */}
+        <div id="date-filters" className="hidden mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              من تاريخ
+            </label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="modern-form-input transition-smooth w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              إلى تاريخ
+            </label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="modern-form-input transition-smooth w-full"
+            />
           </div>
         </div>
+
+        {/* Active Filters Display */}
+        {hasActiveFilters && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {searchTerm && (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-sm font-medium">
+                <Search className="w-3.5 h-3.5" />
+                {searchTerm}
+                <button onClick={() => setSearchTerm('')} className="hover:text-blue-900 dark:hover:text-blue-200">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+            {selectedStatus !== 'all' && (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-sm font-medium">
+                <Filter className="w-3.5 h-3.5" />
+                {selectedStatus === 'pending' ? 'معلق' : 
+                 selectedStatus === 'paid' ? 'مدفوع' : 
+                 selectedStatus === 'partially_paid' ? 'مدفوع جزئياً' : selectedStatus}
+                <button onClick={() => setSelectedStatus('all')} className="hover:text-purple-900 dark:hover:text-purple-200">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+            {dateFrom && (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-medium">
+                <Clock className="w-3.5 h-3.5" />
+                من: {new Date(dateFrom).toLocaleDateString('ar-EG')}
+                <button onClick={() => setDateFrom('')} className="hover:text-green-900 dark:hover:text-green-200">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+            {dateTo && (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-sm font-medium">
+                <Clock className="w-3.5 h-3.5" />
+                إلى: {new Date(dateTo).toLocaleDateString('ar-EG')}
+                <button onClick={() => setDateTo('')} className="hover:text-orange-900 dark:hover:text-orange-200">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">
-              <TrendingDown className="h-6 w-6 text-red-600 dark:text-red-400" />
+      {/* Costs List */}
+      {loading && !costs.length ? (
+        <CostsTableSkeleton />
+      ) : error ? (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8">
+          <div className="text-center space-y-4">
+            <div className="flex justify-center">
+              <AlertCircle className="w-16 h-16 text-red-500 dark:text-red-400" />
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">إجمالي التكاليف</p>
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatCurrency(stats.totalAmount)}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">متوسط يومي: {formatCurrency(getDailyAverage())}</p>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                حدث خطأ أثناء تحميل التكاليف
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">{error}</p>
             </div>
+            <button
+              onClick={handleRetry}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <RefreshCw className="w-5 h-5" />
+              إعادة المحاولة
+            </button>
           </div>
         </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
+      ) : (
+      <div className="modern-table-container stagger-item">
+        {!costs || costs.length === 0 ? (
+          <div className="modern-empty-state">
+            <div className="modern-empty-icon">
+              <DollarSign className="w-12 h-12" />
             </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">المدفوع</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(stats.paidAmount)}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {stats.totalAmount > 0 ? formatDecimal((stats.paidAmount / stats.totalAmount) * 100) : '٠'}% من الإجمالي
-              </p>
-            </div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">لا توجد تكاليف</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">
+              {hasActiveFilters ? 'لم يتم العثور على نتائج مطابقة للفلاتر المحددة' : 'ابدأ بإضافة أول تكلفة'}
+            </p>
+            {hasActiveFilters && (
+              <button
+                onClick={clearAllFilters}
+                className="modern-action-btn modern-action-btn-primary"
+              >
+                مسح الفلاتر
+              </button>
+            )}
           </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
-              <Calendar className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">معلق</p>
-              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{formatCurrency(stats.pendingAmount)}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {stats.totalAmount > 0 ? formatDecimal((stats.pendingAmount / stats.totalAmount) * 100) : '٠'}% من الإجمالي
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-              <Receipt className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">عدد المعاملات</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalCount)}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">متوسط: {formatCurrency(stats.totalCount > 0 ? stats.totalAmount / stats.totalCount : 0)}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Category Breakdown */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-600">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">توزيع التكاليف حسب الفئة</h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {stats.categoryStats
-              .filter(cat => cat.total > 0)
-              .sort((a, b) => b.total - a.total)
-              .map(category => (
-                <div key={category.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center">
-                      <span className="text-2xl mr-2">{category.icon}</span>
-                      <span className="font-medium text-gray-900 dark:text-gray-100">{category.name}</span>
+        ) : (
+          <div className="costs-list-container modern-scrollbar">
+            {costs?.map((cost, index) => (
+              <div
+                key={cost._id}
+                className="cost-card-modern stagger-item cursor-pointer"
+                style={{ 
+                  animationDelay: `${index * 0.05}s`,
+                  '--category-color': cost.category.color
+                } as React.CSSProperties}
+                onClick={() => {
+                  setSelectedCostForDetails(cost);
+                  setShowDetailsModal(true);
+                }}
+              >
+                {/* Header Section */}
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {/* Category Icon */}
+                    <div
+                      className="cost-card-icon"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${cost.category.color} 0%, ${cost.category.color}dd 100%)`,
+                        boxShadow: `0 6px 20px -6px ${cost.category.color}40`
+                      }}
+                    >
+                      {getCategoryIcon(cost.category.icon)}
                     </div>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{formatDecimal(category.percentage)}%</span>
-                  </div>
-                  <div className="mb-2">
-                    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${category.color}`}
-                        style={{ width: `${category.percentage}%` }}
-                      ></div>
+                    
+                    {/* Title & Description */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">
+                          {cost.description}
+                        </h3>
+                        <span 
+                          className="px-2.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0"
+                          style={{ 
+                            backgroundColor: `${cost.category.color}20`,
+                            color: cost.category.color
+                          }}
+                        >
+                          {cost.category.name}
+                        </span>
+                      </div>
+                      {cost.vendor && (
+                        <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                          <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                          <span className="truncate">{cost.vendor}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(category.total)}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{formatDecimal(category.count)} معاملة</p>
+
+                  {/* Status Badge */}
+                  <span className={`modern-status-badge flex-shrink-0 text-xs ${getStatusColor(cost.status)}`}>
+                    {getStatusIcon(cost.status)}
+                    {getStatusText(cost.status)}
+                  </span>
                 </div>
-              ))}
-          </div>
-        </div>
-      </div>
 
-      {/* Monthly Comparison */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-600">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">مقارنة الشهور (آخر 12 شهر)</h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-4">
-            {monthlyData.map((month, index) => (
-              <div key={index} className="text-center">
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{month.month}</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{formatCurrency(month.total)}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatDecimal(month.count)} معاملة</p>
+                {/* Amounts Section */}
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {/* Total Amount */}
+                  <div className="cost-amount-card">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                        <DollarSign className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">الإجمالي</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">
+                      {formatCurrency(cost.amount)}
+                    </p>
+                  </div>
+
+                  {/* Paid Amount */}
+                  <div className="cost-amount-card">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/30">
+                        <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">المدفوع</span>
+                    </div>
+                    <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                      {formatCurrency(cost.paidAmount)}
+                    </p>
+                  </div>
+
+                  {/* Remaining Amount */}
+                  <div className="cost-amount-card">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <div className="p-1.5 rounded-lg bg-red-100 dark:bg-red-900/30">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">المتبقي</span>
+                    </div>
+                    <p className="text-lg font-bold text-red-600 dark:text-red-400">
+                      {formatCurrency(cost.remainingAmount)}
+                    </p>
+                  </div>
+                </div>
+
+
+
+                {/* Footer Section */}
+                <div className="flex items-center justify-center pt-3 border-t border-gray-200 dark:border-gray-700">
+                  {/* Date */}
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{new Date(cost.date).toLocaleDateString('ar-EG', { 
+                      day: 'numeric', 
+                      month: 'short', 
+                      year: 'numeric' 
+                    })}</span>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        )}
       </div>
-
-      {/* Costs List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-600">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">سجل التكاليف</h3>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {formatDecimal(filteredCosts.length)} من {formatDecimal(costs?.length || 0)} معاملة
-            </div>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  التاريخ
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  الفئة
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  الوصف
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  المبلغ
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  المدفوع
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  المتبقي
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  رقم الإيصال
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  الحالة
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  الإجراءات
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
-                    جاري التحميل...
-                  </td>
-                </tr>
-              ) : filteredCosts.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
-                    لا توجد تكاليف في الفترة المحددة
-                  </td>
-                </tr>
-              ) : (
-                filteredCosts.map((cost) => (
-                  <tr key={cost.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {formatDate(cost.date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className="text-lg mr-2">{getCategoryIcon(cost.category)}</span>
-                        <span className="text-sm text-gray-900 dark:text-gray-100">{getCategoryName(cost.category)}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {cost.description}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600 dark:text-red-400">
-                      {formatCurrency(cost.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 dark:text-green-400">
-                      {formatCurrency(cost.paidAmount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-yellow-600 dark:text-yellow-400">
-                      {formatCurrency(cost.remainingAmount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {cost.receipt || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(cost.status)}`}>
-                        {getStatusText(cost.status)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center space-x-2 space-x-reverse">
-                        <button
-                          onClick={() => handleEdit(cost)}
-                          className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 p-1"
-                          title="تعديل"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(cost.id)}
-                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1 disabled:opacity-50"
-                          title="حذف"
-                          disabled={deleteLoading}
-                        >
-                          {deleteLoading && costToDelete === cost.id ? (
-                            <span className="inline-flex items-center">
-                              <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-red-600 dark:text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              جاري الحذف...
-                            </span>
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add/Edit Cost Modal */}
-      {(showAddCost || showEditCost) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-600">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {showEditCost ? 'تعديل التكلفة' : 'إضافة مصروف جديد'}
-              </h3>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة *</label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                >
-                  <option value="">اختر الفئة</option>
-                  {costCategories.map(category => (
-                    <option key={category.id} value={category.id}>
-                      {category.icon} {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف *</label>
-                <input
-                  type="text"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="وصف المصروف"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المبلغ *</label>
-                <input
-                  type="number"
-                  name="amount"
-                  value={formData.amount}
-                  onChange={handleInputChange}
-                  required
-                  step="0.01"
-                  min="0"
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">التاريخ *</label>
-                <input
-                  type="date"
-                  name="date"
-                  value={formData.date}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">طريقة الدفع</label>
-                <select
-                  name="paymentMethod"
-                  value={formData.paymentMethod}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                >
-                  <option value="cash">نقداً</option>
-                  <option value="card">بطاقة ائتمان</option>
-                  <option value="transfer">تحويل بنكي</option>
-                  <option value="check">شيك</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الحالة</label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                >
-                  <option value="pending">معلق</option>
-                  <option value="paid">مدفوع</option>
-                  <option value="partially_paid">مدفوع جزئياً</option>
-                  <option value="overdue">متأخر</option>
-                </select>
-              </div>
-
-              {/* إظهار حقول الدفع فقط إذا كانت الحالة ليست "مدفوع" */}
-              {formData.status !== 'paid' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    المبلغ المدفوع
-                    {formData.status === 'partially_paid' && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">(جزئي)</span>
-                    )}
-                  </label>
-                  <input
-                    type="number"
-                    name="paidAmount"
-                    value={formData.paidAmount}
-                    onChange={handleInputChange}
-                    step="0.01"
-                    min="0"
-                    max={parseFloat(formData.amount || '0')}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                    placeholder="0.00"
-                  />
-                  {formData.paidAmount && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      المتبقي: {formatDecimal(calculateRemainingAmount())} ج.م
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* إظهار ملخص التكلفة */}
-              {formData.amount && (
-                <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ملخص التكلفة:</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    <div>إجمالي التكلفة: {formatDecimal(parseFloat(formData.amount || '0'))} ج.م</div>
-                    {formData.paidAmount && (
-                      <>
-                        <div>المدفوع: {formatDecimal(parseFloat(formData.paidAmount || '0'))} ج.م</div>
-                        <div>المتبقي: {formatDecimal(calculateRemainingAmount())} ج.م</div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم الإيصال (اختياري)</label>
-                <input
-                  type="text"
-                  name="receipt"
-                  value={formData.receipt}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="REC-2024-001"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المورد (اختياري)</label>
-                <input
-                  type="text"
-                  name="vendor"
-                  value={formData.vendor}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="اسم المورد"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم هاتف المورد (اختياري)</label>
-                <input
-                  type="text"
-                  name="vendorContact"
-                  value={formData.vendorContact}
-                  onChange={handleInputChange}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="رقم الهاتف"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ملاحظات (اختياري)</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="ملاحظات إضافية"
-                />
-              </div>
-            </form>
-
-            <div className="p-6 border-t border-gray-200 dark:border-gray-600 flex justify-end space-x-3 space-x-reverse">
-              <button
-                onClick={() => {
-                  setShowAddCost(false);
-                  setShowEditCost(false);
-                  resetForm();
-                  setSelectedCost(null);
-                }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center justify-center min-w-24"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    {showEditCost ? 'جاري التحديث...' : 'جاري الحفظ...'}
-                  </>
-                ) : showEditCost ? 'تحديث التكلفة' : 'إضافة المصروف'}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">تأكيد الحذف</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6">هل أنت متأكد من حذف هذه التكلفة؟ لا يمكن التراجع عن هذا الإجراء.</p>
-            <div className="flex justify-end space-x-3 space-x-reverse">
-              <button
-                onClick={handleCancelDelete}
-                disabled={deleteLoading}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200 disabled:opacity-50"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                disabled={deleteLoading}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center justify-center min-w-24"
-              >
-                {deleteLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    جاري الحذف...
-                  </>
-                ) : 'حذف'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Category Manager Modal */}
+      <CategoryManagerModal
+        isOpen={showCategoryModal}
+        onClose={() => {
+          setShowCategoryModal(false);
+          // Refresh categories when modal closes
+          fetchCategories();
+        }}
+        onSave={() => {
+          fetchCategories();
+          fetchCosts();
+        }}
+      />
+
+      {/* Cost Form Modal */}
+      <CostFormModal
+        isOpen={showCostModal}
+        onClose={() => {
+          setShowCostModal(false);
+          setEditingCost(null);
+        }}
+        onSave={() => {
+          fetchCosts();
+          setShowCostModal(false);
+          setEditingCost(null);
+        }}
+        editingCost={editingCost}
+        categories={categories}
+      />
+
+      {/* Payment Addition Modal */}
+      <PaymentAdditionModal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setSelectedCostForPayment(null);
+        }}
+        onSave={handleAddPayment}
+        cost={selectedCostForPayment}
+      />
+
+      {/* Cost Details Modal */}
+      <CostDetailsModal
+        isOpen={showDetailsModal}
+        onClose={() => {
+          setShowDetailsModal(false);
+          setSelectedCostForDetails(null);
+        }}
+        cost={selectedCostForDetails}
+        onRefresh={fetchCosts}
+        onEdit={(cost) => {
+          setEditingCost(cost);
+          setShowCostModal(true);
+        }}
+        onDelete={handleDeleteCost}
+        onAddPayment={openPaymentModal}
+      />
     </div>
   );
 };
