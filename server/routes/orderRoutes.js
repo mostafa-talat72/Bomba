@@ -28,10 +28,10 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticateToken);
 
-// Get orders (cafe and menu permissions)
-router.get("/", authorize("cafe", "menu", "all"), getOrders);
-router.get("/pending", authorize("cafe", "menu", "all"), getPendingOrders);
-router.get("/stats", authorize("cafe", "menu", "all"), getOrderStats);
+// Get orders (cafe, menu, staff permissions)
+router.get("/", authorize("cafe", "menu", "staff", "all"), getOrders);
+router.get("/pending", authorize("cafe", "menu", "staff", "all"), getPendingOrders);
+router.get("/stats", authorize("cafe", "menu", "staff", "all"), getOrderStats);
 router.get(
     "/today-stats",
     authorize("cafe", "menu", "all"),
@@ -59,10 +59,10 @@ router.post(
     calculateOrderRequirements
 );
 
-// Create order (cafe and menu permissions)
+// Create order (cafe, menu, staff permissions)
 router.post(
     "/",
-    authorize("cafe", "menu", "all"),
+    authorize("cafe", "menu", "staff", "all"),
     validateOrder,
     validateRequest,
     createOrder
@@ -74,7 +74,7 @@ router.patch(
     authorize("cafe", "menu", "all"),
     updateOrderStatus
 );
-router.put("/:id/status", authorize("cafe", "menu", "all"), updateOrderStatus);
+router.put("/:id/status", authorize("cafe", "menu", "staff", "all"), updateOrderStatus);
 router.patch(
     "/:id/items/:itemIndex/status",
     authorize("cafe", "menu", "all"),

@@ -49,6 +49,8 @@ const userSchema = new mongoose.Schema(
                     "costs",
                     "users",
                     "settings",
+                    "staff",
+                    "orders",
                     "all",
                 ],
             },

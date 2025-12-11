@@ -33,8 +33,8 @@ router.use(protect);
 
 router
     .route("/")
-    .get(authorize("billing", "all"), getBills)
-    .post(authorize("billing", "all"), createBill);
+    .get(authorize("billing", "staff", "all"), getBills)
+    .post(authorize("billing", "staff", "all"), createBill);
 
 router
     .route("/:id")
