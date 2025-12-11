@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
 import '../styles/billing-animations.css';
+import PartialPaymentModal from '../components/PartialPaymentModal';
 import React from 'react';
 
 // Type for interval
@@ -243,9 +244,7 @@ const Billing = () => {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [discountPercentage, setDiscountPercentage] = useState('');
   const [originalAmount, setOriginalAmount] = useState('');
-  const [selectedItems, setSelectedItems] = useState<{ [key: string]: boolean }>({});
-  const [itemQuantities, setItemQuantities] = useState<{ [key: string]: number }>({});
-  const [partialPaymentMethod, setPartialPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  // Removed old partial payment variables - now handled by PartialPaymentModal component
   const [statusFilter, setStatusFilter] = useState('all'); // الافتراضي: جميع الفواتير
   const [playstationStatusFilter, setPlaystationStatusFilter] = useState('unpaid'); // الافتراضي: غير مدفوع
   // تم إزالة فلترة التاريخ - عرض جميع الفواتير بدون قيود تاريخية
@@ -349,9 +348,34 @@ const Billing = () => {
       fetchBills();
       fetchTables();
       
+      // If the updated bill is currently selected, refresh it immediately
+      if (selectedBill && data.bill && (data.bill._id === selectedBill._id || data.bill.id === selectedBill.id)) {
+        // Update with fresh data from server
+        setSelectedBill({ ...data.bill });
+        
+        // Force re-render of components that depend on bill data
+        setTimeout(() => {
+          setSelectedBill(prev => prev ? { ...prev } : null);
+        }, 50);
+      }
+    });
+
+    // Listen for partial-payment-received event (new)
+    socket.on('partial-payment-received', (data: any) => {
+      
+      // Refresh bills list immediately
+      fetchBills();
+      fetchTables();
+      
       // If the updated bill is currently selected, refresh it
       if (selectedBill && data.bill && (data.bill._id === selectedBill._id || data.bill.id === selectedBill.id)) {
-        setSelectedBill(data.bill);
+        // Update with fresh data including itemPayments
+        setSelectedBill({ ...data.bill });
+        
+        // Force re-render after a short delay to ensure all components update
+        setTimeout(() => {
+          setSelectedBill(prev => prev ? { ...prev } : null);
+        }, 100);
       }
     });
 
@@ -678,9 +702,7 @@ const Billing = () => {
     setSelectedBill(bill);
     setShowPartialPaymentModal(true);
     
-    // إعادة تعيين العناصر المحددة
-    setSelectedItems({});
-    setItemQuantities({});
+    // العناصر المحددة يتم إدارتها الآن داخل PartialPaymentModal
   };
 
   // دالة لتحديث حالة الفاتورة بناءً على الأصناف والجلسات
@@ -749,182 +771,96 @@ const Billing = () => {
     }
   };
 
-  const handlePartialPaymentSubmit = async () => {
-    if (!selectedBill) return;
-
-    // استخدم نفس منطق المفاتيح كما في aggregateItemsWithPayments
-    const aggItems = aggregateItemsWithPayments(
-      selectedBill?.orders || [], 
-      selectedBill?.itemPayments || [],
-      selectedBill?.status,
-      selectedBill?.paid,
-      selectedBill?.total
-    );
-    const selectedItemIds = Object.keys(selectedItems).filter(id => selectedItems[id]);
-
-    if (selectedItemIds.length === 0) {
-      showNotification('يرجى تحديد العناصر المطلوب دفعها');
-      return;
-    }
-
-    const itemsToPay = aggItems.filter(item => {
-      const addonsKey = (item.addons || []).map((a: { name: string; price: number }) => `${a.name}:${a.price}`).sort().join('|');
-      const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-      const isSelected = selectedItemIds.includes(itemKey);
-      const hasQuantity = itemQuantities[itemKey] > 0;
-
-      return isSelected && hasQuantity;
-    }).map(item => {
-      const addonsKey = (item.addons || []).map((a: { name: string; price: number }) => `${a.name}:${a.price}`).sort().join('|');
-      const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-      const quantity = itemQuantities[itemKey] || 0;
-      // ابحث عن العنصر الأصلي في selectedBill.orders للحصول على orderId وorderNumber
-      const original = selectedBill?.orders?.find(order =>
-        order.items?.some(orderItem => orderItem.name === item.name && orderItem.price === item.price)
-      );
-
-      return {
-        itemName: item.name,
-        price: item.price,
-        quantity: Math.min(quantity, item.remainingQuantity),
-        orderId: original?._id,
-        orderNumber: original?.orderNumber,
-        addons: item.addons || [],
-      };
-    });
-
-    if (itemsToPay.length === 0) {
-      showNotification('يرجى تحديد الكميات المطلوب دفعها');
-      return;
-    }
-
-    // الحصول على orderId من أول عنصر
-    const firstItem = itemsToPay[0];
-    if (!firstItem || !firstItem.orderId) {
-      showNotification('لم يتم العثور على عناصر صالحة للدفع');
-      return;
-    }
+  const handlePartialPaymentSubmit = async (
+    items: Array<{ orderItemId: string; itemName: string; price: number; quantity: number; orderId: string }>,
+    paymentMethod: 'cash' | 'card' | 'transfer'
+  ) => {
+    if (!selectedBill || items.length === 0) return;
 
     try {
       setIsProcessingPartialPayment(true);
       
-      // تحويل itemsToPay إلى الصيغة المطلوبة للـ API
-      const itemsToPayForAPI: Array<{ itemId: string; quantity: number }> = [];
-      
-      // معالجة كل عنصر على حدة (بدون تجميع)
-      itemsToPay.forEach(item => {
-       
-        // البحث عن جميع itemPayments المطابقة
-        const matchingPayments = selectedBill?.itemPayments?.filter(ip => {
-          // تنظيف الأسماء من المسافات الزائدة
-          const itemNameTrimmed = item.itemName.trim();
-          const paymentNameTrimmed = ip.itemName.trim();
-          
-          // مقارنة الأسماء (مع تجاهل الفروقات البسيطة)
-          const nameMatch = paymentNameTrimmed === itemNameTrimmed;
-          
-          // مقارنة السعر (مع تحمل فرق بسيط للأخطاء العشرية)
-          const priceMatch = Math.abs(ip.pricePerUnit - item.price) < 0.01;
-          
-          // التحقق من الكمية المتبقية
-          const remainingQty = (ip.quantity || 0) - (ip.paidQuantity || 0);
-          
-          // مقارنة addons إذا كانت موجودة
-          let addonsMatch = true;
-          if (item.addons && item.addons.length > 0 && ip.addons && ip.addons.length > 0) {
-            // ترتيب addons للمقارنة
-            const itemAddonsKey = item.addons.map((a: any) => `${a.name}:${a.price}`).sort().join('|');
-            const paymentAddonsKey = ip.addons.map((a: any) => `${a.name}:${a.price}`).sort().join('|');
-            addonsMatch = itemAddonsKey === paymentAddonsKey;
-          } else if ((item.addons && item.addons.length > 0) || (ip.addons && ip.addons.length > 0)) {
-            // إذا كان أحدهما لديه addons والآخر لا، فهما مختلفان
-            addonsMatch = false;
-          }
-          
-          return nameMatch && priceMatch && addonsMatch && remainingQty > 0;
-        }) || [];
-
-
-        if (matchingPayments.length === 0) {
-          console.warn('⚠️ لم يتم العثور على itemPayment مطابق للعنصر:', { 
-            itemName: item.itemName, 
-            price: item.price,
-            addons: item.addons,
-            availableItemPayments: selectedBill?.itemPayments?.map(ip => ({
-              id: ip._id,
-              name: ip.itemName,
-              price: ip.pricePerUnit,
-              quantity: ip.quantity,
-              paidQuantity: ip.paidQuantity,
-              remaining: (ip.quantity || 0) - (ip.paidQuantity || 0),
-              addons: ip.addons
-            }))
-          });
-          return;
+      // تجميع العناصر حسب الطلب
+      const itemsByOrder = items.reduce((acc, item) => {
+        if (!acc[item.orderId]) {
+          acc[item.orderId] = [];
         }
-
-        // توزيع الكمية على itemPayments المتاحة
-        let remainingToPay = item.quantity;
-        matchingPayments.forEach(payment => {
-          if (remainingToPay <= 0) return;
-          
-          const availableQty = (payment.quantity || 0) - (payment.paidQuantity || 0);
-          const qtyToPay = Math.min(remainingToPay, availableQty);
-          
-          if (qtyToPay > 0) {
-            itemsToPayForAPI.push({
-              itemId: payment._id || payment.itemId,
-              quantity: qtyToPay
-            });
-            remainingToPay -= qtyToPay;
-          }
+        acc[item.orderId].push({
+          itemName: item.itemName,
+          price: item.price,
+          quantity: item.quantity
         });
+        return acc;
+      }, {} as Record<string, Array<{ itemName: string; price: number; quantity: number }>>);
 
-        if (remainingToPay > 0) {
-          console.warn(`لم يتم دفع ${remainingToPay} من ${item.itemName} - الكمية المتبقية غير كافية`);
-        }
-      });
+      // إرسال طلب دفع جزئي لكل طلب
+      const responses = await Promise.all(
+        Object.entries(itemsByOrder).map(([orderId, orderItems]) =>
+          api.addPartialPayment(selectedBill.id || selectedBill._id, {
+            orderId,
+            items: orderItems,
+            paymentMethod
+          })
+        )
+      );
 
-      if (itemsToPayForAPI.length === 0) {
-        showNotification('لم يتم العثور على عناصر صالحة للدفع', 'error');
-        return;
-      }
-      const response = await api.payForItems(selectedBill.id || selectedBill._id, {
-        items: itemsToPayForAPI,
-        paymentMethod: partialPaymentMethod
-      });
-
-      if (response.success && response.data) {
-        // response.data يحتوي على { bill, paidItems, totalPaid, ... }
-        const updatedBill = (response.data as any).bill || response.data;
+      // التحقق من نجاح جميع الطلبات
+      const allSuccessful = responses.every(response => response.success);
+      
+      if (allSuccessful) {
+        // حساب المبلغ المدفوع
+        const totalPaid = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         
-        // إعادة تحميل قائمة الفواتير أولاً
-        await fetchBills();
+        // إعادة تحميل البيانات فوراً
+        await Promise.all([
+          fetchBills(),
+          fetchTables()
+        ]);
 
-        // إعادة تحميل الفاتورة من الـ API للحصول على أحدث البيانات
+        // تحديث الفاتورة المحددة للحصول على أحدث البيانات
         const refreshedBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
         if (refreshedBillResponse.success && refreshedBillResponse.data) {
-          setSelectedBill(refreshedBillResponse.data);
+          const updatedBill = refreshedBillResponse.data;
+          
+          // تحديث الفاتورة المحددة فوراً مع فرض إعادة الرسم
+          setSelectedBill(null); // Clear first to force re-render
+          setTimeout(() => {
+            setSelectedBill({ ...updatedBill });
+          }, 10);
+          
+          // تحديث إضافي بعد فترة قصيرة لضمان التحديث في جميع المكونات
+          setTimeout(() => {
+            setSelectedBill(prev => prev ? { ...prev, _forceUpdate: Date.now() } : null);
+          }, 200);
+          
+          // التحقق من حالة الفاتورة المحدثة
+          const hasRemainingItems = updatedBill.orders?.some((order: Order) =>
+            order.items?.some((item: OrderItem) => {
+              const paidForThisItem = updatedBill.itemPayments?.reduce((sum, payment) => {
+                if (payment.itemName === item.name && 
+                    Math.abs(payment.pricePerUnit - item.price) < 0.01) {
+                  return sum + (payment.paidQuantity || 0);
+                }
+                return sum;
+              }, 0) || 0;
+              
+              return item.quantity > paidForThisItem;
+            })
+          );
+          
+          if (updatedBill.status === 'paid' || !hasRemainingItems) {
+            setShowPartialPaymentModal(false);
+            showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح! الفاتورة مكتملة.`, 'success');
+          } else {
+            showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح!`, 'success');
+          }
         } else {
-          // إذا فشل التحديث، استخدم البيانات من الاستجابة
-          setSelectedBill(updatedBill);
+          showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح!`, 'success');
         }
-
-        // إعادة تعيين العناصر المحددة
-        setSelectedItems({});
-        setItemQuantities({});
-
-        // إذا كانت الفاتورة أصبحت مدفوعة بالكامل، تحديث حالة الطاولة
-        if (updatedBill.status === 'paid') {
-          await fetchTables();
-          // إغلاق النافذة إذا تم دفع كل شيء
-          setShowPartialPaymentModal(false);
-        }
-
-        // إظهار رسالة نجاح
-        showNotification('تم تسجيل الدفع الجزئي بنجاح!', 'success');
       } else {
-        showNotification('فشل في تسجيل الدفع الجزئي', 'error');
+        const failedResponses = responses.filter(r => !r.success);
+        const errorMessage = failedResponses[0]?.message || 'فشل في تسجيل الدفع الجزئي';
+        showNotification(errorMessage, 'error');
       }
     } catch (error) {
       console.error('Error in partial payment:', error);
@@ -2123,13 +2059,17 @@ const Billing = () => {
 
                   {/* تفاصيل الأصناف مع الكميات */}
                   {selectedBill && (
-                    <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-5 rounded-xl mb-6 border-2 border-purple-200 dark:border-purple-800 shadow-md">
+                    <div 
+                      key={`item-details-${selectedBill._id || selectedBill.id}-${selectedBill.itemPayments?.length || 0}-${selectedBill.paid || 0}`}
+                      className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-5 rounded-xl mb-6 border-2 border-purple-200 dark:border-purple-800 shadow-md"
+                    >
                       <h5 className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-4 flex items-center gap-2">
                         <Receipt className="h-5 w-5" />
                         تفاصيل الأصناف
                       </h5>
                       <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
                         {(() => {
+                          // إعادة حساب العناصر مع ضمان البيانات المحدثة
                           const items = aggregateItemsWithPayments(
                             selectedBill?.orders || [], 
                             selectedBill?.itemPayments || [],
@@ -2137,6 +2077,21 @@ const Billing = () => {
                             selectedBill?.paid,
                             selectedBill?.total
                           );
+                          
+                          // فرض إعادة حساب البيانات إذا كانت فارغة ولكن يجب أن تكون موجودة
+                          if (items.length === 0 && selectedBill?.orders?.length > 0) {
+                            // إعادة جلب البيانات من الخادم
+                            setTimeout(async () => {
+                              try {
+                                const freshBill = await api.getBill(selectedBill.id || selectedBill._id);
+                                if (freshBill.success && freshBill.data) {
+                                  setSelectedBill({ ...freshBill.data });
+                                }
+                              } catch (error) {
+                                console.error('Error refreshing bill data:', error);
+                              }
+                            }, 100);
+                          }
                           
                           if (items.length === 0) {
                             return (
@@ -2185,41 +2140,7 @@ const Billing = () => {
                     </div>
                   )}
 
-                  {/* المدفوعات الجزئية */}
-                  {selectedBill?.partialPayments && selectedBill.partialPayments.length > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg mb-6">
-                      <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-3">المدفوعات الجزئية السابقة</h5>
-                      <div className="space-y-2">
-                        {/* تجميع الأصناف حسب الاسم والسعر */}
-                        {(() => {
-                          const itemMap = new Map<string, { itemName: string; price: number; totalQuantity: number; totalAmount: number }>();
-                          selectedBill.partialPayments.forEach(payment => {
-                            payment.items.forEach(item => {
-                              const key = `${item.itemName}|${item.price}`;
-                              if (!itemMap.has(key)) {
-                                itemMap.set(key, {
-                                  itemName: item.itemName,
-                                  price: item.price,
-                                  totalQuantity: item.quantity,
-                                  totalAmount: item.price * item.quantity
-                                });
-                              } else {
-                                const agg = itemMap.get(key)!;
-                                agg.totalQuantity += item.quantity;
-                                agg.totalAmount += item.price * item.quantity;
-                              }
-                            });
-                          });
-                          return Array.from(itemMap.values()).map((agg) => (
-                            <div key={agg.itemName + agg.price} className="flex justify-between text-sm bg-white dark:bg-gray-800 p-3 rounded-lg border border-blue-100 dark:border-blue-700 mb-1">
-                              <span className="text-blue-800 dark:text-blue-200">{agg.itemName} × {formatDecimal(agg.totalQuantity)}</span>
-                              <span className="text-blue-700 dark:text-blue-300 font-medium">{formatCurrency(agg.totalAmount)}</span>
-                            </div>
-                          ));
-                        })()}
-                      </div>
-                    </div>
-                  )}
+
 
                   {/* إدخال الدفع - يظهر فقط إذا لم تكن الفاتورة مدفوعة بالكامل */}
                   {selectedBill?.status !== 'paid' && (
@@ -2598,328 +2519,15 @@ const Billing = () => {
         </div>
       )}
 
-      {/* Partial Payment Modal */}
-      {showPartialPaymentModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-green-200 dark:border-green-800 animate-bounce-in">
-            <div className="sticky top-0 z-10 p-6 bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-700 dark:to-emerald-700 flex items-center justify-between rounded-t-2xl">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg">
-                  <Receipt className="h-8 w-8 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-white">دفع مشروبات محددة</h3>
-                  <p className="text-sm text-green-100 mt-1">فاتورة #{selectedBill?.billNumber}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowPartialPaymentModal(false);
-                  setSelectedItems({});
-                  setItemQuantities({});
-                }}
-                className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="mb-6">
-                <h4 className="font-bold text-xl text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  اختر المشروبات المطلوب دفعها
-                </h4>
-
-                {(() => {
-                  const itemsWithRemaining = aggregateItemsWithPayments(
-                    selectedBill?.orders || [], 
-                    selectedBill?.itemPayments || [],
-                    selectedBill?.status,
-                    selectedBill?.paid,
-                    selectedBill?.total
-                  ).filter(item => item.remainingQuantity > 0);
-
-
-                  if (itemsWithRemaining.length === 0) {
-                    return (
-                      <div className="text-center py-12 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 rounded-xl border-2 border-green-300 dark:border-green-700 shadow-lg">
-                        <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                          <CheckCircle className="h-10 w-10 text-white" />
-                        </div>
-                        <h5 className="font-bold text-xl text-green-900 dark:text-green-100 mb-2">جميع العناصر مدفوعة بالكامل!</h5>
-                        <p className="text-green-700 dark:text-green-300 text-lg">
-                          لا توجد عناصر متبقية للدفع في هذه الفاتورة
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return itemsWithRemaining.map((item) => {
-                  // استخدم نفس منطق المفتاح كما في التجميع
-                  const addonsKey = (item.addons || [])
-                      .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                    .sort()
-                    .join('|');
-                    const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                  return (
-                    <div key={itemKey} className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-700 dark:to-gray-800 rounded-xl p-5 border-2 border-green-200 dark:border-green-700 flex flex-col gap-3 shadow-md hover:shadow-lg transition-all">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center shadow-md">
-                            <Receipt className="h-5 w-5 text-white" />
-                          </div>
-                          <span className="font-bold text-lg text-gray-900 dark:text-gray-100">{item.name}</span>
-                        </div>
-                        <div className="flex items-center gap-3 bg-green-100 dark:bg-green-900/50 px-4 py-2 rounded-lg">
-                          {/* زر - للصنف الرئيسي */}
-                          <button
-                            type="button"
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={() => {
-                              const newQty = Math.max(0, (itemQuantities[itemKey] || 0) - 1);
-                              setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
-                              setSelectedItems(prev => {
-                                const updated = { ...prev };
-                                if (newQty > 0) updated[itemKey] = true;
-                                else delete updated[itemKey];
-                                return updated;
-                              });
-                            }}
-                            disabled={(itemQuantities[itemKey] || 0) <= 0}
-                          >-</button>
-                          <span className="mx-2 w-12 text-center select-none font-bold text-2xl text-green-700 dark:text-green-300">{formatDecimal(itemQuantities[itemKey] || 0)}</span>
-                          {/* زر + للصنف الرئيسي */}
-                          <button
-                            type="button"
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={() => {
-                              const newQty = Math.min(item.remainingQuantity, (itemQuantities[itemKey] || 0) + 1);
-                              setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
-                              setSelectedItems(prev => ({ ...prev, [itemKey]: newQty > 0 }));
-                            }}
-                            disabled={(itemQuantities[itemKey] || 0) >= item.remainingQuantity}
-                          >+</button>
-                        </div>
-                      </div>
-                      
-                      {/* معلومات الصنف */}
-                      <div className="flex items-center justify-between bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 p-3 rounded-lg">
-                        <div className="flex gap-6 text-sm">
-                          <div className="flex flex-col items-center">
-                            <span className="text-gray-600 dark:text-gray-400 text-xs mb-1">الكمية الكلية</span>
-                            <span className="font-bold text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</span>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <span className="text-green-600 dark:text-green-400 text-xs mb-1">المدفوع</span>
-                            <span className="font-bold text-lg text-green-700 dark:text-green-300">{formatDecimal(item.paidQuantity)}</span>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <span className="text-orange-600 dark:text-orange-400 text-xs mb-1">المتبقي</span>
-                            <span className="font-bold text-lg text-orange-700 dark:text-orange-300">{formatDecimal(item.remainingQuantity)}</span>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="text-sm font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-3 py-1 rounded-lg">
-                            {formatCurrency(item.price)}
-                          </div>
-                          {/* زر دفع الكمية بالكامل */}
-                          <button
-                            type="button"
-                            className="px-4 py-1.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white text-xs font-bold rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={() => {
-                              setItemQuantities({ ...itemQuantities, [itemKey]: item.remainingQuantity });
-                              setSelectedItems(prev => ({ ...prev, [itemKey]: item.remainingQuantity > 0 }));
-                            }}
-                            disabled={(itemQuantities[itemKey] || 0) === item.remainingQuantity}
-                          >
-                            دفع الكمية بالكامل
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="hidden gap-4 text-sm text-gray-600 dark:text-gray-300">
-                        <div>الكمية: <span className="font-bold text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</span></div>
-                        <div>المدفوع: <span className="text-green-700 dark:text-green-400 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
-                        <div>المتبقي: <span className="text-yellow-700 dark:text-yellow-400 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>
-                      </div>
-                      {/* اختيار الكمية للدفع */}
-                      {/* تم نقل أزرار التحكم بجانب اسم الصنف في الأعلى ولن تتكرر هنا */}
-                      {/* عرض الإضافات */}
-                      {item.addons && item.addons.length > 0 && (
-                        <div className="mt-2 pl-4 border-r-2 border-yellow-200 dark:border-yellow-700">
-                            {item.addons.map((addon, addonIdx) => (
-                              <div key={addonIdx} className="flex items-center gap-2 text-sm text-yellow-800 dark:text-yellow-300">
-                                <span>↳ إضافة: {addon.name}</span>
-                                <span>({formatCurrency(addon.price)})</span>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                  });
-                })()}
-              </div>
-
-              {(() => {
-                const itemsWithRemaining = aggregateItemsWithPayments(
-                  selectedBill?.orders || [], 
-                  selectedBill?.itemPayments || [],
-                  selectedBill?.status,
-                  selectedBill?.paid,
-                  selectedBill?.total
-                ).filter(item => item.remainingQuantity > 0);
-                return itemsWithRemaining.length > 0;
-              })() && (
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">طريقة الدفع</h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    <button
-                      onClick={() => setPartialPaymentMethod('cash')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'cash' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900 text-orange-700 dark:text-orange-300' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                        }`}
-                    >
-                      <div className="text-2xl mb-1">💵</div>
-                      <div className="text-sm font-medium">نقداً</div>
-                    </button>
-                    <button
-                      onClick={() => setPartialPaymentMethod('card')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'card' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900 text-orange-700 dark:text-orange-300' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                        }`}
-                    >
-                      <div className="text-2xl mb-1">💳</div>
-                      <div className="text-sm font-medium">بطاقة</div>
-                    </button>
-                    <button
-                      onClick={() => setPartialPaymentMethod('transfer')}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${partialPaymentMethod === 'transfer' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900 text-orange-700 dark:text-orange-300' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                        }`}
-                    >
-                      <div className="text-2xl mb-1">📱</div>
-                      <div className="text-sm font-medium">تحويل</div>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ملخص الدفع */}
-              {Object.keys(selectedItems).some(id => selectedItems[id]) && (
-                <div className="mb-6 bg-orange-50 dark:bg-orange-900 p-4 rounded-lg border border-orange-200 dark:border-orange-700">
-                  <h4 className="font-medium text-orange-900 dark:text-orange-100 mb-2">ملخص الدفع</h4>
-                  <div className="space-y-2">
-                    {aggregateItemsWithPayments(
-                      selectedBill?.orders || [], 
-                      selectedBill?.itemPayments || [],
-                      selectedBill?.status,
-                      selectedBill?.paid,
-                      selectedBill?.total
-                    ).filter(item => {
-                        const addonsKey = (item.addons || [])
-                          .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                          .sort()
-                          .join('|');
-                        const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                        return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
-                      })
-                      .map((item, index) => {
-                        const addonsKey = (item.addons || [])
-                          .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                          .sort()
-                          .join('|');
-                        const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                        const quantity = itemQuantities[itemKey] || 0;
-                        return (
-                          <div key={index} className="flex flex-col text-sm mb-3 p-2 bg-orange-100 dark:bg-orange-800 rounded border border-orange-200 dark:border-orange-600">
-                            <span className="text-orange-800 dark:text-orange-200 font-medium">
-                              {item.name}
-                              {item.addons && item.addons.length > 0 && (
-                                <span className="ml-2 text-xs bg-orange-200 dark:bg-orange-700 text-orange-800 dark:text-orange-200 px-2 py-1 rounded-full">
-                                  إضافات
-                                </span>
-                              )}
-                              {' '}× {formatDecimal(quantity)}
-                            </span>
-                            <span className="font-bold text-orange-900 dark:text-orange-100 mt-1">
-                              المجموع: {formatCurrency(item.price * quantity)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    <div className="border-t border-orange-200 dark:border-orange-600 pt-2 mt-2">
-                      <div className="flex justify-between font-medium text-orange-900 dark:text-orange-100">
-                        <span>المجموع:</span>
-                        <span>
-                          {formatCurrency(
-                            aggregateItemsWithPayments(
-                              selectedBill?.orders || [], 
-                              selectedBill?.itemPayments || [],
-                              selectedBill?.status,
-                              selectedBill?.paid,
-                              selectedBill?.total
-                            ).filter(item => {
-                                const addonsKey = (item.addons || [])
-                                  .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                                  .sort()
-                                  .join('|');
-                                const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                                return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
-                              })
-                              .reduce((sum, item) => {
-                                const addonsKey = (item.addons || [])
-                                  .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-                                  .sort()
-                                  .join('|');
-                                const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-                                const quantity = itemQuantities[itemKey] || 0;
-                                return sum + (item.price * quantity);
-                              }, 0)
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-              <button
-                onClick={() => {
-                  setShowPartialPaymentModal(false);
-                  setSelectedItems({});
-                }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
-              >
-                إلغاء
-              </button>
-
-              <button
-                onClick={handlePartialPaymentSubmit}
-                disabled={
-                  !Object.keys(selectedItems).some(id => {
-                    // تحقق من الصنف أو الإضافة
-                    return selectedItems[id] && (itemQuantities[id] || 0) > 0;
-                  })
-                }
-                className={`px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200`}
-              >
-                {isProcessingPartialPayment ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    جاري الدفع...
-                  </>
-                ) : (
-                  'تأكيد الدفع الجزئي'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Partial Payment Modal - New Simplified Version */}
+      <PartialPaymentModal
+        key={`partial-payment-${selectedBill?._id || selectedBill?.id}-${selectedBill?.itemPayments?.length || 0}-${selectedBill?.paid || 0}`}
+        isOpen={showPartialPaymentModal}
+        onClose={() => setShowPartialPaymentModal(false)}
+        bill={selectedBill}
+        onPaymentSubmit={handlePartialPaymentSubmit}
+        isProcessing={isProcessingPartialPayment}
+      />
 
       {/* Cancel Bill Confirmation Modal */}
       <ConfirmModal

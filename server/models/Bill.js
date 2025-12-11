@@ -466,19 +466,23 @@ billSchema.pre("save", async function (next) {
                             const quantity = item.quantity || 1;
                             const addons = item.addons || [];
 
-                            this.itemPayments.push({
-                                orderId: order._id,
-                                itemId: `${order._id}-${index}`,
-                                itemName,
-                                quantity,
-                                paidQuantity: 0,
-                                pricePerUnit: price,
-                                totalPrice: price * quantity,
-                                paidAmount: 0,
-                                isPaid: false,
-                                addons: addons,
-                                paymentHistory: [],
-                            });
+                            // Only add itemPayments for bills that actually have payments
+                            // Don't initialize with zeros for new bills
+                            if (this.paid > 0 || this.status === 'partial' || this.status === 'paid') {
+                                this.itemPayments.push({
+                                    orderId: order._id,
+                                    itemId: `${order._id}-${index}`,
+                                    itemName,
+                                    quantity,
+                                    paidQuantity: 0,
+                                    pricePerUnit: price,
+                                    totalPrice: price * quantity,
+                                    paidAmount: 0,
+                                    isPaid: false,
+                                    addons: addons,
+                                    paymentHistory: [],
+                                });
+                            }
                         });
                     }
                 });
@@ -568,7 +572,8 @@ billSchema.pre("save", function (next) {
     // لا نعيد تحديد الحالة إذا كانت ملغية
     if (this.status !== "cancelled") {
         // Check if we have itemPayments to determine status based on quantities
-        if (this.itemPayments && this.itemPayments.length > 0) {
+        // Only use itemPayments logic if the bill actually has payments
+        if (this.itemPayments && this.itemPayments.length > 0 && this.paid > 0) {
             // Count fully paid items and partially paid items
             let allItemsFullyPaid = true;
             let someItemsPartiallyPaid = false;
@@ -758,6 +763,7 @@ billSchema.methods.addPartialPayment = function (
         return sum + itemTotal;
     }, 0);
 
+    // Add to old partialPayments system (for backward compatibility)
     this.partialPayments.push({
         orderId,
         orderNumber,
@@ -770,6 +776,58 @@ billSchema.methods.addPartialPayment = function (
             paymentMethod,
         })),
         totalPaid,
+    });
+
+    // Add to new itemPayments system (this is what the frontend expects)
+    items.forEach((item) => {
+        // Find the corresponding order item to get the total quantity
+        // Note: orders should be populated by the controller before calling this method
+        const order = this.orders.find(o => o._id.toString() === orderId.toString());
+        if (!order) {
+            console.error(`Order ${orderId} not found in bill orders`);
+            return;
+        }
+        
+        const orderItem = order.items.find(oi => 
+            oi.name === item.itemName && oi.price === item.price
+        );
+        if (!orderItem) {
+            console.error(`Order item ${item.itemName} not found in order ${orderId}`);
+            return;
+        }
+
+        // Find existing itemPayment or create new one
+        let existingPayment = this.itemPayments.find(
+            (payment) =>
+                payment.orderId.toString() === orderId.toString() &&
+                payment.itemName === item.itemName &&
+                payment.pricePerUnit === item.price
+        );
+
+        if (existingPayment) {
+            // Update existing payment
+            existingPayment.paidQuantity = (existingPayment.paidQuantity || 0) + item.quantity;
+            existingPayment.paidAmount = (existingPayment.paidAmount || 0) + (item.price * item.quantity);
+            existingPayment.isPaid = existingPayment.paidQuantity >= existingPayment.quantity;
+            existingPayment.paidAt = new Date();
+            existingPayment.paidBy = user._id;
+        } else {
+            // Create new payment record
+            this.itemPayments.push({
+                orderId: orderId,
+                itemId: `${orderId}-${item.itemName}`, // Generate itemId
+                itemName: item.itemName,
+                quantity: orderItem.quantity, // Total quantity of this item in the order
+                paidQuantity: item.quantity, // Quantity being paid for now
+                pricePerUnit: item.price,
+                totalPrice: item.price * orderItem.quantity, // Total price for all quantity
+                paidAmount: item.price * item.quantity, // Amount being paid now
+                isPaid: item.quantity >= orderItem.quantity, // True if paying for full quantity
+                paidAt: new Date(),
+                paidBy: user._id,
+                addons: item.addons || []
+            });
+        }
     });
 
     this.paid += totalPaid;

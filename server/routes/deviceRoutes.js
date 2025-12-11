@@ -28,6 +28,20 @@ router.get(
     deviceController.getDevice
 );
 
+// Test endpoint to check auth
+router.get("/test-auth", (req, res) => {
+    res.json({
+        success: true,
+        message: "Authentication working",
+        user: {
+            id: req.user?.id,
+            role: req.user?.role,
+            permissions: req.user?.permissions,
+            organization: req.user?.organization
+        }
+    });
+});
+
 // Create new device (admin only)
 router.post("/", authorize("all"), deviceController.createDevice);
 

@@ -10,7 +10,7 @@ const deviceSchema = new mongoose.Schema(
         number: {
             type: String,
             required: [true, "رقم الجهاز مطلوب"],
-            unique: true,
+            // إزالة unique: true لأن الفهرس المركب سيتولى هذا الأمر
         },
         type: {
             type: String,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Gamepad2, Play, Square, Users, Plus, Table as TableIcon, X } from 'lucide-react';
+import { Gamepad2, Play, Square, Users, Plus, Table as TableIcon, X, Edit, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
@@ -7,9 +7,9 @@ import { SessionCostDisplay } from '../components/SessionCostDisplay';
 
 const PlayStation: React.FC = () => {
   const location = useLocation();
-  const { sessions, createSession, endSession, user, createDevice, createBill, fetchBills, showNotification, tables, fetchTables, fetchTableSections, fetchSessions } = useApp();
+  const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, createBill, fetchBills, showNotification, tables, fetchTables, fetchTableSections, fetchSessions } = useApp();
   const [showAddDevice, setShowAddDevice] = useState(false);
-  const [newDevice, setNewDevice] = useState({ name: '', number: '', controllers: 2, playstationRates: { 1: '', 2: '', 3: '', 4: '' } });
+  const [newDevice, setNewDevice] = useState({ name: '', number: '', controllers: 2, playstationRates: { 1: '20', 2: '20', 3: '25', 4: '30' } });
   const [addDeviceError, setAddDeviceError] = useState<string | null>(null);
 
   // جلسة جديدة
@@ -36,6 +36,13 @@ const PlayStation: React.FC = () => {
   const [endingSessions, setEndingSessions] = useState<Record<string, boolean>>({});
   const [updatingControllers, setUpdatingControllers] = useState<Record<string, boolean>>({});
   const [isAddingDevice, setIsAddingDevice] = useState(false);
+  
+  // حالات التعديل والحذف
+  const [showEditDevice, setShowEditDevice] = useState(false);
+  const [editingDevice, setEditingDevice] = useState<any>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deviceToDelete, setDeviceToDelete] = useState<any>(null);
+  const [isDeletingDevice, setIsDeletingDevice] = useState(false);
 
   // نافذة إنهاء الجلسة مع طلب اسم العميل
   const [showEndSessionModal, setShowEndSessionModal] = useState(false);
@@ -184,37 +191,94 @@ const PlayStation: React.FC = () => {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [showNewSession, loadingSession, showLinkTableModal, showEndSessionModal, selectedSessionForEnd, endingSessions]);
 
+  // دوال التعديل والحذف
+  const handleEditDevice = (device: any) => {
+    setEditingDevice({
+      ...device,
+      number: typeof device.number === 'string' ? 
+        device.number.replace(/[^0-9]/g, '') : device.number.toString(),
+      playstationRates: device.playstationRates || { 1: '20', 2: '20', 3: '25', 4: '30' }
+    });
+    setShowEditDevice(true);
+  };
+
+  const handleDeleteDevice = (device: any) => {
+    setDeviceToDelete(device);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteDevice = async () => {
+    if (!deviceToDelete) return;
+    
+    setIsDeletingDevice(true);
+    try {
+      const success = await deleteDevice(deviceToDelete.id);
+      if (success) {
+        setShowDeleteConfirm(false);
+        setDeviceToDelete(null);
+        // تحديث قائمة الأجهزة
+        await loadDevices();
+      }
+    } catch (error) {
+      showNotification('حدث خطأ أثناء حذف الجهاز', 'error');
+    } finally {
+      setIsDeletingDevice(false);
+    }
+  };
+
   // إضافة جهاز جديد
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddDeviceError(null);
-    if (!newDevice.name || !newDevice.number) return;
-    setIsAddingDevice(true);
-
-    // فحص عدم تكرار رقم الجهاز في الواجهة
-    const existingDevice = devices.find(d => d.number === Number(newDevice.number));
-    if (existingDevice) {
-      setAddDeviceError(`رقم الجهاز ${newDevice.number} مستخدم بالفعل`);
+    if (!newDevice.name || !newDevice.number) {
+      setAddDeviceError('اسم الجهاز ورقمه مطلوبان');
       setIsAddingDevice(false);
       return;
     }
 
-    // تجهيز playstationRates كأرقام
-    const playstationRates = {
-      1: parseFloat(newDevice.playstationRates[1]) || 0,
-      2: parseFloat(newDevice.playstationRates[2]) || 0,
-      3: parseFloat(newDevice.playstationRates[3]) || 0,
-      4: parseFloat(newDevice.playstationRates[4]) || 0
-    };
+    // التحقق من صحة رقم الجهاز
+    const deviceNumber = parseInt(newDevice.number);
+    if (isNaN(deviceNumber) || deviceNumber <= 0) {
+      setAddDeviceError('رقم الجهاز يجب أن يكون رقم صحيح أكبر من 0');
+      setIsAddingDevice(false);
+      return;
+    }
+
+    // فحص عدم تكرار رقم الجهاز في الواجهة
+    const existingDevice = devices.find(d => {
+      const existingNumber = typeof d.number === 'string' ? 
+        parseInt((d.number as string).replace(/[^0-9]/g, '')) : d.number;
+      return existingNumber === deviceNumber;
+    });
+    if (existingDevice) {
+      setAddDeviceError(`رقم الجهاز ${deviceNumber} مستخدم بالفعل في منشأتك فقط. يمكن استخدام نفس الرقم في منشآت أخرى، لكن يجب أن يكون فريد داخل منشأتك. جرب رقم آخر.`);
+      setIsAddingDevice(false);
+      return;
+    }
+
+    // تجهيز playstationRates كأرقام والتحقق من صحتها
+    const playstationRates: { [key: number]: number } = {};
+    for (let i = 1; i <= 4; i++) {
+      const rate = parseFloat(newDevice.playstationRates[i as keyof typeof newDevice.playstationRates]);
+      if (isNaN(rate) || rate < 0) {
+        setAddDeviceError(`سعر الساعة للدراعات (${i}) يجب أن يكون رقم موجب`);
+        setIsAddingDevice(false);
+        return;
+      }
+      playstationRates[i] = rate;
+    }
 
     const deviceData = {
       name: newDevice.name,
-      number: Number(newDevice.number),
+      number: deviceNumber,
       type: 'playstation',
       status: 'available',
       controllers: newDevice.controllers,
       playstationRates
     };
+
+    console.log('Sending device data:', deviceData);
+    console.log('Current user:', user);
 
     try {
       const device = await createDevice(deviceData);
@@ -222,7 +286,7 @@ const PlayStation: React.FC = () => {
         // تحديث قائمة الأجهزة مباشرة في الواجهة
         setDevices(prevDevices => [...prevDevices, device]);
         setShowAddDevice(false);
-        setNewDevice({ name: '', number: '', controllers: 2, playstationRates: { 1: '', 2: '', 3: '', 4: '' } });
+        setNewDevice({ name: '', number: '', controllers: 2, playstationRates: { 1: '20', 2: '20', 3: '25', 4: '30' } });
         showNotification('تمت إضافة الجهاز بنجاح', 'success');
       } else {
         setAddDeviceError('حدث خطأ أثناء إضافة الجهاز.');
@@ -837,6 +901,30 @@ const PlayStation: React.FC = () => {
                 </div>
               )}
                   </div>
+
+              {/* أزرار التعديل والحذف */}
+              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => handleEditDevice(device)}
+                  className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  تعديل
+                </button>
+                <button
+                  onClick={() => handleDeleteDevice(device)}
+                  disabled={isActive}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2 ${
+                    isActive 
+                      ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white'
+                  }`}
+                  title={isActive ? 'لا يمكن حذف جهاز نشط' : 'حذف الجهاز'}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  حذف
+                </button>
+              </div>
             </div>
           );
         })}
@@ -1457,6 +1545,231 @@ const PlayStation: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* نافذة تعديل الجهاز */}
+      {showEditDevice && editingDevice && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!editingDevice) return;
+            
+            try {
+              // التحقق من صحة البيانات
+              const deviceNumber = parseInt(editingDevice.number);
+              if (isNaN(deviceNumber) || deviceNumber <= 0) {
+                showNotification('رقم الجهاز يجب أن يكون رقم صحيح أكبر من 0', 'error');
+                return;
+              }
+
+              // تجهيز playstationRates كأرقام والتحقق من صحتها
+              const playstationRates: { [key: number]: number } = {};
+              for (let i = 1; i <= 4; i++) {
+                const rate = parseFloat(editingDevice.playstationRates[i as keyof typeof editingDevice.playstationRates]);
+                if (isNaN(rate) || rate < 0) {
+                  showNotification(`سعر الساعة للدراعات (${i}) يجب أن يكون رقم موجب`, 'error');
+                  return;
+                }
+                playstationRates[i] = rate;
+              }
+
+              const updateData = {
+                name: editingDevice.name,
+                number: deviceNumber,
+                type: 'playstation',
+                controllers: editingDevice.controllers || 2,
+                playstationRates
+              };
+
+              const updatedDevice = await updateDevice(editingDevice.id, updateData);
+              if (updatedDevice) {
+                setShowEditDevice(false);
+                setEditingDevice(null);
+                // تحديث قائمة الأجهزة
+                await loadDevices();
+              }
+            } catch (error) {
+              showNotification('حدث خطأ أثناء تعديل الجهاز', 'error');
+            }
+          }} className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-orange-200 dark:border-orange-800 animate-bounce-in">
+            
+            <div className="flex items-center justify-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                <Edit className="h-8 w-8 text-white" />
+              </div>
+            </div>
+            
+            <h2 className="text-2xl font-bold text-center mb-6 text-gray-900 dark:text-gray-100">تعديل الجهاز</h2>
+            
+            {/* نفس حقول إضافة الجهاز ولكن مع القيم الحالية */}
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الجهاز</label>
+              <input 
+                type="text" 
+                value={editingDevice.name} 
+                onChange={e => setEditingDevice({ ...editingDevice, name: e.target.value })} 
+                className="w-full border-2 border-orange-300 dark:border-orange-700 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all" 
+                required 
+                placeholder="مثال: بلايستيشن 1" 
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">رقم الجهاز</label>
+              <div className="flex gap-2">
+                <input 
+                  type="number" 
+                  value={editingDevice.number} 
+                  onChange={e => setEditingDevice({ ...editingDevice, number: e.target.value })} 
+                  className="flex-1 border-2 border-orange-300 dark:border-orange-700 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all" 
+                  required 
+                  min="1" 
+                  placeholder="1" 
+                />
+              </div>
+            </div>
+
+            <div className="mb-6 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 p-4 rounded-xl border-2 border-orange-200 dark:border-orange-800">
+              <h3 className="text-lg font-bold text-center mb-4 text-orange-900 dark:text-orange-100">أسعار الساعة (جنيه مصري)</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">دراع واحد</span>
+                  <input 
+                    type="number" 
+                    value={editingDevice.playstationRates[1]} 
+                    onChange={e => setEditingDevice({ ...editingDevice, playstationRates: { ...editingDevice.playstationRates, 1: e.target.value } })} 
+                    className="w-full border-2 border-orange-300 dark:border-orange-700 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 transition-all" 
+                    required 
+                    min="0" 
+                    step="0.01" 
+                  />
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">درعين</span>
+                  <input 
+                    type="number" 
+                    value={editingDevice.playstationRates[2]} 
+                    onChange={e => setEditingDevice({ ...editingDevice, playstationRates: { ...editingDevice.playstationRates, 2: e.target.value } })} 
+                    className="w-full border-2 border-orange-300 dark:border-orange-700 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 transition-all" 
+                    required 
+                    min="0" 
+                    step="0.01" 
+                  />
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">3 دراعات</span>
+                  <input 
+                    type="number" 
+                    value={editingDevice.playstationRates[3]} 
+                    onChange={e => setEditingDevice({ ...editingDevice, playstationRates: { ...editingDevice.playstationRates, 3: e.target.value } })} 
+                    className="w-full border-2 border-orange-300 dark:border-orange-700 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 transition-all" 
+                    required 
+                    min="0" 
+                    step="0.01" 
+                  />
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">4 دراعات</span>
+                  <input 
+                    type="number" 
+                    value={editingDevice.playstationRates[4]} 
+                    onChange={e => setEditingDevice({ ...editingDevice, playstationRates: { ...editingDevice.playstationRates, 4: e.target.value } })} 
+                    className="w-full border-2 border-orange-300 dark:border-orange-700 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 transition-all" 
+                    required 
+                    min="0" 
+                    step="0.01" 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowEditDevice(false);
+                  setEditingDevice(null);
+                }}
+                className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors duration-200 font-bold"
+              >
+                إلغاء
+              </button>
+              <button 
+                type="submit" 
+                className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
+              >
+                <Edit className="h-5 w-5 ml-2 inline" />
+                حفظ التعديلات
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* نافذة تأكيد الحذف */}
+      {showDeleteConfirm && deviceToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-red-200 dark:border-red-800 animate-bounce-in">
+            
+            <div className="flex items-center justify-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                <Trash2 className="h-8 w-8 text-white" />
+              </div>
+            </div>
+            
+            <h2 className="text-2xl font-bold text-center mb-4 text-gray-900 dark:text-gray-100">تأكيد حذف الجهاز</h2>
+            
+            <div className="bg-red-50 dark:bg-red-900/30 p-4 rounded-xl border border-red-200 dark:border-red-700 mb-6">
+              <p className="text-center text-gray-700 dark:text-gray-300 mb-2">
+                هل أنت متأكد من حذف الجهاز؟
+              </p>
+              <p className="text-center font-bold text-red-600 dark:text-red-400">
+                {deviceToDelete.name} - رقم {typeof deviceToDelete.number === 'string' ? deviceToDelete.number.replace(/[^0-9]/g, '') : deviceToDelete.number}
+              </p>
+              <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-2">
+                <strong>تحذير:</strong> هذا الإجراء لا يمكن التراجع عنه
+              </p>
+              <p className="text-center text-xs text-blue-600 dark:text-blue-400 mt-2 bg-blue-50 dark:bg-blue-900/30 p-2 rounded">
+                ملاحظة: يمكن استخدام نفس الرقم في منشآت أخرى
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeviceToDelete(null);
+                }}
+                disabled={isDeletingDevice}
+                className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors duration-200 font-bold disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button 
+                type="button" 
+                onClick={confirmDeleteDevice}
+                disabled={isDeletingDevice}
+                className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white rounded-xl transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:transform-none flex items-center justify-center"
+              >
+                {isDeletingDevice ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري الحذف...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-5 w-5 ml-2" />
+                    تأكيد الحذف
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

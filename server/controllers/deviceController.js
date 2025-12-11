@@ -105,6 +105,7 @@ const deviceController = {
     // Create new device
     createDevice: async (req, res) => {
         try {
+            console.log('Received device creation request:', req.body);
             const {
                 name,
                 number,
@@ -125,10 +126,11 @@ const deviceController = {
             }
 
             // Validate number is positive
-            if (number <= 0) {
+            const numericNumber = parseInt(number);
+            if (isNaN(numericNumber) || numericNumber <= 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "رقم الجهاز يجب أن يكون أكبر من 0",
+                    message: "رقم الجهاز يجب أن يكون رقم صحيح أكبر من 0",
                     error: "Invalid device number",
                 });
             }
@@ -136,7 +138,7 @@ const deviceController = {
             // Check if device number already exists for the same type
             const prefix =
                 (type || "playstation") === "playstation" ? "ps" : "pc";
-            const deviceNumber = `${prefix}${number}`;
+            const deviceNumber = `${prefix}${numericNumber}`;
 
             const existingDevice = await Device.findOne({
                 number: deviceNumber,
@@ -145,8 +147,8 @@ const deviceController = {
             if (existingDevice) {
                 return res.status(400).json({
                     success: false,
-                    message: `رقم الجهاز ${number} مستخدم بالفعل في نفس النوع`,
-                    error: "Device number already exists for this type",
+                    message: `رقم الجهاز ${numericNumber} مستخدم بالفعل في منشأتك فقط. يمكن استخدام نفس الرقم في منشآت أخرى، لكن يجب أن يكون فريد داخل منشأتك. جرب رقم آخر.`,
+                    error: "Device number already exists in this organization only",
                 });
             }
 
@@ -170,7 +172,7 @@ const deviceController = {
                     error: "hourlyRate required for computer",
                 });
             }
-            if (type === "playstation") {
+            if (type === "playstation" || !type) {
                 if (!playstationRates || typeof playstationRates !== "object") {
                     return res.status(400).json({
                         success: false,
@@ -181,14 +183,12 @@ const deviceController = {
                 }
                 // تحقق من وجود أسعار لكل عدد دراعات
                 for (let i = 1; i <= 4; i++) {
-                    if (
-                        playstationRates[i] === undefined ||
-                        playstationRates[i] < 0
-                    ) {
+                    const rate = parseFloat(playstationRates[i]);
+                    if (isNaN(rate) || rate < 0) {
                         return res.status(400).json({
                             success: false,
                             message: `سعر الساعة للدراعات (${i}) مطلوب ويجب أن يكون رقم موجب`,
-                            error: `playstationRates[${i}] required`,
+                            error: `playstationRates[${i}] must be a positive number`,
                         });
                     }
                 }
@@ -197,17 +197,22 @@ const deviceController = {
             // Create new device
             const deviceData = {
                 name: name.trim(),
-                number: parseInt(number),
+                number: numericNumber,
                 type: type || "playstation",
                 status: status || "available",
                 controllers: controllers || 2,
                 organization: req.user.organization,
             };
-            if ((type === "computer" || !type) && hourlyRate !== undefined) {
+            if ((type === "computer") && hourlyRate !== undefined) {
                 deviceData.hourlyRate = hourlyRate;
             }
-            if (type === "playstation" && playstationRates) {
-                deviceData.playstationRates = playstationRates;
+            if ((type === "playstation" || !type) && playstationRates) {
+                // Convert rates to proper numbers
+                const convertedRates = {};
+                for (let i = 1; i <= 4; i++) {
+                    convertedRates[i] = parseFloat(playstationRates[i]);
+                }
+                deviceData.playstationRates = convertedRates;
             }
 
             const device = new Device(deviceData);
@@ -219,15 +224,37 @@ const deviceController = {
                 data: device,
             });
         } catch (err) {
+            console.error('Error in createDevice:', err);
+            
+            // Handle duplicate key error (E11000)
+            if (err.code === 11000) {
+                const duplicateField = err.keyValue;
+                if (duplicateField.number) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `رقم الجهاز ${duplicateField.number.replace(/[^0-9]/g, '')} مستخدم بالفعل في منشأتك فقط. يمكن استخدام نفس الرقم في منشآت أخرى، لكن يجب أن يكون فريد داخل منشأتك. جرب رقم آخر.`,
+                        error: "Device number already exists in this organization only",
+                    });
+                }
+                return res.status(400).json({
+                    success: false,
+                    message: "هذا الجهاز موجود بالفعل في منشأتك فقط",
+                    error: "Duplicate device in this organization",
+                });
+            }
+            
             // Handle mongoose validation errors
             if (err.name === "ValidationError") {
                 const errors = Object.values(err.errors).map((e) => e.message);
+                console.error('Mongoose validation errors:', errors);
                 return res.status(400).json({
                     success: false,
                     message: "بيانات الجهاز غير صحيحة",
                     error: errors.join(", "),
                 });
             }
+            
+            console.error('General error in createDevice:', err.message, err.stack);
             res.status(400).json({
                 success: false,
                 message: "خطأ في إضافة الجهاز",

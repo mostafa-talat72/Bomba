@@ -15,11 +15,7 @@ export const printBill = (bill: Bill, organizationName?: string) => {
     });
   };
 
-  // Convert numbers to Arabic numerals
-  const toArabicNumerals = (num: number) => {
-    const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    return num.toString().replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]);
-  };
+
 
   // Format number without currency - no decimals
   const formatNumber = (amount: number | undefined | null) => {
@@ -36,14 +32,7 @@ export const printBill = (bill: Bill, organizationName?: string) => {
     return qty.toString().replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]);
   };
 
-  const getPaymentMethodText = (method: string) => {
-    switch (method) {
-      case 'cash': return 'نقداً';
-      case 'card': return 'بطاقة';
-      case 'transfer': return 'تحويل';
-      default: return method;
-    }
-  };
+
 
   // Generate order items table
   const generateOrderItemsTable = (orders: Order[], itemPayments?: ItemPayment[], billStatus?: string, billPaid?: number, billTotal?: number) => {
@@ -64,13 +53,14 @@ export const printBill = (bill: Bill, organizationName?: string) => {
         ? ` (${item.addons.map(a => a.name).join(', ')})`
         : '';
       
-      const paidAmount = item.price * item.paidQuantity;
+      const isPaidFully = item.paidQuantity >= item.totalQuantity;
+      const statusIcon = isPaidFully ? '✓' : item.paidQuantity > 0 ? '◐' : '○';
       
       return `
         <tr>
-          <td class="item-name">${item.name}${addonsText}</td>
+          <td class="item-name">${statusIcon} ${item.name}${addonsText}</td>
           <td class="item-quantity">${formatQuantity(item.totalQuantity)}</td>
-          <td class="item-paid">${formatNumber(paidAmount)}</td>
+          <td class="item-paid-qty">${formatQuantity(item.paidQuantity)}</td>
           <td class="item-total">${formatNumber(item.price * item.totalQuantity)}</td>
         </tr>
       `;
@@ -83,7 +73,7 @@ export const printBill = (bill: Bill, organizationName?: string) => {
           <tr>
             <th class="col-name" style="width: 50%;">الصنف</th>
             <th class="col-quantity" style="width: 16.67%;">الكمية</th>
-            <th class="col-paid" style="width: 16.67%;">المدفوع</th>
+            <th class="col-paid-qty" style="width: 16.67%;">مدفوع</th>
             <th class="col-total" style="width: 16.66%;">الإجمالي</th>
           </tr>
         </thead>
@@ -104,10 +94,22 @@ export const printBill = (bill: Bill, organizationName?: string) => {
       const duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
       const finalCost = session.finalCost ?? session.totalCost ?? 0;
       
+      // Find session payment details
+      const sessionPayment = sessionPayments?.find(sp => 
+        sp.sessionId === session._id || sp.sessionId === session.id
+      );
+      const paidAmount = sessionPayment?.paidAmount || 0;
+      const remainingAmount = sessionPayment?.remainingAmount || finalCost;
+      
+      // Status icon based on payment
+      const isPaidFully = remainingAmount === 0;
+      const statusIcon = isPaidFully ? '✓' : paidAmount > 0 ? '◐' : '○';
+      
       return `
         <tr>
-          <td class="item-name">${session.deviceName || session.deviceNumber || 'غير محدد'}</td>
+          <td class="item-name">${statusIcon} ${session.deviceName || session.deviceNumber || 'غير محدد'}</td>
           <td class="item-quantity">${formatQuantity(parseFloat(duration.toFixed(1)))} س</td>
+          <td class="item-paid">${formatNumber(paidAmount)}</td>
           <td class="item-total">${formatNumber(finalCost)}</td>
         </tr>
       `;
@@ -118,9 +120,10 @@ export const printBill = (bill: Bill, organizationName?: string) => {
       <table class="items-table sessions-table">
         <thead>
           <tr>
-            <th class="col-name" style="width: 50%;">الجهاز</th>
-            <th class="col-quantity" style="width: 25%;">المدة</th>
-            <th class="col-total" style="width: 25%;">الإجمالي</th>
+            <th class="col-name" style="width: 40%;">الجهاز</th>
+            <th class="col-quantity" style="width: 20%;">المدة</th>
+            <th class="col-paid" style="width: 20%;">مدفوع</th>
+            <th class="col-total" style="width: 20%;">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
@@ -230,17 +233,24 @@ export const printBill = (bill: Bill, organizationName?: string) => {
         .items-table .item-quantity {
           width: 16.67% !important;
         }
-        .items-table .item-paid {
+        .items-table .item-paid-qty {
           width: 16.67% !important;
+          color: #4caf50;
+          font-weight: 700;
         }
         .items-table .item-total {
           width: 16.66% !important;
         }
         .items-table.sessions-table .item-quantity {
-          width: 25% !important;
+          width: 20% !important;
+        }
+        .items-table.sessions-table .item-paid {
+          width: 20% !important;
+          color: #4caf50;
+          font-weight: 700;
         }
         .items-table.sessions-table .item-total {
-          width: 25% !important;
+          width: 20% !important;
         }
         .items-table th:first-child {
           text-align: left;

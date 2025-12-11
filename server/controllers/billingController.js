@@ -1622,6 +1622,15 @@ export const addPartialPayment = async (req, res) => {
             "name"
         );
 
+        // Emit Socket.IO event for real-time updates
+        if (req.io) {
+            req.io.emit('partial-payment-received', {
+                type: 'partial-payment',
+                bill: bill,
+                message: 'تم إضافة الدفع الجزئي بنجاح'
+            });
+        }
+
         res.json({
             success: true,
             message: "تم إضافة الدفع الجزئي بنجاح",

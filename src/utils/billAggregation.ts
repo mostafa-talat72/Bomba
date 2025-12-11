@@ -81,6 +81,7 @@ function calculatePaidQuantity(
   billPaid?: number,
   billTotal?: number
 ): number {
+
   // If bill is fully paid, all items are paid
   if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal) {
     let totalQty = 0;
@@ -98,10 +99,18 @@ function calculatePaidQuantity(
 
   // Calculate paid quantity from itemPayments
   if (!itemPayments || itemPayments.length === 0) {
-    return 0;
+    // If no itemPayments exist, check if bill has any payment
+    if (!billPaid || billPaid === 0) {
+      // No payments at all - return 0
+      return 0;
+    }
+    // Fallback: if no itemPayments but bill has paid amount, estimate based on bill ratio
+    return calculatePaidQuantityFromBillRatio(itemName, itemPrice, orders, billPaid, billTotal);
   }
 
   let paidQty = 0;
+  let hasValidPayments = false;
+  
   itemPayments.forEach(payment => {
     // تنظيف الأسماء من المسافات الزائدة للمقارنة
     const itemNameTrimmed = itemName.trim();
@@ -110,22 +119,73 @@ function calculatePaidQuantity(
     const nameMatch = paymentNameTrimmed === itemNameTrimmed;
     const priceMatch = payment.pricePerUnit === itemPrice;
     
-    // TODO: يجب إضافة مقارنة addons هنا أيضاً في المستقبل
-    // لكن حالياً itemPayments لا تحتوي على معلومات addons
+
     
     if (nameMatch && priceMatch) {
-      // Use paidQuantity if available (new system)
+      // Use paidQuantity if available (new system) - including when it's 0
       if (payment.paidQuantity !== undefined && payment.paidQuantity !== null) {
         paidQty += payment.paidQuantity;
+        hasValidPayments = true;
       } 
+      // Smart fallback: calculate from paidAmount and pricePerUnit if paidQuantity is not available
+      else if (payment.paidAmount !== undefined && payment.pricePerUnit && payment.pricePerUnit > 0) {
+        const calculatedQuantity = Math.round(payment.paidAmount / payment.pricePerUnit);
+        paidQty += calculatedQuantity;
+        hasValidPayments = true;
+      }
       // Fallback to isPaid for backward compatibility (old system)
       else if (payment.isPaid) {
         paidQty += payment.quantity;
+        hasValidPayments = true;
+      }
+      // If we have itemPayments but no valid data, assume 0 (not paid)
+      else {
+        paidQty += 0;
+        hasValidPayments = true;
       }
     }
   });
 
+  // If itemPayments exist but have no valid data, use bill ratio fallback
+  if (!hasValidPayments && billPaid && billPaid > 0) {
+    return calculatePaidQuantityFromBillRatio(itemName, itemPrice, orders, billPaid, billTotal);
+  }
+
   return paidQty;
+}
+
+/**
+ * Fallback function to estimate paid quantity based on bill's paid ratio
+ * Used when itemPayments are empty or invalid
+ */
+function calculatePaidQuantityFromBillRatio(
+  itemName: string,
+  itemPrice: number,
+  orders: Order[],
+  billPaid?: number,
+  billTotal?: number
+): number {
+  if (!billPaid || !billTotal || billTotal === 0) {
+    return 0;
+  }
+
+  // Calculate total quantity for this item
+  let totalItemQuantity = 0;
+  orders.forEach(order => {
+    order.items.forEach(item => {
+      if (item.name.trim() === itemName.trim() && item.price === itemPrice) {
+        totalItemQuantity += item.quantity;
+      }
+    });
+  });
+
+  // Calculate paid ratio
+  const paidRatio = Math.min(billPaid / billTotal, 1); // Cap at 100%
+  
+  // Estimate paid quantity based on ratio
+  const estimatedPaidQuantity = Math.floor(totalItemQuantity * paidRatio);
+  
+  return estimatedPaidQuantity;
 }
 
 /**
@@ -204,5 +264,6 @@ export function aggregateItemsWithPayments(
   });
 
   const result = Array.from(itemMap.values());
+  
   return result;
 }

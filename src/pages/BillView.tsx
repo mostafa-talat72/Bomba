@@ -4,6 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
+import { io } from 'socket.io-client';
 
 interface OrderItem {
 	name: string;
@@ -245,11 +246,11 @@ const BillView = () => {
 
 		let interval: number;
 		function setupInterval() {
-			// إذا كان هناك جلسة نشطة، حدث كل ثانية، وإلا كل 10 ثوانٍ
+			// إذا كان هناك جلسة نشطة، حدث كل ثانية، وإلا كل 5 ثوانٍ للتحديث السريع
 			if (bill && bill.sessions && bill.sessions.some(session => session.status === 'active')) {
 				interval = window.setInterval(() => fetchBill(false), 1000); // كل ثانية
 			} else {
-				interval = window.setInterval(() => fetchBill(false), 10000); // كل 10 ثوانٍ
+				interval = window.setInterval(() => fetchBill(false), 5000); // كل 5 ثوانٍ
 			}
 		}
 
@@ -261,8 +262,58 @@ const BillView = () => {
 		// نراقب bill.sessions حتى إذا تغيرت حالة الجلسة يعاد ضبط الـ interval
 	}, [bill && bill.sessions && bill.sessions.some(session => session.status === 'active')]);
 
-	// إضافة تأثير لمراقبة التغييرات في البيانات
-	useEffect(() => {	}, [bill]);
+	// إضافة تأثير لمراقبة التغييرات في البيانات والدفعات الجزئية
+	useEffect(() => {
+		// فرض إعادة رسم المكون عند تحديث itemPayments
+		if (bill?.itemPayments) {
+			// تحديث فوري للبيانات
+			const timer = setTimeout(() => {
+				fetchBill(false);
+			}, 200);
+			return () => clearTimeout(timer);
+		}
+	}, [bill?.itemPayments?.length, bill?.paid, bill?.remaining]);
+
+	// إضافة Socket.IO للتحديث الفوري
+	useEffect(() => {
+		if (!billId) return;
+
+		// Initialize Socket.IO connection
+		const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+		const socketUrl = apiUrl.replace(/\/api\/?$/, '');
+		
+		const socket = io(socketUrl, {
+			path: '/socket.io/',
+			transports: ['websocket', 'polling'],
+			reconnection: true,
+			reconnectionDelay: 1000,
+			reconnectionAttempts: 5,
+			autoConnect: true,
+			forceNew: false,
+		});
+
+		// Listen for partial payment updates
+		socket.on('partial-payment-received', (data: any) => {
+			if (data.bill && (data.bill._id === billId || data.bill.id === billId)) {
+				// تحديث فوري للفاتورة
+				setBill(normalizeBillDates(data.bill as unknown as Record<string, unknown>));
+			}
+		});
+
+		// Listen for payment updates
+		socket.on('payment-received', (data: any) => {
+			if (data.bill && (data.bill._id === billId || data.bill.id === billId)) {
+				// تحديث فوري للفاتورة
+				setBill(normalizeBillDates(data.bill as unknown as Record<string, unknown>));
+			}
+		});
+
+		return () => {
+			socket.off('partial-payment-received');
+			socket.off('payment-received');
+			socket.disconnect();
+		};
+	}, [billId]);
 
 	const formatCurrency = (amount: number) => {
 		return formatCurrencyUtil(amount);
