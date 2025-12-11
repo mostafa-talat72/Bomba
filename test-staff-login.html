@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار تسجيل دخول الموظف</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input { padding: 8px; width: 300px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+        .error { background: #f8d7da; color: #721c24; }
+        .success { background: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <h1>اختبار تسجيل دخول الموظف</h1>
+    
+    <form id="loginForm">
+        <div class="form-group">
+            <label>البريد الإلكتروني:</label>
+            <input type="email" id="email" value="staff@bomba.com" required>
+        </div>
+        
+        <div class="form-group">
+            <label>كلمة المرور:</label>
+            <input type="password" id="password" value="staff123" required>
+        </div>
+        
+        <button type="submit">تسجيل الدخول</button>
+    </form>
+    
+    <div id="result"></div>
+
+    <div id="testButtons" style="display: none; margin-top: 20px;">
+        <h3>اختبار الصلاحيات:</h3>
+        <button onclick="testOrders()">اختبار الطلبات</button>
+        <button onclick="testTables()">اختبار الطاولات</button>
+        <button onclick="testBills()">اختبار الفواتير</button>
+    </div>
+
+    <script>
+        let authToken = '';
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const loginData = {
+                email: document.getElementById('email').value,
+                password: document.getElementById('password').value
+            };
+            
+            console.log('Attempting login:', loginData);
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(loginData)
+                });
+                
+                const result = await response.json();
+                console.log('Login response:', result);
+                
+                const resultDiv = document.getElementById('result');
+                if (response.ok && result.success) {
+                    authToken = result.token;
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>تم تسجيل الدخول بنجاح!</h3>
+                        <p><strong>المستخدم:</strong> ${result.user.name}</p>
+                        <p><strong>الدور:</strong> ${result.user.role}</p>
+                        <p><strong>الصلاحيات:</strong> ${result.user.permissions.join(', ')}</p>
+                        <p><strong>التوكن:</strong> ${result.token.substring(0, 50)}...</p>
+                    `;
+                    document.getElementById('testButtons').style.display = 'block';
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `<h3>فشل تسجيل الدخول!</h3><p>${result.message || 'حدث خطأ غير معروف'}</p>`;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                const resultDiv = document.getElementById('result');
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<h3>خطأ في الشبكة!</h3><p>${error.message}</p>`;
+            }
+        });
+
+        async function testOrders() {
+            await testEndpoint('/api/orders', 'الطلبات');
+        }
+
+        async function testTables() {
+            await testEndpoint('/api/tables/tables', 'الطاولات');
+        }
+
+        async function testBills() {
+            await testEndpoint('/api/bills', 'الفواتير');
+        }
+
+        async function testEndpoint(endpoint, name) {
+            try {
+                const response = await fetch(`http://localhost:5000${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                console.log(`${name} response:`, result);
+                
+                if (response.ok) {
+                    alert(`✅ ${name}: نجح الوصول! عدد العناصر: ${result.data?.length || 'غير محدد'}`);
+                } else {
+                    alert(`❌ ${name}: فشل الوصول! ${result.message}`);
+                }
+            } catch (error) {
+                alert(`❌ ${name}: خطأ في الشبكة! ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

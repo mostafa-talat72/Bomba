@@ -415,11 +415,22 @@ export const getMe = async (req, res) => {
 export const updatePassword = async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
+        
+        console.log('Password update request for user:', req.user.id);
 
         const user = await User.findById(req.user.id).select("+password");
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "المستخدم غير موجود",
+            });
+        }
 
         // Check current password
         const isMatch = await user.comparePassword(currentPassword);
+        console.log('Current password match:', isMatch);
+        
         if (!isMatch) {
             return res.status(400).json({
                 success: false,
@@ -428,14 +439,19 @@ export const updatePassword = async (req, res) => {
         }
 
         // Update password
+        console.log('Updating password for user:', user.email);
         user.password = newPassword;
-        await user.save();
+        user.markModified('password'); // تأكد من أن Mongoose يعرف أن كلمة المرور تغيرت
+        
+        const savedUser = await user.save();
+        console.log('Password updated successfully for user:', savedUser.email);
 
         res.json({
             success: true,
             message: "تم تحديث كلمة المرور بنجاح",
         });
     } catch (error) {
+        console.error('Error updating password:', error);
         res.status(500).json({
             success: false,
             message: "خطأ في تحديث كلمة المرور",
