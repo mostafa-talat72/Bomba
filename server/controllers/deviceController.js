@@ -105,7 +105,16 @@ const deviceController = {
     // Create new device
     createDevice: async (req, res) => {
         try {
-            console.log('Received device creation request:', req.body);
+            // Check if user is admin
+            if (req.user.role !== 'admin') {
+                return res.status(403).json({
+                    success: false,
+                    message: "غير مسموح - المدير فقط يمكنه إضافة أجهزة جديدة",
+                    error: "Admin access required"
+                });
+            }
+
+
             const {
                 name,
                 number,
@@ -224,7 +233,6 @@ const deviceController = {
                 data: device,
             });
         } catch (err) {
-            console.error('Error in createDevice:', err);
             
             // Handle duplicate key error (E11000)
             if (err.code === 11000) {
@@ -246,15 +254,12 @@ const deviceController = {
             // Handle mongoose validation errors
             if (err.name === "ValidationError") {
                 const errors = Object.values(err.errors).map((e) => e.message);
-                console.error('Mongoose validation errors:', errors);
                 return res.status(400).json({
                     success: false,
                     message: "بيانات الجهاز غير صحيحة",
                     error: errors.join(", "),
                 });
             }
-            
-            console.error('General error in createDevice:', err.message, err.stack);
             res.status(400).json({
                 success: false,
                 message: "خطأ في إضافة الجهاز",
@@ -266,6 +271,15 @@ const deviceController = {
     // Update device
     updateDevice: async (req, res) => {
         try {
+            // Check if user is admin
+            if (req.user.role !== 'admin') {
+                return res.status(403).json({
+                    success: false,
+                    message: "غير مسموح - المدير فقط يمكنه تعديل الأجهزة",
+                    error: "Admin access required"
+                });
+            }
+
             const { id } = req.params;
             const {
                 name,
@@ -456,6 +470,15 @@ const deviceController = {
     // Delete device
     deleteDevice: async (req, res) => {
         try {
+            // Check if user is admin
+            if (req.user.role !== 'admin') {
+                return res.status(403).json({
+                    success: false,
+                    message: "غير مسموح - المدير فقط يمكنه حذف الأجهزة",
+                    error: "Admin access required"
+                });
+            }
+
             const { id } = req.params;
 
             // Check if device exists

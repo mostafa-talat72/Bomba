@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار صحة أرقام التكاليف</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+            direction: rtl;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .warning {
+            color: #856404;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+        }
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        .stats-table th, .stats-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        .stats-table th {
+            background: #f2f2f2;
+            font-weight: bold;
+        }
+        .mismatch {
+            background: #ffebee !important;
+            color: #c62828;
+        }
+        .match {
+            background: #e8f5e8 !important;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 اختبار صحة أرقام التكاليف</h1>
+        <p>هذا الاختبار يتحقق من صحة حسابات الإحصائيات في صفحة التكاليف</p>
+
+        <div class="test-section">
+            <h3>🧮 اختبار الحسابات</h3>
+            <button onclick="testAllCalculations()">🔍 اختبار شامل للحسابات</button>
+            <button onclick="testBackendStats()">📊 اختبار إحصائيات الـ Backend</button>
+            <button onclick="testFrontendCalculations()">💻 اختبار حسابات الـ Frontend</button>
+            <button onclick="compareCalculations()">⚖️ مقارنة الحسابات</button>
+        </div>
+
+        <div id="results" class="results" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let authToken = '';
+
+        // تسجيل الدخول التلقائي
+        async function autoLogin() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@bomba.com',
+                        password: 'admin123'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.token;
+                    console.log('✅ تم تسجيل الدخول بنجاح');
+                } else {
+                    console.error('❌ فشل في تسجيل الدخول');
+                }
+            } catch (error) {
+                console.error('❌ خطأ في تسجيل الدخول:', error);
+            }
+        }
+
+        // اختبار شامل للحسابات
+        async function testAllCalculations() {
+            showResults('🔄 جاري إجراء اختبار شامل للحسابات...');
+
+            try {
+                // جلب جميع التكاليف
+                const response = await fetch(`${API_BASE}/costs`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const costs = Array.isArray(data) ? data : (data.data || []);
+                
+                // حساب الإحصائيات يدوياً
+                let manualTotal = 0;
+                let manualPaid = 0;
+                let manualRemaining = 0;
+                
+                const detailedCosts = costs.map(cost => {
+                    const amount = Number(cost.amount) || 0;
+                    const paidAmount = Number(cost.paidAmount) || 0;
+                    const remainingAmount = Number(cost.remainingAmount) || 0;
+                    const calculatedRemaining = Math.max(0, amount - paidAmount);
+                    
+                    manualTotal += amount;
+                    manualPaid += paidAmount;
+                    manualRemaining += calculatedRemaining;
+                    
+                    return {
+                        id: cost._id,
+                        description: cost.description,
+                        amount,
+                        paidAmount,
+                        remainingAmount,
+                        calculatedRemaining,
+                        isConsistent: remainingAmount === calculatedRemaining,
+                        status: cost.status
+                    };
+                });
+
+                // إحصائيات من الـ Backend
+                const backendStats = data.totalStats || {
+                    total: data.totalAmount || 0,
+                    paid: 0,
+                    remaining: 0
+                };
+
+                // تحليل النتائج
+                const inconsistentCosts = detailedCosts.filter(c => !c.isConsistent);
+                
+                let resultText = `✅ اختبار الحسابات مكتمل!
+
+📊 الإحصائيات:
+- عدد التكاليف: ${costs.length}
+- التكاليف غير المتسقة: ${inconsistentCosts.length}
+
+💰 الحسابات اليدوية:
+- الإجمالي: ${manualTotal.toLocaleString()} جنيه
+- المدفوع: ${manualPaid.toLocaleString()} جنيه  
+- المتبقي: ${manualRemaining.toLocaleString()} جنيه
+
+🖥️ إحصائيات الـ Backend:
+- الإجمالي: ${backendStats.total.toLocaleString()} جنيه
+- المدفوع: ${backendStats.paid.toLocaleString()} جنيه
+- المتبقي: ${backendStats.remaining.toLocaleString()} جنيه
+
+🔍 مقارنة النتائج:
+- الإجمالي: ${manualTotal === backendStats.total ? '✅ متطابق' : '❌ غير متطابق'}
+- المدفوع: ${manualPaid === backendStats.paid ? '✅ متطابق' : '❌ غير متطابق'}
+- المتبقي: ${manualRemaining === backendStats.remaining ? '✅ متطابق' : '❌ غير متطابق'}`;
+
+                if (inconsistentCosts.length > 0) {
+                    resultText += `
+
+⚠️ تكاليف غير متسقة:`;
+                    inconsistentCosts.forEach(cost => {
+                        resultText += `
+- ${cost.description}:
+  المبلغ: ${cost.amount} | المدفوع: ${cost.paidAmount}
+  المتبقي المحفوظ: ${cost.remainingAmount} | المتبقي المحسوب: ${cost.calculatedRemaining}`;
+                    });
+                }
+
+                // عرض جدول مفصل
+                resultText += `
+
+📋 تفاصيل أول 5 تكاليف:`;
+                detailedCosts.slice(0, 5).forEach((cost, index) => {
+                    resultText += `
+${index + 1}. ${cost.description}
+   الإجمالي: ${cost.amount} | المدفوع: ${cost.paidAmount} | المتبقي: ${cost.remainingAmount}
+   الحالة: ${getStatusText(cost.status)} | متسق: ${cost.isConsistent ? '✅' : '❌'}`;
+                });
+
+                showResults(resultText, inconsistentCosts.length > 0 ? 'warning' : 'success');
+
+            } catch (error) {
+                showResults(`❌ خطأ في الاختبار: ${error.message}`, 'error');
+            }
+        }
+
+        // اختبار إحصائيات الـ Backend
+        async function testBackendStats() {
+            showResults('🔄 جاري اختبار إحصائيات الـ Backend...');
+
+            try {
+                const response = await fetch(`${API_BASE}/costs`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                showResults(`📊 إحصائيات الـ Backend:
+
+🔍 استجابة API كاملة:
+${JSON.stringify(data, null, 2)}
+
+📈 الإحصائيات المستخرجة:
+- النجاح: ${data.success}
+- العدد المعروض: ${data.count}
+- العدد الإجمالي: ${data.total}
+- المبلغ الإجمالي: ${data.totalAmount}
+- إحصائيات مفصلة: ${data.totalStats ? 'موجودة' : 'غير موجودة'}
+
+${data.totalStats ? `
+📊 الإحصائيات المفصلة:
+- الإجمالي: ${data.totalStats.total}
+- المدفوع: ${data.totalStats.paid}  
+- المتبقي: ${data.totalStats.remaining}
+` : ''}`, 'success');
+
+            } catch (error) {
+                showResults(`❌ خطأ في اختبار الـ Backend: ${error.message}`, 'error');
+            }
+        }
+
+        // اختبار حسابات الـ Frontend
+        async function testFrontendCalculations() {
+            showResults('🔄 جاري اختبار حسابات الـ Frontend...');
+
+            try {
+                const response = await fetch(`${API_BASE}/costs`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                const costs = Array.isArray(data) ? data : (data.data || []);
+
+                // محاكاة حسابات الـ Frontend
+                const total = costs.reduce((sum, cost) => {
+                    const amount = Number(cost.amount) || 0;
+                    return sum + amount;
+                }, 0);
+
+                const paid = costs.reduce((sum, cost) => {
+                    const paidAmount = Number(cost.paidAmount) || 0;
+                    return sum + paidAmount;
+                }, 0);
+
+                const remaining = Math.max(0, total - paid);
+
+                showResults(`💻 حسابات الـ Frontend:
+
+📊 النتائج:
+- الإجمالي: ${total.toLocaleString()} جنيه
+- المدفوع: ${paid.toLocaleString()} جنيه
+- المتبقي: ${remaining.toLocaleString()} جنيه
+
+🔍 تفاصيل الحساب:
+- عدد التكاليف: ${costs.length}
+- متوسط التكلفة: ${costs.length > 0 ? (total / costs.length).toFixed(2) : 0} جنيه
+- نسبة المدفوع: ${total > 0 ? ((paid / total) * 100).toFixed(1) : 0}%
+- نسبة المتبقي: ${total > 0 ? ((remaining / total) * 100).toFixed(1) : 0}%
+
+📋 عينة من البيانات:
+${costs.slice(0, 3).map((cost, i) => `
+${i + 1}. ${cost.description}
+   المبلغ: ${cost.amount} | المدفوع: ${cost.paidAmount} | المتبقي: ${cost.remainingAmount}
+   النوع: ${typeof cost.amount} | ${typeof cost.paidAmount} | ${typeof cost.remainingAmount}`).join('')}`, 'success');
+
+            } catch (error) {
+                showResults(`❌ خطأ في اختبار الـ Frontend: ${error.message}`, 'error');
+            }
+        }
+
+        // مقارنة الحسابات
+        async function compareCalculations() {
+            showResults('🔄 جاري مقارنة الحسابات...');
+
+            try {
+                const response = await fetch(`${API_BASE}/costs`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                const costs = Array.isArray(data) ? data : (data.data || []);
+
+                // حسابات Frontend
+                const frontendTotal = costs.reduce((sum, cost) => sum + (Number(cost.amount) || 0), 0);
+                const frontendPaid = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || 0), 0);
+                const frontendRemaining = Math.max(0, frontendTotal - frontendPaid);
+
+                // حسابات Backend
+                const backendStats = data.totalStats || { total: 0, paid: 0, remaining: 0 };
+
+                // مقارنة
+                const totalMatch = frontendTotal === backendStats.total;
+                const paidMatch = frontendPaid === backendStats.paid;
+                const remainingMatch = frontendRemaining === backendStats.remaining;
+
+                showResults(`⚖️ مقارنة الحسابات:
+
+📊 النتائج:
+                    Frontend    Backend     متطابق؟
+الإجمالي:          ${frontendTotal.toLocaleString().padEnd(12)} ${backendStats.total.toLocaleString().padEnd(12)} ${totalMatch ? '✅' : '❌'}
+المدفوع:           ${frontendPaid.toLocaleString().padEnd(12)} ${backendStats.paid.toLocaleString().padEnd(12)} ${paidMatch ? '✅' : '❌'}
+المتبقي:           ${frontendRemaining.toLocaleString().padEnd(12)} ${backendStats.remaining.toLocaleString().padEnd(12)} ${remainingMatch ? '✅' : '❌'}
+
+🔍 تحليل الاختلافات:
+${!totalMatch ? `- فرق الإجمالي: ${Math.abs(frontendTotal - backendStats.total)} جنيه` : ''}
+${!paidMatch ? `- فرق المدفوع: ${Math.abs(frontendPaid - backendStats.paid)} جنيه` : ''}
+${!remainingMatch ? `- فرق المتبقي: ${Math.abs(frontendRemaining - backendStats.remaining)} جنيه` : ''}
+
+${totalMatch && paidMatch && remainingMatch ? 
+'🎉 جميع الحسابات متطابقة!' : 
+'⚠️ يوجد اختلافات في الحسابات - يحتاج مراجعة'}`, 
+                totalMatch && paidMatch && remainingMatch ? 'success' : 'warning');
+
+            } catch (error) {
+                showResults(`❌ خطأ في المقارنة: ${error.message}`, 'error');
+            }
+        }
+
+        // عرض النتائج
+        function showResults(message, type = '') {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.textContent = message;
+            resultsDiv.style.display = 'block';
+            resultsDiv.className = `results ${type}`;
+        }
+
+        // الحصول على نص الحالة
+        function getStatusText(status) {
+            const statusMap = {
+                'pending': 'معلق',
+                'partially_paid': 'مدفوع جزئياً',
+                'paid': 'مدفوع',
+                'overdue': 'متأخر',
+                'cancelled': 'ملغي'
+            };
+            return statusMap[status] || status;
+        }
+
+        // تسجيل الدخول عند تحميل الصفحة
+        window.onload = autoLogin;
+    </script>
+</body>
+</html>

@@ -56,6 +56,7 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   refreshData: () => Promise<void>;
+  forceRefreshData: () => Promise<void>;
   resendVerification: (email: string) => Promise<{ success: boolean; message?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; message?: string }>;
@@ -523,11 +524,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
         
         setOrders(filteredOrders);
+      } else {
+        // إذا فشل الطلب، تأكد من أن القائمة فارغة بدلاً من undefined
+        setOrders([]);
       }
     } catch (error) {
       // Only log errors if still authenticated
       if (isAuthenticated && !isLoggingOut) {
-        }
+        console.warn('Failed to fetch orders:', error);
+        // تأكد من أن القائمة فارغة بدلاً من undefined
+        setOrders([]);
+      }
     }
   };
 
@@ -551,11 +558,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.getBills();
       if (response.success && response.data) {
         setBills(response.data);
+      } else {
+        // إذا فشل الطلب، تأكد من أن القائمة فارغة بدلاً من undefined
+        setBills([]);
       }
     } catch (error) {
       // Only log errors if still authenticated
       if (isAuthenticated && !isLoggingOut) {
-        }
+        console.warn('Failed to fetch bills:', error);
+        // تأكد من أن القائمة فارغة بدلاً من undefined
+        setBills([]);
+      }
     }
   };
 
@@ -1609,17 +1622,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Utility methods
-  const refreshData = async (): Promise<void> => {
+  const forceRefreshData = async (): Promise<void> => {
+    if (!isAuthenticated || !user) {
+      return;
+    }
+
+
+    
+    // إعادة تعيين البيانات أولاً
+    setOrders([]);
+    setBills([]);
+    setSessions([]);
+    
+    // ثم جلب البيانات مرة أخرى
+    await refreshData(0);
+  };
+
+  const refreshData = async (retryCount = 0): Promise<void> => {
     if (!isAuthenticated && !user) {
       return;
     }
 
     try {
+      // جلب البيانات الأساسية أولاً
       await Promise.all([
-        fetchSessions(),
         fetchOrders(),
-        fetchInventory(),
         fetchBills(),
+        fetchSessions(),
+        fetchInventory(),
         fetchCosts(),
         fetchDevices(),
         fetchMenuItems(),
@@ -1628,7 +1658,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchSettings(),
       ]);
     } catch (error) {
+      console.warn('Error in refreshData:', error);
+      
+      // إعادة المحاولة مرة واحدة بعد تأخير قصير
+      if (retryCount < 1 && isAuthenticated && !isLoggingOut) {
+        setTimeout(() => {
+          refreshData(retryCount + 1);
+        }, 1000);
       }
+    }
   };
 
   const showNotification = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info'): void => {
@@ -1975,6 +2013,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     login,
     logout,
     refreshData,
+    forceRefreshData,
     resendVerification,
     forgotPassword,
     resetPassword,

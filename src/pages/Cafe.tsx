@@ -289,16 +289,14 @@ const Cafe: React.FC = () => {
 
     // Connection event handlers
     socket.on('connect', () => {
-      console.log('Socket.IO connected');
+      // Socket connected
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('Socket.IO disconnected:', reason);
       showNotification?.('انقطع الاتصال - جاري إعادة الاتصال...', 'warning');
     });
 
     socket.on('reconnect', async (attemptNumber) => {
-      console.log('Socket.IO reconnected after', attemptNumber, 'attempts');
       showNotification?.('تم إعادة الاتصال', 'success');
       // Refresh data to sync state
       await fetchBills();

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار حذف التكاليف</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+            direction: rtl;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .delete-btn {
+            background: #dc3545;
+        }
+        .delete-btn:hover {
+            background: #c82333;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .warning {
+            color: #856404;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+        }
+        .cost-item {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f9f9f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .cost-info {
+            flex: 1;
+        }
+        .cost-actions {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ اختبار حذف التكاليف</h1>
+        <p>هذا الاختبار يتحقق من عمل وظيفة حذف التكاليف</p>
+
+        <div class="test-section">
+            <h3>📋 قائمة التكاليف</h3>
+            <button onclick="loadCosts()">🔄 تحميل التكاليف</button>
+            <button onclick="createTestCost()">➕ إنشاء تكلفة اختبار</button>
+            <div id="costs-list"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 اختبارات الحذف</h3>
+            <button onclick="testDeleteNonExistent()">❌ اختبار حذف تكلفة غير موجودة</button>
+            <button onclick="testDeletePaidCost()">💰 اختبار حذف تكلفة مدفوعة</button>
+            <button onclick="testDeleteAPI()">🔗 اختبار API مباشرة</button>
+        </div>
+
+        <div id="results" class="results" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let authToken = '';
+        let costs = [];
+
+        // تسجيل الدخول التلقائي
+        async function autoLogin() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@bomba.com',
+                        password: 'admin123'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.token;
+                    console.log('✅ تم تسجيل الدخول بنجاح');
+                    loadCosts();
+                } else {
+                    console.error('❌ فشل في تسجيل الدخول');
+                }
+            } catch (error) {
+                console.error('❌ خطأ في تسجيل الدخول:', error);
+            }
+        }
+
+        // تحميل التكاليف
+        async function loadCosts() {
+            try {
+                showResults('🔄 جاري تحميل التكاليف...');
+                
+                const response = await fetch(`${API_BASE}/costs`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                costs = Array.isArray(data) ? data : (data.data || []);
+                
+                displayCosts();
+                showResults(`✅ تم تحميل ${costs.length} تكلفة`, 'success');
+
+            } catch (error) {
+                showResults(`❌ خطأ في تحميل التكاليف: ${error.message}`, 'error');
+            }
+        }
+
+        // عرض التكاليف
+        function displayCosts() {
+            const costsList = document.getElementById('costs-list');
+            
+            if (costs.length === 0) {
+                costsList.innerHTML = '<p>لا توجد تكاليف</p>';
+                return;
+            }
+
+            costsList.innerHTML = costs.map(cost => `
+                <div class="cost-item">
+                    <div class="cost-info">
+                        <strong>${cost.description}</strong><br>
+                        المبلغ: ${cost.amount} جنيه | الحالة: ${getStatusText(cost.status)}<br>
+                        ID: ${cost._id}
+                    </div>
+                    <div class="cost-actions">
+                        <button onclick="deleteCost('${cost._id}')" class="delete-btn" 
+                                ${cost.status === 'paid' ? 'disabled title="لا يمكن حذف تكلفة مدفوعة"' : ''}>
+                            🗑️ حذف
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // حذف تكلفة
+        async function deleteCost(costId) {
+            if (!confirm('هل أنت متأكد من حذف هذه التكلفة؟')) {
+                return;
+            }
+
+            try {
+                showResults(`🗑️ جاري حذف التكلفة: ${costId}`);
+                
+                const response = await fetch(`${API_BASE}/costs/${costId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResults(`✅ تم حذف التكلفة بنجاح!
+                    
+الاستجابة:
+${JSON.stringify(data, null, 2)}`, 'success');
+                    loadCosts(); // إعادة تحميل القائمة
+                } else {
+                    showResults(`❌ فشل في حذف التكلفة:
+                    
+الاستجابة:
+${JSON.stringify(data, null, 2)}`, 'error');
+                }
+
+            } catch (error) {
+                showResults(`❌ خطأ في حذف التكلفة: ${error.message}`, 'error');
+            }
+        }
+
+        // إنشاء تكلفة اختبار
+        async function createTestCost() {
+            try {
+                showResults('🔄 جاري إنشاء تكلفة اختبار...');
+                
+                // جلب الفئات أولاً
+                const categoriesResponse = await fetch(`${API_BASE}/cost-categories`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                const categoriesData = await categoriesResponse.json();
+                const categories = Array.isArray(categoriesData) ? categoriesData : (categoriesData.data || []);
+                
+                if (categories.length === 0) {
+                    throw new Error('لا توجد فئات تكاليف');
+                }
+
+                const testCost = {
+                    category: categories[0]._id,
+                    description: `تكلفة اختبار - ${new Date().toLocaleString('ar-EG')}`,
+                    amount: 100,
+                    paidAmount: 0,
+                    date: new Date().toISOString().split('T')[0],
+                    paymentMethod: 'cash',
+                    vendor: 'مورد اختبار',
+                    notes: 'تكلفة للاختبار - يمكن حذفها'
+                };
+
+                const response = await fetch(`${API_BASE}/costs`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testCost)
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResults(`✅ تم إنشاء تكلفة اختبار بنجاح!
+                    
+ID: ${data.data._id}
+الوصف: ${data.data.description}`, 'success');
+                    loadCosts();
+                } else {
+                    showResults(`❌ فشل في إنشاء تكلفة اختبار:
+                    
+${JSON.stringify(data, null, 2)}`, 'error');
+                }
+
+            } catch (error) {
+                showResults(`❌ خطأ في إنشاء تكلفة اختبار: ${error.message}`, 'error');
+            }
+        }
+
+        // اختبار حذف تكلفة غير موجودة
+        async function testDeleteNonExistent() {
+            const fakeId = '507f1f77bcf86cd799439011'; // ObjectId وهمي
+            
+            try {
+                showResults(`🧪 اختبار حذف تكلفة غير موجودة: ${fakeId}`);
+                
+                const response = await fetch(`${API_BASE}/costs/${fakeId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                showResults(`📊 نتيجة اختبار حذف تكلفة غير موجودة:
+                
+Status: ${response.status}
+Response: ${JSON.stringify(data, null, 2)}
+
+${response.status === 404 ? '✅ النتيجة صحيحة - 404 Not Found' : '❌ النتيجة غير متوقعة'}`, 
+                response.status === 404 ? 'success' : 'warning');
+
+            } catch (error) {
+                showResults(`❌ خطأ في الاختبار: ${error.message}`, 'error');
+            }
+        }
+
+        // اختبار حذف تكلفة مدفوعة
+        async function testDeletePaidCost() {
+            const paidCost = costs.find(c => c.status === 'paid');
+            
+            if (!paidCost) {
+                showResults('⚠️ لا توجد تكاليف مدفوعة للاختبار', 'warning');
+                return;
+            }
+
+            try {
+                showResults(`🧪 اختبار حذف تكلفة مدفوعة: ${paidCost._id}`);
+                
+                const response = await fetch(`${API_BASE}/costs/${paidCost._id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                showResults(`📊 نتيجة اختبار حذف تكلفة مدفوعة:
+                
+Status: ${response.status}
+Response: ${JSON.stringify(data, null, 2)}
+
+${response.status === 400 ? '✅ النتيجة صحيحة - 400 Bad Request' : '❌ النتيجة غير متوقعة'}`, 
+                response.status === 400 ? 'success' : 'warning');
+
+            } catch (error) {
+                showResults(`❌ خطأ في الاختبار: ${error.message}`, 'error');
+            }
+        }
+
+        // اختبار API مباشرة
+        async function testDeleteAPI() {
+            const deletableCost = costs.find(c => c.status !== 'paid');
+            
+            if (!deletableCost) {
+                showResults('⚠️ لا توجد تكاليف قابلة للحذف للاختبار', 'warning');
+                return;
+            }
+
+            try {
+                showResults(`🧪 اختبار API مباشرة للتكلفة: ${deletableCost._id}
+                
+تفاصيل التكلفة:
+- الوصف: ${deletableCost.description}
+- المبلغ: ${deletableCost.amount}
+- الحالة: ${deletableCost.status}
+- المدفوع: ${deletableCost.paidAmount}`);
+                
+                const response = await fetch(`${API_BASE}/costs/${deletableCost._id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                showResults(`📊 نتيجة اختبار API:
+                
+Status: ${response.status}
+Response: ${JSON.stringify(data, null, 2)}
+
+${response.ok ? '✅ تم الحذف بنجاح' : '❌ فشل في الحذف'}`, 
+                response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    loadCosts(); // إعادة تحميل القائمة
+                }
+
+            } catch (error) {
+                showResults(`❌ خطأ في اختبار API: ${error.message}`, 'error');
+            }
+        }
+
+        // عرض النتائج
+        function showResults(message, type = '') {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.textContent = message;
+            resultsDiv.style.display = 'block';
+            resultsDiv.className = `results ${type}`;
+        }
+
+        // الحصول على نص الحالة
+        function getStatusText(status) {
+            const statusMap = {
+                'pending': 'معلق',
+                'partially_paid': 'مدفوع جزئياً',
+                'paid': 'مدفوع',
+                'overdue': 'متأخر',
+                'cancelled': 'ملغي'
+            };
+            return statusMap[status] || status;
+        }
+
+        // تسجيل الدخول عند تحميل الصفحة
+        window.onload = autoLogin;
+    </script>
+</body>
+</html>

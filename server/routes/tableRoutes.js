@@ -51,46 +51,46 @@ const tableValidation = [
 ];
 
 // Protected routes
-router.use(authenticateToken);
+router.use(protect);
 
-// Table Sections routes (orders, staff permission required)
-router.get("/sections", authorize("orders", "staff", "all"), getAllTableSections);
-router.get("/sections/:id", authorize("orders", "staff", "all"), getTableSectionById);
+// Table Sections routes (cafe, orders, staff permission required)
+router.get("/sections", authorize("cafe", "orders", "staff", "all"), getAllTableSections);
+router.get("/sections/:id", authorize("cafe", "orders", "staff", "all"), getTableSectionById);
 router.post(
     "/sections",
-    authorize("orders", "staff", "all"),
+    authorize("cafe", "orders", "staff", "all"),
     tableSectionValidation,
     validateRequest,
     createTableSection
 );
 router.put(
     "/sections/:id",
-    authorize("orders", "staff", "all"),
+    authorize("cafe", "orders", "staff", "all"),
     tableSectionValidation,
     validateRequest,
     updateTableSection
 );
-router.delete("/sections/:id", authorize("orders", "staff", "all"), deleteTableSection);
+router.delete("/sections/:id", authorize("cafe", "orders", "staff", "all"), deleteTableSection);
 
-// Tables routes (orders, staff permission required)
-router.get("/tables", authorize("orders", "staff", "all"), getAllTables);
-router.get("/tables/:id", authorize("orders", "staff", "all"), getTableById);
-router.get("/tables/:id/status", authorize("orders", "staff", "all"), getTableStatus);
+// Tables routes (cafe, orders, staff permission required)
+router.get("/tables", authorize("cafe", "orders", "staff", "all"), getAllTables);
+router.get("/tables/:id", authorize("cafe", "orders", "staff", "all"), getTableById);
+router.get("/tables/:id/status", authorize("cafe", "orders", "staff", "all"), getTableStatus);
 router.post(
     "/tables",
-    authorize("orders", "staff", "all"),
+    authorize("cafe", "orders", "staff", "all"),
     tableValidation,
     validateRequest,
     createTable
 );
 router.put(
     "/tables/:id",
-    authorize("orders", "staff", "all"),
+    authorize("cafe", "orders", "staff", "all"),
     tableValidation,
     validateRequest,
     updateTable
 );
-router.delete("/tables/:id", authorize("orders", "staff", "all"), deleteTable);
+router.delete("/tables/:id", authorize("cafe", "orders", "staff", "all"), deleteTable);
 
 export default router;
 

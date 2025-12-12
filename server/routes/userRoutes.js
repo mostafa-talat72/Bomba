@@ -173,10 +173,10 @@ router.get("/:id", async (req, res) => {
 // @access  Private (Users permission)
 router.put("/:id", async (req, res) => {
     try {
-        const { name, email, role, permissions, status, phone, address } =
+        const { name, email, role, permissions, status, phone, address, password } =
             req.body;
 
-        const user = await User.findById(req.params.id);
+        const user = await User.findById(req.params.id).select("+password");
 
         if (!user) {
             return res.status(404).json({
@@ -193,15 +193,28 @@ router.put("/:id", async (req, res) => {
         if (status) user.status = status;
         if (phone !== undefined) user.phone = phone;
         if (address !== undefined) user.address = address;
+        
+        // Handle password update
+        if (password && password.trim() !== '') {
+            console.log('Updating password for user:', user.email);
+            user.password = password;
+            user.markModified('password'); // تأكد من أن Mongoose يعرف أن كلمة المرور تغيرت
+        }
 
         await user.save();
+
+        // Remove password from response
+        const userResponse = user.toObject();
+        delete userResponse.password;
+        delete userResponse.refreshToken;
 
         res.json({
             success: true,
             message: "تم تحديث المستخدم بنجاح",
-            data: user,
+            data: userResponse,
         });
     } catch (error) {
+        console.error('Error updating user:', error);
         res.status(500).json({
             success: false,
             message: "خطأ في تحديث المستخدم",

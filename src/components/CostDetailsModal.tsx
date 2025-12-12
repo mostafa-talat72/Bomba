@@ -101,7 +101,9 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
   };
 
   const handleDeleteConfirm = async () => {
-    if (!onDelete) return;
+    if (!onDelete) {
+      return;
+    }
     
     try {
       setDeleteLoading(true);
@@ -153,7 +155,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
         <div 
           className="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0"
           style={{ 
-            background: `linear-gradient(135deg, ${cost.category.color}15 0%, ${cost.category.color}05 100%)`
+            background: `linear-gradient(135deg, ${cost?.category?.color || '#667eea'}15 0%, ${cost?.category?.color || '#667eea'}05 100%)`
           }}
         >
           <div className="flex items-start justify-between gap-4">
@@ -161,12 +163,12 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
               <div
                 className="p-4 rounded-2xl"
                 style={{ 
-                  background: `linear-gradient(135deg, ${cost.category.color} 0%, ${cost.category.color}dd 100%)`,
-                  boxShadow: `0 8px 24px -6px ${cost.category.color}60`
+                  background: `linear-gradient(135deg, ${cost?.category?.color || '#667eea'} 0%, ${cost?.category?.color || '#667eea'}dd 100%)`,
+                  boxShadow: `0 8px 24px -6px ${cost?.category?.color || '#667eea'}60`
                 }}
               >
                 <div className="text-white">
-                  {getCategoryIcon(cost.category.icon)}
+                  {getCategoryIcon(cost?.category?.icon || 'DollarSign')}
                 </div>
               </div>
               <div className="flex-1">
@@ -177,11 +179,11 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
                   <span 
                     className="px-3 py-1 rounded-full text-sm font-bold"
                     style={{ 
-                      backgroundColor: `${cost.category.color}20`,
-                      color: cost.category.color
+                      backgroundColor: `${cost?.category?.color || '#667eea'}20`,
+                      color: cost?.category?.color || '#667eea'
                     }}
                   >
-                    {cost.category.name}
+                    {cost?.category?.name || 'غير محدد'}
                   </span>
                   {cost.vendor && (
                     <span className="text-sm text-gray-600 dark:text-gray-400">
@@ -261,7 +263,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
             )}
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">الحالة:</span>
-              <span className="text-sm font-bold" style={{ color: cost.category.color }}>
+              <span className="text-sm font-bold" style={{ color: cost?.category?.color || '#667eea' }}>
                 {getStatusText(cost.status)}
               </span>
             </div>

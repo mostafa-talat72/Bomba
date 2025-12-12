@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   DollarSign, Plus, Filter, Search, 
   TrendingUp, AlertCircle, CheckCircle,
-  Clock, XCircle, Edit, Trash2, Settings, Wallet, RefreshCw
+  Clock, XCircle, Settings, RefreshCw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
@@ -94,7 +94,7 @@ const Costs = () => {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
 
   // Statistics
   const [stats, setStats] = useState({
@@ -121,10 +121,8 @@ const Costs = () => {
       setCategoriesLoading(true);
       setCategoriesError(null);
       const response = await api.get('/cost-categories');
-      console.log('Categories API Response:', response);
       // Handle both response formats: { data: [...] } or direct array
       const categoriesData = Array.isArray(response) ? response : (response.data || []);
-      console.log('Categories data:', categoriesData);
       setCategories(categoriesData);
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'فشل في تحميل الأقسام';
@@ -151,12 +149,17 @@ const Costs = () => {
       if (dateTo) params.dateTo = dateTo;
 
       const response = await api.get('/costs', { params });
-      console.log('Costs API Response:', response);
+      
       // Handle both response formats: { data: [...] } or direct array
       const costsData = Array.isArray(response) ? response : (response.data || []);
-      console.log('Costs data:', costsData);
       setCosts(costsData);
-      calculateStats(costsData);
+      
+      // Use backend calculations if available, otherwise calculate from frontend data
+      if ((response as any).success && (response as any).totalStats) {
+        setStats((response as any).totalStats);
+      } else {
+        calculateStats(costsData);
+      }
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'فشل في تحميل التكاليف';
       setError(errorMessage);
@@ -169,13 +172,21 @@ const Costs = () => {
 
   const calculateStats = (costsData: Cost[]) => {
     // إجمالي التكاليف: مجموع كل المبالغ
-    const total = costsData.reduce((sum, cost) => sum + cost.amount, 0);
+    const total = costsData.reduce((sum, cost) => {
+      const amount = Number(cost.amount) || 0;
+      return sum + amount;
+    }, 0);
     
     // المدفوع: مجموع المبالغ المدفوعة فعلياً
-    const paid = costsData.reduce((sum, cost) => sum + cost.paidAmount, 0);
+    const paid = costsData.reduce((sum, cost) => {
+      const paidAmount = Number(cost.paidAmount) || 0;
+      return sum + paidAmount;
+    }, 0);
     
-    // المتبقي: مجموع المبالغ المتبقية
-    const remaining = costsData.reduce((sum, cost) => sum + cost.remainingAmount, 0);
+    // المتبقي: حساب المتبقي من الفرق (أكثر دقة من الاعتماد على remainingAmount)
+    const remaining = Math.max(0, total - paid);
+
+
 
     setStats({ total, paid, remaining });
   };
@@ -230,15 +241,14 @@ const Costs = () => {
 
   const handleDeleteCost = async (costId: string) => {
     try {
-      setActionLoading(`delete-${costId}`);
-      await api.delete(`/costs/${costId}`);
+      const response = await api.delete(`/costs/${costId}`);
+      showNotification('تم حذف التكلفة بنجاح', 'success');
       fetchCosts();
       return Promise.resolve();
     } catch (error: any) {
-      setActionLoading(null);
+      const errorMessage = error.response?.data?.message || 'فشل في حذف التكلفة';
+      showNotification(errorMessage, 'error');
       throw error;
-    } finally {
-      setActionLoading(null);
     }
   };
 
@@ -246,7 +256,6 @@ const Costs = () => {
     if (!selectedCostForPayment) return;
 
     try {
-      setActionLoading(`payment-${selectedCostForPayment._id}`);
       await api.post(`/costs/${selectedCostForPayment._id}/payment`, {
         paymentAmount,
         paymentMethod,
@@ -258,12 +267,10 @@ const Costs = () => {
       setSelectedCostForPayment(null);
     } catch (error: any) {
       throw error; // Let the modal handle the error
-    } finally {
-      setActionLoading(null);
     }
   };
 
-  const openPaymentModal = (cost: Cost) => {
+  const openPaymentModal = (cost: any) => {
     setSelectedCostForPayment(cost);
     setShowPaymentModal(true);
   };
@@ -676,7 +683,7 @@ const Costs = () => {
                 className="cost-card-modern stagger-item cursor-pointer"
                 style={{ 
                   animationDelay: `${index * 0.05}s`,
-                  '--category-color': cost.category.color
+                  '--category-color': cost.category?.color || '#667eea'
                 } as React.CSSProperties}
                 onClick={() => {
                   setSelectedCostForDetails(cost);
@@ -690,11 +697,11 @@ const Costs = () => {
                     <div
                       className="cost-card-icon"
                       style={{ 
-                        background: `linear-gradient(135deg, ${cost.category.color} 0%, ${cost.category.color}dd 100%)`,
-                        boxShadow: `0 6px 20px -6px ${cost.category.color}40`
+                        background: `linear-gradient(135deg, ${cost.category?.color || '#667eea'} 0%, ${cost.category?.color || '#667eea'}dd 100%)`,
+                        boxShadow: `0 6px 20px -6px ${cost.category?.color || '#667eea'}40`
                       }}
                     >
-                      {getCategoryIcon(cost.category.icon)}
+                      {getCategoryIcon(cost.category?.icon || 'DollarSign')}
                     </div>
                     
                     {/* Title & Description */}
@@ -706,11 +713,11 @@ const Costs = () => {
                         <span 
                           className="px-2.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0"
                           style={{ 
-                            backgroundColor: `${cost.category.color}20`,
-                            color: cost.category.color
+                            backgroundColor: `${cost.category?.color || '#667eea'}20`,
+                            color: cost.category?.color || '#667eea'
                           }}
                         >
-                          {cost.category.name}
+                          {cost.category?.name || 'غير محدد'}
                         </span>
                       </div>
                       {cost.vendor && (
@@ -843,7 +850,7 @@ const Costs = () => {
         cost={selectedCostForDetails}
         onRefresh={fetchCosts}
         onEdit={(cost) => {
-          setEditingCost(cost);
+          setEditingCost(cost as any);
           setShowCostModal(true);
         }}
         onDelete={handleDeleteCost}

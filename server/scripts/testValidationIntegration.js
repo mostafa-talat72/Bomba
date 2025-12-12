@@ -24,12 +24,9 @@ import ConflictResolver from '../services/sync/conflictResolver.js';
  */
 
 async function testValidationIntegration() {
-    console.log('🧪 Testing Data Validation Integration with Change Processing\n');
-
     try {
         // Connect to Local MongoDB
         await mongoose.connect(process.env.MONGODB_URI);
-        console.log('✅ Connected to Local MongoDB\n');
 
         // Initialize dependencies
         const originTracker = new OriginTracker();
@@ -37,7 +34,6 @@ async function testValidationIntegration() {
         const changeProcessor = new ChangeProcessor(originTracker, conflictResolver, null);
 
         // Test 1: Process Valid Insert Change
-        console.log('📋 Test 1: Process Valid Insert Change');
         const validInsertChange = {
             _id: { _data: 'test-token-1' },
             operationType: 'insert',
@@ -62,15 +58,8 @@ async function testValidationIntegration() {
         };
 
         const result1 = await changeProcessor.processChange(validInsertChange);
-        console.log('Result:', result1.success ? '✅ PASS' : '❌ FAIL');
-        if (!result1.success) {
-            console.log('Reason:', result1.reason);
-            console.log('Errors:', result1.validationErrors);
-        }
-        console.log('');
 
         // Test 2: Process Invalid Insert Change - Missing Required Field
-        console.log('📋 Test 2: Process Invalid Insert Change - Missing Required Field');
         const invalidInsertChange = {
             _id: { _data: 'test-token-2' },
             operationType: 'insert',
@@ -95,15 +84,8 @@ async function testValidationIntegration() {
         };
 
         const result2 = await changeProcessor.processChange(invalidInsertChange);
-        console.log('Result:', !result2.success ? '✅ PASS (correctly rejected)' : '❌ FAIL');
-        if (!result2.success) {
-            console.log('Reason:', result2.reason);
-            console.log('Validation Errors:', result2.validationErrors);
-        }
-        console.log('');
 
         // Test 3: Process Invalid Insert Change - Wrong Enum Value
-        console.log('📋 Test 3: Process Invalid Insert Change - Wrong Enum Value');
         const invalidEnumChange = {
             _id: { _data: 'test-token-3' },
             operationType: 'insert',
@@ -128,16 +110,8 @@ async function testValidationIntegration() {
         };
 
         const result3 = await changeProcessor.processChange(invalidEnumChange);
-        console.log('Result:', !result3.success ? '✅ PASS (correctly rejected)' : '❌ FAIL');
-        if (!result3.success) {
-            console.log('Reason:', result3.reason);
-            console.log('Validation Errors:', result3.validationErrors);
-        }
-        console.log('');
 
         // Test 4: Process Invalid Update Change - Negative Value
-        console.log('📋 Test 4: Process Invalid Update Change - Negative Value');
-        
         // First create a valid bill to update
         const billToUpdate = await Bill.create({
             billNumber: 'BILL-UPDATE-001',
@@ -167,15 +141,8 @@ async function testValidationIntegration() {
         };
 
         const result4 = await changeProcessor.processChange(invalidUpdateChange);
-        console.log('Result:', !result4.success ? '✅ PASS (correctly rejected)' : '❌ FAIL');
-        if (!result4.success) {
-            console.log('Reason:', result4.reason);
-            console.log('Validation Errors:', result4.validationErrors);
-        }
-        console.log('');
 
         // Test 5: Process Valid Update Change
-        console.log('📋 Test 5: Process Valid Update Change');
         const validUpdateChange = {
             _id: { _data: 'test-token-5' },
             operationType: 'update',
@@ -192,15 +159,8 @@ async function testValidationIntegration() {
         };
 
         const result5 = await changeProcessor.processChange(validUpdateChange);
-        console.log('Result:', result5.success ? '✅ PASS' : '❌ FAIL');
-        if (!result5.success) {
-            console.log('Reason:', result5.reason);
-            console.log('Errors:', result5.validationErrors);
-        }
-        console.log('');
 
         // Test 6: Process Invalid Replace Change - Type Mismatch
-        console.log('📋 Test 6: Process Invalid Replace Change - Type Mismatch');
         const invalidReplaceChange = {
             _id: { _data: 'test-token-6' },
             operationType: 'replace',
@@ -226,41 +186,23 @@ async function testValidationIntegration() {
         };
 
         const result6 = await changeProcessor.processChange(invalidReplaceChange);
-        console.log('Result:', !result6.success ? '✅ PASS (correctly rejected)' : '❌ FAIL');
-        if (!result6.success) {
-            console.log('Reason:', result6.reason);
-            console.log('Validation Errors:', result6.validationErrors);
-        }
-        console.log('');
 
         // Test 7: Check Statistics
-        console.log('📊 Test 7: Check Processing Statistics');
         const stats = changeProcessor.getStats();
-        console.log('Statistics:', stats);
-        console.log('Total Processed:', stats.totalProcessed);
-        console.log('Successful:', stats.successful);
-        console.log('Failed:', stats.failed);
-        console.log('Skipped:', stats.skipped);
-        console.log('');
 
         // Cleanup
         await Bill.deleteOne({ _id: billToUpdate._id });
 
-        // Summary
-        console.log('═══════════════════════════════════════════════════════');
-        console.log('✅ Data Validation Integration Tests Complete');
-        console.log('═══════════════════════════════════════════════════════');
-        console.log('\n📝 Summary:');
-        console.log('- Valid changes are processed successfully');
-        console.log('- Invalid changes are rejected with detailed error messages');
-        console.log('- Validation errors are logged for debugging');
-        console.log('- Statistics track failed validations');
+        // Validation completed silently
+        const allTestsPassed = result1.success && !result2.success && !result3.success && 
+                              !result4.success && result5.success && !result6.success;
+
+        process.exit(allTestsPassed ? 0 : 1);
 
     } catch (error) {
-        console.error('❌ Test Error:', error);
+        process.exit(1);
     } finally {
         await mongoose.disconnect();
-        console.log('\n✅ Disconnected from MongoDB');
     }
 }
 

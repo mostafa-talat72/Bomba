@@ -20,9 +20,6 @@ const deviceData = {
 
 async function testDeviceCreation() {
     try {
-        console.log('Testing device creation API...');
-        console.log('Sending data:', JSON.stringify(deviceData, null, 2));
-        
         const response = await fetch(`${API_BASE}/devices`, {
             method: 'POST',
             headers: {
@@ -34,11 +31,8 @@ async function testDeviceCreation() {
         
         const result = await response.json();
         
-        console.log('Response status:', response.status);
-        console.log('Response:', JSON.stringify(result, null, 2));
-        
     } catch (error) {
-        console.error('Error:', error.message);
+        // Error handling without console output
     }
 }
 

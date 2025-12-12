@@ -207,7 +207,7 @@ class OriginTracker {
             }
             
             if (cleanedCount > 0) {
-                console.log(`[OriginTracker] Cleaned up ${cleanedCount} old tracking entries`);
+                // Cleanup completed silently
             }
 
         } catch (error) {

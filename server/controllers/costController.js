@@ -85,17 +85,34 @@ export const getCosts = async (req, res) => {
 
         const total = await Cost.countDocuments(query);
 
-        // Calculate totals
-        const totalAmount = await Cost.aggregate([
+        // Calculate comprehensive statistics for all matching costs (not just paginated)
+        const totalStats = await Cost.aggregate([
             { $match: query },
-            { $group: { _id: null, total: { $sum: "$amount" } } },
+            { 
+                $group: { 
+                    _id: null, 
+                    total: { $sum: "$amount" },
+                    paid: { $sum: "$paidAmount" },
+                    remaining: { $sum: "$remainingAmount" },
+                    count: { $sum: 1 }
+                } 
+            },
         ]);
+
+        const stats = totalStats[0] || { total: 0, paid: 0, remaining: 0, count: 0 };
+        
+
 
         res.json({
             success: true,
             count: costs.length,
             total,
-            totalAmount: totalAmount[0]?.total || 0,
+            totalAmount: stats.total,
+            totalStats: {
+                total: stats.total,
+                paid: stats.paid,
+                remaining: stats.remaining
+            },
             data: costs,
         });
     } catch (error) {
@@ -421,26 +438,20 @@ export const deleteCost = async (req, res) => {
             _id: req.params.id,
             organization: req.user.organization,
         });
-
+        
         if (!cost) {
             return res.status(404).json({
                 success: false,
                 message: "التكلفة غير موجودة",
             });
         }
-
+        
         // Only allow deletion if cost is not fully paid
         if (cost.status === "paid") {
             return res.status(400).json({
                 success: false,
                 message: "لا يمكن حذف تكلفة مدفوعة بالكامل",
             });
-        }
-
-        // Warn if cost has partial payments
-        if (cost.status === "partially_paid") {
-            // Allow deletion but log warning
-            console.warn(`⚠️ Deleting cost with partial payments: ${cost._id}`);
         }
 
         // Delete from Local and Atlas
@@ -475,7 +486,7 @@ export const deleteCost = async (req, res) => {
             syncConfig.enabled = originalSyncEnabled;
             Logger.info(`🔓 Sync middleware re-enabled`);
         }
-
+        
         res.json({
             success: true,
             message: "تم حذف التكلفة بنجاح",

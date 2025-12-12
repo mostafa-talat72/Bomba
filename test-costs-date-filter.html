@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار فلترة التكاليف بالتاريخ</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+            direction: rtl;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .quick-dates {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 10px 0;
+        }
+        .quick-date-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .quick-date-btn:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 اختبار فلترة التكاليف بالتاريخ</h1>
+        <p>هذا الاختبار يتحقق من عمل فلاتر التاريخ في صفحة التكاليف</p>
+
+        <div class="test-section">
+            <h3>📅 اختبار فلاتر التاريخ</h3>
+            
+            <div class="form-group">
+                <label>من تاريخ:</label>
+                <input type="date" id="dateFrom" />
+            </div>
+            
+            <div class="form-group">
+                <label>إلى تاريخ:</label>
+                <input type="date" id="dateTo" />
+            </div>
+
+            <div class="quick-dates">
+                <button class="quick-date-btn" onclick="setToday()">اليوم</button>
+                <button class="quick-date-btn" onclick="setThisWeek()">هذا الأسبوع</button>
+                <button class="quick-date-btn" onclick="setThisMonth()">هذا الشهر</button>
+                <button class="quick-date-btn" onclick="setLastMonth()">الشهر الماضي</button>
+                <button class="quick-date-btn" onclick="clearDates()">مسح</button>
+            </div>
+
+            <div class="form-group">
+                <label>فئة التكلفة (اختياري):</label>
+                <select id="category">
+                    <option value="">جميع الفئات</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>حالة التكلفة:</label>
+                <select id="status">
+                    <option value="all">جميع الحالات</option>
+                    <option value="pending">معلق</option>
+                    <option value="partially_paid">مدفوع جزئياً</option>
+                    <option value="paid">مدفوع</option>
+                    <option value="overdue">متأخر</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>البحث (اختياري):</label>
+                <input type="text" id="search" placeholder="ابحث في الوصف أو المورد..." />
+            </div>
+
+            <button onclick="testDateFilter()">🔍 اختبار الفلترة</button>
+            <button onclick="testAllCosts()">📋 جلب جميع التكاليف</button>
+        </div>
+
+        <div id="results" class="results" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let authToken = '';
+
+        // تسجيل الدخول التلقائي
+        async function autoLogin() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@bomba.com',
+                        password: 'admin123'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.token;
+                    console.log('✅ تم تسجيل الدخول بنجاح');
+                    await loadCategories();
+                } else {
+                    console.error('❌ فشل في تسجيل الدخول');
+                }
+            } catch (error) {
+                console.error('❌ خطأ في تسجيل الدخول:', error);
+            }
+        }
+
+        // تحميل الفئات
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_BASE}/cost-categories`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const categories = await response.json();
+                    const categorySelect = document.getElementById('category');
+                    
+                    const categoriesData = Array.isArray(categories) ? categories : (categories.data || []);
+                    
+                    categoriesData.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category._id;
+                        option.textContent = category.name;
+                        categorySelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('خطأ في تحميل الفئات:', error);
+            }
+        }
+
+        // اختبار فلترة التاريخ
+        async function testDateFilter() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const category = document.getElementById('category').value;
+            const status = document.getElementById('status').value;
+            const search = document.getElementById('search').value;
+
+            const params = new URLSearchParams();
+            
+            if (dateFrom) params.append('dateFrom', dateFrom);
+            if (dateTo) params.append('dateTo', dateTo);
+            if (category) params.append('category', category);
+            if (status !== 'all') params.append('status', status);
+            if (search.trim()) params.append('search', search.trim());
+
+            showResults(`🔄 جاري اختبار الفلترة...
+المعاملات المرسلة:
+${params.toString() || 'لا توجد فلاتر محددة'}`);
+
+            try {
+                const response = await fetch(`${API_BASE}/costs?${params.toString()}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const costs = Array.isArray(data) ? data : (data.data || []);
+                    
+                    showResults(`✅ نجح الاختبار!
+                    
+📊 النتائج:
+- عدد التكاليف المطابقة: ${costs.length}
+- إجمالي المبلغ: ${data.totalAmount || 'غير محدد'} جنيه
+
+🔍 الفلاتر المطبقة:
+${dateFrom ? `- من تاريخ: ${new Date(dateFrom).toLocaleDateString('ar-EG')}` : ''}
+${dateTo ? `- إلى تاريخ: ${new Date(dateTo).toLocaleDateString('ar-EG')}` : ''}
+${category ? `- الفئة: ${document.getElementById('category').selectedOptions[0].text}` : ''}
+${status !== 'all' ? `- الحالة: ${getStatusText(status)}` : ''}
+${search ? `- البحث: "${search}"` : ''}
+
+📋 أول 3 تكاليف:
+${costs.slice(0, 3).map((cost, index) => `
+${index + 1}. ${cost.description}
+   - المبلغ: ${cost.amount} جنيه
+   - المدفوع: ${cost.paidAmount} جنيه
+   - التاريخ: ${new Date(cost.date).toLocaleDateString('ar-EG')}
+   - الحالة: ${getStatusText(cost.status)}
+   - الفئة: ${cost.category?.name || 'غير محدد'}
+`).join('')}
+
+🌐 رابط API المستخدم:
+${API_BASE}/costs?${params.toString()}`, 'success');
+
+                } else {
+                    showResults(`❌ فشل الاختبار!
+                    
+خطأ من الخادم:
+${data.message || 'خطأ غير معروف'}
+
+📊 تفاصيل الاستجابة:
+${JSON.stringify(data, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResults(`❌ خطأ في الشبكة!
+                
+تفاصيل الخطأ:
+${error.message}
+
+🔧 تأكد من:
+- تشغيل الخادم على المنفذ 5000
+- صحة رابط API
+- اتصال الإنترنت`, 'error');
+            }
+        }
+
+        // اختبار جلب جميع التكاليف
+        async function testAllCosts() {
+            showResults('🔄 جاري جلب جميع التكاليف...');
+
+            try {
+                const response = await fetch(`${API_BASE}/costs`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const costs = Array.isArray(data) ? data : (data.data || []);
+                    
+                    showResults(`✅ تم جلب جميع التكاليف بنجاح!
+                    
+📊 الإحصائيات:
+- إجمالي عدد التكاليف: ${costs.length}
+- إجمالي المبلغ: ${data.totalAmount || 'غير محدد'} جنيه
+
+📈 توزيع الحالات:
+- معلق: ${costs.filter(c => c.status === 'pending').length}
+- مدفوع جزئياً: ${costs.filter(c => c.status === 'partially_paid').length}
+- مدفوع: ${costs.filter(c => c.status === 'paid').length}
+- متأخر: ${costs.filter(c => c.status === 'overdue').length}
+
+📅 نطاق التواريخ:
+${costs.length > 0 ? `
+- أقدم تكلفة: ${new Date(Math.min(...costs.map(c => new Date(c.date)))).toLocaleDateString('ar-EG')}
+- أحدث تكلفة: ${new Date(Math.max(...costs.map(c => new Date(c.date)))).toLocaleDateString('ar-EG')}
+` : 'لا توجد تكاليف'}`, 'success');
+
+                } else {
+                    showResults(`❌ فشل في جلب التكاليف!
+                    
+${data.message || 'خطأ غير معروف'}`, 'error');
+                }
+            } catch (error) {
+                showResults(`❌ خطأ في الشبكة: ${error.message}`, 'error');
+            }
+        }
+
+        // عرض النتائج
+        function showResults(message, type = '') {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.textContent = message;
+            resultsDiv.style.display = 'block';
+            resultsDiv.className = `results ${type}`;
+        }
+
+        // الحصول على نص الحالة
+        function getStatusText(status) {
+            const statusMap = {
+                'pending': 'معلق',
+                'partially_paid': 'مدفوع جزئياً',
+                'paid': 'مدفوع',
+                'overdue': 'متأخر',
+                'cancelled': 'ملغي'
+            };
+            return statusMap[status] || status;
+        }
+
+        // أزرار التاريخ السريعة
+        function setToday() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateFrom').value = today;
+            document.getElementById('dateTo').value = today;
+        }
+
+        function setThisWeek() {
+            const today = new Date();
+            const weekStart = new Date(today.setDate(today.getDate() - today.getDay()));
+            const weekEnd = new Date(today.setDate(today.getDate() - today.getDay() + 6));
+            
+            document.getElementById('dateFrom').value = weekStart.toISOString().split('T')[0];
+            document.getElementById('dateTo').value = weekEnd.toISOString().split('T')[0];
+        }
+
+        function setThisMonth() {
+            const today = new Date();
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            
+            document.getElementById('dateFrom').value = monthStart.toISOString().split('T')[0];
+            document.getElementById('dateTo').value = monthEnd.toISOString().split('T')[0];
+        }
+
+        function setLastMonth() {
+            const today = new Date();
+            const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+            
+            document.getElementById('dateFrom').value = lastMonthStart.toISOString().split('T')[0];
+            document.getElementById('dateTo').value = lastMonthEnd.toISOString().split('T')[0];
+        }
+
+        function clearDates() {
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
+        }
+
+        // تسجيل الدخول عند تحميل الصفحة
+        window.onload = autoLogin;
+    </script>
+</body>
+</html>

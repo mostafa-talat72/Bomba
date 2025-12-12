@@ -286,18 +286,11 @@ class ConflictResolver {
                 this.conflictLog.shift(); // Remove oldest entry
             }
             
-            // Log to console for immediate visibility with error handling
+            // Handle conflict detection silently
             try {
-                console.log('[ConflictResolver] Conflict detected:', {
-                    documentId: conflict.documentId,
-                    collection: conflict.collectionName,
-                    winner: conflict.resolution?.winner || 'unknown',
-                    reason: conflict.resolution?.reason || 'unknown',
-                    localTime: conflict.resolution?.localTimestamp,
-                    atlasTime: conflict.resolution?.atlasTimestamp
-                });
+                // Conflict detected and handled silently
             } catch (error) {
-                console.error('[ConflictResolver] Error logging conflict to console:', error);
+                // Error handled silently
             }
 
         } catch (error) {

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار تحميل البيانات للموظف</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { padding: 8px; width: 300px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+        .error { background: #f8d7da; color: #721c24; }
+        .success { background: #d4edda; color: #155724; }
+        .warning { background: #fff3cd; color: #856404; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .data-count { padding: 5px 10px; margin: 5px; border-radius: 4px; display: inline-block; }
+        .has-data { background: #d4edda; color: #155724; }
+        .no-data { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>اختبار تحميل البيانات للموظف</h1>
+    
+    <!-- تسجيل دخول الموظف -->
+    <div class="section">
+        <h2>1. تسجيل دخول الموظف</h2>
+        <form id="staffLoginForm">
+            <div class="form-group">
+                <label>البريد الإلكتروني:</label>
+                <input type="email" id="staffEmail" value="staff@bomba.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label>كلمة المرور:</label>
+                <input type="password" id="staffPassword" value="staff123" required>
+            </div>
+            
+            <button type="submit">تسجيل دخول الموظف</button>
+        </form>
+        <div id="staffLoginResult"></div>
+    </div>
+
+    <!-- فحص البيانات المحملة -->
+    <div class="section" id="dataCheckSection" style="display: none;">
+        <h2>2. فحص البيانات المحملة</h2>
+        <button onclick="checkLoadedData()">فحص البيانات الحالية</button>
+        <button onclick="retryDataLoad()">إعادة تحميل البيانات</button>
+        <div id="dataCheckResult"></div>
+    </div>
+
+    <!-- مقارنة مع المدير -->
+    <div class="section">
+        <h2>3. مقارنة مع بيانات المدير</h2>
+        <form id="adminLoginForm">
+            <div class="form-group">
+                <label>البريد الإلكتروني للمدير:</label>
+                <input type="email" id="adminEmail" value="admin@bomba.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label>كلمة المرور للمدير:</label>
+                <input type="password" id="adminPassword" value="admin123" required>
+            </div>
+            
+            <button type="submit">تسجيل دخول المدير</button>
+        </form>
+        <div id="adminLoginResult"></div>
+    </div>
+
+    <!-- مقارنة البيانات -->
+    <div class="section" id="comparisonSection" style="display: none;">
+        <h2>4. مقارنة البيانات</h2>
+        <button onclick="compareData()">مقارنة البيانات بين الموظف والمدير</button>
+        <div id="comparisonResult"></div>
+    </div>
+
+    <script>
+        let staffToken = '';
+        let adminToken = '';
+        let staffData = {};
+        let adminData = {};
+
+        // تسجيل دخول الموظف
+        document.getElementById('staffLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const loginData = {
+                email: document.getElementById('staffEmail').value,
+                password: document.getElementById('staffPassword').value
+            };
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(loginData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    staffToken = result.data.token;
+                    
+                    showResult('staffLoginResult', `
+                        ✅ تم تسجيل دخول الموظف بنجاح!
+                        <br>المستخدم: ${result.data.user.name}
+                        <br>الدور: ${result.data.user.role}
+                        <br>الصلاحيات: ${result.data.user.permissions.join(', ')}
+                    `, 'success');
+                    
+                    document.getElementById('dataCheckSection').style.display = 'block';
+                    
+                    // فحص البيانات تلقائياً بعد 2 ثانية
+                    setTimeout(checkLoadedData, 2000);
+                } else {
+                    showResult('staffLoginResult', `❌ فشل تسجيل دخول الموظف: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('staffLoginResult', `❌ خطأ: ${error.message}`, 'error');
+            }
+        });
+
+        // تسجيل دخول المدير
+        document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const loginData = {
+                email: document.getElementById('adminEmail').value,
+                password: document.getElementById('adminPassword').value
+            };
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(loginData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    adminToken = result.data.token;
+                    
+                    showResult('adminLoginResult', `
+                        ✅ تم تسجيل دخول المدير بنجاح!
+                        <br>المستخدم: ${result.data.user.name}
+                        <br>الدور: ${result.data.user.role}
+                    `, 'success');
+                    
+                    document.getElementById('comparisonSection').style.display = 'block';
+                } else {
+                    showResult('adminLoginResult', `❌ فشل تسجيل دخول المدير: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('adminLoginResult', `❌ خطأ: ${error.message}`, 'error');
+            }
+        });
+
+        // فحص البيانات المحملة
+        async function checkLoadedData() {
+            if (!staffToken) {
+                showResult('dataCheckResult', '❌ يرجى تسجيل دخول الموظف أولاً', 'error');
+                return;
+            }
+
+            const endpoints = [
+                { name: 'الطلبات', url: '/api/orders' },
+                { name: 'الفواتير', url: '/api/bills' },
+                { name: 'الجلسات', url: '/api/sessions' },
+                { name: 'الأجهزة', url: '/api/devices' },
+                { name: 'المنيو', url: '/api/menu/items' }
+            ];
+
+            let results = '<h3>نتائج فحص البيانات للموظف:</h3>';
+            staffData = {};
+
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(`http://localhost:5000${endpoint.url}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${staffToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        const count = result.data?.length || 0;
+                        staffData[endpoint.name] = count;
+                        results += `<span class="data-count ${count > 0 ? 'has-data' : 'no-data'}">${endpoint.name}: ${count} عنصر</span>`;
+                    } else {
+                        staffData[endpoint.name] = 'error';
+                        results += `<span class="data-count no-data">${endpoint.name}: خطأ - ${result.message}</span>`;
+                    }
+                } catch (error) {
+                    staffData[endpoint.name] = 'error';
+                    results += `<span class="data-count no-data">${endpoint.name}: خطأ شبكة</span>`;
+                }
+            }
+            
+            document.getElementById('dataCheckResult').innerHTML = results;
+        }
+
+        // إعادة تحميل البيانات
+        async function retryDataLoad() {
+            showResult('dataCheckResult', 'جاري إعادة تحميل البيانات...', 'info');
+            
+            // انتظار ثانية واحدة ثم فحص البيانات مرة أخرى
+            setTimeout(checkLoadedData, 1000);
+        }
+
+        // مقارنة البيانات
+        async function compareData() {
+            if (!adminToken) {
+                showResult('comparisonResult', '❌ يرجى تسجيل دخول المدير أولاً', 'error');
+                return;
+            }
+
+            const endpoints = [
+                { name: 'الطلبات', url: '/api/orders' },
+                { name: 'الفواتير', url: '/api/bills' },
+                { name: 'الجلسات', url: '/api/sessions' },
+                { name: 'الأجهزة', url: '/api/devices' },
+                { name: 'المنيو', url: '/api/menu/items' }
+            ];
+
+            let results = '<h3>مقارنة البيانات:</h3><table border="1" style="width:100%; border-collapse: collapse;"><tr><th>البيانات</th><th>الموظف</th><th>المدير</th><th>الحالة</th></tr>';
+            adminData = {};
+
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(`http://localhost:5000${endpoint.url}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${adminToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        const adminCount = result.data?.length || 0;
+                        const staffCount = staffData[endpoint.name] || 0;
+                        adminData[endpoint.name] = adminCount;
+                        
+                        const status = staffCount === adminCount ? '✅ متطابق' : '❌ مختلف';
+                        const statusColor = staffCount === adminCount ? '#d4edda' : '#f8d7da';
+                        
+                        results += `<tr style="background: ${statusColor}"><td>${endpoint.name}</td><td>${staffCount}</td><td>${adminCount}</td><td>${status}</td></tr>`;
+                    } else {
+                        results += `<tr style="background: #f8d7da"><td>${endpoint.name}</td><td>${staffData[endpoint.name] || 'غير محدد'}</td><td>خطأ</td><td>❌ فشل</td></tr>`;
+                    }
+                } catch (error) {
+                    results += `<tr style="background: #f8d7da"><td>${endpoint.name}</td><td>${staffData[endpoint.name] || 'غير محدد'}</td><td>خطأ شبكة</td><td>❌ فشل</td></tr>`;
+                }
+            }
+            
+            results += '</table>';
+            document.getElementById('comparisonResult').innerHTML = results;
+        }
+
+        function showResult(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.innerHTML = message;
+        }
+    </script>
+</body>
+</html>

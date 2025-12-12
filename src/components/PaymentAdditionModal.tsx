@@ -1,25 +1,13 @@
 import { useState, useEffect } from 'react';
 import { X, DollarSign } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
-
-interface Cost {
-  _id: string;
-  description: string;
-  amount: number;
-  paidAmount: number;
-  remainingAmount: number;
-  category: {
-    name: string;
-    icon: string;
-    color: string;
-  };
-}
+import { Cost } from '../types/cost';
 
 interface PaymentAdditionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (paymentAmount: number, paymentMethod: string, notes?: string) => Promise<void>;
-  cost: Cost | null;
+  cost: any; // Allow any type to avoid conflicts
 }
 
 const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAdditionModalProps) => {

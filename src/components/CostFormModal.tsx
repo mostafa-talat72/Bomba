@@ -66,7 +66,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
     if (editingCost) {
       const categoryId = typeof editingCost.category === 'string' 
         ? editingCost.category 
-        : editingCost.category._id;
+        : editingCost.category?._id || '';
       
       setFormData({
         category: categoryId,
@@ -133,17 +133,13 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
         dueDate: formData.dueDate || undefined,
       };
 
-      console.log('Cost Form - Payload:', payload);
-
       if (editingCost) {
         // Update existing cost
         const response = await api.put(`/costs/${editingCost._id}`, payload);
-        console.log('Cost Form - Update Response:', response);
         showNotification('تم تحديث التكلفة بنجاح', 'success');
       } else {
         // Create new cost
         const response = await api.post('/costs', payload);
-        console.log('Cost Form - Create Response:', response);
         showNotification('تم إضافة التكلفة بنجاح', 'success');
       }
 
