@@ -16,6 +16,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "dev:safe": "concurrently \"npm run server:dev\" \"vite --host 0.0.0.0\"",
     "client:dev": "vite",
     "server:dev": "cd server && npm run dev",
     "build": "vite build",

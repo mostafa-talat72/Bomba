@@ -25,23 +25,31 @@
 
 ## Remaining Issues
 
-### File System Watcher Error
+### File System Watcher Error ✅ FIXED
 **Issue**: `Error: UNKNOWN: unknown error, istat D:\Bomba-main\setup-replica-set.ps1`
 
-**Likely Causes**:
-1. File path reference in another project directory
-2. Vite file watcher trying to access non-existent file
-3. Windows file system permissions
+**Root Cause**: Vite file watcher trying to access setup files from old project path
 
-**Recommended Solutions**:
-1. **Restart the development server** - This often resolves file watcher issues
+**Fixed**: Updated `vite.config.ts` to ignore setup script files from file watcher
+
+**Alternative Solutions** (if issue persists):
+1. **Restart the development server**:
+   ```bash
+   npm run dev
+   ```
 2. **Clear node_modules and reinstall**:
    ```bash
-   rm -rf node_modules
+   rm -rf node_modules package-lock.json
    npm install
+   npm run dev
    ```
-3. **Check for any symbolic links or file references** to the D: drive
-4. **Run as administrator** if it's a permissions issue
+3. **Run frontend and backend separately**:
+   ```bash
+   # Terminal 1
+   npm run server:dev
+   # Terminal 2  
+   npm run client:dev
+   ```
 
 ## Current Status
 

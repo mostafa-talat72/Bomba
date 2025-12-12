@@ -14,6 +14,14 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       }
+    },
+    watch: {
+      ignored: [
+        '**/setup-replica-set.ps1',
+        '**/setup-replica-set.cmd',
+        '**/node_modules/**',
+        '**/.git/**'
+      ]
     }
   },
   optimizeDeps: {
