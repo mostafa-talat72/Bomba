@@ -110,13 +110,10 @@ const sessionSchema = new mongoose.Schema(
     }
 );
 
-// Indexes
-sessionSchema.index({ deviceNumber: 1, status: 1 });
-sessionSchema.index({ status: 1 });
 // Indexes for better query performance
-sessionSchema.index({ startTime: -1 });
-sessionSchema.index({ status: 1, organization: 1 }); // للبحث عن الجلسات النشطة
 sessionSchema.index({ deviceNumber: 1, status: 1 }); // للتحقق من استخدام الجهاز
+sessionSchema.index({ status: 1, organization: 1 }); // للبحث عن الجلسات النشطة
+sessionSchema.index({ startTime: -1 });
 sessionSchema.index({ bill: 1 }); // للربط مع الفواتير
 sessionSchema.index({ table: 1 }); // للربط مع الطاولات
 sessionSchema.index({ organization: 1, createdAt: -1 }); // للتقارير

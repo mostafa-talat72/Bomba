@@ -55,7 +55,6 @@ const inventoryItemSchema = new mongoose.Schema(
         barcode: {
             type: String,
             default: null,
-            sparse: true,
         },
         description: {
             type: String,
