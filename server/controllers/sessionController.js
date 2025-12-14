@@ -156,9 +156,9 @@ const sessionController = {
             // البحث عن فاتورة موجودة للطاولة أو إنشاء فاتورة جديدة
             let bill = null;
             try {
-                // تحديد نوع الفاتورة
+                // تحديد نوع الفاتورة واسم العميل
                 let billType = "cafe";
-                let customerNameForBill = `عميل (${deviceName})`;
+                let customerNameForBill;
                 let tableName = deviceName;
 
                 if (deviceType === "playstation") {
@@ -170,9 +170,13 @@ const sessionController = {
                 // إذا كان هناك table، ابحث عن فاتورة موجودة غير مدفوعة
                 let tableNumber = null;
                 if (table) {
-                    // Get table info for logging
+                    // Get table info for logging and customer name
                     const tableDoc = await Table.findById(table);
                     tableNumber = tableDoc ? tableDoc.number : table;
+                    
+                    // إذا كانت الجلسة مرتبطة بطاولة، اسم العميل يكون اسم الطاولة
+                    customerNameForBill = `طاولة ${tableNumber}`;
+                    tableName = `طاولة ${tableNumber}`;
                     
                     // البحث عن فاتورة موجودة للطاولة (غير مدفوعة بالكامل)
                     const existingBill = await Bill.findOne({
@@ -193,6 +197,15 @@ const sessionController = {
                         });
                     } else {
                         Logger.info(`ℹ️ لم يتم العثور على فاتورة موجودة للطاولة ${tableNumber} - سيتم إنشاء فاتورة جديدة`);
+                    }
+                } else {
+                    // إذا لم تكن مرتبطة بطاولة، اسم العميل يكون عميل + نوع الجهاز
+                    if (deviceType === "playstation") {
+                        customerNameForBill = `عميل بلايستيشن ${deviceName}`;
+                    } else if (deviceType === "computer") {
+                        customerNameForBill = `عميل كمبيوتر ${deviceName}`;
+                    } else {
+                        customerNameForBill = `عميل (${deviceName})`;
                     }
                 }
 
@@ -965,26 +978,17 @@ const sessionController = {
                 // Calculate current session cost
                 const currentCost = await session.calculateCurrentCost();
                 
-                // Determine customer name for new bill
+                // تحديد اسم العميل للفاتورة الجديدة (بدون طاولة)
                 let customerNameForBill = "";
                 const deviceType = session.deviceType;
-                const deviceNumber = session.deviceNumber;
-                const custName = session.customerName;
+                const deviceName = session.deviceName;
                 
                 if (deviceType === "playstation") {
-                    if (!custName || custName.trim() === "") {
-                        customerNameForBill = `عميل بلايستيشن PS${deviceNumber}`;
-                    } else {
-                        customerNameForBill = `${custName.trim()} PS${deviceNumber}`;
-                    }
+                    customerNameForBill = `عميل بلايستيشن ${deviceName}`;
                 } else if (deviceType === "computer") {
-                    if (!custName || custName.trim() === "") {
-                        customerNameForBill = `عميل كمبيوتر PC${deviceNumber}`;
-                    } else {
-                        customerNameForBill = `${custName.trim()} PC${deviceNumber}`;
-                    }
+                    customerNameForBill = `عميل كمبيوتر ${deviceName}`;
                 } else {
-                    customerNameForBill = custName || "عميل";
+                    customerNameForBill = `عميل (${deviceName})`;
                 }
 
                 // Create new bill for the session
@@ -1218,6 +1222,7 @@ const sessionController = {
 
                 sessionBill.table = tableId;
                 sessionBill.billType = "cafe"; // Change to cafe type when linked to table
+                sessionBill.customerName = `طاولة ${table.number}`; // تحديث اسم العميل لاسم الطاولة
                 sessionBill.updatedBy = req.user._id;
                 await sessionBill.save();
                 
@@ -1284,6 +1289,152 @@ const sessionController = {
             res.status(500).json({
                 success: false,
                 message: "خطأ في ربط الجلسة بالطاولة",
+                error: err.message,
+            });
+        }
+    },
+
+    // Update session start time
+    updateSessionStartTime: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { startTime } = req.body;
+
+            // Validate input
+            if (!startTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: "وقت البدء الجديد مطلوب",
+                    error: "Start time is required",
+                });
+            }
+
+            // Find the session
+            const session = await Session.findOne({
+                _id: id,
+                organization: req.user.organization,
+            }).populate("bill");
+
+            if (!session) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الجلسة غير موجودة",
+                    error: "Session not found",
+                });
+            }
+
+            if (session.status !== "active") {
+                return res.status(400).json({
+                    success: false,
+                    message: "لا يمكن تعديل وقت بدء جلسة غير نشطة",
+                    error: "Cannot edit start time of inactive session",
+                });
+            }
+
+            // Parse and validate the new start time
+            const newStartTime = new Date(startTime);
+            const currentTime = new Date();
+
+            // Check if the new start time is valid
+            if (isNaN(newStartTime.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "وقت البدء غير صحيح",
+                    error: "Invalid start time format",
+                });
+            }
+
+            // Check if the new start time is not in the future
+            if (newStartTime > currentTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: "لا يمكن تعديل وقت البدء إلى وقت في المستقبل",
+                    error: "Start time cannot be in the future",
+                });
+            }
+
+            // Check if the new start time is not more than 24 hours ago
+            const twentyFourHoursAgo = new Date(currentTime.getTime() - (24 * 60 * 60 * 1000));
+            if (newStartTime < twentyFourHoursAgo) {
+                return res.status(400).json({
+                    success: false,
+                    message: "لا يمكن تعديل وقت البدء إلى أكثر من 24 ساعة في الماضي",
+                    error: "Start time cannot be more than 24 hours ago",
+                });
+            }
+
+            // Store old start time for logging
+            const oldStartTime = session.startTime;
+
+            // Update session start time
+            session.startTime = newStartTime;
+            session.updatedBy = req.user._id;
+
+            // Update controllers history if it exists
+            if (session.controllersHistory && session.controllersHistory.length > 0) {
+                // Update the first period's start time
+                session.controllersHistory[0].from = newStartTime;
+            }
+
+            // Save the session
+            await session.save();
+
+            // Recalculate current cost with new start time
+            const currentCost = await session.calculateCurrentCost();
+            session.totalCost = currentCost;
+            session.finalCost = currentCost - (session.discount || 0);
+
+            // Update the associated bill if it exists
+            if (session.bill) {
+                try {
+                    const bill = await Bill.findById(session.bill);
+                    if (bill) {
+                        await bill.calculateSubtotal();
+                        await bill.save();
+                    }
+                } catch (billError) {
+                    Logger.error("❌ Error updating bill after start time change:", billError);
+                }
+            }
+
+            // Populate session data
+            await session.populate(["createdBy", "updatedBy", "bill"], "name");
+
+            // Create notification
+            try {
+                await NotificationService.createNotification({
+                    type: "session",
+                    title: "تعديل وقت بدء الجلسة",
+                    message: `تم تعديل وقت بدء جلسة ${session.deviceName} من ${oldStartTime.toLocaleString('ar-EG')} إلى ${newStartTime.toLocaleString('ar-EG')}`,
+                    organization: req.user.organization,
+                    createdBy: req.user._id,
+                });
+            } catch (notificationError) {
+                Logger.error(
+                    "Failed to create start time update notification:",
+                    notificationError
+                );
+            }
+
+            Logger.info(`✓ Session start time updated:`, {
+                sessionId: session._id,
+                deviceName: session.deviceName,
+                oldStartTime: oldStartTime.toISOString(),
+                newStartTime: newStartTime.toISOString(),
+                updatedBy: req.user.name,
+            });
+
+            res.json({
+                success: true,
+                message: "تم تعديل وقت بدء الجلسة بنجاح",
+                data: session,
+            });
+
+        } catch (err) {
+            Logger.error("updateSessionStartTime error:", err);
+            res.status(500).json({
+                success: false,
+                message: "خطأ في تعديل وقت بدء الجلسة",
                 error: err.message,
             });
         }

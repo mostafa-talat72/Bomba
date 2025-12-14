@@ -49,6 +49,13 @@ router.put(
     sessionController.updateSessionCost
 );
 
+// Update session start time (playstation and computer permissions)
+router.put(
+    "/:id/start-time",
+    authorize("playstation", "computer", "all"),
+    sessionController.updateSessionStartTime
+);
+
 // End session (playstation and computer permissions)
 router.put(
     "/:id/end",

@@ -4,6 +4,35 @@ import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
 import { SessionCostDisplay } from '../components/SessionCostDisplay';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ar';
+import utc from 'dayjs/plugin/utc';
+
+// Configure dayjs
+dayjs.locale('ar');
+dayjs.extend(utc);
+
+// دالة لتحويل الأرقام الإنجليزية إلى العربية
+const toArabicNumbers = (str: string): string => {
+  const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return str.replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
+};
+
+// دالة لتنسيق الوقت بالعربية (يوم/شهر/سنة)
+const formatTimeInArabic = (dateTime: dayjs.Dayjs): string => {
+  const formatted = dateTime.format('DD/MM/YYYY - hh:mm A');
+  return toArabicNumbers(formatted)
+    .replace('AM', 'ص')
+    .replace('PM', 'م');
+};
+
+// دالة لتحويل قيمة datetime-local للعربية للعرض
+const formatDateTimeLocalToArabic = (datetimeLocal: string): string => {
+  if (!datetimeLocal) return '';
+  // تحويل من datetime-local إلى dayjs مع إضافة ساعتين للتوقيت المصري
+  const date = dayjs(datetimeLocal);
+  return formatTimeInArabic(date);
+};
 
 const PlayStation: React.FC = () => {
   const location = useLocation();
@@ -48,6 +77,12 @@ const PlayStation: React.FC = () => {
   const [showEndSessionModal, setShowEndSessionModal] = useState(false);
   const [selectedSessionForEnd, setSelectedSessionForEnd] = useState<Session | null>(null);
   const [customerNameForEnd, setCustomerNameForEnd] = useState('');
+
+  // نافذة تعديل وقت بدء الجلسة
+  const [showEditStartTimeModal, setShowEditStartTimeModal] = useState(false);
+  const [selectedSessionForEditTime, setSelectedSessionForEditTime] = useState<Session | null>(null);
+  const [newStartTime, setNewStartTime] = useState('');
+  const [isUpdatingStartTime, setIsUpdatingStartTime] = useState(false);
 
   // نافذة تأكيد تعديل عدد الأذرع
   const [showControllersConfirm, setShowControllersConfirm] = useState(false);
@@ -251,7 +286,7 @@ const PlayStation: React.FC = () => {
       return existingNumber === deviceNumber;
     });
     if (existingDevice) {
-      setAddDeviceError(`رقم الجهاز ${deviceNumber} مستخدم بالفعل في منشأتك فقط. يمكن استخدام نفس الرقم في منشآت أخرى، لكن يجب أن يكون فريد داخل منشأتك. جرب رقم آخر.`);
+      setAddDeviceError(`رقم الجهاز ${toArabicNumbers(String(deviceNumber))} مستخدم بالفعل في منشأتك فقط. يمكن استخدام نفس الرقم في منشآت أخرى، لكن يجب أن يكون فريد داخل منشأتك. جرب رقم آخر.`);
       setIsAddingDevice(false);
       return;
     }
@@ -398,6 +433,74 @@ const PlayStation: React.FC = () => {
     }
   };
 
+  // دالة تعديل وقت بدء الجلسة
+  const handleEditStartTime = async () => {
+    if (!selectedSessionForEditTime || !newStartTime) {
+      showNotification('يرجى تحديد الوقت الجديد', 'error');
+      return;
+    }
+
+    try {
+      setIsUpdatingStartTime(true);
+      
+      // تحويل الوقت المدخل من التوقيت المحلي المصري إلى UTC باستخدام dayjs
+      // طرح ساعتين لتحويل من التوقيت المصري (UTC+2) إلى UTC
+      const localDateTime = dayjs(newStartTime);
+      const newStartDateUTC = localDateTime.subtract(2, 'hour');
+      
+      const currentTime = dayjs();
+      
+      // التحقق من أن الوقت الجديد ليس في المستقبل
+      if (newStartDateUTC.isAfter(currentTime)) {
+        showNotification('لا يمكن تعديل وقت البدء إلى وقت في المستقبل', 'error');
+        return;
+      }
+
+      // التحقق من أن الوقت الجديد معقول (ليس أكثر من 24 ساعة في الماضي)
+      const twentyFourHoursAgo = currentTime.subtract(24, 'hour');
+      if (newStartDateUTC.isBefore(twentyFourHoursAgo)) {
+        showNotification('لا يمكن تعديل وقت البدء إلى أكثر من ٢٤ ساعة في الماضي', 'error');
+        return;
+      }
+
+      // إرسال طلب تعديل وقت البدء للخادم بالتوقيت العالمي UTC
+      await api.updateSessionStartTime(selectedSessionForEditTime.id, {
+        startTime: newStartDateUTC.toISOString()
+      });
+
+      // تحديث البيانات
+      await fetchSessions();
+      await fetchBills();
+
+      showNotification('✅ تم تعديل وقت بدء الجلسة بنجاح', 'success');
+      
+      // إغلاق النافذة وتنظيف البيانات
+      setShowEditStartTimeModal(false);
+      setSelectedSessionForEditTime(null);
+      setNewStartTime('');
+
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء تعديل وقت البدء';
+      showNotification(`❌ ${errorMessage}`, 'error');
+    } finally {
+      setIsUpdatingStartTime(false);
+    }
+  };
+
+  // دالة فتح نافذة تعديل وقت البدء
+  const openEditStartTimeModal = (session: Session) => {
+    setSelectedSessionForEditTime(session);
+    
+    // تحويل وقت بدء الجلسة إلى التوقيت المحلي المصري (UTC+2)
+    const currentStartTime = dayjs(session.startTime).utc().add(2, 'hour');
+    
+    // تنسيق الوقت للـ datetime-local input (YYYY-MM-DDTHH:MM)
+    const formattedTime = currentStartTime.format('YYYY-MM-DDTHH:mm');
+    setNewStartTime(formattedTime);
+    
+    setShowEditStartTimeModal(true);
+  };
+
   const handleEndSession = async (sessionId: string) => {
     // البحث عن الجلسة
     const session = sessions.find(s => s.id === sessionId);
@@ -479,7 +582,7 @@ const PlayStation: React.FC = () => {
       if (res.success && res.data) {
         // تحديث الجلسة في الـ state مباشرة
         await fetchSessions();
-        showNotification(`✅ تم تحديث عدد الأذرع إلى ${newCount}`, 'success');
+        showNotification(`✅ تم تحديث عدد الأذرع إلى ${toArabicNumbers(String(newCount))}`, 'success');
       } else {
         showNotification('❌ فشل في تحديث عدد الأذرع. يرجى المحاولة مرة أخرى.', 'error');
       }
@@ -513,10 +616,10 @@ const PlayStation: React.FC = () => {
         
         // عرض رسالة نجاح مع تفاصيل الدمج إذا حدث
         const billData = result.data?.bill;
-        let message = `✅ تم ربط الجلسة بالطاولة ${tableNumber} بنجاح`;
+        let message = `✅ تم ربط الجلسة بالطاولة ${toArabicNumbers(String(tableNumber))} بنجاح`;
         
         if (billData && billData.sessionsCount > 1) {
-          message += ` (تم دمج الفواتير - ${billData.sessionsCount} جلسات)`;
+          message += ` (تم دمج الفواتير - ${toArabicNumbers(String(billData.sessionsCount))} جلسات)`;
         }
         
         showNotification(message, 'success');
@@ -552,7 +655,7 @@ const PlayStation: React.FC = () => {
       if (response && response.success) {
         const tableNumber = response.data?.unlinkedFromTable;
         showNotification(
-          `✅ تم فك ربط الجلسة من الطاولة ${tableNumber} بنجاح`,
+          `✅ تم فك ربط الجلسة من الطاولة ${toArabicNumbers(String(tableNumber))} بنجاح`,
           'success'
         );
 
@@ -733,7 +836,7 @@ const PlayStation: React.FC = () => {
                   
                   <div className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
                     <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{activeSession.controllers ?? 1} دراع</span>
+                    <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{toArabicNumbers(String(activeSession.controllers ?? 1))} دراع</span>
                   </div>
                   
                   {/* عرض حالة ربط الطاولة مع أزرار الربط/فك الربط */}
@@ -759,7 +862,7 @@ const PlayStation: React.FC = () => {
                           {billTableNumber ? (
                             <div className="flex items-center text-blue-600 dark:text-blue-400">
                               <TableIcon className="h-4 w-4 ml-1" />
-                              مرتبطة بطاولة: {billTableNumber}
+                              مرتبطة بطاولة: {toArabicNumbers(String(billTableNumber))}
                             </div>
                           ) : (
                             <div className="flex items-center text-gray-500 dark:text-gray-400">
@@ -829,7 +932,7 @@ const PlayStation: React.FC = () => {
                       </button>
                       <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm min-w-[80px]">
                         <span className="font-bold text-xl text-orange-600 dark:text-orange-400 block text-center">
-                          {activeSession.controllers ?? 1}
+                          {toArabicNumbers(String(activeSession.controllers ?? 1))}
                         </span>
                         <span className="text-xs text-gray-600 dark:text-gray-400 block text-center">دراع</span>
                       </div>
@@ -864,28 +967,73 @@ const PlayStation: React.FC = () => {
                   </div>
 
                   {/* الأزرار دائماً في نهاية الكارت */}
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-2">
                     {activeSession ? (
-                  <button
-                    onClick={() => handleEndSession(activeSession.id)}
-                    disabled={endingSessions[activeSession.id]}
-                    className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'} text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105`}
-                  >
-                    {endingSessions[activeSession.id] ? (
                       <>
-                        <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        جاري الإنهاء...
+                        {/* أزرار إضافية للجلسة النشطة */}
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          {/* زر تعديل وقت البدء */}
+                          <button
+                            onClick={() => openEditStartTimeModal(activeSession)}
+                            className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                          >
+                            <Edit className="h-4 w-4" />
+                            تعديل الوقت
+                          </button>
+
+                          {/* زر ربط/فك ربط الطاولة */}
+                          {(() => {
+                            const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
+                            const isLinkedToTable = bill ? !!(bill as any)?.table : false;
+                            
+                            return isLinkedToTable ? (
+                              <button
+                                onClick={() => {
+                                  setSelectedSessionForUnlink(activeSession);
+                                  setShowUnlinkTableModal(true);
+                                }}
+                                className="px-3 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                              >
+                                <X className="h-4 w-4" />
+                                فك الربط
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedSessionForLink(activeSession);
+                                  setShowLinkTableModal(true);
+                                }}
+                                className="px-3 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                              >
+                                <TableIcon className="h-4 w-4" />
+                                ربط طاولة
+                              </button>
+                            );
+                          })()}
+                        </div>
+
+                        {/* زر إنهاء الجلسة */}
+                        <button
+                          onClick={() => handleEndSession(activeSession.id)}
+                          disabled={endingSessions[activeSession.id]}
+                          className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'} text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105`}
+                        >
+                          {endingSessions[activeSession.id] ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              جاري الإنهاء...
+                            </>
+                          ) : (
+                            <>
+                              <Square className="h-5 w-5 ml-2" />
+                              إنهاء الجلسة
+                            </>
+                          )}
+                        </button>
                       </>
-                    ) : (
-                      <>
-                        <Square className="h-5 w-5 ml-2" />
-                        إنهاء الجلسة
-                      </>
-                    )}
-                  </button>
                     ) : device.status === 'available' ? (
                     <button
                       onClick={() => openSessionModal(device)}
@@ -1016,9 +1164,9 @@ const PlayStation: React.FC = () => {
                     } ${loadingSession ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <Users className={`h-6 w-6 mx-auto mb-2 ${selectedControllers === num ? 'text-white' : 'text-green-600 dark:text-green-400'}`} />
-                    <span className="text-lg font-bold block">{num}</span>
+                    <span className="text-lg font-bold block">{toArabicNumbers(String(num))}</span>
                     <div className={`text-xs mt-1 font-semibold ${selectedControllers === num ? 'text-green-100' : 'text-gray-600 dark:text-gray-400'}`}>
-                      {selectedDevice.playstationRates && selectedDevice.playstationRates[num] ? `${selectedDevice.playstationRates[num]} ج.م/س` : '-'}
+                      {selectedDevice.playstationRates && selectedDevice.playstationRates[num] ? `${toArabicNumbers(String(selectedDevice.playstationRates[num]))} ج.م/س` : '-'}
                     </div>
                   </button>
                 ))}
@@ -1299,10 +1447,10 @@ const PlayStation: React.FC = () => {
                 الجهاز: {devices.find(d => d.number === selectedSessionForEnd.deviceNumber)?.name || selectedSessionForEnd.deviceName}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                عدد الأذرع: {selectedSessionForEnd.controllers ?? 1}
+                عدد الأذرع: {toArabicNumbers(String(selectedSessionForEnd.controllers ?? 1))}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                بدأت: {new Date(selectedSessionForEnd.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                بدأت: {toArabicNumbers(dayjs(selectedSessionForEnd.startTime).utc().add(2, 'hour').format('hh:mm A')).replace('AM', 'ص').replace('PM', 'م')}
               </p>
             </div>
 
@@ -1418,11 +1566,11 @@ const PlayStation: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg">
                     <span className="text-sm text-gray-600 dark:text-gray-400">العدد الحالي</span>
-                    <span className="font-bold text-red-600 dark:text-red-400">{controllersChangeData.oldCount} دراع</span>
+                    <span className="font-bold text-red-600 dark:text-red-400">{toArabicNumbers(String(controllersChangeData.oldCount))} دراع</span>
                   </div>
                   <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg">
                     <span className="text-sm text-gray-600 dark:text-gray-400">العدد الجديد</span>
-                    <span className="font-bold text-green-600 dark:text-green-400">{controllersChangeData.newCount} دراع</span>
+                    <span className="font-bold text-green-600 dark:text-green-400">{toArabicNumbers(String(controllersChangeData.newCount))} دراع</span>
                   </div>
                 </div>
               </div>
@@ -1492,11 +1640,11 @@ const PlayStation: React.FC = () => {
                   <input type="number" value={newDevice.playstationRates[2]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 2: e.target.value } })} className="w-full border-2 border-blue-300 dark:border-blue-700 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 transition-all" required min="0" step="0.01" />
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">3 دراعات</span>
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">٣ دراعات</span>
                   <input type="number" value={newDevice.playstationRates[3]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 3: e.target.value } })} className="w-full border-2 border-blue-300 dark:border-blue-700 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 transition-all" required min="0" step="0.01" />
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">4 دراعات</span>
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">٤ دراعات</span>
                   <input type="number" value={newDevice.playstationRates[4]} onChange={e => setNewDevice({ ...newDevice, playstationRates: { ...newDevice.playstationRates, 4: e.target.value } })} className="w-full border-2 border-blue-300 dark:border-blue-700 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 transition-all" required min="0" step="0.01" />
                 </div>
               </div>
@@ -1659,7 +1807,7 @@ const PlayStation: React.FC = () => {
                   />
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">3 دراعات</span>
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">٣ دراعات</span>
                   <input 
                     type="number" 
                     value={editingDevice.playstationRates[3]} 
@@ -1671,7 +1819,7 @@ const PlayStation: React.FC = () => {
                   />
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">4 دراعات</span>
+                  <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">٤ دراعات</span>
                   <input 
                     type="number" 
                     value={editingDevice.playstationRates[4]} 
@@ -1766,6 +1914,116 @@ const PlayStation: React.FC = () => {
                   <>
                     <Trash2 className="h-5 w-5 ml-2" />
                     تأكيد الحذف
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تعديل وقت بدء الجلسة */}
+      {showEditStartTimeModal && selectedSessionForEditTime && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                  <Edit className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  تعديل وقت بدء الجلسة
+                </h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditStartTimeModal(false);
+                  setSelectedSessionForEditTime(null);
+                  setNewStartTime('');
+                }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors duration-200"
+                disabled={isUpdatingStartTime}
+              >
+                <X className="h-6 w-6 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* معلومات الجلسة */}
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">معلومات الجلسة:</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">الجهاز:</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{selectedSessionForEditTime.deviceName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">الوقت الحالي:</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {formatTimeInArabic(dayjs(selectedSessionForEditTime.startTime).utc().add(2, 'hour'))}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* حقل تعديل الوقت */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                الوقت الجديد لبدء الجلسة:
+              </label>
+              <input
+                type="datetime-local"
+                value={newStartTime}
+                onChange={(e) => setNewStartTime(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-all duration-200"
+                disabled={isUpdatingStartTime}
+              />
+              {/* عرض الوقت بالعربية */}
+              {newStartTime && (
+                <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                  <p className="text-sm text-blue-800 dark:text-blue-200 font-medium">
+                    📅 الوقت المحدد: {formatDateTimeLocalToArabic(newStartTime)}
+                  </p>
+                </div>
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                ⚠️ لا يمكن تعديل الوقت إلى المستقبل أو أكثر من ٢٤ ساعة في الماضي
+              </p>
+            </div>
+
+            {/* الأزرار */}
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowEditStartTimeModal(false);
+                  setSelectedSessionForEditTime(null);
+                  setNewStartTime('');
+                }}
+                className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-medium"
+                disabled={isUpdatingStartTime}
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleEditStartTime}
+                className={`w-full sm:w-auto px-8 py-3 rounded-xl flex items-center justify-center min-w-[160px] transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                  !newStartTime || isUpdatingStartTime
+                    ? 'bg-blue-400 dark:bg-blue-700 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                } text-white`}
+                disabled={!newStartTime || isUpdatingStartTime}
+              >
+                {isUpdatingStartTime ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري التحديث...
+                  </>
+                ) : (
+                  <>
+                    <Edit className="h-5 w-5 ml-2" />
+                    تحديث الوقت
                   </>
                 )}
               </button>

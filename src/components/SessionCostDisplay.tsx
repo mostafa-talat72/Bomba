@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Clock } from 'lucide-react';
 import { Session, Device } from '../services/api';
 
+// دالة لتحويل الأرقام الإنجليزية إلى العربية
+const toArabicNumbers = (str: string): string => {
+  const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return str.replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
+};
+
 interface SessionCostDisplayProps {
   session: Session;
   device: Device | null;
@@ -118,7 +124,7 @@ export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session,
           <span className="text-sm text-green-700 dark:text-green-300">التكلفة الحالية:</span>
         </div>
         <span className="text-lg font-bold text-green-800 dark:text-green-200">
-          {currentCost} ج.م
+          {toArabicNumbers(String(currentCost))} ج.م
         </span>
       </div>
 
@@ -129,8 +135,8 @@ export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session,
           <span className="text-xs text-blue-700 dark:text-blue-300">المدة:</span>
         </div>
         <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">
-          {duration.hours > 0 && `${duration.hours} س `}
-          {duration.minutes} د
+          {duration.hours > 0 && `${toArabicNumbers(String(duration.hours))} س `}
+          {toArabicNumbers(String(duration.minutes))} د
         </span>
       </div>
 
@@ -138,7 +144,7 @@ export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session,
       <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
         <span className="text-xs text-gray-600 dark:text-gray-400">السعر الحالي:</span>
         <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
-          {getCurrentRate()} ج.م/ساعة
+          {toArabicNumbers(String(getCurrentRate()))} ج.م/ساعة
         </span>
       </div>
     </div>

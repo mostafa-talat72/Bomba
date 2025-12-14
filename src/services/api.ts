@@ -852,6 +852,13 @@ class ApiClient {
     });
   }
 
+  async updateSessionStartTime(sessionId: string, data: { startTime: string }): Promise<ApiResponse<Session>> {
+    return this.request<Session>(`/sessions/${sessionId}/start-time`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   // Orders endpoints
   async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Order[]>> {
     const searchParams = new URLSearchParams();
