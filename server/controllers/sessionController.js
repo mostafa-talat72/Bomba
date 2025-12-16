@@ -1222,13 +1222,15 @@ const sessionController = {
 
             // Create notification
             try {
-                await NotificationService.createNotification({
-                    type: "session",
-                    title: "فك ربط جلسة من طاولة",
-                    message: `تم فك ربط جلسة ${session.deviceName} من الطاولة ${tableNumber}`,
-                    organization: req.user.organization,
-                    createdBy: req.user._id,
-                });
+                if (req.user && req.user.organization) {
+                    await NotificationService.createNotification({
+                        type: "session",
+                        category: "session",
+                        title: "فك ربط جلسة من طاولة",
+                        message: `تم فك ربط جلسة ${session.deviceName} من الطاولة ${tableNumber}`,
+                        createdBy: req.user._id,
+                    }, req.user);
+                }
             } catch (notificationError) {
                 Logger.error(
                     "Failed to create unlink notification:",
@@ -1508,11 +1510,11 @@ const sessionController = {
                 if (req.user && req.user.organization) {
                     await NotificationService.createNotification({
                         type: "session",
+                        category: "session",
                         title: "ربط جلسة بطاولة",
                         message: `تم ربط جلسة ${session.deviceName} بالطاولة ${table.number}`,
-                        organization: req.user.organization,
                         createdBy: req.user._id,
-                    });
+                    }, req.user);
                 }
             } catch (notificationError) {
                 Logger.error(
@@ -1842,13 +1844,15 @@ const sessionController = {
 
             // Create notification
             try {
-                await NotificationService.createNotification({
-                    type: "session",
-                    title: "تغيير طاولة الجلسة",
-                    message: `تم نقل جلسة ${session.deviceName} من طاولة ${oldTableNumber} إلى طاولة ${newTable.number}`,
-                    organization: req.user.organization,
-                    createdBy: req.user._id,
-                });
+                if (req.user && req.user.organization) {
+                    await NotificationService.createNotification({
+                        type: "session",
+                        category: "session",
+                        title: "تغيير طاولة الجلسة",
+                        message: `تم نقل جلسة ${session.deviceName} من طاولة ${oldTableNumber} إلى طاولة ${newTable.number}`,
+                        createdBy: req.user._id,
+                    }, req.user);
+                }
             } catch (notificationError) {
                 Logger.error("Failed to create table change notification:", notificationError);
             }
@@ -2042,13 +2046,15 @@ const sessionController = {
 
             // Create notification
             try {
-                await NotificationService.createNotification({
-                    type: "session",
-                    title: "تعديل وقت بدء الجلسة",
-                    message: `تم تعديل وقت بدء جلسة ${session.deviceName} من ${oldStartTime.toLocaleString('ar-EG')} إلى ${newStartTime.toLocaleString('ar-EG')}`,
-                    organization: req.user.organization,
-                    createdBy: req.user._id,
-                });
+                if (req.user && req.user.organization) {
+                    await NotificationService.createNotification({
+                        type: "session",
+                        category: "session",
+                        title: "تعديل وقت بدء الجلسة",
+                        message: `تم تعديل وقت بدء جلسة ${session.deviceName} من ${oldStartTime.toLocaleString('ar-EG')} إلى ${newStartTime.toLocaleString('ar-EG')}`,
+                        createdBy: req.user._id,
+                    }, req.user);
+                }
             } catch (notificationError) {
                 Logger.error(
                     "Failed to create start time update notification:",

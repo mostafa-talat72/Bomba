@@ -45,13 +45,24 @@ const deviceSchema = new mongoose.Schema(
         },
         // أسعار الساعة لكل عدد دراعات للبلايستيشن
         playstationRates: {
-            type: Map,
-            of: Number,
+            type: Object,
             required: function () {
                 return this.type === "playstation";
             },
             // مثال: { '1': 20, '2': 20, '3': 25, '4': 30 }
             default: undefined,
+            validate: {
+                validator: function(value) {
+                    if (this.type === "playstation" && value) {
+                        // التحقق من أن القيم أرقام موجبة
+                        return Object.values(value).every(rate => 
+                            typeof rate === 'number' && rate > 0
+                        );
+                    }
+                    return true;
+                },
+                message: 'أسعار البلايستيشن يجب أن تكون أرقام موجبة'
+            }
         },
     },
     {

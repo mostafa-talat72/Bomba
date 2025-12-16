@@ -157,7 +157,7 @@ sessionSchema.methods.calculateCost = async function () {
    
     const getRate = (controllers) => {
         if (device.type === "playstation" && device.playstationRates) {
-            return device.playstationRates.get(String(controllers)) || 0;
+            return device.playstationRates[String(controllers)] || 0;
         } else if (device.type === "computer") {
             return device.hourlyRate || 0;
         }
@@ -328,7 +328,7 @@ sessionSchema.methods.calculateCurrentCost = async function () {
 
     const getRate = (controllers) => {
         if (device.type === "playstation" && device.playstationRates) {
-            return device.playstationRates.get(String(controllers)) || 0;
+            return device.playstationRates[String(controllers)] || 0;
         } else if (device.type === "computer") {
             return device.hourlyRate || 0;
         }
@@ -456,7 +456,7 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
             device &&
             device.playstationRates
         ) {
-            return device.playstationRates.get(String(controllers)) || 0;
+            return device.playstationRates[String(controllers)] || 0;
         } else if (this.deviceType === "computer" && device) {
             return device.hourlyRate || 0;
         }
