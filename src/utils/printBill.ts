@@ -291,12 +291,12 @@ export const printBill = (bill: Bill, organizationName?: string) => {
         .footer { 
           margin-top: 12px; 
           text-align: center; 
-          font-size: 0.85em; 
-          color: #333;
+          font-size: 1.1em; 
+          color: #000;
           border-top: 2px dashed #000;
-          padding-top: 8px;
-          padding-bottom: 8px;
-          font-weight: 700;
+          padding-top: 10px;
+          padding-bottom: 10px;
+          font-weight: 800;
         }
         .thank-you { 
           text-align: center; 
@@ -385,7 +385,8 @@ export const printBill = (bill: Bill, organizationName?: string) => {
       <div class="thank-you">شكراً لزيارتكم</div>
       
       <div class="footer">
-        <div><strong>العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
+        <div><strong style="font-weight: 900; font-size: 14px;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
+        <div><strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong></div>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">

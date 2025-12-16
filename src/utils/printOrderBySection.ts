@@ -278,7 +278,8 @@ const printAllSectionsInOnePage = (
         <!-- Footer لكل قسم -->
         <div class="footer">
           شكراً لزيارتكم<br>
-          <strong style="font-weight: 900;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه
+          <strong style="font-weight: 900; font-size: 14px;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه<br>
+          <strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong>
         </div>
       </div>
     `;
@@ -447,11 +448,12 @@ const printAllSectionsInOnePage = (
         .footer {
           margin: 5px auto 0;
           text-align: center;
-          font-size: 9px;
-          color: #666;
+          font-size: 12px;
+          color: #000;
           border-top: 1px dashed #000;
-          padding-top: 5px;
+          padding-top: 8px;
           width: 100%;
+          font-weight: bold;
         }
         @media print {
           body {
@@ -688,11 +690,12 @@ const printSectionOrder = (
         .footer {
           margin: 5px auto 0;
           text-align: center;
-          font-size: 9px;
-          color: #666;
+          font-size: 12px;
+          color: #000;
           border-top: 1px dashed #000;
-          padding-top: 5px;
+          padding-top: 8px;
           width: 100%;
+          font-weight: bold;
         }
         @media print {
           body {
@@ -793,7 +796,8 @@ const printSectionOrder = (
 
       <div class="footer">
         شكراً لزيارتكم<br>
-        <strong style="font-weight: 900;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه
+        <strong style="font-weight: 900; font-size: 14px;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه<br>
+        <strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center;">

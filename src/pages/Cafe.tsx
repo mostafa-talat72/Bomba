@@ -541,7 +541,19 @@ const Cafe: React.FC = () => {
     
     // Sort tables by number within each section
     Object.keys(tablesBySection).forEach(sectionId => {
-      tablesBySection[sectionId].sort((a, b) => a.number - b.number);
+      tablesBySection[sectionId].sort((a, b) => {
+        // Convert to numbers for comparison, fallback to string comparison
+        const aNum = typeof a.number === 'number' ? a.number : parseInt(String(a.number));
+        const bNum = typeof b.number === 'number' ? b.number : parseInt(String(b.number));
+        
+        // If both are valid numbers, sort numerically
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return aNum - bNum;
+        }
+        
+        // Otherwise, sort alphabetically
+        return String(a.number).localeCompare(String(b.number));
+      });
     });
     
     return tablesBySection;
@@ -769,8 +781,19 @@ const Cafe: React.FC = () => {
               menuItemsMap.set(String(item._id), item);
             });
             
+            // Create a compatible order object for printing
+            const printableOrder = {
+              ...order,
+              items: order.items?.map((item: any, index: number) => ({
+                ...item,
+                _id: item._id || item.id || `temp-${index}`, // Add _id if missing
+              })) || [],
+              createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+              updatedAt: (order as any).updatedAt instanceof Date ? (order as any).updatedAt.toISOString() : (order as any).updatedAt,
+            };
+            
             const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
-            printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
+            printOrderBySections(printableOrder, menuSections, menuItemsMap, establishmentName);
           }, 0);
         }
         
@@ -865,8 +888,19 @@ const Cafe: React.FC = () => {
               menuItemsMap.set(String(item._id), item);
             });
             
-              const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
-            printOrderBySections(updatedOrder, menuSections, menuItemsMap, establishmentName);
+            // Create a compatible order object for printing
+            const printableOrder = {
+              ...updatedOrder,
+              items: updatedOrder.items?.map((item: any, index: number) => ({
+                ...item,
+                _id: item._id || item.id || `temp-${index}`, // Add _id if missing
+              })) || [],
+              createdAt: updatedOrder.createdAt instanceof Date ? updatedOrder.createdAt.toISOString() : updatedOrder.createdAt,
+              updatedAt: (updatedOrder as any).updatedAt instanceof Date ? (updatedOrder as any).updatedAt.toISOString() : (updatedOrder as any).updatedAt,
+            };
+            
+            const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
+            printOrderBySections(printableOrder, menuSections, menuItemsMap, establishmentName);
           }, 0);
         }
         
@@ -921,10 +955,21 @@ const Cafe: React.FC = () => {
       menuItemsMap.set(String(item._id), item);
     });
     
+    // Create a compatible order object for printing
+    const printableOrder = {
+      ...order,
+      items: order.items.map((item: any, index: number) => ({
+        ...item,
+        _id: item._id || item.id || `temp-${index}`, // Add _id if missing
+      })),
+      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+      updatedAt: (order as any).updatedAt instanceof Date ? (order as any).updatedAt.toISOString() : (order as any).updatedAt,
+    };
+    
     // Get establishment name from user (already populated from backend)
     const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
     
-    printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
+    printOrderBySections(printableOrder, menuSections, menuItemsMap, establishmentName);
   };
 
   // Show confirm modal
