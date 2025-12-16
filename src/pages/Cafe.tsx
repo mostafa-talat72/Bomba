@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle, DollarSign } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
 import { formatCurrency } from '../utils/formatters';
@@ -184,6 +185,7 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
 OrderItem.displayName = 'OrderItem';
 
 const Cafe: React.FC = () => {
+  const navigate = useNavigate();
   const {
     tableSections,
     tables,
@@ -601,6 +603,33 @@ const Cafe: React.FC = () => {
     setSelectedTable(table);
     setShowTableOrdersModal(true);
     // Orders will be updated automatically by useEffect above
+  };
+
+  // Handle payment management - navigate to billing page
+  const handlePaymentManagement = (table: Table) => {
+    // Find unpaid bill for this table
+    const tableId = table._id || table.id;
+    const unpaidBill = bills.find((bill: any) => {
+      const billTableId = bill.table?._id || bill.table?.id || bill.table;
+      return billTableId === tableId && bill.status !== 'paid' && bill.status !== 'cancelled';
+    });
+
+    if (unpaidBill) {
+      // Close current modal
+      setShowTableOrdersModal(false);
+      setSelectedTable(null);
+      
+      // Navigate to billing page with bill ID as state
+      navigate('/billing', { 
+        state: { 
+          openPaymentModal: true, 
+          billId: unpaidBill._id || unpaidBill.id,
+          tableNumber: table.number 
+        } 
+      });
+    } else {
+      showNotification('لا توجد فاتورة غير مدفوعة لهذه الطاولة', 'warning');
+    }
   };
 
   // Handle add order
@@ -1529,13 +1558,35 @@ const Cafe: React.FC = () => {
 
             {/* Footer */}
             <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-              <button
-                onClick={handleAddOrder}
-                className="w-full bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
-              >
-                <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
-                طلب جديد
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleAddOrder}
+                  className="flex-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
+                >
+                  <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
+                  طلب جديد
+                </button>
+                
+                {/* Payment Management Button - only show if table is occupied */}
+                {(() => {
+                  const tableStatus = tableStatuses[selectedTable.number];
+                  const hasUnpaidBill = tableStatus?.hasUnpaid;
+                  
+                  if (hasUnpaidBill) {
+                    return (
+                      <button
+                        onClick={() => handlePaymentManagement(selectedTable)}
+                        className="flex-1 sm:flex-none sm:min-w-[140px] bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
+                        title="إدارة الدفع"
+                      >
+                        <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
+                        إدارة الدفع
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
             </div>
           </div>
         </div>

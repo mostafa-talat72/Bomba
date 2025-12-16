@@ -5,7 +5,7 @@ import { api, Bill, Order, OrderItem, Session } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import ConfirmModal from '../components/ConfirmModal';
 import { printBill } from '../utils/printBill';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
 import '../styles/billing-animations.css';
@@ -201,12 +201,13 @@ const TableBillItem = memo(({
 });
 
 const Billing = () => {
+  const location = useLocation();
   const { bills, fetchBills, cancelBill, addPartialPayment, showNotification, user, tables, fetchTables, fetchTableSections, tableSections, getTableStatus } = useApp();
 
   // دالة للتحقق من نوع المستخدم
   const checkUserRole = () => {
-    // التحقق من الدور
-    if (user?.role === 'manager' || user?.role === 'owner' || user?.role === 'admin') {
+    // التحقق من الدور - admin هو المدير الوحيد في النظام
+    if (user?.role === 'admin') {
       return true; // مدير
     }
 
@@ -226,7 +227,7 @@ const Billing = () => {
     // return true; // لجعل الجميع مديرين
     // return false; // لجعل الجميع موظفين
 
-    // افتراضياً - موظف
+    // افتراضياً - موظف (staff, cashier, kitchen)
     return false;
   };
 
@@ -291,6 +292,34 @@ const Billing = () => {
       clearInterval(intervalId);
     };
   }, []);
+
+  // Handle navigation from Cafe page to open payment modal
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.openPaymentModal && state?.billId && bills.length > 0 && !showPaymentModal) {
+      // Find the bill by ID
+      const targetBill = bills.find((bill: Bill) => 
+        (bill._id === state.billId || bill.id === state.billId)
+      );
+      
+      if (targetBill) {
+        // Open payment modal for this bill
+        handlePaymentClick(targetBill);
+        
+        // Show notification about which table we're managing
+        if (state.tableNumber) {
+          showNotification(`تم فتح إدارة الدفع لطاولة ${state.tableNumber}`, 'info');
+        }
+        
+        // Clear the state immediately to prevent reopening
+        navigate(location.pathname, { replace: true, state: {} });
+      } else {
+        showNotification('لم يتم العثور على الفاتورة المطلوبة', 'error');
+        // Clear the state even if bill not found
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [bills, location.state, navigate, location.pathname, showPaymentModal]);
 
   // Socket.IO listeners for real-time bill updates
   useEffect(() => {
@@ -416,10 +445,10 @@ const Billing = () => {
       const map: Record<number, { hasUnpaid: boolean; bills: Bill[] }> = {};
       
       tables.forEach((table: Table) => {
-        const tableIdStr = (table._id || table.id).toString();
+        const tableIdStr = table._id.toString();
         const tableBills = bills.filter((bill: Bill) => {
           if (!bill.table) return false;
-          const billTableId = (bill.table._id || bill.table.id || bill.table).toString();
+          const billTableId = (bill.table._id || bill.table).toString();
           return billTableId === tableIdStr;
         });
         const hasUnpaid = tableBills.some((bill: Bill) => 
@@ -555,6 +584,22 @@ const Billing = () => {
   // Helper: Safely get field or fallback
   const safe = (val: unknown, fallback = '-') => (val !== undefined && val !== null && val !== '' ? String(val) : fallback);
 
+  // دالة لإغلاق نافذة الدفع مع مسح الـ state
+  const handleClosePaymentModal = () => {
+    setShowPaymentModal(false);
+    setSelectedBill(null);
+    setPaymentAmount('');
+    setPaymentMethod('cash');
+    setPaymentReference('');
+    setDiscountPercentage('');
+    
+    // مسح navigation state إذا كان موجود
+    const currentState = location.state as any;
+    if (currentState?.openPaymentModal) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  };
+
   const handlePaymentClick = async (bill: Bill) => {
     // إعادة جلب الفاتورة للتأكد من وجود QR code
     try {
@@ -650,10 +695,7 @@ const Billing = () => {
           setSelectedBill(result.data);
         }
         
-        setShowPaymentModal(false);
-        setPaymentAmount('');
-        setPaymentMethod('cash');
-        setPaymentReference('');
+        handleClosePaymentModal();
 
         // لا نستدعي updateBillStatus هنا لأن الـ Backend يتولى ذلك
         // والاستدعاء هنا قد يُعيد حساب الحالة بشكل خاطئ
@@ -885,7 +927,7 @@ const Billing = () => {
     // التحقق من أن المبلغ لا يتجاوز المبلغ المتبقي للجلسة
     const sessionId = selectedSession._id || selectedSession.id;
     const sessionPayment = selectedBill.sessionPayments?.find(
-      sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+      sp => sp.sessionId === sessionId
     );
     
     // حساب المتبقي بنفس الطريقة المستخدمة في الـ UI
@@ -986,8 +1028,13 @@ const Billing = () => {
       // Find table to get its number for notification
       const targetTable = tables.find((t: any) => t._id === newTableNumber);
       
+      if (!targetTable) {
+        showNotification('❌ الطاولة المحددة غير موجودة', 'error');
+        return;
+      }
+      
       const result = await api.updateBill(selectedBill.id || selectedBill._id, {
-        table: newTableNumber
+        table: targetTable._id
       });
       
       if (result && result.success) {
@@ -1132,8 +1179,7 @@ const Billing = () => {
       if (result && result.success) {
         showNotification('تم حذف الفاتورة بنجاح', 'success');
         setShowCancelConfirmModal(false);
-        setShowPaymentModal(false);
-        setSelectedBill(null);
+        handleClosePaymentModal();
         
         // الحذف يتم الآن مباشرة من Local و Atlas في نفس الوقت
         // لذلك يمكن إعادة جلب الفواتير فوراً بدون تأخير
@@ -1696,7 +1742,7 @@ const Billing = () => {
                   
                   return (
                     <button
-                      key={table.id || table._id}
+                      key={table._id}
                       onClick={() => {
                         setSelectedTable(table);
                         setShowTableBillsModal(true);
@@ -1925,7 +1971,7 @@ const Billing = () => {
                 </div>
               </div>
               <button
-                onClick={() => setShowPaymentModal(false)}
+                onClick={handleClosePaymentModal}
                 className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
               >
                 <X className="h-6 w-6" />
@@ -1986,7 +2032,7 @@ const Billing = () => {
                             </div>
                             <button
                               onClick={() => {
-                                setNewTableNumber(selectedBill.table?._id || selectedBill.table?.id || null);
+                                setNewTableNumber(selectedBill.table?._id || null);
                                 setShowChangeTableModal(true);
                               }}
                               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-bold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-md"
@@ -2011,15 +2057,7 @@ const Billing = () => {
                         {selectedBill.sessions?.filter(s => {
                           // عرض الجلسات النشطة فقط التي تنتمي لنفس الطاولة أو بدون طاولة محددة
                           if (s.status !== 'active') return false;
-                          // إذا كانت الفاتورة مرتبطة بطاولة، تحقق من أن الجلسة تنتمي لنفس الطاولة
-                          if (selectedBill.table) {
-                            const billTableId = selectedBill.table._id || selectedBill.table.id || selectedBill.table;
-                            const sessionTableId = s.table?._id || s.table?.id || s.table;
-                            // إذا كانت الجلسة لها طاولة، تحقق من التطابق
-                            if (sessionTableId) {
-                              return billTableId.toString() === sessionTableId.toString();
-                            }
-                          }
+                          // عرض جميع الجلسات النشطة للفاتورة المحددة
                           return true;
                         }).map((session, index) => (
                           <div key={index} className="bg-white dark:bg-gray-800 p-3 rounded border border-red-100 dark:border-red-700">
@@ -2481,7 +2519,7 @@ const Billing = () => {
 
               <div className="flex space-x-3 space-x-reverse">
                 <button
-                  onClick={() => setShowPaymentModal(false)}
+                  onClick={handleClosePaymentModal}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
                 >
                   إغلاق
@@ -2649,7 +2687,7 @@ const Billing = () => {
                 {selectedBill.sessions?.map((session: any) => {
                   const sessionId = session._id || session.id;
                   const sessionPayment = selectedBill.sessionPayments?.find(
-                    sp => (sp.sessionId?._id || sp.sessionId) === sessionId
+                    sp => sp.sessionId === sessionId
                   );
                   
                   // تحديد حالة الجلسة أولاً
@@ -2893,8 +2931,8 @@ const Billing = () => {
                 الفاتورة الحالية: <span className="font-semibold text-gray-900 dark:text-gray-100">#{selectedBill.billNumber}</span>
               </p>
               {(() => {
-                const currentTableId = selectedBill.table?._id || selectedBill.table?.id || selectedBill.table;
-                const currentTable = tables.find((t: any) => (t._id || t.id) === currentTableId);
+                const currentTableId = selectedBill.table?._id || selectedBill.table;
+                const currentTable = tables.find((t: any) => t._id === currentTableId);
                 
                 if (currentTable) {
                   return (
@@ -2926,7 +2964,7 @@ const Billing = () => {
                     return String(a.number).localeCompare(String(b.number), 'ar', { numeric: true });
                   })
                   .map((table: any) => (
-                    <option key={table.id || table._id} value={table._id}>
+                    <option key={table._id} value={table._id}>
                       طاولة {table.number}
                     </option>
                   ))}
