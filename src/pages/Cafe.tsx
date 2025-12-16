@@ -7,6 +7,18 @@ import { printOrderBySections } from '../utils/printOrderBySection';
 import api from '../services/api';
 import { io, Socket } from 'socket.io-client';
 
+// دالة تحويل الأرقام الإنجليزية إلى العربية
+const convertToArabicNumbers = (str: string | number): string => {
+  const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return str.toString().replace(/[0-9]/g, (match) => arabicNumbers[parseInt(match)]);
+};
+
+// دالة تنسيق العملة بالأرقام العربية
+const formatCurrencyArabic = (amount: number): string => {
+  const formatted = formatCurrency(amount);
+  return convertToArabicNumbers(formatted);
+};
+
 interface LocalOrderItem {
   menuItem: string;
   name: string;
@@ -132,7 +144,7 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
             {order.orderNumber}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            {formatCurrency(calculateTotal())}
+            {formatCurrencyArabic(calculateTotal())}
           </div>
         </div>
         <div className="flex items-center space-x-2 space-x-reverse">
@@ -1354,12 +1366,12 @@ const Cafe: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
-                      طاولة {selectedTable.number}
+                      طاولة {convertToArabicNumbers(selectedTable.number)}
                     </h2>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
                         <p className="text-xs sm:text-sm text-white font-medium">
-                          {filteredTableOrders.length} {filteredTableOrders.length === 1 ? 'طلب' : 'طلبات'}
+                          {convertToArabicNumbers(filteredTableOrders.length)} {filteredTableOrders.length === 1 ? 'طلب' : 'طلبات'}
                         </p>
                       </div>
                     </div>
@@ -1406,8 +1418,8 @@ const Cafe: React.FC = () => {
                             <div className="text-xs sm:text-sm font-semibold text-orange-600 dark:text-orange-400 truncate">
                               {(() => {
                                 // Calculate total from items if not available
-                                if (order.finalAmount) return formatCurrency(order.finalAmount);
-                                if (order.totalAmount) return formatCurrency(order.totalAmount);
+                                if (order.finalAmount) return formatCurrencyArabic(order.finalAmount);
+                                if (order.totalAmount) return formatCurrencyArabic(order.totalAmount);
                                 
                                 // Calculate from items
                                 if (order.items && Array.isArray(order.items)) {
@@ -1415,10 +1427,10 @@ const Cafe: React.FC = () => {
                                     const itemTotal = (item.price || 0) * (item.quantity || 0);
                                     return sum + itemTotal;
                                   }, 0);
-                                  return formatCurrency(total);
+                                  return formatCurrencyArabic(total);
                                 }
                                 
-                                return formatCurrency(0);
+                                return formatCurrencyArabic(0);
                               })()}
                             </div>
                           </div>
@@ -1655,7 +1667,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <div className="flex items-center gap-2 mt-1">
                   <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
                     <p className="text-xs sm:text-sm text-white font-medium">
-                      طاولة {table.number}
+                      طاولة {convertToArabicNumbers(table.number)}
                     </p>
                   </div>
                 </div>
@@ -1718,7 +1730,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                           {item.name}
                         </span>
                         <span className="font-semibold text-orange-600 dark:text-orange-400">
-                          {formatCurrency(item.price)}
+                          {formatCurrencyArabic(item.price)}
                         </span>
                       </button>
                     ))
@@ -1788,7 +1800,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                             {item.name}
                                           </span>
                                           <span className="font-semibold text-orange-600 dark:text-orange-400">
-                                            {formatCurrency(item.price)}
+                                            {formatCurrencyArabic(item.price)}
                                           </span>
                                         </button>
                                       ))}
@@ -1813,7 +1825,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               الطلبات
               {orderItems.length > 0 && (
                 <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs font-bold rounded-full">
-                  {orderItems.length}
+                  {convertToArabicNumbers(orderItems.length)}
                 </span>
               )}
             </h3>
@@ -1835,7 +1847,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             {item.name}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {formatCurrency(item.price)} × {item.quantity} = {formatCurrency(item.price * item.quantity)}
+                            {formatCurrencyArabic(item.price)} × {convertToArabicNumbers(item.quantity)} = {formatCurrencyArabic(item.price * item.quantity)}
                           </div>
                         </div>
                         <button
@@ -1848,14 +1860,16 @@ const OrderModal: React.FC<OrderModalProps> = ({
                       <div className="flex items-center space-x-2 space-x-reverse mb-2">
                         <button
                           onClick={() => updateItemQuantity(item.menuItem, -1)}
-                          className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded p-1"
+                          className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg p-2 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95"
                         >
                           <MinusCircle className="h-4 w-4" />
                         </button>
-                        <span className="font-semibold w-8 text-center">{item.quantity}</span>
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 border-2 border-blue-200 dark:border-gray-500 rounded-lg px-3 py-2 min-w-[3rem] shadow-sm">
+                          <span className="font-bold text-lg text-blue-800 dark:text-white text-center block">{convertToArabicNumbers(item.quantity)}</span>
+                        </div>
                         <button
                           onClick={() => updateItemQuantity(item.menuItem, 1)}
-                          className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded p-1"
+                          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg p-2 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95"
                         >
                           <PlusCircle className="h-4 w-4" />
                         </button>
@@ -1876,7 +1890,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <div className="flex items-center justify-between mb-4">
                 <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">الإجمالي:</span>
                 <span className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                  {formatCurrency(calculateTotal())}
+                  {formatCurrencyArabic(calculateTotal())}
                 </span>
               </div>
               <textarea
@@ -1963,7 +1977,7 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                   إدارة الأقسام والطاولات
                 </h2>
                 <p className="text-xs sm:text-sm text-white/80 mt-1">
-                  {tableSections.length} أقسام • {tables.length} طاولات
+                  {convertToArabicNumbers(tableSections.length)} أقسام • {convertToArabicNumbers(tables.length)} طاولات
                 </p>
               </div>
             </div>
@@ -2006,7 +2020,7 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                           <div className="flex items-center gap-2 mb-2">
                             <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">{section.name}</h4>
                             <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-full">
-                              {sectionTables.length} طاولة
+                              {convertToArabicNumbers(sectionTables.length)} طاولة
                             </span>
                           </div>
                           {section.description && (
