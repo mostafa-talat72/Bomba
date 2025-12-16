@@ -77,6 +77,20 @@ router.put(
     sessionController.linkSessionToTable
 );
 
+// Change session table - moves only the specific session to a new table
+router.put(
+    "/:sessionId/change-table",
+    authorize("playstation", "computer", "all"),
+    sessionController.changeSessionTable
+);
+
+// Clean up duplicate session references in bills (admin only)
+router.post(
+    "/cleanup-duplicates",
+    authorize("all"),
+    sessionController.cleanupDuplicateSessionReferences
+);
+
 // Get active sessions (playstation and computer permissions)
 router.get(
     "/status/active",

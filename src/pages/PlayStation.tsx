@@ -611,7 +611,7 @@ const PlayStation: React.FC = () => {
     }
   };
 
-  // ربط الجلسة بطاولة
+  // ربط الجلسة بطاولة أو تغيير طاولة الجلسة
   const handleLinkTableToSession = async (session: Session, tableId: string | null) => {
     // التحقق من وجود tableId
     if (!tableId) {
@@ -619,23 +619,42 @@ const PlayStation: React.FC = () => {
       return;
     }
 
+    // تحديد ما إذا كانت الجلسة مرتبطة بطاولة حالياً
+    const bill = typeof session.bill === 'object' ? session.bill : null;
+    const isCurrentlyLinkedToTable = bill ? !!(bill as any)?.table : false;
+
     try {
       setLinkingTable(true);
       
-      // استخدام الـ endpoint الجديد الذي يدمج الفواتير بذكاء
-      const result = await api.linkSessionToTable(session._id || session.id, tableId);
+      let result;
+      
+      if (isCurrentlyLinkedToTable) {
+        // الجلسة مرتبطة بطاولة حالياً - استخدام API تغيير الطاولة
+        result = await api.changeSessionTable(session._id || session.id, tableId);
+      } else {
+        // الجلسة غير مرتبطة بطاولة - استخدام API الربط العادي
+        result = await api.linkSessionToTable(session._id || session.id, tableId);
+      }
       
       if (result && result.success) {
         // Get table number for notification
         const tableDoc = tables.find(t => t._id === tableId);
         const tableNumber = tableDoc?.number;
         
-        // عرض رسالة نجاح مع تفاصيل الدمج إذا حدث
-        const billData = result.data?.bill;
-        let message = `✅ تم ربط الجلسة بالطاولة ${toArabicNumbers(String(tableNumber))} بنجاح`;
+        let message;
         
-        if (billData && billData.sessionsCount > 1) {
-          message += ` (تم دمج الفواتير - ${toArabicNumbers(String(billData.sessionsCount))} جلسات)`;
+        if (isCurrentlyLinkedToTable && result.data && 'oldTable' in result.data && 'newTable' in result.data) {
+          // رسالة تغيير الطاولة
+          const changeData = result.data as any;
+          message = `✅ تم نقل الجلسة من طاولة ${toArabicNumbers(String(changeData.oldTable))} إلى طاولة ${toArabicNumbers(String(changeData.newTable))} بنجاح`;
+        } else {
+          // رسالة الربط العادي
+          const billData = result.data?.bill;
+          message = `✅ تم ربط الجلسة بالطاولة ${toArabicNumbers(String(tableNumber))} بنجاح`;
+          
+          if (billData && billData.sessionsCount > 1) {
+            message += ` (تم دمج الفواتير - ${toArabicNumbers(String(billData.sessionsCount))} جلسات)`;
+          }
         }
         
         showNotification(message, 'success');
@@ -645,11 +664,13 @@ const PlayStation: React.FC = () => {
         setShowLinkTableModal(false);
         setSelectedSessionForLink(null);
       } else {
-        showNotification(result.message || '❌ فشل في ربط الجلسة بالطاولة', 'error');
+        const errorMessage = result.message || (isCurrentlyLinkedToTable ? '❌ فشل في تغيير طاولة الجلسة' : '❌ فشل في ربط الجلسة بالطاولة');
+        showNotification(errorMessage, 'error');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
-      showNotification(`❌ خطأ في ربط الجلسة بالطاولة: ${errorMsg}`, 'error');
+      const actionText = isCurrentlyLinkedToTable ? 'تغيير طاولة الجلسة' : 'ربط الجلسة بالطاولة';
+      showNotification(`❌ خطأ في ${actionText}: ${errorMsg}`, 'error');
     } finally {
       setLinkingTable(false);
     }
@@ -746,15 +767,39 @@ const PlayStation: React.FC = () => {
               </p>
             </div>
           </div>
-          {user?.role === 'admin' && (
+          <div className="flex gap-3">
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => setShowAddDevice(true)}
+                className="bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 px-6 py-3 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-bold"
+              >
+                <Plus className="h-5 w-5 ml-2" />
+                إضافة جهاز
+              </button>
+            )}
+            
             <button
-              onClick={() => setShowAddDevice(true)}
-              className="w-full sm:w-auto bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 px-6 py-3 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-bold"
+              onClick={async () => {
+                try {
+                  const result = await api.cleanupDuplicateSessionReferences();
+                  if (result.success) {
+                    showNotification(`✅ تم تنظيف ${result.data?.cleanedCount || 0} مرجع مكرر`, 'success');
+                    // تحديث البيانات بعد التنظيف
+                    await Promise.all([fetchSessions(), fetchBills()]);
+                  } else {
+                    showNotification('❌ فشل في تنظيف البيانات', 'error');
+                  }
+                } catch (error) {
+                  console.error('خطأ في تنظيف البيانات:', error);
+                  showNotification('❌ خطأ في تنظيف البيانات', 'error');
+                }
+              }}
+              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-bold text-sm"
+              title="تنظيف البيانات المكررة - إصلاح الجلسات الموجودة في عدة فواتير"
             >
-              <Plus className="h-5 w-5 ml-2" />
-              إضافة جهاز
+              🧹 تنظيف
             </button>
-          )}
+          </div>
         </div>
       </div>
 
@@ -949,33 +994,64 @@ const PlayStation: React.FC = () => {
                     {activeSession ? (
                       <>
                         {/* أزرار إضافية للجلسة النشطة */}
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                          {/* زر تعديل وقت البدء */}
-                          <button
-                            onClick={() => openEditStartTimeModal(activeSession)}
-                            className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
-                          >
-                            <Edit className="h-4 w-4" />
-                            تعديل الوقت
-                          </button>
+                        {(() => {
+                          const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
+                          const isLinkedToTable = bill ? !!(bill as any)?.table : false;
+                          
+                          return isLinkedToTable ? (
+                            // إذا كانت مرتبطة بطاولة: زر تعديل الوقت + زر تغيير الطاولة + زر فك الربط
+                            <>
+                              <div className="grid grid-cols-2 gap-2 mb-2">
+                                {/* زر تعديل وقت البدء */}
+                                <button
+                                  onClick={() => openEditStartTimeModal(activeSession)}
+                                  className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                  تعديل الوقت
+                                </button>
 
-                          {/* زر ربط/فك ربط الطاولة */}
-                          {(() => {
-                            const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
-                            const isLinkedToTable = bill ? !!(bill as any)?.table : false;
-                            
-                            return isLinkedToTable ? (
+                                {/* زر تغيير الطاولة */}
+                                <button
+                                  onClick={() => {
+                                    setSelectedSessionForLink(activeSession);
+                                    setShowLinkTableModal(true);
+                                  }}
+                                  className="px-3 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                                >
+                                  <TableIcon className="h-4 w-4" />
+                                  تغيير الطاولة
+                                </button>
+                              </div>
+                              
+                              {/* زر فك الربط */}
+                              <div className="mb-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedSessionForUnlink(activeSession);
+                                    setCustomerNameForUnlink(activeSession.customerName || '');
+                                    setShowUnlinkTableModal(true);
+                                  }}
+                                  className="w-full px-3 py-2 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                                >
+                                  <X className="h-4 w-4" />
+                                  فك ربط الطاولة
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            // إذا لم تكن مرتبطة بطاولة: زر تعديل الوقت + زر ربط طاولة
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              {/* زر تعديل وقت البدء */}
                               <button
-                                onClick={() => {
-                                  setSelectedSessionForUnlink(activeSession);
-                                  setShowUnlinkTableModal(true);
-                                }}
-                                className="px-3 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                                onClick={() => openEditStartTimeModal(activeSession)}
+                                className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                               >
-                                <X className="h-4 w-4" />
-                                فك الربط
+                                <Edit className="h-4 w-4" />
+                                تعديل الوقت
                               </button>
-                            ) : (
+
+                              {/* زر ربط طاولة */}
                               <button
                                 onClick={() => {
                                   setSelectedSessionForLink(activeSession);
@@ -986,9 +1062,9 @@ const PlayStation: React.FC = () => {
                                 <TableIcon className="h-4 w-4" />
                                 ربط طاولة
                               </button>
-                            );
-                          })()}
-                        </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* زر إنهاء الجلسة */}
                         <button
@@ -1216,7 +1292,13 @@ const PlayStation: React.FC = () => {
                 <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
                   <TableIcon className="h-6 w-6 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">ربط الجلسة بطاولة</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {(() => {
+                    const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
+                    const isCurrentlyLinkedToTable = bill ? !!(bill as any)?.table : false;
+                    return isCurrentlyLinkedToTable ? 'تغيير طاولة الجلسة' : 'ربط الجلسة بطاولة';
+                  })()}
+                </h2>
               </div>
               <button
                 onClick={() => {

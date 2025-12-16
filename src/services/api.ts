@@ -825,6 +825,28 @@ class ApiClient {
     return response;
   }
 
+  async changeSessionTable(sessionId: string, newTableId: string): Promise<ApiResponse<{ session: any; bill: any; oldTable: string; newTable: string }>> {
+    const response = await this.request<{ session: any; bill: any; oldTable: string; newTable: string }>(`/sessions/${sessionId}/change-table`, {
+      method: 'PUT',
+      body: JSON.stringify({ newTableId }),
+    });
+    if (response.success && response.data) {
+      if (response.data.session) {
+        response.data.session = this.normalizeData(response.data.session);
+      }
+      if (response.data.bill) {
+        response.data.bill = this.normalizeData(response.data.bill);
+      }
+    }
+    return response;
+  }
+
+  async cleanupDuplicateSessionReferences(): Promise<ApiResponse<{ cleanedCount: number }>> {
+    return this.request<{ cleanedCount: number }>('/sessions/cleanup-duplicates', {
+      method: 'POST',
+    });
+  }
+
   async getActiveSessions(): Promise<ApiResponse<Session[]>> {
     const response = await this.request<Session[]>('/sessions/status/active');
     if (response.success && response.data) {
