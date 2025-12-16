@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار تغيير الطاولة في صفحة الفواتير</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>اختبار تغيير الطاولة في صفحة الفواتير</h1>
+        <p>هذا الاختبار يتحقق من أن تغيير الطاولة في صفحة الفواتير يحدث الجلسات المرتبطة بالفاتورة لتشير إلى الطاولة الجديدة.</p>
+
+        <div class="test-section">
+            <h3>1. إنشاء فاتورة تحتوي على جلسة</h3>
+            <button onclick="createBillWithSession()">إنشاء فاتورة مع جلسة</button>
+            <div id="createResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. تغيير طاولة الفاتورة</h3>
+            <input type="text" id="billId" placeholder="معرف الفاتورة" />
+            <input type="text" id="newTableId" placeholder="معرف الطاولة الجديدة" />
+            <button onclick="changeTableInBilling()">تغيير الطاولة</button>
+            <div id="changeResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. التحقق من تحديث الجلسة</h3>
+            <input type="text" id="sessionId" placeholder="معرف الجلسة" />
+            <button onclick="checkSessionTable()">فحص طاولة الجلسة</button>
+            <div id="checkResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. اختبار شامل</h3>
+            <button onclick="runFullTest()">تشغيل الاختبار الشامل</button>
+            <div id="fullTestResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let authToken = '';
+
+        // تسجيل الدخول أولاً
+        async function login() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@example.com',
+                        password: 'admin123'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.token;
+                    return true;
+                } else {
+                    console.error('فشل تسجيل الدخول');
+                    return false;
+                }
+            } catch (error) {
+                console.error('خطأ في تسجيل الدخول:', error);
+                return false;
+            }
+        }
+
+        async function createBillWithSession() {
+            const resultDiv = document.getElementById('createResult');
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'جاري إنشاء الفاتورة...';
+
+            try {
+                if (!authToken) {
+                    const loginSuccess = await login();
+                    if (!loginSuccess) {
+                        throw new Error('فشل في تسجيل الدخول');
+                    }
+                }
+
+                // إنشاء فاتورة جديدة
+                const billResponse = await fetch(`${API_BASE}/bills`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        customerName: 'طاولة 1',
+                        table: '507f1f77bcf86cd799439011', // معرف طاولة وهمي
+                        billType: 'gaming'
+                    })
+                });
+
+                if (!billResponse.ok) {
+                    throw new Error(`فشل في إنشاء الفاتورة: ${billResponse.status}`);
+                }
+
+                const billData = await billResponse.json();
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `تم إنشاء الفاتورة بنجاح:
+معرف الفاتورة: ${billData.data._id}
+رقم الفاتورة: ${billData.data.billNumber}
+الطاولة: ${billData.data.table || 'غير محدد'}`;
+
+                // حفظ معرف الفاتورة للاستخدام في الاختبارات الأخرى
+                document.getElementById('billId').value = billData.data._id;
+
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `خطأ: ${error.message}`;
+            }
+        }
+
+        async function changeTableInBilling() {
+            const resultDiv = document.getElementById('changeResult');
+            const billId = document.getElementById('billId').value;
+            const newTableId = document.getElementById('newTableId').value;
+
+            if (!billId || !newTableId) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'يرجى إدخال معرف الفاتورة ومعرف الطاولة الجديدة';
+                return;
+            }
+
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'جاري تغيير الطاولة...';
+
+            try {
+                if (!authToken) {
+                    const loginSuccess = await login();
+                    if (!loginSuccess) {
+                        throw new Error('فشل في تسجيل الدخول');
+                    }
+                }
+
+                const response = await fetch(`${API_BASE}/bills/${billId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        table: newTableId
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `فشل في تحديث الفاتورة: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `تم تغيير الطاولة بنجاح:
+الرسالة: ${data.message}
+الطاولة الجديدة: ${data.data.table || 'غير محدد'}
+عدد الجلسات: ${data.data.sessions ? data.data.sessions.length : 0}`;
+
+                // إذا كانت هناك جلسات، احفظ معرف أول جلسة للاختبار
+                if (data.data.sessions && data.data.sessions.length > 0) {
+                    document.getElementById('sessionId').value = data.data.sessions[0];
+                }
+
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `خطأ: ${error.message}`;
+            }
+        }
+
+        async function checkSessionTable() {
+            const resultDiv = document.getElementById('checkResult');
+            const sessionId = document.getElementById('sessionId').value;
+
+            if (!sessionId) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'يرجى إدخال معرف الجلسة';
+                return;
+            }
+
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'جاري فحص الجلسة...';
+
+            try {
+                if (!authToken) {
+                    const loginSuccess = await login();
+                    if (!loginSuccess) {
+                        throw new Error('فشل في تسجيل الدخول');
+                    }
+                }
+
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`فشل في جلب الجلسة: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `معلومات الجلسة:
+معرف الجلسة: ${data.data._id}
+اسم الجهاز: ${data.data.deviceName}
+الطاولة: ${data.data.table || 'غير محدد'}
+الفاتورة: ${data.data.bill || 'غير محدد'}
+الحالة: ${data.data.status}`;
+
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `خطأ: ${error.message}`;
+            }
+        }
+
+        async function runFullTest() {
+            const resultDiv = document.getElementById('fullTestResult');
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'جاري تشغيل الاختبار الشامل...';
+
+            try {
+                let testResults = [];
+
+                // الخطوة 1: تسجيل الدخول
+                testResults.push('1. تسجيل الدخول...');
+                if (!authToken) {
+                    const loginSuccess = await login();
+                    if (!loginSuccess) {
+                        throw new Error('فشل في تسجيل الدخول');
+                    }
+                }
+                testResults.push('✓ تم تسجيل الدخول بنجاح');
+
+                // الخطوة 2: إنشاء فاتورة أولى
+                testResults.push('\n2. إنشاء فاتورة أولى...');
+                const bill1Response = await fetch(`${API_BASE}/bills`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        customerName: 'طاولة 1',
+                        table: '507f1f77bcf86cd799439011',
+                        billType: 'gaming'
+                    })
+                });
+
+                if (!bill1Response.ok) {
+                    throw new Error(`فشل في إنشاء الفاتورة الأولى: ${bill1Response.status}`);
+                }
+
+                const bill1Data = await bill1Response.json();
+                const bill1Id = bill1Data.data._id;
+                testResults.push(`✓ تم إنشاء الفاتورة الأولى: ${bill1Data.data.billNumber}`);
+
+                // الخطوة 3: إنشاء فاتورة ثانية
+                testResults.push('\n3. إنشاء فاتورة ثانية...');
+                const bill2Response = await fetch(`${API_BASE}/bills`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        customerName: 'طاولة 2',
+                        table: '507f1f77bcf86cd799439012',
+                        billType: 'cafe'
+                    })
+                });
+
+                if (!bill2Response.ok) {
+                    throw new Error(`فشل في إنشاء الفاتورة الثانية: ${bill2Response.status}`);
+                }
+
+                const bill2Data = await bill2Response.json();
+                testResults.push(`✓ تم إنشاء الفاتورة الثانية: ${bill2Data.data.billNumber}`);
+
+                // الخطوة 4: اختبار Case 1 - دمج الفواتير
+                testResults.push('\n4. اختبار Case 1 - دمج الفواتير...');
+                testResults.push(`   تغيير طاولة الفاتورة الأولى إلى طاولة الفاتورة الثانية`);
+                
+                const mergeResponse = await fetch(`${API_BASE}/bills/${bill1Id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        table: '507f1f77bcf86cd799439012' // نفس طاولة الفاتورة الثانية
+                    })
+                });
+
+                if (!mergeResponse.ok) {
+                    const errorData = await mergeResponse.json();
+                    throw new Error(errorData.message || `فشل في دمج الفواتير: ${mergeResponse.status}`);
+                }
+
+                const mergeData = await mergeResponse.json();
+                testResults.push('✓ تم دمج الفواتير بنجاح');
+                testResults.push(`✓ الفاتورة المدمجة: ${mergeData.data.billNumber || 'غير محدد'}`);
+                testResults.push(`✓ الرسالة: ${mergeData.message}`);
+
+                // الخطوة 5: إنشاء فاتورة جديدة لاختبار Case 2
+                testResults.push('\n5. اختبار Case 2 - تغيير طاولة فقط...');
+                const bill3Response = await fetch(`${API_BASE}/bills`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        customerName: 'طاولة 3',
+                        table: '507f1f77bcf86cd799439013',
+                        billType: 'gaming'
+                    })
+                });
+
+                if (bill3Response.ok) {
+                    const bill3Data = await bill3Response.json();
+                    const bill3Id = bill3Data.data._id;
+                    testResults.push(`✓ تم إنشاء فاتورة جديدة: ${bill3Data.data.billNumber}`);
+
+                    // تغيير إلى طاولة فارغة
+                    const changeResponse = await fetch(`${API_BASE}/bills/${bill3Id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            table: '507f1f77bcf86cd799439014' // طاولة فارغة
+                        })
+                    });
+
+                    if (changeResponse.ok) {
+                        const changeData = await changeResponse.json();
+                        testResults.push('✓ تم تغيير الطاولة بنجاح (Case 2)');
+                        testResults.push(`✓ الطاولة الجديدة: ${changeData.data.table || 'غير محدد'}`);
+                    } else {
+                        testResults.push('⚠️ فشل في تغيير الطاولة (Case 2)');
+                    }
+                } else {
+                    testResults.push('⚠️ فشل في إنشاء فاتورة للاختبار الثاني');
+                }
+
+                resultDiv.className = 'result success';
+                resultDiv.textContent = testResults.join('\n');
+
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `خطأ في الاختبار الشامل: ${error.message}`;
+            }
+        }
+
+        // تسجيل الدخول عند تحميل الصفحة
+        window.onload = function() {
+            login();
+        };
+    </script>
+</body>
+</html>

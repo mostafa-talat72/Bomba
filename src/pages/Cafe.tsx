@@ -709,7 +709,7 @@ const Cafe: React.FC = () => {
   };
 
   // Save order
-  const handleSaveOrder = async () => {
+  const handleSaveOrder = async (shouldPrint: boolean = false) => {
     if (!selectedTable || currentOrderItems.length === 0) {
       showNotification('يرجى إضافة عنصر واحد على الأقل', 'error');
       return;
@@ -746,19 +746,21 @@ const Cafe: React.FC = () => {
       if (order) {
         showNotification('تم إضافة الطلب بنجاح', 'success');
         
-        // Print order in background (non-blocking)
-        setTimeout(() => {
-          const menuItemsMap = new Map();
-          menuItems.forEach(item => {
-            menuItemsMap.set(item.id, item);
-            menuItemsMap.set(item._id, item);
-            menuItemsMap.set(String(item.id), item);
-            menuItemsMap.set(String(item._id), item);
-          });
-          
-          const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
-          printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
-        }, 0);
+        // Print order if requested or by default
+        if (shouldPrint) {
+          setTimeout(() => {
+            const menuItemsMap = new Map();
+            menuItems.forEach(item => {
+              menuItemsMap.set(item.id, item);
+              menuItemsMap.set(item._id, item);
+              menuItemsMap.set(String(item.id), item);
+              menuItemsMap.set(String(item._id), item);
+            });
+            
+            const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
+            printOrderBySections(order, menuSections, menuItemsMap, establishmentName);
+          }, 0);
+        }
         
         // Update table status immediately (optimistic update)
         if (selectedTable) {
@@ -804,7 +806,7 @@ const Cafe: React.FC = () => {
   };
 
   // Update order
-  const handleUpdateOrder = async () => {
+  const handleUpdateOrder = async (shouldPrint: boolean = false) => {
     if (!selectedOrder || currentOrderItems.length === 0) {
       showNotification('يرجى إضافة عنصر واحد على الأقل', 'error');
       return;
@@ -840,19 +842,21 @@ const Cafe: React.FC = () => {
       if (updatedOrder) {
         showNotification('تم تحديث الطلب بنجاح', 'success');
         
-        // Print updated order in background (non-blocking)
-        setTimeout(() => {
-          const menuItemsMap = new Map();
-          menuItems.forEach(item => {
-            menuItemsMap.set(item.id, item);
-            menuItemsMap.set(item._id, item);
-            menuItemsMap.set(String(item.id), item);
-            menuItemsMap.set(String(item._id), item);
-          });
-          
-          const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
-          printOrderBySections(updatedOrder, menuSections, menuItemsMap, establishmentName);
-        }, 0);
+        // Print updated order if requested
+        if (shouldPrint) {
+          setTimeout(() => {
+            const menuItemsMap = new Map();
+            menuItems.forEach(item => {
+              menuItemsMap.set(item.id, item);
+              menuItemsMap.set(item._id, item);
+              menuItemsMap.set(String(item.id), item);
+              menuItemsMap.set(String(item._id), item);
+            });
+            
+              const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
+            printOrderBySections(updatedOrder, menuSections, menuItemsMap, establishmentName);
+          }, 0);
+        }
         
         // Update table orders immediately (optimistic)
         if (selectedTable) {
@@ -1115,7 +1119,8 @@ const Cafe: React.FC = () => {
           updateItemNotes={updateItemNotes}
           removeItemFromOrder={removeItemFromOrder}
           calculateTotal={calculateOrderTotal}
-          onSave={handleSaveOrder}
+          onSave={() => handleSaveOrder(false)}
+          onSaveAndPrint={() => handleSaveOrder(true)}
           onClose={() => {
             setShowOrderModal(false);
             setSelectedTable(null);
@@ -1149,7 +1154,8 @@ const Cafe: React.FC = () => {
           updateItemNotes={updateItemNotes}
           removeItemFromOrder={removeItemFromOrder}
           calculateTotal={calculateOrderTotal}
-          onSave={handleUpdateOrder}
+          onSave={() => handleUpdateOrder(false)}
+          onSaveAndPrint={() => handleUpdateOrder(true)}
           onClose={() => {
             setShowEditOrderModal(false);
             setSelectedTable(null);
@@ -1508,6 +1514,7 @@ interface OrderModalProps {
   removeItemFromOrder: (menuItemId: string) => void;
   calculateTotal: () => number;
   onSave: () => void;
+  onSaveAndPrint: () => void;
   onClose: () => void;
   loading: boolean;
   isEdit: boolean;
@@ -1533,6 +1540,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   removeItemFromOrder,
   calculateTotal,
   onSave,
+  onSaveAndPrint,
   onClose,
   loading,
   isEdit,
@@ -1896,6 +1904,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
             {loading ? 'جاري الحفظ...' : isEdit ? 'تحديث' : 'حفظ'}
+          </button>
+          <button
+            onClick={onSaveAndPrint}
+            disabled={loading || orderItems.length === 0}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Printer className="h-4 w-4" />
+            {loading ? 'جاري الحفظ...' : isEdit ? 'تحديث وطباعة' : 'حفظ وطباعة'}
           </button>
         </div>
       </div>

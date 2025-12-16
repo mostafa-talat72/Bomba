@@ -658,7 +658,7 @@ export const updateBill = async (req, res) => {
             const newTableId = table ? table.toString() : null;
             
             if (oldTableId !== newTableId && newTableId) {
-                Logger.info(`🔄 تغيير الطاولة من ${oldTableId} إلى ${newTableId}`);
+                Logger.info(`🔄 تغيير الطاولة من ${oldTableId} إلى ${newTableId} للفاتورة ${bill.billNumber}`);
                 
                 // البحث عن فاتورة موجودة في الطاولة الجديدة (غير مدفوعة بالكامل)
                 const existingBillInNewTable = await Bill.findOne({
@@ -669,89 +669,83 @@ export const updateBill = async (req, res) => {
                 }).sort({ createdAt: -1 });
 
                 if (existingBillInNewTable) {
-                    // دمج الفاتورة الحالية مع الفاتورة الموجودة في الطاولة الجديدة
-                    Logger.info(`🔗 دمج الفاتورة ${bill.billNumber} مع الفاتورة الموجودة ${existingBillInNewTable.billNumber}`);
+                    // Case 1: الطاولة الجديدة تحتوي على فاتورة غير مدفوعة - دمج الفواتير
+                    Logger.info(`📋 CASE 1: الطاولة الجديدة تحتوي على فاتورة غير مدفوعة - دمج مع ${existingBillInNewTable.billNumber}`);
                     
-                    // حفظ معلومات الفاتورة القديمة قبل الحذف
+                    // حفظ معلومات الفاتورة القديمة قبل الدمج
                     const oldBillId = bill._id;
                     const oldBillNumber = bill.billNumber;
                     const oldBillOrders = [...(bill.orders || [])];
                     const oldBillSessions = [...(bill.sessions || [])];
                     
-                    // نقل الطلبات
+                    // STEP 1: إضافة الطلبات والجلسات إلى الفاتورة الموجودة في الطاولة الجديدة
                     if (oldBillOrders.length > 0) {
+                        // إضافة الطلبات إلى الفاتورة الجديدة
                         existingBillInNewTable.orders.push(...oldBillOrders);
                         
-                        // تحديث table و bill في الطلبات
+                        // تحديث مرجع الفاتورة والطاولة في الطلبات
                         await Order.updateMany(
                             { _id: { $in: oldBillOrders } },
                             { $set: { table: newTableId, bill: existingBillInNewTable._id } }
                         );
-                        Logger.info(`✓ تم نقل ${oldBillOrders.length} طلب إلى الفاتورة ${existingBillInNewTable.billNumber}`);
+                        Logger.info(`✅ STEP 1a: تم إضافة ${oldBillOrders.length} طلب إلى الفاتورة ${existingBillInNewTable.billNumber}`);
                     }
                     
-                    // نقل الجلسات
                     if (oldBillSessions.length > 0) {
+                        // إضافة الجلسات إلى الفاتورة الجديدة
                         existingBillInNewTable.sessions.push(...oldBillSessions);
                         
-                        // تحديث bill في الجلسات
+                        // تحديث مرجع الفاتورة والطاولة في الجلسات
                         await Session.updateMany(
                             { _id: { $in: oldBillSessions } },
-                            { $set: { bill: existingBillInNewTable._id } }
+                            { $set: { bill: existingBillInNewTable._id, table: newTableId } }
                         );
-                        Logger.info(`✓ تم نقل ${oldBillSessions.length} جلسة إلى الفاتورة ${existingBillInNewTable.billNumber}`);
+                        Logger.info(`✅ STEP 1b: تم إضافة ${oldBillSessions.length} جلسة إلى الفاتورة ${existingBillInNewTable.billNumber} والطاولة ${newTableId}`);
                     }
                     
-                    // حفظ الفاتورة أولاً لتحديث arrays
+                    // STEP 2: حفظ الفاتورة المدمجة وإعادة حساب المجاميع
+                    await existingBillInNewTable.calculateSubtotal();
                     await existingBillInNewTable.save();
+                    Logger.info(`✅ STEP 2: تم حفظ الفاتورة المدمجة ${existingBillInNewTable.billNumber}`);
                     
-                    // إعادة تحميل الفاتورة من قاعدة البيانات مع populate كامل
-                    const reloadedBill = await Bill.findById(existingBillInNewTable._id)
-                        .populate('orders')
-                        .populate('sessions')
-                        .populate('table');
-                    
-                    if (!reloadedBill) {
-                        throw new Error('فشل في إعادة تحميل الفاتورة المدمجة');
-                    }
-                    
-                    Logger.info(`✓ تم إعادة تحميل الفاتورة مع ${reloadedBill.orders.length} طلب و ${reloadedBill.sessions.length} جلسة`);
-                    
-                    // إعادة حساب المجاميع
-                    await reloadedBill.calculateSubtotal();
-                    await reloadedBill.save();
-                    
-                    Logger.info(`✅ تم حفظ الفاتورة المدمجة ${reloadedBill.billNumber}`, {
-                        subtotal: reloadedBill.subtotal,
-                        total: reloadedBill.total
-                    });
-                    
-                    // حذف الفاتورة القديمة بعد نقل كل شيء
+                    // STEP 3: حذف الفاتورة القديمة (التي أصبحت فارغة)
                     const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                     await deleteFromBothDatabases(bill, 'bills', `bill ${oldBillNumber}`);
-                    Logger.info(`✓ تم حذف الفاتورة القديمة ${oldBillNumber}`);
+                    Logger.info(`✅ STEP 3: تم حذف الفاتورة القديمة ${oldBillNumber}`);
                     
                     // تحديث حالة الطاولة القديمة
                     if (oldTableId) {
                         await updateTableStatusIfNeeded(oldTableId, req.user.organization, req.io);
                     }
                     
-                    // Emit Socket.IO event
+                    // إعادة تحميل الفاتورة المدمجة مع البيانات الكاملة
+                    const reloadedBill = await Bill.findById(existingBillInNewTable._id)
+                        .populate('orders')
+                        .populate('sessions')
+                        .populate('table')
+                        .populate('createdBy', 'name')
+                        .populate('updatedBy', 'name');
+                    
+                    // Emit Socket.IO events
                     if (req.io) {
                         req.io.notifyBillUpdate("deleted", { _id: oldBillId, billNumber: oldBillNumber });
                         req.io.notifyBillUpdate("updated", reloadedBill);
                     }
                     
-                    Logger.info(`✅ تم دمج الفواتير بنجاح`);
+                    Logger.info(`✅ تم دمج الفواتير بنجاح - الفاتورة النهائية: ${reloadedBill.billNumber}`);
                     
-                    // إرجاع الفاتورة المدمجة (محمّلة بالفعل مع orders و sessions)
+                    // إرجاع الفاتورة المدمجة
                     return res.json({
                         success: true,
-                        message: "تم دمج الفاتورة مع الفاتورة الموجودة في الطاولة الجديدة",
+                        message: "تم دمج الفاتورة مع الفاتورة الموجودة في الطاولة الجديدة بنجاح",
                         data: reloadedBill,
                     });
+                    
                 } else {
-                    // لا توجد فاتورة في الطاولة الجديدة - فقط غير الطاولة
+                    // Case 2: الطاولة الجديدة لا تحتوي على فاتورة غير مدفوعة - تغيير الطاولة فقط
+                    Logger.info(`📋 CASE 2: الطاولة الجديدة فارغة - تغيير طاولة الفاتورة ${bill.billNumber}`);
+                    
+                    // تحديث طاولة الفاتورة
                     bill.table = newTableId;
                     
                     // تحديث اسم العميل ليكون اسم الطاولة الجديدة
@@ -762,8 +756,6 @@ export const updateBill = async (req, res) => {
                         Logger.info(`✓ تم تحديث اسم العميل إلى: ${bill.customerName}`);
                     }
                     
-                    Logger.info(`✓ تم تغيير الطاولة إلى ${newTableId}`);
-                    
                     // تحديث جميع الطلبات المرتبطة بهذه الفاتورة
                     if (bill.orders && bill.orders.length > 0) {
                         try {
@@ -771,9 +763,22 @@ export const updateBill = async (req, res) => {
                                 { _id: { $in: bill.orders } },
                                 { $set: { table: newTableId } }
                             );
-                            Logger.info(`✓ تم تحديث ${bill.orders.length} طلب للطاولة الجديدة`);
+                            Logger.info(`✅ تم تحديث ${bill.orders.length} طلب للطاولة الجديدة`);
                         } catch (orderUpdateError) {
                             Logger.error('خطأ في تحديث الطلبات:', orderUpdateError);
+                        }
+                    }
+                    
+                    // تحديث جميع الجلسات المرتبطة بهذه الفاتورة لتشير إلى الطاولة الجديدة
+                    if (bill.sessions && bill.sessions.length > 0) {
+                        try {
+                            await Session.updateMany(
+                                { _id: { $in: bill.sessions } },
+                                { $set: { table: newTableId } }
+                            );
+                            Logger.info(`✅ تم تحديث ${bill.sessions.length} جلسة للطاولة الجديدة`);
+                        } catch (sessionUpdateError) {
+                            Logger.error('خطأ في تحديث الجلسات:', sessionUpdateError);
                         }
                     }
                     
@@ -781,6 +786,8 @@ export const updateBill = async (req, res) => {
                     if (oldTableId) {
                         await updateTableStatusIfNeeded(oldTableId, req.user.organization, req.io);
                     }
+                    
+                    Logger.info(`✅ تم تغيير طاولة الفاتورة ${bill.billNumber} إلى الطاولة ${newTableId}`);
                 }
             }
         }

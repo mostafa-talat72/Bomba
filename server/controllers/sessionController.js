@@ -1351,29 +1351,136 @@ const sessionController = {
             let finalBill = null;
 
             if (existingTableBill && existingTableBill._id.toString() !== sessionBill._id.toString()) {
-                // Case 1: Table has an existing unpaid bill - merge bills
-                Logger.info(`✓ Found existing bill on table ${table.number}, merging...`, {
+                // Case 1: الطاولة تحتوي على فاتورة غير مدفوعة بالكامل
+                Logger.info(`🔗 CASE 1: Table ${table.number} has existing unpaid bill - following same process as changeSessionTable`, {
                     sessionBillId: sessionBill._id,
                     sessionBillNumber: sessionBill.billNumber,
                     tableBillId: existingTableBill._id,
                     tableBillNumber: existingTableBill.billNumber,
                 });
 
-                // Merge bills using helper function
-                finalBill = await mergeBills(sessionBill, existingTableBill, session, req.user._id);
+                const sessionIdStr = session._id.toString();
+
+                // STEP 1: Add session to table bill first (same as changeSessionTable)
+                const sessionAlreadyInTableBill = existingTableBill.sessions.some(s => {
+                    const sIdStr = s._id ? s._id.toString() : s.toString();
+                    return sIdStr === sessionIdStr;
+                });
+                
+                if (!sessionAlreadyInTableBill) {
+                    existingTableBill.sessions.push(session._id);
+                    Logger.info(`✅ STEP 1: Added session to table bill`, {
+                        sessionId: sessionIdStr,
+                        tableBillId: existingTableBill._id.toString(),
+                        totalSessions: existingTableBill.sessions.length,
+                    });
+                }
+                
+                await existingTableBill.calculateSubtotal();
+                await existingTableBill.save();
+
+                // Update session's bill reference
+                session.bill = existingTableBill._id;
+                await session.save();
+
+                // STEP 2: Remove session from old bill (same as changeSessionTable)
+                sessionBill.sessions = sessionBill.sessions.filter(s => {
+                    const sIdStr = s._id ? s._id.toString() : s.toString();
+                    return sIdStr !== sessionIdStr;
+                });
+                
+                Logger.info(`✅ STEP 2: Removed session from old bill`, {
+                    sessionId: sessionIdStr,
+                    sessionBillId: sessionBill._id.toString(),
+                    remainingSessions: sessionBill.sessions.length,
+                });
+                
+                await sessionBill.calculateSubtotal();
+                await sessionBill.save();
+
+                // STEP 3: Check if old bill is now empty and merge with destination bill (same as changeSessionTable)
+                const updatedSessionBill = await Bill.findById(sessionBill._id);
+                if (updatedSessionBill && 
+                    updatedSessionBill.sessions.length === 0 && 
+                    updatedSessionBill.orders.length === 0) {
+                    
+                    Logger.info(`🔄 STEP 3: Old bill ${updatedSessionBill.billNumber} is now empty, merging with table bill...`, {
+                        billId: updatedSessionBill._id,
+                        destinationBill: existingTableBill.billNumber,
+                    });
+                    
+                    // Copy any useful information from empty bill to table bill
+                    let mergeNotes = '';
+                    if (updatedSessionBill.notes && updatedSessionBill.notes.trim()) {
+                        mergeNotes = `\n[مدمج من ${updatedSessionBill.billNumber}]: ${updatedSessionBill.notes}`;
+                    }
+                    
+                    // Copy any payments from empty bill to table bill
+                    if (updatedSessionBill.payments && updatedSessionBill.payments.length > 0) {
+                        Logger.info(`💰 Transferring ${updatedSessionBill.payments.length} payments from empty bill to table bill`);
+                        existingTableBill.payments = existingTableBill.payments || [];
+                        existingTableBill.payments.push(...updatedSessionBill.payments);
+                        
+                        // Update paid amount
+                        const transferredAmount = updatedSessionBill.payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                        existingTableBill.paid = (existingTableBill.paid || 0) + transferredAmount;
+                        
+                        mergeNotes += `\n[تم نقل مدفوعات بقيمة ${transferredAmount} ج.م]`;
+                    }
+                    
+                    // Copy any partial payments
+                    if (updatedSessionBill.partialPayments && updatedSessionBill.partialPayments.length > 0) {
+                        Logger.info(`💳 Transferring ${updatedSessionBill.partialPayments.length} partial payments from empty bill`);
+                        existingTableBill.partialPayments = existingTableBill.partialPayments || [];
+                        existingTableBill.partialPayments.push(...updatedSessionBill.partialPayments);
+                    }
+                    
+                    // Add merge information to table bill notes
+                    const currentNotes = existingTableBill.notes || '';
+                    existingTableBill.notes = currentNotes + `\n[تم دمج فاتورة فارغة ${updatedSessionBill.billNumber}]` + mergeNotes;
+                    
+                    // Update table bill totals
+                    await existingTableBill.calculateSubtotal();
+                    existingTableBill.remaining = existingTableBill.total - (existingTableBill.paid || 0);
+                    await existingTableBill.save();
+                    
+                    // Delete the empty bill
+                    await updatedSessionBill.deleteOne();
+                    
+                    Logger.info(`✅ STEP 3: Successfully merged empty bill ${updatedSessionBill.billNumber} with table bill ${existingTableBill.billNumber}`, {
+                        finalBillTotal: existingTableBill.total,
+                        finalBillPaid: existingTableBill.paid,
+                        finalBillRemaining: existingTableBill.remaining
+                    });
+                    
+                } else if (updatedSessionBill) {
+                    Logger.info(`ℹ️ Old bill ${updatedSessionBill.billNumber} still has content, keeping it`, {
+                        sessionsCount: updatedSessionBill.sessions.length,
+                        ordersCount: updatedSessionBill.orders.length,
+                    });
+                }
+                
+                finalBill = existingTableBill;
 
             } else {
-                // Case 2: No existing bill on table - transfer session bill to table
-                Logger.info(`✓ No existing bill on table ${table.number}, transferring session bill...`, {
+                // Case 2: الطاولة لا تحتوي على فاتورة غير مدفوعة - ربط الطاولة بفاتورة الجلسة الحالية
+                Logger.info(`📌 CASE 2: Table ${table.number} has no unpaid bill - linking table to session bill`, {
                     sessionBillId: sessionBill._id,
                     sessionBillNumber: sessionBill.billNumber,
                 });
 
+                // إضافة الطاولة إلى فاتورة الجلسة الحالية
                 sessionBill.table = tableId;
-                sessionBill.billType = "cafe"; // Change to cafe type when linked to table
-                sessionBill.customerName = `طاولة ${table.number}`; // تحديث اسم العميل لاسم الطاولة
+                sessionBill.billType = "cafe"; // تغيير نوع الفاتورة إلى كافيه عند الربط بطاولة
+                sessionBill.customerName = `طاولة ${table.number}`; // تحديث اسم العميل
                 sessionBill.updatedBy = req.user._id;
+                
+                // إضافة ملاحظة عن الربط
+                const linkNote = `\n[تم ربط الفاتورة بالطاولة ${table.number}]`;
+                sessionBill.notes = (sessionBill.notes || '') + linkNote;
+                
                 await sessionBill.save();
+                Logger.info(`✅ Linked table ${table.number} to session bill ${sessionBill.billNumber}`);
                 
                 finalBill = sessionBill;
             }
