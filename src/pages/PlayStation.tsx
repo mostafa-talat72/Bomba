@@ -443,29 +443,38 @@ const PlayStation: React.FC = () => {
     try {
       setIsUpdatingStartTime(true);
       
-      // تحويل الوقت المدخل من التوقيت المحلي المصري إلى UTC باستخدام dayjs
-      // طرح ساعتين لتحويل من التوقيت المصري (UTC+2) إلى UTC
+      // تحويل الوقت المدخل من datetime-local بشكل صحيح
+      // datetime-local يعطي الوقت المحلي، نحتاج لمعاملته كوقت محلي مصري
       const localDateTime = dayjs(newStartTime);
-      const newStartDateUTC = localDateTime.subtract(2, 'hour');
       
       const currentTime = dayjs();
       
-      // التحقق من أن الوقت الجديد ليس في المستقبل
-      if (newStartDateUTC.isAfter(currentTime)) {
+      // التحقق من أن الوقت الجديد ليس في المستقبل (مقارنة بالتوقيت المحلي)
+      if (localDateTime.isAfter(currentTime)) {
         showNotification('لا يمكن تعديل وقت البدء إلى وقت في المستقبل', 'error');
         return;
       }
 
       // التحقق من أن الوقت الجديد معقول (ليس أكثر من 24 ساعة في الماضي)
       const twentyFourHoursAgo = currentTime.subtract(24, 'hour');
-      if (newStartDateUTC.isBefore(twentyFourHoursAgo)) {
+      if (localDateTime.isBefore(twentyFourHoursAgo)) {
         showNotification('لا يمكن تعديل وقت البدء إلى أكثر من ٢٤ ساعة في الماضي', 'error');
         return;
       }
 
-      // إرسال طلب تعديل وقت البدء للخادم بالتوقيت العالمي UTC
+      // إنشاء Date object من القيم المحلية مباشرة لتجنب تحويل المنطقة الزمنية
+      const year = localDateTime.year();
+      const month = localDateTime.month(); // dayjs months are 0-indexed
+      const day = localDateTime.date();
+      const hour = localDateTime.hour();
+      const minute = localDateTime.minute();
+      
+      // إنشاء Date object بالتوقيت المحلي
+      const localDate = new Date(year, month, day, hour, minute);
+      
+      // إرسال طلب تعديل وقت البدء للخادم
       await api.updateSessionStartTime(selectedSessionForEditTime.id, {
-        startTime: newStartDateUTC.toISOString()
+        startTime: localDate.toISOString()
       });
 
       // تحديث البيانات
@@ -491,11 +500,18 @@ const PlayStation: React.FC = () => {
   const openEditStartTimeModal = (session: Session) => {
     setSelectedSessionForEditTime(session);
     
-    // تحويل وقت بدء الجلسة إلى التوقيت المحلي المصري (UTC+2)
-    const currentStartTime = dayjs(session.startTime).utc().add(2, 'hour');
+    // تحويل وقت بدء الجلسة من UTC إلى التوقيت المحلي للعرض
+    // session.startTime مخزن بـ UTC، نحتاج لتحويله للتوقيت المحلي
+    const utcStartTime = new Date(session.startTime);
     
-    // تنسيق الوقت للـ datetime-local input (YYYY-MM-DDTHH:MM)
-    const formattedTime = currentStartTime.format('YYYY-MM-DDTHH:mm');
+    // تحويل إلى التوقيت المحلي وتنسيقه للـ datetime-local input
+    const year = utcStartTime.getFullYear();
+    const month = String(utcStartTime.getMonth() + 1).padStart(2, '0');
+    const day = String(utcStartTime.getDate()).padStart(2, '0');
+    const hours = String(utcStartTime.getHours()).padStart(2, '0');
+    const minutes = String(utcStartTime.getMinutes()).padStart(2, '0');
+    
+    const formattedTime = `${year}-${month}-${day}T${hours}:${minutes}`;
     setNewStartTime(formattedTime);
     
     setShowEditStartTimeModal(true);
@@ -839,7 +855,7 @@ const PlayStation: React.FC = () => {
                     <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{toArabicNumbers(String(activeSession.controllers ?? 1))} دراع</span>
                   </div>
                   
-                  {/* عرض حالة ربط الطاولة مع أزرار الربط/فك الربط */}
+                  {/* عرض حالة ربط الطاولة فقط (بدون أزرار) */}
                   {activeSession.bill && (() => {
                     const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
                     const billTable = bill ? (bill as any)?.table : null;
@@ -857,56 +873,18 @@ const PlayStation: React.FC = () => {
                     }
                     
                     return (
-                      <div className="space-y-2">
-                        <div className="flex items-center text-sm">
-                          {billTableNumber ? (
-                            <div className="flex items-center text-blue-600 dark:text-blue-400">
-                              <TableIcon className="h-4 w-4 ml-1" />
-                              مرتبطة بطاولة: {toArabicNumbers(String(billTableNumber))}
-                            </div>
-                          ) : (
-                            <div className="flex items-center text-gray-500 dark:text-gray-400">
-                              <TableIcon className="h-4 w-4 ml-1" />
-                              غير مرتبطة بطاولة
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {billTableNumber ? (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setSelectedSessionForLink(activeSession);
-                                  setShowLinkTableModal(true);
-                                }}
-                                className="flex-1 px-3 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg text-xs font-bold transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
-                              >
-                                تغيير الطاولة
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedSessionForUnlink(activeSession);
-                                  setCustomerNameForUnlink(activeSession.customerName || '');
-                                  setShowUnlinkTableModal(true);
-                                }}
-                                className="flex-1 px-3 py-2 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg text-xs font-bold transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
-                              >
-                                <X className="h-3 w-3" />
-                                فك الربط
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setSelectedSessionForLink(activeSession);
-                                setShowLinkTableModal(true);
-                              }}
-                              className="w-full px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-xs font-bold transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
-                            >
-                              ربط بطاولة
-                            </button>
-                          )}
-                        </div>
+                      <div className="flex items-center text-sm justify-center p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
+                        {billTableNumber ? (
+                          <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
+                            <TableIcon className="h-4 w-4 ml-1" />
+                            مرتبطة بطاولة: {toArabicNumbers(String(billTableNumber))}
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-gray-500 dark:text-gray-400">
+                            <TableIcon className="h-4 w-4 ml-1" />
+                            غير مرتبطة بطاولة
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
