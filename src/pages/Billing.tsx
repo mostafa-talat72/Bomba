@@ -600,6 +600,29 @@ const Billing = () => {
     }
   };
 
+  // دالة للذهاب إلى صفحة الطلبات وفتح نافذة الطاولة
+  const handleGoToTableOrders = () => {
+    if (!selectedBill?.table) return;
+    
+    
+    const tableId = selectedBill.table._id || selectedBill.table;
+    const tableNumber = selectedBill.table.number;
+    
+    
+    
+    // إغلاق نافذة الدفع
+    handleClosePaymentModal();
+    
+    // الانتقال إلى صفحة الطلبات مع معرف الطاولة
+    navigate('/cafe', {
+      state: {
+        openTableModal: true,
+        tableId,
+        tableNumber
+      }
+    });
+  };
+
   const handlePaymentClick = async (bill: Bill) => {
     // إعادة جلب الفاتورة للتأكد من وجود QR code
     try {
@@ -1970,12 +1993,25 @@ const Billing = () => {
                   <p className="text-sm text-blue-100 mt-1">فاتورة #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</p>
                 </div>
               </div>
-              <button
-                onClick={handleClosePaymentModal}
-                className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
-              >
-                <X className="h-6 w-6" />
-              </button>
+              <div className="flex items-center gap-3">
+                {/* زر الذهاب إلى الطاولة - يظهر فقط إذا كانت الفاتورة مرتبطة بطاولة */}
+                {selectedBill?.table && (
+                  <button
+                    onClick={handleGoToTableOrders}
+                    className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white hover:scale-105 transform"
+                    title={`تعديل طلبات طاولة ${selectedBill.table.number}`}
+                  >
+                    <TableIcon className="h-5 w-5" />
+                    <span className="text-sm font-medium">تعديل الطلبات</span>
+                  </button>
+                )}
+                <button
+                  onClick={handleClosePaymentModal}
+                  className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6">

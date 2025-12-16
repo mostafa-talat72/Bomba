@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle, DollarSign } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
 import { formatCurrency } from '../utils/formatters';
@@ -186,6 +186,7 @@ OrderItem.displayName = 'OrderItem';
 
 const Cafe: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     tableSections,
     tables,
@@ -268,6 +269,40 @@ const Cafe: React.FC = () => {
   useEffect(() => {
     tablesRef.current = tables;
   }, [tables]);
+
+  // Handle navigation from Billing page to open table modal
+  useEffect(() => {
+    const state = location.state as any;
+   
+    if (state?.openTableModal && state?.tableId && tables.length > 0) {
+     
+      // Find the table by ID
+      const targetTable = tables.find((table: Table) => 
+        (table._id === state.tableId || table.id === state.tableId)
+      );
+      
+      
+      if (targetTable) {
+        // Add a small delay to ensure UI is ready
+        setTimeout(() => {
+          // Open table modal for this table
+          handleTableClick(targetTable);
+          
+          // Show notification about which table we're opening
+          if (state.tableNumber) {
+            showNotification(`تم فتح طاولة ${state.tableNumber}`, 'info');
+          }
+        }, 100);
+        
+        // Clear the state immediately to prevent reopening
+        navigate(location.pathname, { replace: true, state: {} });
+      } else {
+        showNotification('لم يتم العثور على الطاولة المطلوبة', 'error');
+        // Clear the state even if table not found
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [tables, location.state, navigate, location.pathname]);
 
   // Load data on mount - only once per page visit
   useEffect(() => {
