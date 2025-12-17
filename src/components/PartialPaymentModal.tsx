@@ -2,32 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { X, Receipt, CheckCircle, Plus, Minus } from 'lucide-react';
 import { Bill, Order, OrderItem } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
+import { aggregateItemsWithPayments } from '../utils/billAggregation';
 
 interface PartialPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   bill: Bill | null;
-  onPaymentSubmit: (items: PaymentItem[], paymentMethod: 'cash' | 'card' | 'transfer') => Promise<void>;
+  onPaymentSubmit: (items: Array<{ itemId: string; quantity: number }>, paymentMethod: 'cash' | 'card' | 'transfer') => Promise<void>;
   isProcessing: boolean;
-}
-
-interface PaymentItem {
-  orderItemId: string;
-  itemName: string;
-  price: number;
-  quantity: number;
-  orderId: string;
-}
-
-interface SimpleItem {
-  id: string;
-  name: string;
-  price: number;
-  totalQuantity: number;
-  paidQuantity: number;
-  remainingQuantity: number;
-  orderId: string;
-  orderItemId: string;
 }
 
 const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
@@ -54,77 +36,22 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
     }
   }, [bill?.itemPayments?.length, bill?.orders?.length, bill?.paid, bill?.remaining]);
 
-  // تحديث فوري للبيانات عند تغيير itemPayments
-  useEffect(() => {
-    // إعادة حساب البيانات عند تحديث المدفوعات
-    if (bill?.itemPayments) {
-      // فرض إعادة رسم المكون
-      setSelectedItems({});
-      
-      // إعادة حساب البيانات بعد فترة قصيرة
-      setTimeout(() => {
-        setSelectedItems(prev => ({ ...prev }));
-      }, 50);
-    }
-  }, [bill?.itemPayments, bill?.paid, bill?.remaining]);
-
   if (!isOpen || !bill) return null;
 
-  // تحويل العناصر إلى قائمة مبسطة مع تجميع الأصناف المتشابهة
-  const getSimpleItems = (): SimpleItem[] => {
-    const itemsMap = new Map<string, SimpleItem>();
-    
-    bill.orders?.forEach((order: Order) => {
-      order.items?.forEach((orderItem: OrderItem) => {
-        // إنشاء مفتاح فريد للصنف (اسم + سعر)
-        const itemKey = `${orderItem.name}-${orderItem.price}`;
-        
-        // سيتم حساب الكمية المدفوعة لاحقاً للصنف المجمع
+  // استخدام aggregateItemsWithPayments للحصول على بيانات دقيقة
+  const aggregatedItems = aggregateItemsWithPayments(
+    bill.orders || [],
+    bill.itemPayments || [],
+    bill.status,
+    bill.paid,
+    bill.total
+  );
 
-        if (itemsMap.has(itemKey)) {
-          // إضافة الكمية للصنف الموجود
-          const existingItem = itemsMap.get(itemKey)!;
-          existingItem.totalQuantity += orderItem.quantity;
-          
-          // لا نحتاج لتجميع معرفات الطلبات - سنتعامل معها في handleSubmit
-        } else {
-          // إنشاء صنف جديد
-          itemsMap.set(itemKey, {
-            id: itemKey,
-            name: orderItem.name,
-            price: orderItem.price,
-            totalQuantity: orderItem.quantity,
-            paidQuantity: 0, // سيتم حسابه لاحقاً
-            remainingQuantity: 0, // سيتم حسابه لاحقاً
-            orderId: order._id,
-            orderItemId: `${order._id}-${orderItem.name}`
-          });
-        }
-      });
-    });
-
-    // إعادة حساب الكميات المدفوعة والمتبقية للأصناف المجمعة
-    itemsMap.forEach((item) => {
-      const totalPaidForItem = bill.itemPayments?.reduce((sum, payment) => {
-        if (payment.itemName === item.name && 
-            Math.abs(payment.pricePerUnit - item.price) < 0.01) {
-          return sum + (payment.paidQuantity || 0);
-        }
-        return sum;
-      }, 0) || 0;
-      
-      item.paidQuantity = totalPaidForItem;
-      item.remainingQuantity = Math.max(0, item.totalQuantity - totalPaidForItem);
-    });
-
-    // إرجاع فقط الأصناف التي لها كمية متبقية
-    return Array.from(itemsMap.values()).filter(item => item.remainingQuantity > 0);
-  };
-
-  const simpleItems = getSimpleItems();
+  // فلترة العناصر التي لها كمية متبقية فقط
+  const availableItems = aggregatedItems.filter(item => item.remainingQuantity > 0);
 
   const handleQuantityChange = (itemId: string, change: number) => {
-    const item = simpleItems.find(i => i.id === itemId);
+    const item = availableItems.find(i => i.id === itemId);
     if (!item) return;
 
     const currentQuantity = selectedItems[itemId] || 0;
@@ -137,7 +64,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   };
 
   const handlePayAll = (itemId: string) => {
-    const item = simpleItems.find(i => i.id === itemId);
+    const item = availableItems.find(i => i.id === itemId);
     if (!item) return;
 
     setSelectedItems(prev => ({
@@ -147,53 +74,14 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   };
 
   const handleSubmit = async () => {
-    const itemsToPay: PaymentItem[] = [];
+    const itemsToPay: Array<{ itemId: string; quantity: number }> = [];
     
     Object.entries(selectedItems).forEach(([itemId, quantity]) => {
       if (quantity > 0) {
-        const item = simpleItems.find(i => i.id === itemId);
-        if (item) {
-          // البحث عن العناصر الأصلية في الطلبات للحصول على معرفات صحيحة
-          let remainingQuantityToPay = quantity;
-          
-          bill.orders?.forEach((order: Order) => {
-            if (remainingQuantityToPay <= 0) return;
-            
-            order.items?.forEach((orderItem: OrderItem) => {
-              if (remainingQuantityToPay <= 0) return;
-              
-              // التحقق من تطابق الصنف
-              if (orderItem.name === item.name && 
-                  Math.abs(orderItem.price - item.price) < 0.01) {
-                
-                // حساب الكمية المتاحة من هذا العنصر
-                const paidForThisItem = bill.itemPayments?.reduce((sum, payment) => {
-                  if (payment.itemName === orderItem.name && 
-                      Math.abs(payment.pricePerUnit - orderItem.price) < 0.01) {
-                    return sum + (payment.paidQuantity || 0);
-                  }
-                  return sum;
-                }, 0) || 0;
-                
-                const availableQuantity = orderItem.quantity - paidForThisItem;
-                
-                if (availableQuantity > 0) {
-                  const quantityFromThisItem = Math.min(remainingQuantityToPay, availableQuantity);
-                  
-                  itemsToPay.push({
-                    orderItemId: `${order._id}-${orderItem.name}`,
-                    itemName: orderItem.name,
-                    price: orderItem.price,
-                    quantity: quantityFromThisItem,
-                    orderId: order._id
-                  });
-                  
-                  remainingQuantityToPay -= quantityFromThisItem;
-                }
-              }
-            });
-          });
-        }
+        itemsToPay.push({
+          itemId: itemId,
+          quantity: quantity
+        });
       }
     });
 
@@ -205,7 +93,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   };
 
   const totalAmount = Object.entries(selectedItems).reduce((sum, [itemId, quantity]) => {
-    const item = simpleItems.find(i => i.id === itemId);
+    const item = availableItems.find(i => i.id === itemId);
     return sum + (item ? item.price * quantity : 0);
   }, 0);
 
@@ -242,7 +130,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               اختر المشروبات المطلوب دفعها
             </h4>
 
-            {simpleItems.length === 0 ? (
+            {availableItems.length === 0 ? (
               <div className="text-center py-12 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 rounded-xl border-2 border-green-300 dark:border-green-700 shadow-lg">
                 <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
                   <CheckCircle className="h-10 w-10 text-white" />
@@ -254,7 +142,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               </div>
             ) : (
               <div className="space-y-4">
-                {simpleItems.map((item) => (
+                {availableItems.map((item) => (
                   <div key={item.id} className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-700 dark:to-gray-800 rounded-xl p-5 border-2 border-green-200 dark:border-green-700 shadow-md hover:shadow-lg transition-all">
                     
                     {/* معلومات العنصر */}
@@ -266,22 +154,11 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-lg text-gray-900 dark:text-gray-100">{item.name}</span>
-                            {(() => {
-                              // التحقق من وجود نفس الصنف في طلبات متعددة
-                              const itemCount = bill.orders?.reduce((count, order) => {
-                                const hasItem = order.items?.some(orderItem => 
-                                  orderItem.name === item.name && 
-                                  Math.abs(orderItem.price - item.price) < 0.01
-                                );
-                                return hasItem ? count + 1 : count;
-                              }, 0) || 0;
-                              
-                              return itemCount > 1 && (
-                                <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
-                                  📋 من {itemCount} طلبات
-                                </span>
-                              );
-                            })()}
+                            {item.hasAddons && (
+                              <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full">
+                                🍯 مع إضافات
+                              </span>
+                            )}
                           </div>
                           <div className="text-sm text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-1 rounded-lg inline-block mt-1">
                             {formatCurrency(item.price)}
@@ -362,7 +239,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
           </div>
 
           {/* طريقة الدفع */}
-          {simpleItems.length > 0 && (
+          {availableItems.length > 0 && (
             <div className="mb-6">
               <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">طريقة الدفع</h4>
               <div className="grid grid-cols-3 gap-3">
@@ -411,7 +288,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                 {Object.entries(selectedItems)
                   .filter(([_, quantity]) => quantity > 0)
                   .map(([itemId, quantity]) => {
-                    const item = simpleItems.find(i => i.id === itemId);
+                    const item = availableItems.find(i => i.id === itemId);
                     if (!item) return null;
                     
                     return (

@@ -40,6 +40,7 @@ interface ItemPayment {
 }
 
 export interface AggregatedItem {
+  id: string; // Unique identifier for the item
   name: string;
   price: number;
   totalQuantity: number;
@@ -49,6 +50,7 @@ export interface AggregatedItem {
     name: string;
     price: number;
   }[];
+  hasAddons?: boolean; // Helper property for UI
 }
 
 /**
@@ -82,8 +84,9 @@ function calculatePaidQuantity(
   billTotal?: number
 ): number {
 
-  // If bill is fully paid, all items are paid
-  if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal) {
+  // Only consider bill fully paid if the remaining amount is actually 0
+  // Don't rely on status alone as it might be incorrect
+  if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal && (billTotal - billPaid) === 0) {
     let totalQty = 0;
     orders.forEach(order => {
       order.items.forEach(item => {
@@ -212,6 +215,7 @@ export function aggregateItemsWithPayments(
   billPaid?: number,
   billTotal?: number
 ): AggregatedItem[] {
+  
   if (!orders || !Array.isArray(orders)) {
     return [];
   }
@@ -219,24 +223,29 @@ export function aggregateItemsWithPayments(
   const itemMap = new Map<string, AggregatedItem>();
 
   // First pass: aggregate all items by their unique key
-  orders.forEach(order => {
+  orders.forEach((order, orderIndex) => {
+
     if (!order.items || !Array.isArray(order.items)) {
       return;
     }
 
-    order.items.forEach((item: OrderItem) => {
+    order.items.forEach((item: OrderItem, itemIndex) => {
+
       const key = createItemKey(item.name, item.price, item.addons);
 
       if (!itemMap.has(key)) {
         // Create new aggregated item
-        itemMap.set(key, {
+        const newItem = {
+          id: key, // Use the unique key as ID
           name: item.name,
           price: item.price,
           totalQuantity: item.quantity,
           paidQuantity: 0,
           remainingQuantity: item.quantity,
           addons: item.addons ? [...item.addons] : undefined,
-        });
+          hasAddons: !!(item.addons && item.addons.length > 0),
+        };
+        itemMap.set(key, newItem);
       } else {
         // Add to existing aggregated item
         const aggregated = itemMap.get(key)!;

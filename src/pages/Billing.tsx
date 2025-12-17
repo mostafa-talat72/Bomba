@@ -400,11 +400,6 @@ const Billing = () => {
       if (selectedBill && data.bill && (data.bill._id === selectedBill._id || data.bill.id === selectedBill.id)) {
         // Update with fresh data including itemPayments
         setSelectedBill({ ...data.bill });
-        
-        // Force re-render after a short delay to ensure all components update
-        setTimeout(() => {
-          setSelectedBill(prev => prev ? { ...prev } : null);
-        }, 100);
       }
     });
 
@@ -785,22 +780,15 @@ const Billing = () => {
       // التحقق من وجود جلسات نشطة
       const hasActive = selectedBill ? hasActiveSession(selectedBill) : false;
 
-      // التحقق من أن جميع الأصناف مدفوعة بالكامل
-      const allItemsPaid = aggItems.every(item => item.remainingQuantity === 0);
-
       // التحقق من المبلغ المدفوع والمتبقي
       const billPaid = selectedBill?.paid || 0;
-      const billTotal = selectedBill?.total || 0;
       const billRemaining = selectedBill?.remaining || 0;
 
       // تحديد الحالة الجديدة
       let newStatus: 'draft' | 'partial' | 'paid' | 'cancelled' | 'overdue';
 
-      // إذا كان المتبقي = 0 أو المدفوع >= الإجمالي، الفاتورة مدفوعة
-      if ((billRemaining === 0 || billPaid >= billTotal) && !hasActive) {
-        newStatus = 'paid';
-      } else if (allItemsPaid && !hasActive) {
-        // جميع الأصناف مدفوعة ولا توجد جلسات نشطة
+      // الشرط الوحيد للفاتورة المدفوعة بالكامل: المتبقي = 0 ولا توجد جلسات نشطة
+      if (billRemaining === 0 && !hasActive) {
         newStatus = 'paid';
       } else if (hasActive) {
         // توجد جلسات نشطة (حتى لو كانت جميع الأصناف مدفوعة)
@@ -837,7 +825,7 @@ const Billing = () => {
   };
 
   const handlePartialPaymentSubmit = async (
-    items: Array<{ orderItemId: string; itemName: string; price: number; quantity: number; orderId: string }>,
+    items: Array<{ itemId: string; quantity: number }>,
     paymentMethod: 'cash' | 'card' | 'transfer'
   ) => {
     if (!selectedBill || items.length === 0) return;
@@ -845,18 +833,42 @@ const Billing = () => {
     try {
       setIsProcessingPartialPayment(true);
       
+      // تحويل العناصر إلى تنسيق addPartialPayment (حل مؤقت)
+      const aggregatedItems = aggregateItemsWithPayments(
+        selectedBill.orders || [],
+        selectedBill.itemPayments || [],
+        selectedBill.status,
+        selectedBill.paid,
+        selectedBill.total
+      );
+
       // تجميع العناصر حسب الطلب
-      const itemsByOrder = items.reduce((acc, item) => {
-        if (!acc[item.orderId]) {
-          acc[item.orderId] = [];
+      const itemsByOrder: Record<string, Array<{ itemName: string; price: number; quantity: number }>> = {};
+      
+      items.forEach(item => {
+        const aggregatedItem = aggregatedItems.find(aggItem => aggItem.id === item.itemId);
+        if (aggregatedItem) {
+          // البحث عن الطلب الأصلي لهذا العنصر
+          selectedBill.orders?.forEach(order => {
+            const orderItem = order.items?.find(oi => 
+              oi.name === aggregatedItem.name && 
+              Math.abs(oi.price - aggregatedItem.price) < 0.01
+            );
+            
+            if (orderItem) {
+              if (!itemsByOrder[order._id]) {
+                itemsByOrder[order._id] = [];
+              }
+              
+              itemsByOrder[order._id].push({
+                itemName: aggregatedItem.name,
+                price: aggregatedItem.price,
+                quantity: item.quantity
+              });
+            }
+          });
         }
-        acc[item.orderId].push({
-          itemName: item.itemName,
-          price: item.price,
-          quantity: item.quantity
-        });
-        return acc;
-      }, {} as Record<string, Array<{ itemName: string; price: number; quantity: number }>>);
+      });
 
       // إرسال طلب دفع جزئي لكل طلب
       const responses = await Promise.all(
@@ -874,7 +886,10 @@ const Billing = () => {
       
       if (allSuccessful) {
         // حساب المبلغ المدفوع
-        const totalPaid = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const totalPaid = items.reduce((sum, item) => {
+          const aggregatedItem = aggregatedItems.find(aggItem => aggItem.id === item.itemId);
+          return sum + (aggregatedItem ? aggregatedItem.price * item.quantity : 0);
+        }, 0);
         
         // إعادة تحميل البيانات فوراً
         await Promise.all([
@@ -886,34 +901,20 @@ const Billing = () => {
         const refreshedBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
         if (refreshedBillResponse.success && refreshedBillResponse.data) {
           const updatedBill = refreshedBillResponse.data;
-          
-          // تحديث الفاتورة المحددة فوراً مع فرض إعادة الرسم
-          setSelectedBill(null); // Clear first to force re-render
-          setTimeout(() => {
-            setSelectedBill({ ...updatedBill });
-          }, 10);
-          
-          // تحديث إضافي بعد فترة قصيرة لضمان التحديث في جميع المكونات
-          setTimeout(() => {
-            setSelectedBill(prev => prev ? { ...prev, _forceUpdate: Date.now() } : null);
-          }, 200);
+          setSelectedBill(updatedBill);
           
           // التحقق من حالة الفاتورة المحدثة
-          const hasRemainingItems = updatedBill.orders?.some((order: Order) =>
-            order.items?.some((item: OrderItem) => {
-              const paidForThisItem = updatedBill.itemPayments?.reduce((sum, payment) => {
-                if (payment.itemName === item.name && 
-                    Math.abs(payment.pricePerUnit - item.price) < 0.01) {
-                  return sum + (payment.paidQuantity || 0);
-                }
-                return sum;
-              }, 0) || 0;
-              
-              return item.quantity > paidForThisItem;
-            })
+          const updatedAggregatedItems = aggregateItemsWithPayments(
+            updatedBill.orders || [],
+            updatedBill.itemPayments || [],
+            updatedBill.status,
+            updatedBill.paid,
+            updatedBill.total
           );
           
-          if (updatedBill.status === 'paid' || !hasRemainingItems) {
+          const billFullyPaid = updatedBill.remaining === 0 || updatedBill.paid >= updatedBill.total;
+          
+          if (updatedBill.status === 'paid' && billFullyPaid) {
             setShowPartialPaymentModal(false);
             showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح! الفاتورة مكتملة.`, 'success');
           } else {
