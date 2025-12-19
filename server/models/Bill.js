@@ -731,8 +731,18 @@ billSchema.methods.addPayment = function (
     // Calculate remaining amount (can't be negative)
     this.remaining = Math.max(0, this.total - this.paid);
 
-    // Update status based on payment
-    if (this.paid >= this.total) {
+    // Update status based on payment - but check if all items and sessions are actually paid
+    // Check if all items are paid (for partial payment system)
+    const allItemsPaid = this.itemPayments && this.itemPayments.length > 0
+        ? this.itemPayments.every(item => item.isPaid)
+        : true; // If no itemPayments, consider items as paid
+    
+    // Check if all sessions are paid (for partial payment system)
+    const allSessionsPaid = this.sessionPayments && this.sessionPayments.length > 0
+        ? this.sessionPayments.every(session => session.remainingAmount === 0)
+        : true; // If no sessionPayments, consider sessions as paid
+
+    if (this.paid >= this.total && allItemsPaid && allSessionsPaid) {
         this.status = "paid";
         this.remaining = 0; // Ensure remaining is 0 if fully paid
         this.paid = this.total; // Ensure we don't overpay
@@ -832,8 +842,18 @@ billSchema.methods.addPartialPayment = function (
 
     this.paid += totalPaid;
 
-    // Update status based on payment
-    if (this.paid >= this.total) {
+    // Update status based on payment - but check if all items and sessions are actually paid
+    // Check if all items are paid (for partial payment system)
+    const allItemsPaid = this.itemPayments && this.itemPayments.length > 0
+        ? this.itemPayments.every(item => item.isPaid)
+        : true; // If no itemPayments, consider items as paid
+    
+    // Check if all sessions are paid (for partial payment system)
+    const allSessionsPaid = this.sessionPayments && this.sessionPayments.length > 0
+        ? this.sessionPayments.every(session => session.remainingAmount === 0)
+        : true; // If no sessionPayments, consider sessions as paid
+
+    if (this.paid >= this.total && allItemsPaid && allSessionsPaid) {
         this.status = "paid";
         this.remaining = 0;
         this.paid = this.total;
@@ -896,6 +916,26 @@ billSchema.methods.calculateRemainingAmount = function () {
     // تحديث المبلغ المدفوع والمتبقي
     this.paid = totalPaid;
     this.remaining = Math.max(0, this.total - totalPaid);
+
+    // Update status based on payment - check if all items and sessions are actually paid
+    // Check if all items are paid (for partial payment system)
+    const allItemsPaid = this.itemPayments && this.itemPayments.length > 0
+        ? this.itemPayments.every(item => item.isPaid)
+        : true; // If no itemPayments, consider items as paid
+    
+    // Check if all sessions are paid (for partial payment system)
+    const allSessionsPaid = this.sessionPayments && this.sessionPayments.length > 0
+        ? this.sessionPayments.every(session => session.remainingAmount === 0)
+        : true; // If no sessionPayments, consider sessions as paid
+
+    if (this.paid >= this.total && allItemsPaid && allSessionsPaid) {
+        this.status = "paid";
+        this.remaining = 0; // Ensure remaining is 0 if fully paid
+    } else if (this.paid > 0) {
+        this.status = "partial";
+    } else {
+        this.status = this.status || "draft";
+    }
 
     return this.remaining;
 };

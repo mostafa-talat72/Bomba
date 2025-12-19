@@ -7,6 +7,7 @@ import { Server } from "socket.io";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import connectDB from "./config/database.js";
+import electronDB from "./config/electronDatabase.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { requestLogger, errorLogger } from "./middleware/logger.js";
 import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
@@ -55,6 +56,17 @@ import syncRoutes from "./routes/syncRoutes.js";
 // Load environment variables
 dotenv.config();
 
+// Initialize database connection
+async function initializeDatabase() {
+    if (process.env.ELECTRON_MODE === 'true') {
+        console.log('🖥️ Running in Electron mode - using embedded database');
+        await electronDB.initialize();
+    } else {
+        console.log('🌐 Running in web mode - using standard database connection');
+        await connectDB();
+    }
+}
+
 // Validate sync configuration on startup
 const configValidation = validateSyncConfig();
 if (!configValidation.isValid) {
@@ -82,9 +94,6 @@ if (!configValidation.isValid) {
         Logger.info("ℹ️  Bidirectional sync is DISABLED (one-way sync only: Local → Atlas)");
     }
 }
-
-// Connect to database
-connectDB();
 
 // Fix username index issue on startup
 const fixUsernameIndex = async () => {

@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   root: '.',
   plugins: [react()],
+  base: './', // مهم لـ Electron
   server: {
     port: 3000,
     https: false, // Keep as HTTP for development
@@ -20,8 +21,24 @@ export default defineConfig({
         '**/setup-replica-set.ps1',
         '**/setup-replica-set.cmd',
         '**/node_modules/**',
-        '**/.git/**'
+        '**/.git/**',
+        '**/electron/**'
       ]
+    }
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    // تحسينات خاصة بـ Electron
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          antd: ['antd'],
+          router: ['react-router-dom'],
+          utils: ['axios', 'dayjs', 'date-fns']
+        }
+      }
     }
   },
   optimizeDeps: {

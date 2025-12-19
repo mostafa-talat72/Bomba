@@ -25,7 +25,7 @@
     "server": "cd server && npm start",
     "server:prod": "cd server && npm start",
     "install:server": "cd server && npm install",
-    "install:all": "npm install && npm run install:server",
+    "install:all": "npm install && npm run install:server && npm run install:electron",
     "start": "npm run dev",
     "build:all": "npm run build && cd server && npm run build",
     "test": "vitest",
@@ -34,7 +34,17 @@
     "migrate:tables": "cd server && node scripts/migrateTableReferences.js",
     "check:replica": "node server/scripts/checkReplicaSet.js",
     "init:replica": "node server/scripts/initializeReplicaSet.js",
-    "sync:initial": "node server/scripts/initialSync.js"
+    "sync:initial": "node server/scripts/initialSync.js",
+    "install:electron": "cd electron && npm install",
+    "electron:setup": "node electron/build-scripts/setup.js",
+    "electron:dev": "cd electron && npm run dev",
+    "electron:build": "node electron/build-scripts/build.js",
+    "electron:dist": "cd electron && npm run dist:win",
+    "electron:pack": "cd electron && npm run pack",
+    "desktop:setup": "npm run electron:setup",
+    "desktop:build": "npm run build && npm run electron:build",
+    "desktop:dev": "npm run electron:dev",
+    "desktop:dist": "npm run desktop:build && npm run electron:dist"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

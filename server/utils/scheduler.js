@@ -5,6 +5,7 @@ import {
     sendDailyReport,
     sendLowStockAlert,
     sendMonthlyReport,
+    generateAndSendDailyReport,
 } from "./email.js";
 import InventoryItem from "../models/InventoryItem.js";
 import User from "../models/User.js";
@@ -17,6 +18,20 @@ import Subscription from "../models/Subscription.js";
 import { sendSubscriptionNotification } from "../controllers/notificationController.js";
 import Organization from "../models/Organization.js";
 import { runCleanup } from "./notificationCleanup.js";
+
+// Helper function to get section icon based on name
+const getSectionIcon = (sectionName) => {
+    const name = sectionName.toLowerCase();
+    if (name.includes('مشروبات') || name.includes('عصائر') || name.includes('قهوة')) return '☕';
+    if (name.includes('طعام') || name.includes('وجبات') || name.includes('أكل')) return '🍽️';
+    if (name.includes('حلويات') || name.includes('كيك') || name.includes('حلى')) return '🍰';
+    if (name.includes('مقبلات') || name.includes('سلطات')) return '🥗';
+    if (name.includes('ساندويتش') || name.includes('برجر')) return '🥪';
+    if (name.includes('بيتزا')) return '🍕';
+    if (name.includes('مثلجات') || name.includes('آيس كريم')) return '🍦';
+    if (name.includes('فواكه')) return '🍓';
+    return '🍽️'; // Default icon
+};
 
 /**
  * إعداد الجدولة التلقائية لحذف الإشعارات القديمة
@@ -189,193 +204,79 @@ const checkLowStock = async () => {
     }
 };
 
-// Generate and send daily report
+// Generate and send daily report using consumption report logic
 const generateDailyReport = async () => {
     try {
-        Logger.info("Starting daily report generation...");
+        Logger.info("Starting daily report generation with consumption report logic...");
 
         const now = new Date();
 
-        // Calculate the report period: from 5 AM yesterday to 5 AM today
-        const endOfReport = new Date(now);
-        endOfReport.setHours(5, 0, 0, 0); // Today at 5 AM
+        // Calculate the report period: from 8 AM yesterday to 8 AM today (Cairo time)
+        const cairoNow = new Date(now.toLocaleString("en-US", {timeZone: "Africa/Cairo"}));
         
-        // If it's before 5 AM today, adjust to yesterday's 5 AM
-        if (now < endOfReport) {
-            endOfReport.setDate(endOfReport.getDate() - 1);
-        }
+        const endOfReport = new Date(cairoNow);
+        endOfReport.setHours(8, 0, 0, 0); // Today at 8 AM Cairo time
         
         const startOfReport = new Date(endOfReport);
-        startOfReport.setDate(startOfReport.getDate() - 1); // Yesterday at 5 AM
-
-        // Format dates for logging
-        const formatForLog = (date) => {
-            return {
-                iso: date.toISOString(),
-                local: date.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
-                date: date.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }),
-                time: date.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo' })
-            };
-        };
+        startOfReport.setDate(startOfReport.getDate() - 1); // Yesterday at 8 AM Cairo time
+        
+        // Convert back to UTC for database queries
+        const startOfReportUTC = new Date(startOfReport.toLocaleString("en-US", {timeZone: "UTC"}));
+        const endOfReportUTC = new Date(endOfReport.toLocaleString("en-US", {timeZone: "UTC"}));
 
         Logger.info("📅 Daily report period:", {
-            currentTime: formatForLog(now),
-            reportStart: formatForLog(startOfReport),
-            reportEnd: formatForLog(endOfReport),
+            reportStart: startOfReport.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
+            reportEnd: endOfReport.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
             timezone: 'Africa/Cairo (GMT+2)'
         });
 
         // Get all organizations
         const organizations = await Organization.find();
-
-        Logger.info(
-            `Found ${organizations.length} organizations for daily report`
-        );
+        Logger.info(`Found ${organizations.length} organizations for daily report`);
 
         for (const organization of organizations) {
             try {
-                // Get daily statistics for this organization
-                Logger.info(`Fetching data for organization: ${organization.name}`, {
-                    startOfReport: startOfReport.toISOString(),
-                    endOfReport: endOfReport.toISOString(),
+                Logger.info(`Processing organization: ${organization.name}`, {
                     organizationId: organization._id
                 });
 
-                const [bills, orders, sessions, costs] = await Promise.all([
-                    Bill.find({
-                        createdAt: { $gte: startOfReport, $lt: endOfReport },
-                        status: { $in: ["partial", "paid"] },
-                        organization: organization._id,
-                    }),
-                    Order.find({
-                        createdAt: { $gte: startOfReport, $lt: endOfReport },
-                        organization: organization._id,
-                    }),
-                    Session.find({
-                        startTime: { $gte: startOfReport, $lt: endOfReport },
-                        organization: organization._id,
-                    }),
-                    Cost.find({
-                        date: { $gte: startOfReport, $lt: endOfReport },
-                        organization: organization._id,
-                    }),
-                ]);
-
-                // Calculate totals for this organization
-                const totalRevenue = bills.reduce(
-                    (sum, bill) => sum + bill.paid,
-                    0
-                );
-                const totalCosts = costs.reduce(
-                    (sum, cost) => sum + cost.amount,
-                    0
-                );
-
-                // Get top products for this organization
-                const topProducts = await Order.aggregate([
-                    {
-                        $match: {
-                            createdAt: {
-                                $gte: startOfReport,
-                                $lt: endOfReport,
-                            },
-                            status: "delivered",
-                            organization: organization._id,
-                        },
-                    },
-                    { $unwind: "$items" },
-                    {
-                        $group: {
-                            _id: "$items.name",
-                            quantity: { $sum: "$items.quantity" },
-                            revenue: {
-                                $sum: {
-                                    $multiply: [
-                                        "$items.price",
-                                        "$items.quantity",
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                    { $sort: { quantity: -1 } },
-                    { $limit: 5 },
-                ]);
-
-                // Log the data being used for the report
-                Logger.info(`Data for organization ${organization.name}:`, {
-                    billsCount: bills.length,
-                    ordersCount: orders.length,
-                    sessionsCount: sessions.length,
-                    costsCount: costs.length,
-                    totalRevenue,
-                    totalCosts,
-                    topProducts: topProducts.length
-                });
-
-                const reportData = {
-                    date: startOfReport.toLocaleDateString("ar-EG"),
-                    organizationName: organization.name,
-                    totalRevenue: totalRevenue || 0,
-                    totalCosts: totalCosts || 0,
-                    netProfit: (totalRevenue || 0) - (totalCosts || 0),
-                    totalBills: bills.length || 0,
-                    totalOrders: orders.length || 0,
-                    totalSessions: sessions.length || 0,
-                    topProducts: topProducts.map((p) => ({
-                        name: p._id,
-                        quantity: p.quantity || 0,
-                    })),
-                    startOfReport: startOfReport,
-                    endOfReport: endOfReport,
-                    reportPeriod: `من 5:00 صباحاً يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})} 
-                                 إلى 5:00 صباحاً يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}`,
-                };
-
-                // Get admin emails for this organization
+                // Get admin and owner emails for this organization
                 const admins = await User.find({
-                    role: "admin",
+                    role: { $in: ["admin", "owner"] },
                     status: "active",
                     organization: organization._id,
                     email: { $exists: true, $ne: "" },
-                }).select("email");
+                    notifications: { $ne: false }
+                }).select("email name");
 
                 const adminEmails = admins.map((admin) => admin.email);
 
-                Logger.info(
-                    `Organization "${organization.name}" has ${adminEmails.length} admin emails:`,
-                    {
-                        organizationId: organization._id,
-                        adminEmails: adminEmails,
-                    }
-                );
-
                 if (adminEmails.length > 0) {
-                    await sendDailyReport(reportData, adminEmails);
-                    Logger.info(
-                        `Daily report sent for organization: ${organization.name}`,
-                        {
-                            organizationId: organization._id,
-                            adminCount: adminEmails.length,
-                            emails: adminEmails,
-                        }
+                    // Use the new generateAndSendDailyReport function
+                    await generateAndSendDailyReport(
+                        organization._id,
+                        organization.name,
+                        adminEmails,
+                        startOfReportUTC,
+                        endOfReportUTC
                     );
+
+                    Logger.info(`Daily report sent for organization: ${organization.name}`, {
+                        organizationId: organization._id,
+                        adminCount: adminEmails.length,
+                        emails: adminEmails,
+                    });
                 } else {
-                    Logger.warn(
-                        `No admin emails found for organization: ${organization.name}`,
-                        {
-                            organizationId: organization._id,
-                        }
-                    );
+                    Logger.warn(`No admin/owner emails found for organization: ${organization.name}`, {
+                        organizationId: organization._id,
+                    });
                 }
             } catch (orgError) {
-                Logger.error(
-                    `Failed to generate daily report for organization: ${organization.name}`,
-                    {
-                        organizationId: organization._id,
-                        error: orgError.message,
-                    }
-                );
+                Logger.error(`Failed to generate daily report for organization: ${organization.name}`, {
+                    organizationId: organization._id,
+                    error: orgError.message,
+                    stack: orgError.stack
+                });
             }
         }
 
@@ -383,6 +284,7 @@ const generateDailyReport = async () => {
     } catch (error) {
         Logger.error("Failed to generate daily report", {
             error: error.message,
+            stack: error.stack
         });
     }
 };
@@ -770,11 +672,11 @@ export const initializeScheduler = () => {
     cron.schedule("0 */6 * * *", checkLowStock);
     Logger.info("✅ Low stock check scheduled: every 6 hours at minute 0");
 
-    // Generate daily report at 5:00 AM (Egypt time)
-    cron.schedule("0 5 * * *", () => {
+    // Generate daily report at 10:00 AM (Egypt time)
+    cron.schedule("0 10 * * *", () => {
         const now = new Date();
         Logger.info(
-            "🕐 Daily report scheduled task triggered at 5:00 AM (Egypt time)",
+            "🕐 Daily report scheduled task triggered at 10:00 AM (Egypt time)",
             {
                 currentTime: now.toLocaleString("ar-EG"),
                 egyptTime: now.toLocaleString("ar-EG", {
@@ -783,8 +685,10 @@ export const initializeScheduler = () => {
             }
         );
         generateDailyReport();
+    }, {
+        timezone: "Africa/Cairo"
     });
-    Logger.info("✅ Daily report scheduled: every day at 5:00 AM (Egypt time)");
+    Logger.info("✅ Daily report scheduled: every day at 10:00 AM (Egypt time)");
 
     // For testing: also run daily report every hour (only in development)
     // if (process.env.NODE_ENV === "development") {
@@ -854,3 +758,6 @@ export const initializeScheduler = () => {
 
     Logger.info("🎯 All scheduled tasks initialized successfully!");
 };
+
+// Export functions for testing
+export { generateDailyReport, generateMonthlyReport, checkLowStock, updateOverdueItems, createRecurringCosts };
