@@ -842,30 +842,19 @@ const Billing = () => {
         selectedBill.total
       );
 
-      // تجميع العناصر حسب الطلب
-      const itemsByOrder: Record<string, Array<{ itemName: string; price: number; quantity: number }>> = {};
+      // تجميع العناصر حسب الطلب مع إرسال itemId الصحيح
+      const itemsByOrder: Record<string, Array<{ itemId: string; quantity: number }>> = {};
       
       items.forEach(item => {
         const aggregatedItem = aggregatedItems.find(aggItem => aggItem.id === item.itemId);
-        if (aggregatedItem) {
-          // البحث عن الطلب الأصلي لهذا العنصر
-          selectedBill.orders?.forEach(order => {
-            const orderItem = order.items?.find(oi => 
-              oi.name === aggregatedItem.name && 
-              Math.abs(oi.price - aggregatedItem.price) < 0.01
-            );
-            
-            if (orderItem) {
-              if (!itemsByOrder[order._id]) {
-                itemsByOrder[order._id] = [];
-              }
-              
-              itemsByOrder[order._id].push({
-                itemName: aggregatedItem.name,
-                price: aggregatedItem.price,
-                quantity: item.quantity
-              });
-            }
+        if (aggregatedItem && aggregatedItem.orderId) {
+          if (!itemsByOrder[aggregatedItem.orderId]) {
+            itemsByOrder[aggregatedItem.orderId] = [];
+          }
+          
+          itemsByOrder[aggregatedItem.orderId].push({
+            itemId: item.itemId, // إرسال itemId مباشرة
+            quantity: item.quantity
           });
         }
       });

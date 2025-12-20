@@ -214,13 +214,13 @@ export function aggregateItemsWithPayments(
   billStatus?: string,
   billPaid?: number,
   billTotal?: number
-): AggregatedItem[] {
+): (AggregatedItem & { orderId?: string })[] {
   
   if (!orders || !Array.isArray(orders)) {
     return [];
   }
 
-  const itemMap = new Map<string, AggregatedItem>();
+  const itemMap = new Map<string, AggregatedItem & { orderId?: string }>();
 
   // First pass: aggregate all items by their unique key
   orders.forEach((order, orderIndex) => {
@@ -232,11 +232,12 @@ export function aggregateItemsWithPayments(
     order.items.forEach((item: OrderItem, itemIndex) => {
 
       const key = createItemKey(item.name, item.price, item.addons);
+      const itemId = `${order._id}-${itemIndex}`; // Backend expected format
 
       if (!itemMap.has(key)) {
         // Create new aggregated item
         const newItem = {
-          id: key, // Use the unique key as ID
+          id: itemId, // Use backend expected format
           name: item.name,
           price: item.price,
           totalQuantity: item.quantity,
@@ -244,6 +245,7 @@ export function aggregateItemsWithPayments(
           remainingQuantity: item.quantity,
           addons: item.addons ? [...item.addons] : undefined,
           hasAddons: !!(item.addons && item.addons.length > 0),
+          orderId: order._id, // Add orderId for backend
         };
         itemMap.set(key, newItem);
       } else {
@@ -251,6 +253,7 @@ export function aggregateItemsWithPayments(
         const aggregated = itemMap.get(key)!;
         aggregated.totalQuantity += item.quantity;
         aggregated.remainingQuantity += item.quantity;
+        // Keep the first orderId for backend compatibility
       }
     });
   });

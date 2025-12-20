@@ -917,31 +917,90 @@ export const addPayment = async (req, res) => {
                         : undefined
                 );
                 bill.updatedBy = req.user._id;
+                
+                // Set flag to skip status recalculation in pre-save
+                bill._skipStatusRecalculation = true;
+                bill.paid = paid;
+                bill.remaining = remaining;
+                bill.status = status;
+                
+                console.log(`💰 [addPayment] Full payment processed:`, {
+                    billId: bill._id,
+                    paymentAmount,
+                    paid,
+                    remaining,
+                    status,
+                    skipRecalc: true
+                });
+                
                 await bill.save();
             } else {
                 // إذا لم يكن هناك مبلغ دفع جديد، قم بتحديث الحالة مباشرة
+                bill._skipStatusRecalculation = true;
                 bill.paid = paid;
                 bill.remaining = remaining;
                 bill.status = status;
                 bill.updatedBy = req.user._id;
+                
+                console.log(`💰 [addPayment] Status update only:`, {
+                    billId: bill._id,
+                    paid,
+                    remaining,
+                    status,
+                    skipRecalc: true
+                });
+                
                 await bill.save();
             }
 
             // Mark all items as paid if bill is fully paid
-            if (status === 'paid' && bill.itemPayments && bill.itemPayments.length > 0) {
-                let itemsUpdated = false;
-                bill.itemPayments.forEach(item => {
-                    if (!item.isPaid || item.paidQuantity < item.quantity) {
-                        item.paidQuantity = item.quantity;
-                        item.isPaid = true;
-                        item.paidAt = new Date();
-                        item.paidBy = req.user._id;
-                        itemsUpdated = true;
+            if (status === 'paid' && bill.orders && bill.orders.length > 0) {
+                console.log(`✅ [addPayment] Marking all items as paid for bill ${bill._id}`);
+                
+                // Initialize itemPayments if not exists
+                if (!bill.itemPayments) {
+                    bill.itemPayments = [];
+                }
+                
+                // Create or update itemPayments for all order items
+                bill.orders.forEach(order => {
+                    if (order.items && Array.isArray(order.items)) {
+                        order.items.forEach((orderItem, itemIndex) => {
+                            const itemId = `${order._id}-${itemIndex}`;
+                            
+                            // Find existing itemPayment or create new one
+                            let itemPayment = bill.itemPayments.find(ip => ip.itemId === itemId);
+                            
+                            if (itemPayment) {
+                                // Update existing
+                                itemPayment.paidQuantity = itemPayment.quantity;
+                                itemPayment.paidAmount = itemPayment.totalPrice;
+                                itemPayment.isPaid = true;
+                                itemPayment.paidAt = new Date();
+                                itemPayment.paidBy = req.user._id;
+                            } else {
+                                // Create new itemPayment
+                                bill.itemPayments.push({
+                                    orderId: order._id,
+                                    itemId: itemId,
+                                    itemName: orderItem.name,
+                                    quantity: orderItem.quantity,
+                                    paidQuantity: orderItem.quantity,
+                                    pricePerUnit: orderItem.price,
+                                    totalPrice: orderItem.price * orderItem.quantity,
+                                    paidAmount: orderItem.price * orderItem.quantity,
+                                    isPaid: true,
+                                    paidAt: new Date(),
+                                    paidBy: req.user._id,
+                                    paymentMethod: method || 'cash',
+                                    addons: orderItem.addons || []
+                                });
+                            }
+                        });
                     }
                 });
-                if (itemsUpdated) {
-                    await bill.save();
-                }
+                
+                console.log(`✅ [addPayment] Created/updated ${bill.itemPayments.length} itemPayments`);
             }
 
             // Mark all sessions as paid if bill is fully paid
@@ -988,6 +1047,48 @@ export const addPayment = async (req, res) => {
             }
 
             bill.addPayment(amount, method, req.user._id, reference);
+            
+            // If this payment makes the bill fully paid, create itemPayments
+            if (bill.status === 'paid' && bill.orders && bill.orders.length > 0) {
+                console.log(`✅ [addPayment - Old Method] Marking all items as paid for bill ${bill._id}`);
+                
+                // Initialize itemPayments if not exists
+                if (!bill.itemPayments) {
+                    bill.itemPayments = [];
+                }
+                
+                // Create itemPayments for all order items
+                bill.orders.forEach(order => {
+                    if (order.items && Array.isArray(order.items)) {
+                        order.items.forEach((orderItem, itemIndex) => {
+                            const itemId = `${order._id}-${itemIndex}`;
+                            
+                            // Check if itemPayment already exists
+                            const existingPayment = bill.itemPayments.find(ip => ip.itemId === itemId);
+                            
+                            if (!existingPayment) {
+                                // Create new itemPayment
+                                bill.itemPayments.push({
+                                    orderId: order._id,
+                                    itemId: itemId,
+                                    itemName: orderItem.name,
+                                    quantity: orderItem.quantity,
+                                    paidQuantity: orderItem.quantity,
+                                    pricePerUnit: orderItem.price,
+                                    totalPrice: orderItem.price * orderItem.quantity,
+                                    paidAmount: orderItem.price * orderItem.quantity,
+                                    isPaid: true,
+                                    paidAt: new Date(),
+                                    paidBy: req.user._id,
+                                    paymentMethod: method || 'cash',
+                                    addons: orderItem.addons || []
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+            
             await bill.save();
         }
 
@@ -1555,12 +1656,18 @@ export const deleteBill = async (req, res) => {
     }
 };
 
-// @desc    Add partial payment for specific items
+// @desc    Add partial payment for specific items (REBUILT)
 // @route   POST /api/bills/:id/partial-payment
 // @access  Private
 export const addPartialPayment = async (req, res) => {
     try {
-        const { orderId, items, paymentMethod } = req.body;
+        const { items, paymentMethod } = req.body;
+
+        Logger.info(`🔄 [addPartialPayment] Processing partial payment for bill: ${req.params.id}`, {
+            itemsCount: items?.length,
+            paymentMethod,
+            items: items
+        });
 
         const bill = await Bill.findById(req.params.id).populate("orders");
 
@@ -1568,17 +1675,6 @@ export const addPartialPayment = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "الفاتورة غير موجودة",
-            });
-        }
-
-        // لا يوجد شرط يمنع الدفع الجزئي بسبب وجود جلسة نشطة، إذا وُجد مستقبلاً احذفه أو تجاهله.
-
-        // Find the order
-        const order = bill.orders.find((o) => o._id.toString() === orderId);
-        if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: "الطلب غير موجود في هذه الفاتورة",
             });
         }
 
@@ -1590,64 +1686,295 @@ export const addPartialPayment = async (req, res) => {
             });
         }
 
-        // Validate that items exist in the order
-        const orderItems = order.items || [];
-        const validItems = items.filter((item) =>
-            orderItems.some(
-                (orderItem) =>
-                    orderItem.name === item.itemName &&
-                    orderItem.price === item.price
-            )
-        );
+        // تأكد من وجود itemPayments
+        if (!bill.itemPayments || bill.itemPayments.length === 0) {
+            Logger.info(`🔧 [addPartialPayment] Initializing itemPayments for bill: ${bill.billNumber}`);
+            
+            bill.itemPayments = [];
+            if (bill.orders && bill.orders.length > 0) {
+                bill.orders.forEach((order) => {
+                    if (order.items && order.items.length > 0) {
+                        order.items.forEach((item, index) => {
+                            bill.itemPayments.push({
+                                orderId: order._id,
+                                itemId: `${order._id}-${index}`,
+                                itemName: item.name,
+                                quantity: item.quantity,
+                                paidQuantity: 0,
+                                pricePerUnit: item.price,
+                                totalPrice: item.price * item.quantity,
+                                paidAmount: 0,
+                                isPaid: false,
+                                addons: item.addons || [],
+                                paymentHistory: [],
+                            });
+                        });
+                    }
+                });
+            }
+        }
 
-        if (validItems.length !== items.length) {
+        let totalPaymentAmount = 0;
+        const processedItems = [];
+
+        // معالجة كل عنصر للدفع
+        for (const paymentItem of items) {
+            Logger.info(`🔍 [addPartialPayment] Processing payment item:`, paymentItem);
+
+            // التحقق من صحة البيانات
+            if (!paymentItem.quantity || paymentItem.quantity <= 0) {
+                Logger.error(`❌ [addPartialPayment] Invalid quantity:`, paymentItem);
+                continue;
+            }
+
+            let itemName, itemPrice;
+
+            // تحديد اسم الصنف والسعر
+            if (paymentItem.itemName && paymentItem.price !== undefined) {
+                // الطريقة الجديدة: itemName + price
+                itemName = paymentItem.itemName;
+                itemPrice = paymentItem.price;
+            } else if (paymentItem.itemId) {
+                // الطريقة القديمة: itemId - نحول إلى itemName + price
+                const itemPayment = bill.itemPayments.find(ip => ip.itemId === paymentItem.itemId);
+                if (itemPayment) {
+                    itemName = itemPayment.itemName;
+                    itemPrice = itemPayment.pricePerUnit;
+                } else {
+                    Logger.error(`❌ [addPartialPayment] ItemPayment not found for itemId: ${paymentItem.itemId}`);
+                    continue;
+                }
+            } else {
+                Logger.error(`❌ [addPartialPayment] Invalid payment item - missing itemName+price or itemId:`, paymentItem);
+                continue;
+            }
+
+            Logger.info(`🔍 [addPartialPayment] Processing: ${itemName} at price ${itemPrice}, quantity: ${paymentItem.quantity}`);
+
+            // البحث عن جميع الأصناف المطابقة للاسم والسعر
+            const matchingItems = bill.itemPayments.filter(ip => 
+                ip.itemName === itemName && 
+                Math.abs(ip.pricePerUnit - itemPrice) < 0.01 // مقارنة الأسعار مع تسامح للأرقام العشرية
+            );
+
+            if (matchingItems.length === 0) {
+                Logger.error(`❌ [addPartialPayment] No matching items found for: ${itemName} at price ${itemPrice}`);
+                return res.status(400).json({
+                    success: false,
+                    message: `الصنف "${itemName}" بسعر ${itemPrice} غير موجود في الفاتورة`
+                });
+            }
+
+            // حساب إجمالي الكمية المتبقية من جميع الأصناف المطابقة
+            let totalRemainingQuantity = 0;
+            const itemsWithRemaining = [];
+
+            matchingItems.forEach(item => {
+                const remainingQty = (item.quantity || 0) - (item.paidQuantity || 0);
+                if (remainingQty > 0) {
+                    totalRemainingQuantity += remainingQty;
+                    itemsWithRemaining.push({
+                        item: item,
+                        remainingQuantity: remainingQty
+                    });
+                }
+            });
+
+            Logger.info(`🔍 [addPartialPayment] Found ${matchingItems.length} matching items for "${itemName}"`, {
+                totalRemainingQuantity,
+                requestedQuantity: paymentItem.quantity,
+                itemsWithRemaining: itemsWithRemaining.length
+            });
+
+            // التحقق من أن الكمية المطلوبة لا تتجاوز المتبقية الإجمالية
+            if (paymentItem.quantity > totalRemainingQuantity) {
+                return res.status(400).json({
+                    success: false,
+                    message: `الكمية المطلوبة (${paymentItem.quantity}) أكبر من الكمية المتبقية (${totalRemainingQuantity}) للصنف "${itemName}"`
+                });
+            }
+
+            // توزيع الدفع على الأصناف المطابقة
+            let remainingQuantityToPay = paymentItem.quantity;
+            let itemTotalAmount = 0;
+
+            for (const itemWithRemaining of itemsWithRemaining) {
+                if (remainingQuantityToPay <= 0) break;
+
+                const item = itemWithRemaining.item;
+                const availableQuantity = itemWithRemaining.remainingQuantity;
+
+                // حساب الكمية التي سيتم دفعها من هذا العنصر
+                const quantityToPayFromThisItem = Math.min(remainingQuantityToPay, availableQuantity);
+                const paymentAmount = item.pricePerUnit * quantityToPayFromThisItem;
+
+                // تحديث الدفع
+                item.paidQuantity = (item.paidQuantity || 0) + quantityToPayFromThisItem;
+                item.paidAmount = (item.paidAmount || 0) + paymentAmount;
+                item.isPaid = item.paidQuantity >= item.quantity;
+                item.paidAt = new Date();
+                item.paidBy = req.user._id;
+
+                // إضافة سجل الدفع
+                if (!item.paymentHistory) {
+                    item.paymentHistory = [];
+                }
+                item.paymentHistory.push({
+                    quantity: quantityToPayFromThisItem,
+                    amount: paymentAmount,
+                    paidAt: new Date(),
+                    paidBy: req.user._id,
+                    method: paymentMethod || "cash"
+                });
+
+                totalPaymentAmount += paymentAmount;
+                itemTotalAmount += paymentAmount;
+                remainingQuantityToPay -= quantityToPayFromThisItem;
+
+                Logger.info(`✅ [addPartialPayment] Paid ${quantityToPayFromThisItem} from item ${item.itemId}`, {
+                    itemName: item.itemName,
+                    newPaidQuantity: item.paidQuantity,
+                    totalQuantity: item.quantity,
+                    paymentAmount: paymentAmount,
+                    remainingToPay: remainingQuantityToPay
+                });
+            }
+
+            // إضافة العنصر المعالج إلى القائمة
+            if (remainingQuantityToPay === 0) {
+                processedItems.push({
+                    itemName: itemName,
+                    quantity: paymentItem.quantity,
+                    price: itemPrice,
+                    amount: itemTotalAmount
+                });
+            } else {
+                Logger.error(`❌ [addPartialPayment] Could not fully process item: ${itemName}, remaining: ${remainingQuantityToPay}`);
+            }
+        }
+
+        if (totalPaymentAmount === 0) {
             return res.status(400).json({
                 success: false,
-                message: "بعض العناصر غير موجودة في الطلب",
+                message: "لم يتم معالجة أي عناصر للدفع",
             });
         }
 
-        // Add partial payment
-        bill.addPartialPayment(
-            orderId,
-            order.orderNumber,
-            validItems.map((item) => ({
-                itemName: item.itemName,
-                price: item.price,
-                quantity: item.quantity,
-            })),
-            req.user,
-            paymentMethod || "cash"
-        );
+        Logger.info(`💰 [addPartialPayment] Payment processed successfully:`, {
+            totalPaymentAmount,
+            processedItemsCount: processedItems.length,
+            processedItems
+        });
 
-        // Recalculate totals
-        await bill.calculateSubtotal();
+        // حفظ الفاتورة
         await bill.save();
 
-        await bill.populate(
-            ["orders", "sessions", "createdBy", "partialPayments.items.paidBy"],
-            "name"
-        );
+        Logger.info(`📊 [addPartialPayment] Bill status after save:`, {
+            billId: bill._id,
+            status: bill.status,
+            paid: bill.paid,
+            remaining: bill.remaining,
+            total: bill.total
+        });
 
-        // Emit Socket.IO event for real-time updates
+        // Populate للاستجابة
+        await bill.populate([
+            "orders",
+            "sessions", 
+            "createdBy",
+            "itemPayments.paidBy",
+            "payments.user"
+        ]);
+
+        // إرسال تحديث Socket.IO
         if (req.io) {
             req.io.emit('partial-payment-received', {
                 type: 'partial-payment',
                 bill: bill,
+                amount: totalPaymentAmount,
+                items: processedItems,
                 message: 'تم إضافة الدفع الجزئي بنجاح'
             });
         }
 
         res.json({
             success: true,
-            message: "تم إضافة الدفع الجزئي بنجاح",
+            message: `تم دفع ${totalPaymentAmount} جنيه بنجاح`,
             data: bill,
+            paymentDetails: {
+                amount: totalPaymentAmount,
+                items: processedItems,
+                method: paymentMethod || "cash"
+            }
         });
+
     } catch (error) {
         Logger.error("خطأ في إضافة الدفع الجزئي", error);
         res.status(500).json({
             success: false,
             message: "خطأ في إضافة الدفع الجزئي",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Clean up orphaned itemPayments for a bill
+// @route   POST /api/bills/:id/cleanup-payments
+// @access  Private
+export const cleanupBillPayments = async (req, res) => {
+    try {
+        const bill = await Bill.findById(req.params.id).populate("orders");
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة",
+            });
+        }
+
+        Logger.info(`🧹 [cleanupBillPayments] Cleaning up payments for bill: ${bill.billNumber}`);
+
+        // تنظيف itemPayments
+        const cleanupResult = await bill.cleanupItemPayments();
+
+        // إعادة حساب المجاميع
+        await bill.calculateSubtotal();
+        
+        // حفظ التحديثات
+        await bill.save();
+
+        Logger.info(`✅ [cleanupBillPayments] Cleanup completed:`, {
+            billId: bill._id,
+            cleaned: cleanupResult.cleaned,
+            remaining: cleanupResult.remaining,
+            newStatus: bill.status,
+            newPaid: bill.paid,
+            newRemaining: bill.remaining
+        });
+
+        res.json({
+            success: true,
+            message: `تم تنظيف ${cleanupResult.cleaned} دفعة يتيمة`,
+            data: {
+                cleaned: cleanupResult.cleaned,
+                remaining: cleanupResult.remaining,
+                cleanedItems: cleanupResult.cleanedItems,
+                bill: {
+                    _id: bill._id,
+                    billNumber: bill.billNumber,
+                    status: bill.status,
+                    paid: bill.paid,
+                    remaining: bill.remaining,
+                    total: bill.total
+                }
+            }
+        });
+
+    } catch (error) {
+        Logger.error("خطأ في تنظيف دفعات الفاتورة", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تنظيف دفعات الفاتورة",
             error: error.message,
         });
     }
@@ -1667,95 +1994,116 @@ export const getBillItems = async (req, res) => {
             });
         }
 
-        const items = [];
-        // خريطة تتبع لكل قطعة: ما هي الإضافات التي تم دفعها معها
-        const paidItemsMap = new Map(); // key: orderId-itemName, value: عدد القطع المدفوعة
+        Logger.info(`🔍 [getBillItems] Processing bill: ${bill.billNumber}`, {
+            ordersCount: bill.orders?.length || 0,
+            itemPaymentsCount: bill.itemPayments?.length || 0
+        });
 
-        // تتبع المدفوعات الجزئية
-        if (bill.partialPayments && bill.partialPayments.length > 0) {
-            bill.partialPayments.forEach((payment) => {
-                payment.items.forEach((item) => {
-                    const key = `${payment.orderId}-${item.itemName}`;
+        // تأكد من وجود itemPayments - إذا لم تكن موجودة، قم بتهيئتها
+        if (!bill.itemPayments || bill.itemPayments.length === 0) {
+            Logger.info(`🔧 [getBillItems] Initializing itemPayments for bill: ${bill.billNumber}`);
+            
+            // تهيئة itemPayments من الطلبات
+            bill.itemPayments = [];
+            if (bill.orders && bill.orders.length > 0) {
+                bill.orders.forEach((order) => {
+                    if (order.items && order.items.length > 0) {
+                        order.items.forEach((item, index) => {
+                            const itemName = item.name || "Unknown";
+                            const price = item.price || 0;
+                            const quantity = item.quantity || 1;
+                            const addons = item.addons || [];
 
-                    paidItemsMap.set(
-                        key,
-                        (paidItemsMap.get(key) || 0) + (item.quantity || 0)
-                    );
+                            bill.itemPayments.push({
+                                orderId: order._id,
+                                itemId: `${order._id}-${index}`,
+                                itemName,
+                                quantity,
+                                paidQuantity: 0,
+                                pricePerUnit: price,
+                                totalPrice: price * quantity,
+                                paidAmount: 0,
+                                isPaid: false,
+                                addons: addons,
+                                paymentHistory: [],
+                            });
+                        });
+                    }
                 });
-            });
+                
+                // حفظ التحديثات
+                await bill.save();
+                Logger.info(`✅ [getBillItems] ItemPayments initialized: ${bill.itemPayments.length} items`);
+            }
         }
 
-        // Get items from orders with remaining quantities
-        if (bill.orders && bill.orders.length > 0) {
-            bill.orders.forEach((order) => {
-                if (order.items && order.items.length > 0) {
-                    order.items.forEach((item) => {
-                        const key = `${order._id}-${item.name}`;
-                        const paidQuantity = paidItemsMap.get(key) || 0;
-                        const remainingQuantity = item.quantity - paidQuantity;
-                        const allAddons = item.addons
-                            ? item.addons.map((a) => ({
-                                  name: a.name,
-                                  price: a.price,
-                              }))
-                            : [];
+        const items = [];
 
-                        // إضافة العنصر الأساسي فقط إذا كان لديه كمية متبقية
-                        if (remainingQuantity > 0) {
-                            items.push({
-                                orderId: order._id,
-                                orderNumber: order.orderNumber,
-                                itemName: item.name,
-                                price: item.price,
-                                quantity: remainingQuantity, // الكمية المتبقية فقط
-                                originalQuantity: item.quantity, // الكمية الأصلية
-                                paidQuantity: paidQuantity, // الكمية المدفوعة
-                                totalPrice: item.price * remainingQuantity,
-                                isMainItem: true, // علامة للعنصر الأساسي
-                            });
-                        }
+        // استخدام itemPayments (النظام الجديد) بدلاً من partialPayments
+        if (bill.itemPayments && bill.itemPayments.length > 0) {
+            bill.itemPayments.forEach((itemPayment) => {
+                const remainingQuantity = (itemPayment.quantity || 0) - (itemPayment.paidQuantity || 0);
+                
+                Logger.info(`🔍 [getBillItems] Item: ${itemPayment.itemName}`, {
+                    totalQuantity: itemPayment.quantity,
+                    paidQuantity: itemPayment.paidQuantity,
+                    remainingQuantity,
+                    price: itemPayment.pricePerUnit
+                });
 
-                        // إضافة الإضافات كأصناف منفصلة
-                        if (allAddons.length > 0) {
-                            allAddons.forEach((addon) => {
-                                // حساب عدد مرات هذه الإضافة في الطلب الأصلي
-                                const totalAddonCount = item.quantity; // كل قطعة تحتوي على الإضافة
-
-                                // حساب عدد مرات دفع هذه الإضافة
-                                const addonItemName = `${addon.name} (إضافة لـ ${item.name})`;
-                                const addonKey = `${order._id}-${addonItemName}`;
-                                const paidAddonCount =
-                                    paidItemsMap.get(addonKey) || 0;
-
-                                const remainingAddonCount =
-                                    totalAddonCount - paidAddonCount;
-
-                                if (remainingAddonCount > 0) {
-                                    items.push({
-                                        orderId: order._id,
-                                        orderNumber: order.orderNumber,
-                                        itemName: addonItemName,
-                                        price: addon.price,
-                                        quantity: remainingAddonCount,
-                                        originalQuantity: totalAddonCount,
-                                        paidQuantity: paidAddonCount,
-                                        totalPrice:
-                                            addon.price * remainingAddonCount,
-                                        isAddon: true, // علامة للإضافة
-                                        mainItemName: item.name, // اسم العنصر الأساسي
-                                        addonName: addon.name, // اسم الإضافة
-                                    });
-                                }
-                            });
-                        }
+                // إضافة العنصر فقط إذا كان لديه كمية متبقية
+                if (remainingQuantity > 0) {
+                    items.push({
+                        itemId: itemPayment.itemId, // مهم للـ frontend
+                        orderId: itemPayment.orderId,
+                        itemName: itemPayment.itemName,
+                        price: itemPayment.pricePerUnit,
+                        quantity: remainingQuantity, // الكمية المتبقية فقط
+                        originalQuantity: itemPayment.quantity, // الكمية الأصلية
+                        paidQuantity: itemPayment.paidQuantity || 0, // الكمية المدفوعة
+                        totalPrice: itemPayment.pricePerUnit * remainingQuantity,
+                        addons: itemPayment.addons || [],
+                        hasAddons: !!(itemPayment.addons && itemPayment.addons.length > 0)
                     });
                 }
             });
+        } else {
+            // Fallback: إذا لم توجد itemPayments، استخدم الطلبات مباشرة
+            Logger.warn(`⚠️ [getBillItems] No itemPayments found, using orders directly`);
+            
+            if (bill.orders && bill.orders.length > 0) {
+                bill.orders.forEach((order) => {
+                    if (order.items && order.items.length > 0) {
+                        order.items.forEach((item, index) => {
+                            items.push({
+                                itemId: `${order._id}-${index}`,
+                                orderId: order._id,
+                                itemName: item.name,
+                                price: item.price,
+                                quantity: item.quantity,
+                                originalQuantity: item.quantity,
+                                paidQuantity: 0,
+                                totalPrice: item.price * item.quantity,
+                                addons: item.addons || [],
+                                hasAddons: !!(item.addons && item.addons.length > 0)
+                            });
+                        });
+                    }
+                });
+            }
         }
+
+        Logger.info(`✅ [getBillItems] Returning ${items.length} items for bill: ${bill.billNumber}`);
 
         res.json({
             success: true,
             data: items,
+            meta: {
+                billId: bill._id,
+                billNumber: bill.billNumber,
+                totalItems: items.length,
+                hasItemPayments: !!(bill.itemPayments && bill.itemPayments.length > 0)
+            }
         });
     } catch (error) {
         Logger.error("خطأ في جلب عناصر الفاتورة", error);

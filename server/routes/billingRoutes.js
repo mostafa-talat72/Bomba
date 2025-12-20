@@ -12,6 +12,7 @@ import {
     cancelBill,
     deleteBill,
     addPartialPayment,
+    cleanupBillPayments,
     getBillItems,
     getSubscriptionStatus,
     createSubscriptionPayment,
@@ -55,6 +56,8 @@ router.post(
     authorize("billing", "all"),
     addPartialPayment
 );
+// تنظيف دفعات الأصناف المحذوفة
+router.post("/:id/cleanup-payments", authorize("billing", "all"), cleanupBillPayments);
 // دفع أصناف محددة من الفاتورة
 router.post("/:id/pay-items", authorize("billing", "all"), payForItems);
 // دفع جزئي لجلسة محددة
