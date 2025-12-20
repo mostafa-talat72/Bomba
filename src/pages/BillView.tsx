@@ -393,15 +393,16 @@ const BillView = () => {
 						.join('|');
 					const itemKey = `${item.name}|${item.price}|${addonsKey}`;
 					
-					// البحث عن itemId من الطلبات
+					// البحث عن itemId من الطلبات باستخدام التنسيق الصحيح
 					let itemId = '';
-					for (const order of bill.orders) {
-						const foundItem = order.items.find(
+					for (let orderIndex = 0; orderIndex < bill.orders.length; orderIndex++) {
+						const order = bill.orders[orderIndex];
+						const foundItemIndex = order.items.findIndex(
 							orderItem => orderItem.name === item.name && orderItem.price === item.price
 						);
-						if (foundItem) {
-							// استخدام اسم الصنف كـ itemId إذا لم يكن هناك _id
-							itemId = (foundItem as unknown as { _id?: string })._id || item.name;
+						if (foundItemIndex !== -1) {
+							// استخدام التنسيق الصحيح: orderId-itemIndex
+							itemId = `${order._id || order.id}-${foundItemIndex}`;
 							break;
 						}
 					}

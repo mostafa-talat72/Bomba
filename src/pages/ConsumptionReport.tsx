@@ -183,7 +183,19 @@ const ConsumptionReport = () => {
       order.items.forEach((item) => {
         if (!item.name) return;
 
-        const menuItem = menuItems.find((m) => m.name === item.name);
+        // البحث عن MenuItem - أولاً بـ ID إذا كان متوفراً، ثم بالاسم كـ fallback
+        let menuItem = null;
+        
+        // إذا كان العنصر يحتوي على menuItemId، استخدمه
+        if ((item as any).menuItemId) {
+          menuItem = menuItems.find((m) => m._id === (item as any).menuItemId || m.id === (item as any).menuItemId);
+        }
+        
+        // Fallback: البحث بالاسم (للتوافق مع البيانات القديمة)
+        if (!menuItem && item.name) {
+          menuItem = menuItems.find((m) => m.name === item.name);
+        }
+        
         if (!menuItem) return;
 
         // Get the section name from the menu item's category

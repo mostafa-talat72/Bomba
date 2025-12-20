@@ -1257,12 +1257,9 @@ class ApiClient {
   }
 
   async addPartialPayment(id: string, paymentData: {
-    orderId: string;
     items: Array<{
-      itemName: string;
-      price: number;
+      itemId: string;
       quantity: number;
-      addonsPerPiece?: { name: string; price: number }[][];
     }>;
     paymentMethod: 'cash' | 'card' | 'transfer';
   }): Promise<ApiResponse<Bill>> {

@@ -69,14 +69,14 @@ function createItemKey(itemName: string, itemPrice: number, addons?: { name: str
 }
 
 /**
- * Calculates the paid quantity for a specific item based on itemPayments
- * Uses paidQuantity field (new system) with backward compatibility for isPaid (old system)
- * If the bill is fully paid, returns the total quantity
+ * Calculates the paid quantity for aggregated items using all matching itemIds
+ * Sums up payments from all items that match the same name+price+addons
  */
-function calculatePaidQuantity(
+function calculateAggregatedPaidQuantity(
   itemName: string,
   itemPrice: number,
   addons: { name: string; price: number }[] | undefined,
+  allItemIds: string[],
   orders: Order[],
   itemPayments?: ItemPayment[],
   billStatus?: string,
@@ -85,124 +85,58 @@ function calculatePaidQuantity(
 ): number {
 
   // Only consider bill fully paid if the remaining amount is actually 0
-  // Don't rely on status alone as it might be incorrect
   if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal && (billTotal - billPaid) === 0) {
+    // Sum quantities from all matching items
     let totalQty = 0;
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        const itemKey = createItemKey(item.name, item.price, item.addons);
-        const targetKey = createItemKey(itemName, itemPrice, addons);
-        if (itemKey === targetKey) {
-          totalQty += item.quantity;
+    for (const itemId of allItemIds) {
+      for (const order of orders) {
+        for (let i = 0; i < order.items.length; i++) {
+          const currentItemId = `${order._id}-${i}`;
+          if (currentItemId === itemId) {
+            totalQty += order.items[i].quantity;
+          }
         }
-      });
-    });
+      }
+    }
     return totalQty;
   }
 
-  // Calculate paid quantity from itemPayments
+  // Calculate paid quantity from itemPayments using all matching itemIds
   if (!itemPayments || itemPayments.length === 0) {
-    // If no itemPayments exist, check if bill has any payment
-    if (!billPaid || billPaid === 0) {
-      // No payments at all - return 0
-      return 0;
-    }
-    // Fallback: if no itemPayments but bill has paid amount, estimate based on bill ratio
-    return calculatePaidQuantityFromBillRatio(itemName, itemPrice, orders, billPaid, billTotal);
+    return 0;
   }
 
   let paidQty = 0;
-  let hasValidPayments = false;
   
   itemPayments.forEach(payment => {
-    // تنظيف الأسماء من المسافات الزائدة للمقارنة
-    const itemNameTrimmed = itemName.trim();
-    const paymentNameTrimmed = payment.itemName.trim();
-    
-    const nameMatch = paymentNameTrimmed === itemNameTrimmed;
-    const priceMatch = payment.pricePerUnit === itemPrice;
-    
-
-    
-    if (nameMatch && priceMatch) {
-      // Use paidQuantity if available (new system) - including when it's 0
+    // Check if this payment belongs to any of our matching items
+    if (allItemIds.includes(payment.itemId)) {
+      // Use paidQuantity if available (new system)
       if (payment.paidQuantity !== undefined && payment.paidQuantity !== null) {
         paidQty += payment.paidQuantity;
-        hasValidPayments = true;
       } 
       // Smart fallback: calculate from paidAmount and pricePerUnit if paidQuantity is not available
       else if (payment.paidAmount !== undefined && payment.pricePerUnit && payment.pricePerUnit > 0) {
         const calculatedQuantity = Math.round(payment.paidAmount / payment.pricePerUnit);
         paidQty += calculatedQuantity;
-        hasValidPayments = true;
       }
       // Fallback to isPaid for backward compatibility (old system)
       else if (payment.isPaid) {
         paidQty += payment.quantity;
-        hasValidPayments = true;
-      }
-      // If we have itemPayments but no valid data, assume 0 (not paid)
-      else {
-        paidQty += 0;
-        hasValidPayments = true;
       }
     }
   });
 
-  // If itemPayments exist but have no valid data, use bill ratio fallback
-  if (!hasValidPayments && billPaid && billPaid > 0) {
-    return calculatePaidQuantityFromBillRatio(itemName, itemPrice, orders, billPaid, billTotal);
-  }
-
   return paidQty;
 }
 
-/**
- * Fallback function to estimate paid quantity based on bill's paid ratio
- * Used when itemPayments are empty or invalid
- */
-function calculatePaidQuantityFromBillRatio(
-  itemName: string,
-  itemPrice: number,
-  orders: Order[],
-  billPaid?: number,
-  billTotal?: number
-): number {
-  if (!billPaid || !billTotal || billTotal === 0) {
-    return 0;
-  }
-
-  // Calculate total quantity for this item
-  let totalItemQuantity = 0;
-  orders.forEach(order => {
-    order.items.forEach(item => {
-      if (item.name.trim() === itemName.trim() && item.price === itemPrice) {
-        totalItemQuantity += item.quantity;
-      }
-    });
-  });
-
-  // Calculate paid ratio
-  const paidRatio = Math.min(billPaid / billTotal, 1); // Cap at 100%
-  
-  // Estimate paid quantity based on ratio
-  const estimatedPaidQuantity = Math.floor(totalItemQuantity * paidRatio);
-  
-  return estimatedPaidQuantity;
-}
 
 /**
  * Aggregates items from multiple orders with payment information
- * 
- * Requirements validated:
- * - 6.1: Combines same items from different orders
- * - 6.2: Treats items with different prices as separate
- * - 6.3: Combines items with same addons
- * - 6.4: Distributes payment across orders (via itemPayments)
- * - 6.5: Consistent aggregation across views
+ * Combines items with same name+price+addons while maintaining ID-based payment tracking
  * 
  * @param orders - Array of orders containing items
- * @param itemPayments - Array of item payment records (new system)
+ * @param itemPayments - Array of item payment records (ID-based system)
  * @param billStatus - Current bill status
  * @param billPaid - Amount paid on bill
  * @param billTotal - Total bill amount
@@ -220,32 +154,31 @@ export function aggregateItemsWithPayments(
     return [];
   }
 
-  const itemMap = new Map<string, AggregatedItem & { orderId?: string }>();
+  const itemMap = new Map<string, AggregatedItem & { orderId?: string; itemIds: string[] }>();
 
-  // First pass: aggregate all items by their unique key
-  orders.forEach((order, orderIndex) => {
-
+  // First pass: aggregate all items by their unique key (name+price+addons)
+  orders.forEach((order) => {
     if (!order.items || !Array.isArray(order.items)) {
       return;
     }
 
     order.items.forEach((item: OrderItem, itemIndex) => {
-
-      const key = createItemKey(item.name, item.price, item.addons);
       const itemId = `${order._id}-${itemIndex}`; // Backend expected format
+      const key = createItemKey(item.name, item.price, item.addons);
 
       if (!itemMap.has(key)) {
         // Create new aggregated item
         const newItem = {
-          id: itemId, // Use backend expected format
+          id: itemId, // Use first itemId as representative
           name: item.name,
           price: item.price,
           totalQuantity: item.quantity,
-          paidQuantity: 0,
+          paidQuantity: 0, // Will be calculated later
           remainingQuantity: item.quantity,
           addons: item.addons ? [...item.addons] : undefined,
           hasAddons: !!(item.addons && item.addons.length > 0),
-          orderId: order._id, // Add orderId for backend
+          orderId: order._id,
+          itemIds: [itemId], // Track all itemIds for this aggregated item
         };
         itemMap.set(key, newItem);
       } else {
@@ -253,17 +186,19 @@ export function aggregateItemsWithPayments(
         const aggregated = itemMap.get(key)!;
         aggregated.totalQuantity += item.quantity;
         aggregated.remainingQuantity += item.quantity;
+        aggregated.itemIds.push(itemId); // Add this itemId to the list
         // Keep the first orderId for backend compatibility
       }
     });
   });
 
-  // Second pass: calculate paid quantities for each aggregated item
+  // Second pass: calculate paid quantities for each aggregated item using all its itemIds
   itemMap.forEach((aggregated) => {
-    const paidQty = calculatePaidQuantity(
+    const paidQty = calculateAggregatedPaidQuantity(
       aggregated.name,
       aggregated.price,
       aggregated.addons,
+      aggregated.itemIds,
       orders,
       itemPayments,
       billStatus,
@@ -272,10 +207,69 @@ export function aggregateItemsWithPayments(
     );
 
     aggregated.paidQuantity = paidQty;
-    aggregated.remainingQuantity = aggregated.totalQuantity - paidQty;
+    aggregated.remainingQuantity = Math.max(0, aggregated.totalQuantity - paidQty);
   });
 
-  const result = Array.from(itemMap.values());
-  
+  // Convert to final result format (remove itemIds from output)
+  const result = Array.from(itemMap.values()).map(item => {
+    const { itemIds, ...finalItem } = item;
+    return finalItem;
+  });
+
   return result;
+}
+
+/**
+ * Gets all itemIds that belong to a specific aggregated item
+ * Used by PartialPaymentModal to know which individual items to pay for
+ */
+export function getItemIdsForAggregatedItem(
+  aggregatedItemId: string,
+  orders: Order[]
+): string[] {
+  if (!orders || !Array.isArray(orders)) {
+    return [aggregatedItemId]; // Fallback to single item
+  }
+
+  // Find the original item to get its details
+  let targetItem: OrderItem | null = null;
+  let targetOrderId = '';
+  let targetItemIndex = -1;
+
+  for (const order of orders) {
+    if (!order.items || !Array.isArray(order.items)) continue;
+    
+    for (let i = 0; i < order.items.length; i++) {
+      const currentItemId = `${order._id}-${i}`;
+      if (currentItemId === aggregatedItemId) {
+        targetItem = order.items[i];
+        targetOrderId = order._id;
+        targetItemIndex = i;
+        break;
+      }
+    }
+    if (targetItem) break;
+  }
+
+  if (!targetItem) {
+    return [aggregatedItemId]; // Fallback
+  }
+
+  // Find all items with same name+price+addons
+  const targetKey = createItemKey(targetItem.name, targetItem.price, targetItem.addons);
+  const matchingItemIds: string[] = [];
+
+  orders.forEach((order) => {
+    if (!order.items || !Array.isArray(order.items)) return;
+
+    order.items.forEach((item: OrderItem, itemIndex) => {
+      const itemKey = createItemKey(item.name, item.price, item.addons);
+      if (itemKey === targetKey) {
+        const itemId = `${order._id}-${itemIndex}`;
+        matchingItemIds.push(itemId);
+      }
+    });
+  });
+
+  return matchingItemIds;
 }

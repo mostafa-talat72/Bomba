@@ -7,7 +7,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { printBill } from '../utils/printBill';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
-import { aggregateItemsWithPayments } from '../utils/billAggregation';
+import { aggregateItemsWithPayments, getItemIdsForAggregatedItem } from '../utils/billAggregation';
 import '../styles/billing-animations.css';
 import PartialPaymentModal from '../components/PartialPaymentModal';
 import React from 'react';
@@ -842,38 +842,57 @@ const Billing = () => {
         selectedBill.total
       );
 
-      // تجميع العناصر حسب الطلب مع إرسال itemId الصحيح
-      const itemsByOrder: Record<string, Array<{ itemId: string; quantity: number }>> = {};
+      // تحويل العناصر المختارة إلى itemIds مع توسيع الأصناف المجمعة
+      const allItemsToPayFor: Array<{ itemId: string; quantity: number }> = [];
       
       items.forEach(item => {
         const aggregatedItem = aggregatedItems.find(aggItem => aggItem.id === item.itemId);
-        if (aggregatedItem && aggregatedItem.orderId) {
-          if (!itemsByOrder[aggregatedItem.orderId]) {
-            itemsByOrder[aggregatedItem.orderId] = [];
-          }
+        if (aggregatedItem) {
+          // الحصول على جميع itemIds للصنف المجمع
+          const matchingItemIds = getItemIdsForAggregatedItem(item.itemId, selectedBill.orders || []);
           
-          itemsByOrder[aggregatedItem.orderId].push({
-            itemId: item.itemId, // إرسال itemId مباشرة
-            quantity: item.quantity
-          });
+          // توزيع الكمية المطلوبة على جميع العناصر المطابقة
+          let remainingQuantity = item.quantity;
+          
+          for (const matchingItemId of matchingItemIds) {
+            if (remainingQuantity <= 0) break;
+            
+            // العثور على العنصر الأصلي لمعرفة كميته المتاحة
+            let itemQuantityAvailable = 0;
+            for (const order of selectedBill.orders || []) {
+              const [orderIdFromItem, itemIndexStr] = matchingItemId.split('-');
+              const itemIndex = parseInt(itemIndexStr);
+              if (order._id === orderIdFromItem && order.items[itemIndex]) {
+                itemQuantityAvailable = order.items[itemIndex].quantity;
+                break;
+              }
+            }
+            
+            // حساب الكمية المدفوعة مسبقاً لهذا العنصر المحدد
+            const existingPayment = (selectedBill.itemPayments || []).find(ip => ip.itemId === matchingItemId);
+            const alreadyPaid = existingPayment?.paidQuantity || 0;
+            const availableForPayment = Math.max(0, itemQuantityAvailable - alreadyPaid);
+            
+            if (availableForPayment > 0) {
+              const quantityToPay = Math.min(remainingQuantity, availableForPayment);
+              allItemsToPayFor.push({
+                itemId: matchingItemId,
+                quantity: quantityToPay
+              });
+              remainingQuantity -= quantityToPay;
+            }
+          }
         }
       });
 
-      // إرسال طلب دفع جزئي لكل طلب
-      const responses = await Promise.all(
-        Object.entries(itemsByOrder).map(([orderId, orderItems]) =>
-          api.addPartialPayment(selectedBill.id || selectedBill._id, {
-            orderId,
-            items: orderItems,
-            paymentMethod
-          })
-        )
-      );
+      // إرسال طلب دفع جزئي واحد لجميع العناصر
+      const response = await api.addPartialPayment(selectedBill.id || selectedBill._id, {
+        items: allItemsToPayFor,
+        paymentMethod
+      });
 
-      // التحقق من نجاح جميع الطلبات
-      const allSuccessful = responses.every(response => response.success);
-      
-      if (allSuccessful) {
+      // التحقق من نجاح الطلب
+      if (response.success) {
         // حساب المبلغ المدفوع
         const totalPaid = items.reduce((sum, item) => {
           const aggregatedItem = aggregatedItems.find(aggItem => aggItem.id === item.itemId);
@@ -913,8 +932,7 @@ const Billing = () => {
           showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح!`, 'success');
         }
       } else {
-        const failedResponses = responses.filter(r => !r.success);
-        const errorMessage = failedResponses[0]?.message || 'فشل في تسجيل الدفع الجزئي';
+        const errorMessage = response.message || 'فشل في تسجيل الدفع الجزئي';
         showNotification(errorMessage, 'error');
       }
     } catch (error) {

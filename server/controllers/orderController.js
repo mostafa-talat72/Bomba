@@ -647,8 +647,10 @@ export const updateOrder = async (req, res) => {
                             break;
                         }
                     } else if (newItem.name && existingItem.name) {
-                        // مقارنة بواسطة الاسم
-                        if (newItem.name === existingItem.name) {
+                        // مقارنة بواسطة الاسم (fallback للتوافق مع البيانات القديمة)
+                        // إضافة مقارنة السعر أيضاً لمزيد من الدقة
+                        if (newItem.name === existingItem.name && 
+                            (!newItem.price || !existingItem.price || newItem.price === existingItem.price)) {
                             shouldKeep = true;
                             break;
                         }

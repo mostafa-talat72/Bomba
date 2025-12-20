@@ -451,15 +451,11 @@ billSchema.pre("save", async function (next) {
                 const originalItemPaymentsCount = this.itemPayments.length;
                 this.itemPayments = this.itemPayments.filter(ip => {
                     const isValid = validItemIds.has(ip.itemId);
-                    if (!isValid) {
-                        console.log(`🗑️ [Pre-save] Removing orphaned itemPayment: ${ip.itemName} (${ip.itemId})`);
-                    }
+                    
                     return isValid;
                 });
 
-                if (this.itemPayments.length !== originalItemPaymentsCount) {
-                    console.log(`🧹 [Pre-save] Cleaned itemPayments: ${originalItemPaymentsCount} → ${this.itemPayments.length}`);
-                }
+               
             } catch (error) {
                 console.error("Error cleaning itemPayments:", error);
             }
@@ -503,7 +499,6 @@ billSchema.pre("save", async function (next) {
                             const addons = item.addons || [];
 
                             // إضافة itemPayments لجميع الفواتير (حتى الجديدة) لضمان ظهور جميع الأصناف
-                            console.log(`🔧 [Pre-save] Adding itemPayment for: ${itemName} (Order: ${orderIdStr})`);
                             
                             this.itemPayments.push({
                                 orderId: order._id,
@@ -607,7 +602,6 @@ billSchema.pre("save", function (next) {
             // تحديث isPaid بناءً على المقارنة بين paidQuantity و quantity
             item.isPaid = (item.paidQuantity || 0) >= (item.quantity || 0);
 
-            console.log(`🔧 [Pre-save] Item ${item.itemName}: Qty ${item.paidQuantity}/${item.quantity}, Amount ${item.paidAmount}, Paid: ${item.isPaid}`);
         });
     }
     next();
@@ -617,22 +611,7 @@ billSchema.pre("save", function (next) {
 billSchema.pre("save", function (next) {
     // حساب المبلغ المتبقي باستخدام calculateRemainingAmount
     this.calculateRemainingAmount();
-    
-    console.log(`💰 [Pre-save] After calculateRemainingAmount:`, {
-        billId: this.billNumber || this._id,
-        paid: this.paid,
-        total: this.total,
-        remaining: this.remaining
-    });
 
-    // تحديد حالة الفاتورة بناءً على المبلغ المتبقي
-    // لا نعيد تحديد الحالة إذا كانت ملغية أو إذا تم تعيين flag لتجنب إعادة الحساب
-    if (this.status !== "cancelled" && !this._skipStatusRecalculation) {
-        console.log(`🔄 [Pre-save] Recalculating status for bill ${this.billNumber || this._id}`);
-    } else if (this._skipStatusRecalculation) {
-        console.log(`⏭️ [Pre-save] Skipping status recalculation for bill ${this.billNumber || this._id}`);
-    }
-    
     if (this.status !== "cancelled" && !this._skipStatusRecalculation) {
         // Check if we have itemPayments to determine status based on quantities
         // Only use itemPayments logic if the bill actually has payments
@@ -678,19 +657,7 @@ billSchema.pre("save", function (next) {
             const allItemsFullyPaid = (fullyPaidItemsCount === totalItemsCount) && (totalItemsCount > 0);
             const allItemsValuePaid = Math.abs(totalPaidFromItems - totalOrderItemsValue) < 0.01;
             const someItemsPartiallyPaid = partiallyPaidItemsCount > 0 || (fullyPaidItemsCount > 0 && fullyPaidItemsCount < totalItemsCount);
-            
-            // Log for debugging
-            console.log(`🔍 [Bill Status Check] ${this.billNumber || this._id}:`, {
-                totalItemsCount,
-                fullyPaidItemsCount,
-                partiallyPaidItemsCount,
-                totalOrderItemsValue,
-                totalPaidFromItems,
-                allItemsFullyPaid,
-                allItemsValuePaid,
-                remaining: this.remaining
-            });
-            
+                       
             // Also check sessionPayments if they exist
             let allSessionsFullyPaid = true;
             let someSessionsPartiallyPaid = false;
@@ -728,44 +695,24 @@ billSchema.pre("save", function (next) {
                 allSessionsFullyPaid = true;
             }
             
-            console.log(`🎮 [Session Status Check] ${this.billNumber || this._id}:`, {
-                totalSessionsCount,
-                fullyPaidSessionsCount,
-                allSessionsFullyPaid,
-                someSessionsPartiallyPaid
-            });
+          
             
             // Set status based on item and session payment status
             // Use both count-based and value-based checks
             const itemsFullyPaid = allItemsFullyPaid || allItemsValuePaid;
-            
-            console.log(`🏁 [Final Status Check] ${this.billNumber || this._id}:`, {
-                itemsFullyPaid,
-                allSessionsFullyPaid,
-                remaining: this.remaining,
-                remainingLessThanCent: this.remaining <= 0.01,
-                totalPaidFromItems,
-                totalOrderItemsValue,
-                paidVsTotal: `${this.paid}/${this.total}`
-            });
+          
             
             // تحديد الحالة بناءً على الدفعات والجلسات
             if (itemsFullyPaid && allSessionsFullyPaid && this.remaining <= 0.01) {
                 // جميع الأصناف والجلسات مدفوعة بالكامل
                 this.status = "paid";
-                console.log(`✅ [Bill Status] ${this.billNumber || this._id}: Set to PAID - All items and sessions fully paid`);
             } else if (someItemsPartiallyPaid || someSessionsPartiallyPaid || (this.paid > 0 && this.remaining > 0.01)) {
                 // بعض الأصناف/الجلسات مدفوعة جزئياً
                 this.status = "partial";
-                console.log(`� [Billl Status] ${this.billNumber || this._id}: Set to PARTIAL - Some items/sessions partially paid`);
             } else if (this.paid === 0) {
                 // لا توجد دفعات
                 this.status = "draft";
-                console.log(`📝 [Bill Status] ${this.billNumber || this._id}: Set to DRAFT - No payments`);
-            } else {
-                // حالة غير متوقعة - احتفظ بالحالة الحالية
-                console.log(`❓ [Bill Status] ${this.billNumber || this._id}: Keeping current status (${this.status}) - Unexpected state`);
-            }
+            } 
         } else {
             // Fallback to old logic if no itemPayments (backward compatibility)
             if (this.remaining <= 0.01 && this.paid > 0) {
@@ -943,52 +890,45 @@ billSchema.methods.addPartialPayment = function (
 
     // Add to new itemPayments system (this is what the frontend expects)
     items.forEach((item) => {
-        // Find the corresponding order item to get the total quantity
-        // Note: orders should be populated by the controller before calling this method
-        const order = this.orders.find(o => o._id.toString() === orderId.toString());
-        if (!order) {
-            console.error(`Order ${orderId} not found in bill orders`);
-            return;
-        }
-        
-        const orderItem = order.items.find(oi => 
-            oi.name === item.itemName && oi.price === item.price
-        );
-        if (!orderItem) {
-            console.error(`Order item ${item.itemName} not found in order ${orderId}`);
-            return;
-        }
-
-        // Find existing itemPayment or create new one
+        // Find existing itemPayment using itemId (new system)
         let existingPayment = this.itemPayments.find(
-            (payment) =>
-                payment.orderId.toString() === orderId.toString() &&
-                payment.itemName === item.itemName &&
-                payment.pricePerUnit === item.price
+            (payment) => payment.itemId === item.itemId
         );
 
         if (existingPayment) {
             // Update existing payment
             existingPayment.paidQuantity = (existingPayment.paidQuantity || 0) + item.quantity;
-            existingPayment.paidAmount = (existingPayment.paidAmount || 0) + (item.price * item.quantity);
+            existingPayment.paidAmount = (existingPayment.paidAmount || 0) + (existingPayment.pricePerUnit * item.quantity);
             existingPayment.isPaid = existingPayment.paidQuantity >= existingPayment.quantity;
             existingPayment.paidAt = new Date();
             existingPayment.paidBy = user._id;
         } else {
-            // Create new payment record
+            // Find the corresponding order item using itemId format: orderId-itemIndex
+            const [orderIdFromItem, itemIndexStr] = item.itemId.split('-');
+            const itemIndex = parseInt(itemIndexStr);
+            
+            const order = this.orders.find(o => o._id.toString() === orderIdFromItem);
+            if (!order || !order.items[itemIndex]) {
+                console.error(`Order item not found for itemId: ${item.itemId}`);
+                return;
+            }
+            
+            const orderItem = order.items[itemIndex];
+            
+            // Create new payment record using itemId
             this.itemPayments.push({
-                orderId: orderId,
-                itemId: `${orderId}-${item.itemName}`, // Generate itemId
-                itemName: item.itemName,
+                orderId: orderIdFromItem,
+                itemId: item.itemId, // Use the provided itemId directly
+                itemName: orderItem.name,
                 quantity: orderItem.quantity, // Total quantity of this item in the order
                 paidQuantity: item.quantity, // Quantity being paid for now
-                pricePerUnit: item.price,
-                totalPrice: item.price * orderItem.quantity, // Total price for all quantity
-                paidAmount: item.price * item.quantity, // Amount being paid now
+                pricePerUnit: orderItem.price,
+                totalPrice: orderItem.price * orderItem.quantity, // Total price for all quantity
+                paidAmount: orderItem.price * item.quantity, // Amount being paid now
                 isPaid: item.quantity >= orderItem.quantity, // True if paying for full quantity
                 paidAt: new Date(),
                 paidBy: user._id,
-                addons: item.addons || []
+                addons: orderItem.addons || []
             });
         }
     });
@@ -1072,10 +1012,6 @@ billSchema.methods.cleanupItemPayments = async function() {
 
     const cleanedCount = originalCount - this.itemPayments.length;
 
-    if (cleanedCount > 0) {
-        console.log(`🧹 [cleanupItemPayments] Cleaned ${cleanedCount} orphaned itemPayments:`, cleanedItems);
-    }
-
     return {
         cleaned: cleanedCount,
         remaining: this.itemPayments.length,
@@ -1085,62 +1021,46 @@ billSchema.methods.cleanupItemPayments = async function() {
 
 // Calculate remaining amount based on all payment types
 billSchema.methods.calculateRemainingAmount = function () {
-    console.log(`🔍 [calculateRemainingAmount] Starting calculation for bill ${this.billNumber || this._id}`);
-    console.log(`🔍 [calculateRemainingAmount] Bill total: ${this.total}`);
-
     let totalPaidFromItems = 0;
     let totalPaidFromSessions = 0;
     let totalPaidFromFullPayments = 0;
 
     // 1. حساب المدفوع من الأصناف (itemPayments) - الأصناف المدفوعة بالكامل فقط
     if (this.itemPayments && this.itemPayments.length > 0) {
-        console.log(`📦 [calculateRemainingAmount] Calculating paid items:`);
         
         this.itemPayments.forEach((item) => {
             const paidAmount = item.paidAmount || 0;
             const isPaidFully = (item.paidQuantity || 0) >= (item.quantity || 0);
-            
-            console.log(`  - Item: ${item.itemName}`);
-            console.log(`    Quantity: ${item.paidQuantity}/${item.quantity}`);
-            console.log(`    Amount: ${paidAmount}`);
-            console.log(`    Fully Paid: ${isPaidFully}`);
-            
+          
             // نحسب كل المدفوع من الأصناف (سواء مدفوعة بالكامل أو جزئياً)
             totalPaidFromItems += paidAmount;
         });
         
-        console.log(`  📦 Total paid from items: ${totalPaidFromItems}`);
     }
 
     // 2. حساب المدفوع من الجلسات (sessionPayments)
     if (this.sessionPayments && this.sessionPayments.length > 0) {
-        console.log(`🎮 [calculateRemainingAmount] Calculating paid sessions:`);
         
         this.sessionPayments.forEach((session) => {
             const paidAmount = session.paidAmount || 0;
-            console.log(`  - Session: ${session.sessionId}, Paid: ${paidAmount}`);
             totalPaidFromSessions += paidAmount;
         });
         
-        console.log(`  🎮 Total paid from sessions: ${totalPaidFromSessions}`);
     }
 
     // 3. حساب المدفوع من الدفعات الكاملة (payments array - فقط الدفعات الكاملة)
     if (this.payments && this.payments.length > 0) {
-        console.log(`💳 [calculateRemainingAmount] Calculating full payments:`);
         
         this.payments.forEach((payment) => {
             const isFullPayment = payment.type === 'full' || (!payment.type && !payment.items);
             const amount = payment.amount || 0;
             
-            console.log(`  - Payment type: ${payment.type || 'legacy'}, Amount: ${amount}, Is Full: ${isFullPayment}`);
             
             if (isFullPayment) {
                 totalPaidFromFullPayments += amount;
             }
         });
         
-        console.log(`  💳 Total paid from full payments: ${totalPaidFromFullPayments}`);
     }
 
     // 4. جمع جميع المدفوعات
@@ -1149,20 +1069,6 @@ billSchema.methods.calculateRemainingAmount = function () {
     // 5. تحديث المبلغ المدفوع والمتبقي
     this.paid = totalPaid;
     this.remaining = Math.max(0, this.total - totalPaid);
-
-    console.log(`💰 [calculateRemainingAmount] Final calculation:`, {
-        billId: this.billNumber || this._id,
-        total: this.total,
-        breakdown: {
-            itemPayments: totalPaidFromItems,
-            sessionPayments: totalPaidFromSessions,
-            fullPayments: totalPaidFromFullPayments,
-            totalPaid: totalPaid
-        },
-        remaining: this.remaining,
-        status: this.status
-    });
-
     return this.remaining;
 };
 
