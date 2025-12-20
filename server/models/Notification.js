@@ -423,12 +423,21 @@ notificationSchema.statics.getForUser = function (userId, user, options = {}) {
 
 // Static method to mark all notifications as read for user
 notificationSchema.statics.markAllAsRead = function (userId, organization) {
+    const query = {
+        "readBy.user": { $ne: userId },
+        isActive: true,
+    };
+
+    // إضافة فلتر المنظمة إذا تم توفيرها
+    if (organization) {
+        query.organization = organization;
+    } else {
+        // إذا لم يتم توفير المنظمة، نبحث عن الإشعارات التي ليس لها منظمة
+        query.organization = { $exists: false };
+    }
+
     return this.updateMany(
-        {
-            "readBy.user": { $ne: userId },
-            isActive: true,
-            organization,
-        },
+        query,
         {
             $push: {
                 readBy: {
@@ -447,6 +456,10 @@ notificationSchema.statics.cleanExpired = function (organization) {
         organization,
     });
 };
+
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(notificationSchema);
 
 const Notification = mongoose.model("Notification", notificationSchema);
 export default Notification;

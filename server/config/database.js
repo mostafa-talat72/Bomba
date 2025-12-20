@@ -1,154 +1,94 @@
-import mongoose from "mongoose";
 import Logger from "../middleware/logger.js";
+import dualDatabaseManager from "./dualDatabaseManager.js";
+import syncConfig, { validateSyncConfig } from "./syncConfig.js";
 
+/**
+ * Connect to databases using DualDatabaseManager
+ * Connects to local MongoDB (primary) and optionally to Atlas (backup)
+ */
 const connectDB = async () => {
     try {
-        // Use local MongoDB if MONGODB_URI is not provided
-        const mongoURI =
-            process.env.MONGODB_URI || "mongodb://localhost:27017/bomba";
-
-        if (!process.env.MONGODB_URI) {
-            Logger.info("⚠️ MONGODB_URI not set, using local MongoDB");
+        // Validate sync configuration
+        const validation = validateSyncConfig();
+        if (!validation.isValid && syncConfig.enabled) {
+            Logger.warn("⚠️ Sync configuration validation failed:");
+            validation.errors.forEach((error) => Logger.warn(`  - ${error}`));
+            Logger.warn("⚠️ Sync will be disabled");
         }
 
-        Logger.info("🔄 Connecting to MongoDB...");
+        // Determine local URI (backward compatible)
+        const localUri = syncConfig.localUri || process.env.MONGODB_URI || "mongodb://localhost:27017/bomba";
 
-        // Connection options
-        const options = {
-            maxPoolSize: 10,
-            serverSelectionTimeoutMS: 10000,
-            socketTimeoutMS: 45000,
-            family: 4,
-            retryWrites: true,
-            w: "majority",
-        };
+        // Connect to local MongoDB (primary database) - CRITICAL
+        await dualDatabaseManager.connectLocal(localUri);
 
-        const conn = await mongoose.connect(mongoURI, options);
-
-        Logger.info(`✅ MongoDB Connected Successfully!`);
-        Logger.info(`📊 Database: ${conn.connection.name}`);
-        Logger.info(`🌐 Host: ${conn.connection.host}`);
-        Logger.info(`🔌 Port: ${conn.connection.port}`);
-        Logger.info(`📈 Ready State: ${conn.connection.readyState}`);
-
-        // Test database operations
-        try {
-            await mongoose.connection.db.admin().ping();
-            Logger.info("✅ Database ping successful");
-        } catch (pingError) {
-            Logger.warn("⚠️ Database ping failed, but connection established");
-        }
-
-        // Handle connection events
-        mongoose.connection.on("error", (err) => {
-            Logger.error("❌ MongoDB connection error:", err.message);
-        });
-
-        mongoose.connection.on("disconnected", () => {
-            Logger.warn("⚠️ MongoDB disconnected");
-        });
-
-        mongoose.connection.on("reconnected", () => {
-            Logger.info("✅ MongoDB reconnected");
-        });
-
-        // Graceful shutdown
-        process.on("SIGINT", async () => {
-            try {
-                await mongoose.connection.close();
-                Logger.info(
-                    "🔒 MongoDB connection closed through app termination"
-                );
-            } catch (error) {
-                Logger.error("Error closing MongoDB connection:", error);
+        // Connect to Atlas (backup database) - NON-CRITICAL
+        if (syncConfig.enabled && syncConfig.atlasUri) {
+            Logger.info("🔄 Sync system enabled, connecting to Atlas...");
+            await dualDatabaseManager.connectAtlas(syncConfig.atlasUri);
+            
+            if (dualDatabaseManager.isAtlasAvailable()) {
+                Logger.info("✅ Dual MongoDB system initialized successfully");
+                Logger.info("📊 Primary: Local MongoDB (fast operations)");
+                Logger.info("☁️  Backup: MongoDB Atlas (cloud sync)");
+                
+                // Start connection monitoring
+                dualDatabaseManager.startConnectionMonitoring();
+                Logger.info("🔍 Atlas connection monitoring started");
+            } else {
+                Logger.warn("⚠️ Atlas connection failed, sync will be queued");
+                Logger.warn("⚠️ Application will continue with local MongoDB only");
+                
+                // Start monitoring to attempt reconnection
+                dualDatabaseManager.startConnectionMonitoring();
+                Logger.info("🔍 Atlas connection monitoring started (will attempt reconnection)");
             }
-            process.exit(0);
-        });
-
-        process.on("SIGTERM", async () => {
-            try {
-                await mongoose.connection.close();
-                Logger.info("🔒 MongoDB connection closed through SIGTERM");
-            } catch (error) {
-                Logger.error("Error closing MongoDB connection:", error);
-            }
-            process.exit(0);
-        });
-    } catch (error) {
-        Logger.error("\n❌ MongoDB connection failed!");
-        Logger.error("📝 Error details:", error.message);
-
-        // Provide specific error guidance
-        if (error.message.includes("authentication failed")) {
-            Logger.error("\n🔐 Authentication Error:");
-            Logger.error(
-                "- Check your username and password in the connection string"
-            );
-            Logger.error(
-                "- Make sure the database user has proper permissions"
-            );
-        } else if (
-            error.message.includes("ENOTFOUND") ||
-            error.message.includes("getaddrinfo")
-        ) {
-            Logger.error("\n🌐 Network Error:");
-            Logger.error("- Check your internet connection");
-            Logger.error(
-                "- Verify the cluster hostname in your connection string"
-            );
-            Logger.error(
-                "- Make sure MongoDB is running locally if using local connection"
-            );
-        } else if (
-            error.message.includes("timeout") ||
-            error.message.includes("Could not connect to any servers")
-        ) {
-            Logger.error("\n⏰ Connection Timeout:");
-            Logger.error("- This is likely an IP whitelisting issue for Atlas");
-            Logger.error(
-                "- Add your current IP to MongoDB Atlas Network Access"
-            );
-            Logger.error(
-                "- Or add 0.0.0.0/0 for development (not recommended for production)"
-            );
-            Logger.error(
-                "- For local MongoDB, make sure the service is running"
-            );
-        } else if (error.message.includes("ECONNREFUSED")) {
-            Logger.error("\n🔌 Connection Refused:");
-            Logger.error("- Make sure MongoDB is running locally");
-            Logger.error("- Start MongoDB service: mongod");
-            Logger.error("- Or install MongoDB if not installed");
-        }
-
-        if (!process.env.MONGODB_URI) {
-            Logger.error("\n🔧 Local MongoDB Setup:");
-            Logger.error("1. Install MongoDB Community Server");
-            Logger.error("2. Start MongoDB service: mongod");
-            Logger.error(
-                "3. Or use Docker: docker run -d -p 27017:27017 --name mongodb mongo"
-            );
         } else {
-            Logger.error("\n🔧 Atlas Setup Instructions:");
-            Logger.error("1. Go to https://cloud.mongodb.com/");
-            Logger.error("2. Create a cluster or use existing one");
-            Logger.error("3. Go to Database Access and create a user");
-            Logger.error(
-                "4. Go to Network Access and add your IP (or 0.0.0.0/0 for development)"
-            );
-            Logger.error(
-                "5. Get connection string from Connect > Connect your application"
-            );
-            Logger.error(
-                "6. Replace <username>, <password>, and <cluster-name> in your .env file"
-            );
-            Logger.error(
-                '7. Make sure to replace <database-name> with your actual database name (e.g., "bomba")'
-            );
+            Logger.info("ℹ️  Sync system disabled, using local MongoDB only");
         }
 
+        // Log connection status
+        const status = dualDatabaseManager.getConnectionStatus();
+        Logger.info("\n📊 Database Connection Status:");
+        Logger.info(`  Local:  ${status.local.connected ? "✅ Connected" : "❌ Disconnected"} - ${status.local.host}`);
+        Logger.info(`  Atlas:  ${status.atlas.connected ? "✅ Connected" : "⚠️  Disconnected"} - ${status.atlas.host}`);
+
+        // Setup graceful shutdown handlers
+        setupGracefulShutdown();
+
+    } catch (error) {
+        Logger.error("\n❌ Database connection failed!");
+        Logger.error("📝 Error details:", error.message);
         process.exit(1);
     }
 };
+
+/**
+ * Setup graceful shutdown handlers for both connections
+ */
+function setupGracefulShutdown() {
+    const shutdown = async (signal) => {
+        Logger.info(`\n${signal} received, shutting down gracefully...`);
+        try {
+            await dualDatabaseManager.closeConnections();
+            Logger.info("✅ Graceful shutdown completed");
+            process.exit(0);
+        } catch (error) {
+            Logger.error("❌ Error during shutdown:", error.message);
+            process.exit(1);
+        }
+    };
+
+    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+}
+
+/**
+ * Get the dual database manager instance
+ * @returns {DualDatabaseManager}
+ */
+export function getDatabaseManager() {
+    return dualDatabaseManager;
+}
 
 export default connectDB;

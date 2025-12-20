@@ -97,7 +97,7 @@ const ScrollButtons: React.FC<ScrollButtonsProps> = ({ mainContentRef }) => {
       {showTopButton && isPageVisible && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-20 left-4 z-50 p-3 bg-primary-600 dark:bg-primary-700 text-white rounded-full shadow-lg hover:bg-primary-700 dark:hover:bg-primary-800 transition-all duration-200 hover:scale-110 lg:bottom-6 lg:left-6"
+          className="fixed bottom-20 left-4 z-50 p-3 bg-orange-600 dark:bg-orange-700 text-white rounded-full shadow-lg hover:bg-orange-700 dark:hover:bg-orange-800 transition-all duration-200 hover:scale-110 lg:bottom-6 lg:left-6"
           title="الصعود للأعلى"
         >
           <ChevronUp className="h-5 w-5" />

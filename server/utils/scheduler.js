@@ -16,65 +16,176 @@ import NotificationService from "../services/notificationService.js";
 import Subscription from "../models/Subscription.js";
 import { sendSubscriptionNotification } from "../controllers/notificationController.js";
 import Organization from "../models/Organization.js";
+import { runCleanup } from "./notificationCleanup.js";
+
+/**
+ * إعداد الجدولة التلقائية لحذف الإشعارات القديمة
+ */
+const setupNotificationCleanupScheduler = () => {
+    // تشغيل كل يوم في الساعة 2:00 صباحاً
+    cron.schedule(
+        "0 2 * * *",
+        async () => {
+            try {
+                Logger.info("⏰ تشغيل جدولة تنظيف الإشعارات...");
+                await runCleanup();
+                Logger.info("✅ تم الانتهاء من جدولة تنظيف الإشعارات");
+            } catch (error) {
+                Logger.error("❌ خطأ في جدولة تنظيف الإشعارات:", error);
+            }
+        },
+        {
+            scheduled: true,
+            timezone: "Africa/Cairo", // توقيت القاهرة
+        }
+    );
+
+    Logger.info("✅ تم إعداد جدولة تنظيف الإشعارات (كل يوم في 2:00 صباحاً)");
+};
+
+/**
+ * تشغيل تنظيف فوري (للتجربة)
+ */
+const runImmediateCleanup = async () => {
+    try {
+        Logger.info("🔄 تشغيل تنظيف فوري للإشعارات...");
+        const deletedCount = await runCleanup();
+        Logger.info(
+            `✅ تم الانتهاء من التنظيف الفوري. المحذوف: ${deletedCount}`
+        );
+        return deletedCount;
+    } catch (error) {
+        Logger.error("❌ خطأ في التنظيف الفوري:", error);
+        throw error;
+    }
+};
+
+/**
+ * إيقاف جميع الجداول
+ */
+const stopAllSchedulers = () => {
+    cron.getTasks().forEach((task) => {
+        task.stop();
+    });
+    Logger.info("⏹️ تم إيقاف جميع الجداول");
+};
 
 // Check for low stock items and send alerts
 const checkLowStock = async () => {
+    const startTime = new Date();
+    Logger.info("🔄 Starting low stock check...", { startTime: startTime.toISOString() });
+    
     try {
-        // Get all organizations
-        const organizations = await Organization.find();
+        // Get all active organizations
+        const organizations = await Organization.find({ isActive: true });
+        Logger.info(`Found ${organizations.length} active organizations to check`);
+
+        let totalLowStockItems = 0;
+        let totalAlertsSent = 0;
 
         for (const organization of organizations) {
+            const orgStartTime = new Date();
             try {
+                Logger.info(`Checking low stock for organization: ${organization.name}`, {
+                    organizationId: organization._id,
+                    startTime: orgStartTime.toISOString()
+                });
+
                 // Get low stock items for this organization
                 const lowStockItems = await InventoryItem.find({
                     isActive: true,
                     organization: organization._id,
-                    $expr: { $lte: ["$currentStock", "$minStock"] },
-                });
+                    $expr: { 
+                        $and: [
+                            { $lte: ["$currentStock", "$minStock"] },
+                            { $gt: ["$minStock", 0] } // Only include items with minStock > 0
+                        ]
+                    },
+                }).lean();
+
+                totalLowStockItems += lowStockItems.length;
 
                 if (lowStockItems.length > 0) {
+                    Logger.info(`Found ${lowStockItems.length} low stock items for ${organization.name}`, {
+                        organizationId: organization._id,
+                        itemNames: lowStockItems.map(item => item.name)
+                    });
+
                     // Get admin emails for this organization
                     const admins = await User.find({
-                        role: "admin",
+                        role: { $in: ["admin", "owner"] },
                         status: "active",
                         organization: organization._id,
                         email: { $exists: true, $ne: "" },
-                    }).select("email");
+                        notifications: { $ne: false } // Only users who haven't disabled notifications
+                    }).select("email name");
 
-                    const adminEmails = admins.map((admin) => admin.email);
+                    const adminEmails = admins.map(admin => admin.email);
 
                     if (adminEmails.length > 0) {
-                        await sendLowStockAlert(lowStockItems, adminEmails);
-                        Logger.info(
-                            `Low stock alert sent for organization: ${organization.name}`,
-                            {
+                        try {
+                            await sendLowStockAlert({
+                                items: lowStockItems,
+                                organizationName: organization.name,
+                                recipientEmails: adminEmails,
+                                adminNames: admins.map(a => a.name)
+                            });
+                            
+                            totalAlertsSent++;
+                            Logger.info(`✅ Low stock alert sent successfully for ${organization.name}`, {
                                 organizationId: organization._id,
-                                itemCount: lowStockItems.length,
-                                adminCount: adminEmails.length,
-                            }
-                        );
+                                recipientCount: adminEmails.length,
+                                recipients: adminEmails
+                            });
+                        } catch (emailError) {
+                            Logger.error(`Failed to send low stock alert for ${organization.name}`, {
+                                organizationId: organization._id,
+                                error: emailError.message,
+                                stack: emailError.stack
+                            });
+                        }
                     } else {
-                        Logger.warn(
-                            `No admin emails found for low stock alert in organization: ${organization.name}`,
-                            {
-                                organizationId: organization._id,
-                                itemCount: lowStockItems.length,
-                            }
-                        );
+                        Logger.warn(`No active admin emails found for organization: ${organization.name}`, {
+                            organizationId: organization._id,
+                            itemCount: lowStockItems.length
+                        });
                     }
                 }
             } catch (orgError) {
-                Logger.error(
-                    `Failed to check low stock for organization: ${organization.name}`,
-                    {
-                        organizationId: organization._id,
-                        error: orgError.message,
-                    }
-                );
+                Logger.error(`❌ Error processing organization ${organization?.name || 'Unknown'}`, {
+                    organizationId: organization?._id,
+                    error: orgError.message,
+                    stack: orgError.stack,
+                    duration: new Date() - orgStartTime
+                });
             }
         }
+
+        const endTime = new Date();
+        const duration = endTime - startTime;
+        
+        Logger.info("✅ Low stock check completed", {
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            duration: `${duration}ms`,
+            organizationsChecked: organizations.length,
+            totalLowStockItems,
+            totalAlertsSent,
+            success: true
+        });
+
     } catch (error) {
-        Logger.error("Failed to check low stock", { error: error.message });
+        const endTime = new Date();
+        const duration = endTime - startTime;
+        
+        Logger.error("❌ Critical error in low stock check", {
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            duration: `${duration}ms`,
+            error: error.message,
+            stack: error.stack,
+            success: false
+        });
     }
 };
 
@@ -83,22 +194,35 @@ const generateDailyReport = async () => {
     try {
         Logger.info("Starting daily report generation...");
 
-        const today = new Date();
-        const startOfDay = new Date(
-            today.getFullYear(),
-            today.getMonth(),
-            today.getDate()
-        );
-        const endOfDay = new Date(
-            today.getFullYear(),
-            today.getMonth(),
-            today.getDate() + 1
-        );
+        const now = new Date();
 
-        Logger.info("Daily report date range:", {
-            today: today.toISOString(),
-            startOfDay: startOfDay.toISOString(),
-            endOfDay: endOfDay.toISOString(),
+        // Calculate the report period: from 5 AM yesterday to 5 AM today
+        const endOfReport = new Date(now);
+        endOfReport.setHours(5, 0, 0, 0); // Today at 5 AM
+        
+        // If it's before 5 AM today, adjust to yesterday's 5 AM
+        if (now < endOfReport) {
+            endOfReport.setDate(endOfReport.getDate() - 1);
+        }
+        
+        const startOfReport = new Date(endOfReport);
+        startOfReport.setDate(startOfReport.getDate() - 1); // Yesterday at 5 AM
+
+        // Format dates for logging
+        const formatForLog = (date) => {
+            return {
+                iso: date.toISOString(),
+                local: date.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
+                date: date.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }),
+                time: date.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo' })
+            };
+        };
+
+        Logger.info("📅 Daily report period:", {
+            currentTime: formatForLog(now),
+            reportStart: formatForLog(startOfReport),
+            reportEnd: formatForLog(endOfReport),
+            timezone: 'Africa/Cairo (GMT+2)'
         });
 
         // Get all organizations
@@ -111,22 +235,28 @@ const generateDailyReport = async () => {
         for (const organization of organizations) {
             try {
                 // Get daily statistics for this organization
+                Logger.info(`Fetching data for organization: ${organization.name}`, {
+                    startOfReport: startOfReport.toISOString(),
+                    endOfReport: endOfReport.toISOString(),
+                    organizationId: organization._id
+                });
+
                 const [bills, orders, sessions, costs] = await Promise.all([
                     Bill.find({
-                        createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        createdAt: { $gte: startOfReport, $lt: endOfReport },
                         status: { $in: ["partial", "paid"] },
                         organization: organization._id,
                     }),
                     Order.find({
-                        createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        createdAt: { $gte: startOfReport, $lt: endOfReport },
                         organization: organization._id,
                     }),
                     Session.find({
-                        startTime: { $gte: startOfDay, $lt: endOfDay },
+                        startTime: { $gte: startOfReport, $lt: endOfReport },
                         organization: organization._id,
                     }),
                     Cost.find({
-                        date: { $gte: startOfDay, $lt: endOfDay },
+                        date: { $gte: startOfReport, $lt: endOfReport },
                         organization: organization._id,
                     }),
                 ]);
@@ -145,7 +275,10 @@ const generateDailyReport = async () => {
                 const topProducts = await Order.aggregate([
                     {
                         $match: {
-                            createdAt: { $gte: startOfDay, $lt: endOfDay },
+                            createdAt: {
+                                $gte: startOfReport,
+                                $lt: endOfReport,
+                            },
                             status: "delivered",
                             organization: organization._id,
                         },
@@ -169,19 +302,34 @@ const generateDailyReport = async () => {
                     { $limit: 5 },
                 ]);
 
-                const reportData = {
-                    date: today.toLocaleDateString("ar-EG"),
-                    organizationName: organization.name,
+                // Log the data being used for the report
+                Logger.info(`Data for organization ${organization.name}:`, {
+                    billsCount: bills.length,
+                    ordersCount: orders.length,
+                    sessionsCount: sessions.length,
+                    costsCount: costs.length,
                     totalRevenue,
                     totalCosts,
-                    netProfit: totalRevenue - totalCosts,
-                    totalBills: bills.length,
-                    totalOrders: orders.length,
-                    totalSessions: sessions.length,
+                    topProducts: topProducts.length
+                });
+
+                const reportData = {
+                    date: startOfReport.toLocaleDateString("ar-EG"),
+                    organizationName: organization.name,
+                    totalRevenue: totalRevenue || 0,
+                    totalCosts: totalCosts || 0,
+                    netProfit: (totalRevenue || 0) - (totalCosts || 0),
+                    totalBills: bills.length || 0,
+                    totalOrders: orders.length || 0,
+                    totalSessions: sessions.length || 0,
                     topProducts: topProducts.map((p) => ({
                         name: p._id,
-                        quantity: p.quantity,
+                        quantity: p.quantity || 0,
                     })),
+                    startOfReport: startOfReport,
+                    endOfReport: endOfReport,
+                    reportPeriod: `من 5:00 صباحاً يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})} 
+                                 إلى 5:00 صباحاً يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}`,
                 };
 
                 // Get admin emails for this organization
@@ -618,15 +766,15 @@ export const scheduleSubscriptionExpiryNotifications = () => {
 export const initializeScheduler = () => {
     Logger.info("Initializing scheduled tasks...");
 
-    // Check low stock every hour
-    cron.schedule("0 * * * *", checkLowStock);
-    Logger.info("✅ Low stock check scheduled: every hour at minute 0");
+    // Check low stock every 6 hours at minute 0
+    cron.schedule("0 */6 * * *", checkLowStock);
+    Logger.info("✅ Low stock check scheduled: every 6 hours at minute 0");
 
-    // Generate daily report at 11:59 PM (Egypt time)
-    cron.schedule("59 23 * * *", () => {
+    // Generate daily report at 5:00 AM (Egypt time)
+    cron.schedule("0 5 * * *", () => {
         const now = new Date();
         Logger.info(
-            "🕐 Daily report scheduled task triggered at 11:59 PM (Egypt time)",
+            "🕐 Daily report scheduled task triggered at 5:00 AM (Egypt time)",
             {
                 currentTime: now.toLocaleString("ar-EG"),
                 egyptTime: now.toLocaleString("ar-EG", {
@@ -636,22 +784,20 @@ export const initializeScheduler = () => {
         );
         generateDailyReport();
     });
-    Logger.info(
-        "✅ Daily report scheduled: every day at 11:59 PM (Egypt time)"
-    );
+    Logger.info("✅ Daily report scheduled: every day at 5:00 AM (Egypt time)");
 
     // For testing: also run daily report every hour (only in development)
-    if (process.env.NODE_ENV === "development") {
-        cron.schedule("0 * * * *", () => {
-            Logger.info(
-                "🧪 Development mode: Running daily report every hour for testing"
-            );
-            generateDailyReport();
-        });
-        Logger.info(
-            "✅ Development mode: Daily report also scheduled every hour for testing"
-        );
-    }
+    // if (process.env.NODE_ENV === "development") {
+    //     cron.schedule("0 * * * *", () => {
+    //         Logger.info(
+    //             "🧪 Development mode: Running daily report every hour for testing"
+    //         );
+    //         generateDailyReport();
+    //     });
+    //     Logger.info(
+    //         "✅ Development mode: Daily report also scheduled every hour for testing"
+    //     );
+    // }
 
     // Generate monthly report at 11:59 PM on the last day of the month
     cron.schedule("59 23 28-31 * *", () => {
@@ -702,34 +848,9 @@ export const initializeScheduler = () => {
         "✅ Subscription expiry notifications scheduled: every 24 hours"
     );
 
-    Logger.info("🎯 All scheduled tasks initialized successfully!");
-};
+    // إضافة جدولة تنظيف الإشعارات القديمة
+    setupNotificationCleanupScheduler();
+    Logger.info("✅ Notification cleanup scheduler initialized");
 
-// Manual task execution (for testing)
-export const runTask = async (taskName) => {
-    switch (taskName) {
-        case "lowStock":
-            await checkLowStock();
-            break;
-        case "dailyReport":
-            await generateDailyReport();
-            break;
-        case "monthlyReport":
-            await generateMonthlyReport();
-            break;
-        case "updateOverdue":
-            await updateOverdueItems();
-            break;
-        case "recurringCosts":
-            await createRecurringCosts();
-            break;
-        case "backup":
-            await createDatabaseBackup();
-            break;
-        case "cleanNotifications":
-            await NotificationService.cleanExpiredNotifications();
-            break;
-        default:
-            throw new Error("Unknown task name");
-    }
+    Logger.info("🎯 All scheduled tasks initialized successfully!");
 };

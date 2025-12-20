@@ -225,8 +225,14 @@ class NotificationService {
     // تحديد جميع الإشعارات كمقروءة
     static async markAllAsRead(userId) {
         try {
-            const result = await Notification.markAllAsRead(userId);
-
+            // Get user to get their organization
+            const user = await User.findById(userId);
+            if (!user) {
+                throw new Error('User not found');
+            }
+            
+            // Pass both userId and organization to the model
+            const result = await Notification.markAllAsRead(userId, user.organization);
             return result;
         } catch (error) {
             Logger.error("Error marking all notifications as read:", error);

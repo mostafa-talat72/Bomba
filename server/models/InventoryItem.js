@@ -10,14 +10,7 @@ const inventoryItemSchema = new mongoose.Schema(
         category: {
             type: String,
             required: [true, "فئة المنتج مطلوبة"],
-            enum: [
-                "مشروبات ساخنة",
-                "مشروبات باردة",
-                "طعام",
-                "حلويات",
-                "مواد خام",
-                "أخرى",
-            ],
+            // Remove enum to allow dynamic categories from menu
         },
         currentStock: {
             type: Number,
@@ -62,7 +55,6 @@ const inventoryItemSchema = new mongoose.Schema(
         barcode: {
             type: String,
             default: null,
-            sparse: true,
         },
         description: {
             type: String,
@@ -217,5 +209,9 @@ inventoryItemSchema.index({ category: 1 });
 inventoryItemSchema.index({ currentStock: 1 });
 inventoryItemSchema.index({ isActive: 1 });
 inventoryItemSchema.index({ barcode: 1 }, { sparse: true });
+
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(inventoryItemSchema);
 
 export default mongoose.model("InventoryItem", inventoryItemSchema);

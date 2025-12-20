@@ -1,4 +1,5 @@
 import MenuItem from "../models/MenuItem.js";
+import MenuCategory from "../models/MenuCategory.js";
 import {
     validateRequest,
     validateRequestData,
@@ -14,7 +15,7 @@ export const getAllMenuItems = async (req, res) => {
             sortBy = "name",
             sortOrder = "asc",
             page = 1,
-            limit = 50,
+            limit = 0, // Set to 0 to return all items
             checkStock, // معامل جديد للتحقق من توفر المخزون
         } = req.query;
 
@@ -54,6 +55,8 @@ export const getAllMenuItems = async (req, res) => {
             .sort(sort)
             .skip(skip)
             .limit(parseInt(limit))
+            .populate("category", "name section")
+            .populate("category.section", "name")
             .populate("createdBy", "name")
             .populate("updatedBy", "name");
 
@@ -156,7 +159,6 @@ export const getAllMenuItems = async (req, res) => {
             });
         }
     } catch (error) {
-        console.error("❌ Error getting menu items:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب عناصر القائمة",
@@ -173,6 +175,8 @@ export const getMenuItemById = async (req, res) => {
             _id: id,
             organization: req.user.organization,
         })
+            .populate("category", "name section")
+            .populate("category.section", "name")
             .populate("createdBy", "name")
             .populate("updatedBy", "name");
 
@@ -189,7 +193,6 @@ export const getMenuItemById = async (req, res) => {
             data: menuItem,
         });
     } catch (err) {
-        console.error("getMenuItem error:", err);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب العنصر",
@@ -199,6 +202,22 @@ export const getMenuItemById = async (req, res) => {
 };
 
 // Create new menu item
+// Helper function to sync menu category to inventory categories
+const syncCategoryToInventory = async (categoryId) => {
+    try {
+        if (!categoryId) return;
+        
+        const category = await MenuCategory.findById(categoryId);
+        if (!category) return;
+        
+        // Category name is now automatically available for inventory items
+        // No need to update enum since we removed it
+    } catch (error) {
+        console.error('Error syncing category:', error);
+        // Don't throw error - this is not critical
+    }
+};
+
 export const createMenuItem = async (req, res) => {
     try {
         const validation = validateRequestData(req);
@@ -218,6 +237,9 @@ export const createMenuItem = async (req, res) => {
 
         const menuItem = new MenuItem(menuItemData);
         await menuItem.save();
+        
+        // Sync category to inventory
+        await syncCategoryToInventory(menuItem.category);
 
         res.status(201).json({
             success: true,
@@ -225,8 +247,6 @@ export const createMenuItem = async (req, res) => {
             data: menuItem,
         });
     } catch (error) {
-        console.error("❌ Error creating menu item:", error);
-
         if (error.code === 11000) {
             return res.status(400).json({
                 success: false,
@@ -269,6 +289,8 @@ export const updateMenuItem = async (req, res) => {
                 runValidators: true,
             }
         )
+            .populate("category", "name section")
+            .populate("category.section", "name")
             .populate("createdBy", "name")
             .populate("updatedBy", "name");
 
@@ -278,6 +300,11 @@ export const updateMenuItem = async (req, res) => {
                 message: "عنصر القائمة غير موجود",
             });
         }
+        
+        // Sync category to inventory if category was updated
+        if (updateData.category) {
+            await syncCategoryToInventory(updateData.category);
+        }
 
         res.json({
             success: true,
@@ -285,8 +312,6 @@ export const updateMenuItem = async (req, res) => {
             data: menuItem,
         });
     } catch (error) {
-        console.error("❌ Error updating menu item:", error);
-
         if (error.code === 11000) {
             return res.status(400).json({
                 success: false,
@@ -307,7 +332,7 @@ export const deleteMenuItem = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const menuItem = await MenuItem.findOneAndDelete({
+        const menuItem = await MenuItem.findOne({
             _id: id,
             organization: req.user.organization,
         });
@@ -319,12 +344,15 @@ export const deleteMenuItem = async (req, res) => {
             });
         }
 
+        // Delete from both Local and Atlas
+        const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
+        await deleteFromBothDatabases(menuItem, 'menuitems', `menu item ${menuItem.name}`);
+
         res.json({
             success: true,
             message: "تم حذف عنصر القائمة بنجاح",
         });
     } catch (error) {
-        console.error("❌ Error deleting menu item:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في حذف عنصر القائمة",
@@ -344,7 +372,6 @@ export const getItemsByCategory = async (req, res) => {
             data: menuItems,
         });
     } catch (err) {
-        console.error("getItemsByCategory error:", err);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب العناصر حسب الفئة",
@@ -364,7 +391,6 @@ export const getPopularItems = async (req, res) => {
             data: menuItems,
         });
     } catch (err) {
-        console.error("getPopularItems error:", err);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب العناصر الشائعة",
@@ -423,7 +449,6 @@ export const getMenuStats = async (req, res) => {
             data: result,
         });
     } catch (err) {
-        console.error("getMenuStats error:", err);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب إحصائيات المنيو",
@@ -454,7 +479,6 @@ export const incrementOrderCount = async (req, res) => {
             data: { orderCount: menuItem.orderCount + 1 },
         });
     } catch (err) {
-        console.error("incrementOrderCount error:", err);
         res.status(400).json({
             success: false,
             message: "خطأ في تحديث عدد الطلبات",
@@ -489,7 +513,6 @@ export const toggleMenuItemAvailability = async (req, res) => {
             data: menuItem,
         });
     } catch (error) {
-        console.error("❌ Error toggling menu item availability:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في تغيير حالة عنصر القائمة",
@@ -498,20 +521,26 @@ export const toggleMenuItemAvailability = async (req, res) => {
     }
 };
 
-// Get menu categories
+// Get menu categories (deprecated - kept for backward compatibility)
+// This should return category IDs from MenuCategory model
 export const getMenuCategories = async (req, res) => {
     try {
-        const categories = await MenuItem.distinct("category");
+        // Get categories from MenuCategory model instead of MenuItem
+        const MenuCategory = (await import("../models/MenuCategory.js")).default;
+        const categories = await MenuCategory.find({
+            organization: req.user?.organization || null,
+        })
+            .populate("section", "name")
+            .sort({ sortOrder: 1, name: 1 });
 
         res.json({
             success: true,
             data: categories,
         });
     } catch (error) {
-        console.error("❌ Error getting menu categories:", error);
         res.status(500).json({
             success: false,
-            message: "خطأ في جلب فئات القائمة",
+            message: "خطأ في جلب فئات المنيو",
             error: error.message,
         });
     }
@@ -525,9 +554,12 @@ export const getPopularMenuItems = async (req, res) => {
         const popularItems = await MenuItem.find({
             isPopular: true,
             isAvailable: true,
+            organization: req.user?.organization,
         })
             .sort({ sortOrder: 1, name: 1 })
-            .limit(parseInt(limit));
+            .limit(parseInt(limit))
+            .populate("category", "name section")
+            .populate("category.section", "name");
 
         res.json({
             success: true,
@@ -535,7 +567,6 @@ export const getPopularMenuItems = async (req, res) => {
             count: popularItems.length,
         });
     } catch (error) {
-        console.error("❌ Error getting popular menu items:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب العناصر الشائعة",
@@ -570,7 +601,6 @@ export const updateMenuItemsOrder = async (req, res) => {
             message: "تم تحديث ترتيب العناصر بنجاح",
         });
     } catch (error) {
-        console.error("❌ Error updating menu items order:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في تحديث ترتيب العناصر",

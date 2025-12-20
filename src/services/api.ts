@@ -21,6 +21,7 @@ export interface User {
   avatar?: string;
   phone?: string;
   address?: string;
+  organizationName?: string;
   createdAt: Date;
 }
 
@@ -65,7 +66,11 @@ export interface Order {
   _id: string;
   id: string;
   orderNumber: string;
-  tableNumber?: number;
+  table?: {
+    _id: string;
+    number: string | number;
+    name?: string;
+  };
   customerName?: string;
   customerPhone?: string;
   items: OrderItem[];
@@ -74,6 +79,7 @@ export interface Order {
   subtotal?: number;
   discount?: number;
   finalAmount?: number;
+  totalCost?: number;
   notes?: string;
   preparationTime?: number;
   estimatedReadyTime?: Date;
@@ -82,6 +88,10 @@ export interface Order {
   createdBy?: User;
   preparedBy?: User;
   deliveredBy?: User;
+  organization?: {
+    _id: string;
+    name: string;
+  };
   createdAt: Date;
   bill?: {
     _id: string;
@@ -124,17 +134,63 @@ export interface InventoryItem {
   createdAt: Date;
 }
 
+export interface ItemPayment {
+  _id?: string;
+  orderId: string;
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  paidQuantity: number;
+  remainingQuantity: number;
+  pricePerUnit: number;
+  totalPrice: number;
+  paidAmount: number;
+  isPaid: boolean;
+  paidAt?: Date;
+  paidBy?: string;
+  addons?: Array<{
+    name: string;
+    price: number;
+  }>;
+  paymentHistory?: Array<{
+    quantity: number;
+    amount: number;
+    paidAt: Date;
+    paidBy: string;
+    method: 'cash' | 'card' | 'transfer';
+  }>;
+}
+
+export interface SessionPayment {
+  _id?: string;
+  sessionId: string;
+  sessionCost: number;
+  paidAmount: number;
+  remainingAmount: number;
+  payments: Array<{
+    amount: number;
+    paidAt: Date;
+    paidBy: string;
+    method: 'cash' | 'card' | 'transfer';
+  }>;
+}
+
 export interface Bill {
   _id: string;
   id: string;
   billNumber: string;
-  tableNumber?: number;
+  table?: {
+    _id: string;
+    number: string | number;
+    name?: string;
+  };
   customerName?: string;
   customerPhone?: string;
   orders: Order[];
   sessions: Session[];
   subtotal: number;
   discount: number;
+  discountPercentage: number;
   tax: number;
   total: number;
   paid: number;
@@ -143,6 +199,8 @@ export interface Bill {
   paymentMethod: 'cash' | 'card' | 'transfer' | 'mixed';
   billType: 'cafe' | 'playstation' | 'computer';
   payments: Payment[];
+  itemPayments?: ItemPayment[];
+  sessionPayments?: SessionPayment[];
   partialPayments?: Array<{
     orderId: string;
     orderNumber: string;
@@ -215,12 +273,41 @@ export interface Device {
   hourlyRate?: number;
 }
 
+export interface MenuSection {
+  _id: string;
+  id: string;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  isActive: boolean;
+  organization?: string;
+  createdBy?: User;
+  updatedBy?: User;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface MenuCategory {
+  _id: string;
+  id: string;
+  name: string;
+  description?: string;
+  section: string | MenuSection;
+  sortOrder: number;
+  isActive: boolean;
+  organization?: string;
+  createdBy?: User;
+  updatedBy?: User;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
 export interface MenuItem {
   _id: string;
   id: string;
   name: string;
   price: number;
-  category: string;
+  category: string | MenuCategory;
   description?: string;
   isAvailable: boolean;
   orderCount: number;
@@ -240,6 +327,33 @@ export interface MenuItem {
   createdAt: Date;
 }
 
+export interface TableSection {
+  _id: string;
+  id: string;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  isActive: boolean;
+  organization?: string;
+  createdBy?: User;
+  updatedBy?: User;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface Table {
+  _id: string;
+  id: string;
+  number: string | number;
+  section: string | TableSection;
+  organization?: string;
+  isActive: boolean;
+  createdBy?: User;
+  updatedBy?: User;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
 export interface BillItem {
   orderId: string;
   orderNumber: string;
@@ -255,6 +369,18 @@ export interface BillItem {
   isAddon?: boolean;
   mainItemName?: string;
   addonName?: string;
+}
+
+export interface PayForItemsRequest {
+  items: Array<{
+    itemId: string;
+    quantity: number;
+  }>;
+  paymentMethod: 'cash' | 'card' | 'transfer';
+}
+
+export interface PayForItemsResponse extends Bill {
+  itemPayments: ItemPayment[];
 }
 
 // API Client class
@@ -578,7 +704,7 @@ class ApiClient {
   }
 
   // Sessions endpoints
-  async getSessions(params?: { status?: string; device?: string; page?: number; limit?: number }): Promise<ApiResponse<Session[]>> {
+  async getSessions(params?: { status?: string; device?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Session[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -655,9 +781,10 @@ class ApiClient {
     return response;
   }
 
-  async endSession(id: string): Promise<ApiResponse<{ session: Session; bill?: any }>> {
+  async endSession(id: string, customerName?: string): Promise<ApiResponse<{ session: Session; bill?: any }>> {
     const response = await this.request<{ session: Session; bill?: any }>(`/sessions/${id}/end`, {
       method: 'PUT',
+      body: customerName ? JSON.stringify({ customerName }) : undefined,
     });
     if (response.success && response.data) {
       response.data.session = this.normalizeData(response.data.session);
@@ -666,6 +793,58 @@ class ApiClient {
       }
     }
     return response;
+  }
+
+  async unlinkTableFromSession(sessionId: string, customerName?: string): Promise<ApiResponse<{ session: Session; bill: any; unlinkedFromTable: number }>> {
+    const response = await this.request<{ session: Session; bill: any; unlinkedFromTable: number }>(`/sessions/${sessionId}/unlink-table`, {
+      method: 'PUT',
+      body: customerName ? JSON.stringify({ customerName }) : undefined,
+    });
+    if (response.success && response.data) {
+      response.data.session = this.normalizeData(response.data.session);
+      if (response.data.bill) {
+        response.data.bill = this.normalizeData(response.data.bill);
+      }
+    }
+    return response;
+  }
+
+  async linkSessionToTable(sessionId: string, tableId: string): Promise<ApiResponse<{ session: any; bill: any }>> {
+    const response = await this.request<{ session: any; bill: any }>(`/sessions/${sessionId}/link-table`, {
+      method: 'PUT',
+      body: JSON.stringify({ tableId }),
+    });
+    if (response.success && response.data) {
+      if (response.data.session) {
+        response.data.session = this.normalizeData(response.data.session);
+      }
+      if (response.data.bill) {
+        response.data.bill = this.normalizeData(response.data.bill);
+      }
+    }
+    return response;
+  }
+
+  async changeSessionTable(sessionId: string, newTableId: string): Promise<ApiResponse<{ session: any; bill: any; oldTable: string; newTable: string }>> {
+    const response = await this.request<{ session: any; bill: any; oldTable: string; newTable: string }>(`/sessions/${sessionId}/change-table`, {
+      method: 'PUT',
+      body: JSON.stringify({ newTableId }),
+    });
+    if (response.success && response.data) {
+      if (response.data.session) {
+        response.data.session = this.normalizeData(response.data.session);
+      }
+      if (response.data.bill) {
+        response.data.bill = this.normalizeData(response.data.bill);
+      }
+    }
+    return response;
+  }
+
+  async cleanupDuplicateSessionReferences(): Promise<ApiResponse<{ cleanedCount: number }>> {
+    return this.request<{ cleanedCount: number }>('/sessions/cleanup-duplicates', {
+      method: 'POST',
+    });
   }
 
   async getActiveSessions(): Promise<ApiResponse<Session[]>> {
@@ -695,8 +874,15 @@ class ApiClient {
     });
   }
 
+  async updateSessionStartTime(sessionId: string, data: { startTime: string }): Promise<ApiResponse<Session>> {
+    return this.request<Session>(`/sessions/${sessionId}/start-time`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   // Orders endpoints
-  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number }): Promise<ApiResponse<Order[]>> {
+  async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Order[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -757,8 +943,22 @@ class ApiClient {
     return response;
   }
 
+  async calculateOrderRequirements(orderData: {
+    customerName: string;
+    items: OrderItem[];
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    const response = await this.request<any>('/orders/calculate', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+
+    return response;
+  }
+
   async updateOrder(id: string, updates: Partial<Order>): Promise<ApiResponse<Order>> {
     try {
+
       const response = await this.request<Order>(`/orders/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(updates)
@@ -773,6 +973,12 @@ class ApiClient {
     return this.request<Order>(`/orders/${orderId}/items/${itemIndex}/prepared`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  async deductOrderInventory(orderId: string): Promise<ApiResponse<Order>> {
+    return this.request<Order>(`/orders/${orderId}/deduct-inventory`, {
+      method: 'POST',
     });
   }
 
@@ -893,7 +1099,7 @@ class ApiClient {
   }
 
   // Bills endpoints
-  async getBills(params?: { status?: string; tableNumber?: number; page?: number; limit?: number; date?: string; customerName?: string }): Promise<ApiResponse<Bill[]>> {
+  async getBills(params?: { status?: string; table?: string; page?: number; limit?: number; customerName?: string }): Promise<ApiResponse<Bill[]>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -926,7 +1132,7 @@ class ApiClient {
   }
 
   async createBill(billData: {
-    tableNumber?: number;
+    table?: string;
     customerName?: string;
     customerPhone?: string;
     orders?: string[];
@@ -1002,6 +1208,16 @@ class ApiClient {
     return response;
   }
 
+  async removeOrderFromBill(billId: string, orderId: string): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(`/billing/${billId}/orders/${orderId}`, {
+      method: 'DELETE',
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
   async addSessionToBill(id: string, sessionId: string): Promise<ApiResponse<Bill>> {
     const response = await this.request<Bill>(`/billing/${id}/sessions`, {
       method: 'POST',
@@ -1025,6 +1241,13 @@ class ApiClient {
     return response;
   }
 
+  async deleteBill(id: string): Promise<ApiResponse<boolean>> {
+    const response = await this.request<boolean>(`/billing/${id}`, {
+      method: 'DELETE',
+    });
+    return response;
+  }
+
   async getBillItems(id: string): Promise<ApiResponse<any[]>> {
     const response = await this.request<any[]>(`/billing/${id}/items`);
     if (response.success && response.data) {
@@ -1044,6 +1267,48 @@ class ApiClient {
     paymentMethod: 'cash' | 'card' | 'transfer';
   }): Promise<ApiResponse<Bill>> {
     const response = await this.request<Bill>(`/billing/${id}/partial-payment`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  /**
+   * Pay for specific quantities of items in a bill
+   * 
+   * @param id - Bill ID
+   * @param paymentData - Payment data including items with quantities and payment method
+   * @returns Updated bill with payment information
+   * 
+   * @throws {ApiResponse} Possible error messages:
+   * - "يجب إدخال كمية صحيحة أكبر من صفر" - Invalid quantity (zero or negative)
+   * - "الكمية المطلوبة ({quantity}) أكبر من الكمية المتبقية ({remainingQuantity})" - Quantity exceeds remaining
+   * - "الصنف '{itemName}' مدفوع بالكامل" - Item already fully paid
+   * - "الصنف غير موجود في الفاتورة" - Item not found in bill
+   * - "الفاتورة غير موجودة" - Bill not found
+   * - "لا يمكن دفع أصناف من فاتورة مدفوعة بالكامل" - Bill already paid
+   * - "لا يمكن دفع أصناف من فاتورة ملغاة" - Bill cancelled
+   */
+  async payForItems(id: string, paymentData: PayForItemsRequest): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(`/billing/${id}/pay-items`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async paySessionPartial(id: string, paymentData: {
+    sessionId: string;
+    amount: number;
+    paymentMethod: 'cash' | 'card' | 'transfer';
+  }): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(`/billing/${id}/pay-session-partial`, {
       method: 'POST',
       body: JSON.stringify(paymentData),
     });
@@ -1151,9 +1416,15 @@ class ApiClient {
     return this.request(`/reports/dashboard?${searchParams.toString()}`);
   }
 
-  async getSalesReport(period?: string, groupBy?: string): Promise<ApiResponse<any>> {
+  async getSalesReport(filter: any = {}, groupBy?: string): Promise<ApiResponse<any>> {
     const searchParams = new URLSearchParams();
-    if (period) searchParams.append('period', period);
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
     if (groupBy) searchParams.append('groupBy', groupBy);
 
     return this.request(`/reports/sales?${searchParams.toString()}`);
@@ -1168,46 +1439,98 @@ class ApiClient {
     return this.request(`/reports/inventory?${searchParams.toString()}`);
   }
 
-  async getFinancialReport(period?: string): Promise<ApiResponse<any>> {
-    const response = await this.request<any>(`/reports/financial?period=${period || 'today'}`);
+  async getFinancialReport(filter: any = {}): Promise<ApiResponse<any>> {
+    const searchParams = new URLSearchParams();
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+
+    // Ensure period is set if no filter is provided
+    if (!searchParams.has('period') && !searchParams.has('type')) {
+      searchParams.append('period', 'today');
+    }
+
+    const response = await this.request<any>(`/reports/financial?${searchParams.toString()}`);
     return response;
   }
 
-  async exportReportToExcel(reportType: string, period: string = 'today'): Promise<Blob> {
-    const response = await fetch(`${this.baseURL}/reports/export/excel?reportType=${reportType}&period=${period}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.getToken()}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to export report');
-    }
-
-    return response.blob();
-  }
-
-  async exportReportToPDF(reportType: string, period: string = 'today'): Promise<Blob> {
-    const response = await fetch(`${this.baseURL}/reports/export/pdf?reportType=${reportType}&period=${period}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.getToken()}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to export report');
-    }
-
-    return response.blob();
-  }
-
-  async getSessionsReport(period?: string, device?: string): Promise<ApiResponse<any>> {
+  async exportReportToExcel(reportType: string, filter: any = {}): Promise<Blob> {
     const searchParams = new URLSearchParams();
-    if (period) searchParams.append('period', period);
+    searchParams.append('reportType', reportType);
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    } else if (typeof filter === 'string') {
+      searchParams.append('period', filter);
+    }
+
+    if (!searchParams.has('period') && !searchParams.has('type')) {
+      searchParams.append('period', 'today');
+    }
+
+    const response = await fetch(`${this.baseURL}/reports/export/excel?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export report');
+    }
+
+    return response.blob();
+  }
+
+  async exportReportToPDF(reportType: string, filter: any = {}): Promise<Blob> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('reportType', reportType);
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    } else if (typeof filter === 'string') {
+      searchParams.append('period', filter);
+    }
+
+    if (!searchParams.has('period') && !searchParams.has('type')) {
+      searchParams.append('period', 'today');
+    }
+
+    const response = await fetch(`${this.baseURL}/reports/export/pdf?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export report');
+    }
+
+    return response.blob();
+  }
+
+  async getSessionsReport(filter: any = {}, device?: string): Promise<ApiResponse<any>> {
+    const searchParams = new URLSearchParams();
+    if (filter && typeof filter === 'object') {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
     if (device) searchParams.append('device', device);
 
     return this.request(`/reports/sessions?${searchParams.toString()}`);
@@ -1575,6 +1898,222 @@ class ApiClient {
     });
   }
 
+  // Menu Sections endpoints
+  async getMenuSections(): Promise<ApiResponse<MenuSection[]>> {
+    const response = await this.request<MenuSection[]>('/menu/sections');
+    if (response.success && response.data) {
+      response.data = this.normalizeArray(response.data);
+    }
+    return response;
+  }
+
+  async getMenuSection(id: string): Promise<ApiResponse<MenuSection>> {
+    const response = await this.request<MenuSection>(`/menu/sections/${id}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async createMenuSection(sectionData: {
+    name: string;
+    description?: string;
+    sortOrder?: number;
+  }): Promise<ApiResponse<MenuSection>> {
+    const response = await this.request<MenuSection>('/menu/sections', {
+      method: 'POST',
+      body: JSON.stringify(sectionData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async updateMenuSection(id: string, updates: Partial<MenuSection>): Promise<ApiResponse<MenuSection>> {
+    const response = await this.request<MenuSection>(`/menu/sections/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async deleteMenuSection(id: string): Promise<ApiResponse> {
+    return this.request(`/menu/sections/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Menu Categories endpoints
+  async getMenuCategories(params?: { section?: string }): Promise<ApiResponse<MenuCategory[]>> {
+    const searchParams = new URLSearchParams();
+    if (params?.section) {
+      searchParams.append('section', params.section);
+    }
+    const response = await this.request<MenuCategory[]>(`/menu/categories-all?${searchParams.toString()}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeArray(response.data);
+    }
+    return response;
+  }
+
+  async getMenuCategory(id: string): Promise<ApiResponse<MenuCategory>> {
+    const response = await this.request<MenuCategory>(`/menu/categories/${id}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async createMenuCategory(categoryData: {
+    name: string;
+    description?: string;
+    section: string;
+    sortOrder?: number;
+  }): Promise<ApiResponse<MenuCategory>> {
+    const response = await this.request<MenuCategory>('/menu/categories', {
+      method: 'POST',
+      body: JSON.stringify(categoryData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async updateMenuCategory(id: string, updates: Partial<MenuCategory>): Promise<ApiResponse<MenuCategory>> {
+    const response = await this.request<MenuCategory>(`/menu/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async deleteMenuCategory(id: string): Promise<ApiResponse> {
+    return this.request(`/menu/categories/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Table Sections endpoints
+  async getTableSections(): Promise<ApiResponse<TableSection[]>> {
+    const response = await this.request<TableSection[]>('/tables/sections');
+    if (response.success && response.data) {
+      response.data = this.normalizeArray(response.data);
+    }
+    return response;
+  }
+
+  async getTableSection(id: string): Promise<ApiResponse<TableSection>> {
+    const response = await this.request<TableSection>(`/tables/sections/${id}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async createTableSection(sectionData: {
+    name: string;
+    description?: string;
+    sortOrder?: number;
+  }): Promise<ApiResponse<TableSection>> {
+    const response = await this.request<TableSection>('/tables/sections', {
+      method: 'POST',
+      body: JSON.stringify(sectionData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async updateTableSection(id: string, updates: Partial<TableSection>): Promise<ApiResponse<TableSection>> {
+    const response = await this.request<TableSection>(`/tables/sections/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async deleteTableSection(id: string): Promise<ApiResponse> {
+    return this.request(`/tables/sections/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Tables endpoints
+  async getTables(params?: { section?: string }): Promise<ApiResponse<Table[]>> {
+    const searchParams = new URLSearchParams();
+    if (params?.section) {
+      searchParams.append('section', params.section);
+    }
+    const response = await this.request<Table[]>(`/tables/tables?${searchParams.toString()}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeArray(response.data);
+    }
+    return response;
+  }
+
+  async getTable(id: string): Promise<ApiResponse<Table>> {
+    const response = await this.request<Table>(`/tables/tables/${id}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async getTableStatus(id: string): Promise<ApiResponse<{ table: Table; hasUnpaidOrders: boolean; orders: Order[] }>> {
+    const response = await this.request<{ table: Table; hasUnpaidOrders: boolean; orders: Order[] }>(`/tables/tables/${id}/status`);
+    if (response.success && response.data) {
+      response.data = {
+        ...response.data,
+        table: this.normalizeData(response.data.table),
+        orders: this.normalizeArray(response.data.orders),
+      };
+    }
+    return response;
+  }
+
+  async createTable(tableData: {
+    number: string | number;
+    section: string;
+  }): Promise<ApiResponse<Table>> {
+    const response = await this.request<Table>('/tables/tables', {
+      method: 'POST',
+      body: JSON.stringify(tableData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async updateTable(id: string, updates: Partial<Table>): Promise<ApiResponse<Table>> {
+    const response = await this.request<Table>(`/tables/tables/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async deleteTable(id: string): Promise<ApiResponse> {
+    return this.request(`/tables/tables/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   async getTodayOrdersStats(): Promise<ApiResponse<any>> {
     return this.request('/orders/today-stats');
   }
@@ -1601,7 +2140,7 @@ class ApiClient {
 
   async markAllNotificationsAsRead(): Promise<ApiResponse<any>> {
     return this.request('/notifications/read-all', {
-      method: 'PUT'
+      method: 'POST'  // Changed from PUT to POST to match backend route
     });
   }
 
@@ -1648,6 +2187,44 @@ class ApiClient {
 
   async getAvailableBillsForSession(type: 'playstation' | 'computer'): Promise<ApiResponse<Bill[]>> {
     return this.request<Bill[]>(`/bills/available-for-session?type=${type}`);
+  }
+
+  // Generic HTTP methods
+  async get<T = any>(endpoint: string, config?: { params?: any }): Promise<ApiResponse<T>> {
+    let url = endpoint;
+    if (config?.params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(config.params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      const queryString = searchParams.toString();
+      if (queryString) {
+        url = `${endpoint}?${queryString}`;
+      }
+    }
+    return this.request<T>(url);
+  }
+
+  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'DELETE',
+    });
   }
 
 

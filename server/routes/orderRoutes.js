@@ -13,19 +13,25 @@ import {
     deliverItem,
     updateOrder,
     deleteOrder,
+    calculateOrderRequirements,
+    deductOrderInventory,
 } from "../controllers/orderController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
-import { validateOrder, validateRequest } from "../middleware/validation.js";
+import {
+    validateOrder,
+    validateOrderUpdate,
+    validateRequest,
+} from "../middleware/validation.js";
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(authenticateToken);
 
-// Get orders (cafe and menu permissions)
-router.get("/", authorize("cafe", "menu", "all"), getOrders);
-router.get("/pending", authorize("cafe", "menu", "all"), getPendingOrders);
-router.get("/stats", authorize("cafe", "menu", "all"), getOrderStats);
+// Get orders (cafe, menu, staff permissions)
+router.get("/", authorize("cafe", "menu", "staff", "all"), getOrders);
+router.get("/pending", authorize("cafe", "menu", "staff", "all"), getPendingOrders);
+router.get("/stats", authorize("cafe", "menu", "staff", "all"), getOrderStats);
 router.get(
     "/today-stats",
     authorize("cafe", "menu", "all"),
@@ -37,12 +43,26 @@ router.get("/:id", authorize("cafe", "menu", "all"), getOrder);
 router.delete("/:id", authorize("cafe", "menu", "all"), deleteOrder);
 
 // إضافة مسار تحديث الطلبات
-router.patch("/:id", authorize("cafe", "menu", "all"), updateOrder);
+router.patch(
+    "/:id",
+    authorize("cafe", "menu", "all"),
+    validateOrderUpdate,
+    validateRequest,
+    updateOrder
+);
 
-// Create order (cafe and menu permissions)
+// Calculate order requirements (cafe and menu permissions)
+router.post(
+    "/calculate",
+    authorize("cafe", "menu", "all"),
+    validateRequest,
+    calculateOrderRequirements
+);
+
+// Create order (cafe, menu, staff permissions)
 router.post(
     "/",
-    authorize("cafe", "menu", "all"),
+    authorize("cafe", "menu", "staff", "all"),
     validateOrder,
     validateRequest,
     createOrder
@@ -54,7 +74,7 @@ router.patch(
     authorize("cafe", "menu", "all"),
     updateOrderStatus
 );
-router.put("/:id/status", authorize("cafe", "menu", "all"), updateOrderStatus);
+router.put("/:id/status", authorize("cafe", "menu", "staff", "all"), updateOrderStatus);
 router.patch(
     "/:id/items/:itemIndex/status",
     authorize("cafe", "menu", "all"),
@@ -67,6 +87,13 @@ router.put(
     "/:orderId/items/:itemIndex/prepared",
     authorize("cafe", "menu", "all"),
     updateOrderItemPrepared
+);
+
+// Deduct all inventory for order preparation (cafe and menu permissions)
+router.post(
+    "/:orderId/deduct-inventory",
+    authorize("cafe", "menu", "all"),
+    deductOrderInventory
 );
 
 // Deliver specific item in order (cafe and menu permissions)

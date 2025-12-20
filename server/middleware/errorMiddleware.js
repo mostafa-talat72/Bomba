@@ -9,16 +9,7 @@ export const errorHandler = (err, req, res, next) => {
     error.message = err.message;
 
     // Log error with more details
-    // console.error('🚨 Error occurred:', {
-    //   message: err.message,
-    //   stack: err.stack,
-    //   url: req.originalUrl,
-    //   method: req.method,
-    //   body: req.body,
-    //   user: req.user ? { id: req.user._id, name: req.user.name } : 'No user'
-    // });
-
-    // Mongoose bad ObjectId
+    // // Mongoose bad ObjectId
     if (err.name === "CastError") {
         const message = "المورد غير موجود";
         error = { message, statusCode: 404 };
@@ -51,11 +42,7 @@ export const errorHandler = (err, req, res, next) => {
 
     // Handle specific order creation errors
     if (req.originalUrl.includes("/orders") && req.method === "POST") {
-        // console.error('📋 Order creation specific error:', {
-        //   error: err.message,
-        //   body: req.body,
-        //   validationErrors: err.errors
-        // });
+        // Additional error handling for orders can be added here
     }
 
     res.status(error.statusCode || 500).json({

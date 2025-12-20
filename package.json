@@ -12,10 +12,11 @@
     "nodejs",
     "mongodb"
   ],
-      "author": "Bomba Team",
+  "author": "Bomba Team",
   "license": "MIT",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "dev:safe": "concurrently \"npm run server:dev\" \"vite --host 0.0.0.0\"",
     "client:dev": "vite",
     "server:dev": "cd server && npm run dev",
     "build": "vite build",
@@ -29,17 +30,34 @@
     "build:all": "npm run build && cd server && npm run build",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "seed:admin": "cd server && node scripts/seedAdmin.js"
+    "seed:admin": "cd server && node scripts/seedAdmin.js",
+    "migrate:tables": "cd server && node scripts/migrateTableReferences.js",
+    "check:replica": "node server/scripts/checkReplicaSet.js",
+    "init:replica": "node server/scripts/initializeReplicaSet.js",
+    "sync:initial": "node server/scripts/initialSync.js"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "@types/react-date-range": "^1.4.10",
+    "@types/recharts": "^1.8.29",
+    "antd": "^5.28.1",
     "axios": "^1.10.0",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.19",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
+    "react-date-range": "^2.0.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.1"
+    "react-router-dom": "^6.26.1",
+    "react-toastify": "^11.0.5",
+    "recharts": "^3.4.1",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@types/node": "^24.3.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
@@ -62,10 +80,10 @@
   },
   "repository": {
     "type": "git",
-          "url": "https://github.com/your-repo/bomba.git"
+    "url": "https://github.com/your-repo/bomba.git"
   },
   "bugs": {
-          "url": "https://github.com/your-repo/bomba/issues"
+    "url": "https://github.com/your-repo/bomba/issues"
   },
-      "homepage": "https://bomba.com"
+  "homepage": "https://bomba.com"
 }

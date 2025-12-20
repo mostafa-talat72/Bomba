@@ -49,11 +49,46 @@ router.put(
     sessionController.updateSessionCost
 );
 
+// Update session start time (playstation and computer permissions)
+router.put(
+    "/:id/start-time",
+    authorize("playstation", "computer", "all"),
+    sessionController.updateSessionStartTime
+);
+
 // End session (playstation and computer permissions)
 router.put(
     "/:id/end",
     authorize("playstation", "computer", "all"),
     sessionController.endSession
+);
+
+// Unlink session from table (playstation and computer permissions)
+router.put(
+    "/:sessionId/unlink-table",
+    authorize("playstation", "computer", "all"),
+    sessionController.unlinkTableFromSession
+);
+
+// Link session to table with smart bill merging (playstation and computer permissions)
+router.put(
+    "/:sessionId/link-table",
+    authorize("playstation", "computer", "all"),
+    sessionController.linkSessionToTable
+);
+
+// Change session table - moves only the specific session to a new table
+router.put(
+    "/:sessionId/change-table",
+    authorize("playstation", "computer", "all"),
+    sessionController.changeSessionTable
+);
+
+// Clean up duplicate session references in bills (admin only)
+router.post(
+    "/cleanup-duplicates",
+    authorize("all"),
+    sessionController.cleanupDuplicateSessionReferences
 );
 
 // Get active sessions (playstation and computer permissions)

@@ -34,20 +34,20 @@ const NotificationManagement = () => {
   const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
 
   const categories = [
-    { id: 'all', name: 'جميع الإشعارات', color: 'text-gray-600 dark:text-gray-400' },
-    { id: 'session', name: 'الجلسات', color: 'text-blue-600 dark:text-blue-400' },
-    { id: 'order', name: 'الطلبات', color: 'text-green-600 dark:text-green-400' },
-    { id: 'inventory', name: 'المخزون', color: 'text-orange-600 dark:text-orange-400' },
-    { id: 'billing', name: 'الفواتير', color: 'text-purple-600 dark:text-purple-400' },
-    { id: 'system', name: 'النظام', color: 'text-red-600 dark:text-red-400' },
-    { id: 'security', name: 'الأمان', color: 'text-yellow-600 dark:text-yellow-400' },
+    { id: 'all', name: 'جميع الإشعارات', color: 'text-gray-600' },
+    { id: 'session', name: 'الجلسات', color: 'text-blue-600' },
+    { id: 'order', name: 'الطلبات', color: 'text-green-600' },
+    { id: 'inventory', name: 'المخزون', color: 'text-orange-600' },
+    { id: 'billing', name: 'الفواتير', color: 'text-purple-600' },
+    { id: 'system', name: 'النظام', color: 'text-red-600' },
+    { id: 'security', name: 'الأمان', color: 'text-yellow-600' },
   ];
 
   const priorityColors = {
-    low: 'text-gray-500 dark:text-gray-400',
-    medium: 'text-blue-500 dark:text-blue-400',
-    high: 'text-orange-500 dark:text-orange-400',
-    urgent: 'text-red-500 dark:text-red-400'
+    low: 'text-gray-500',
+    medium: 'text-blue-500',
+    high: 'text-orange-500',
+    urgent: 'text-red-500'
   };
 
   const typeIcons = {
@@ -84,8 +84,7 @@ const NotificationManagement = () => {
       await loadNotifications();
       await loadStats();
     } catch (error) {
-      console.error('Error marking all notifications as read on page load:', error);
-    } finally {
+      } finally {
       setIsMarkingAllAsRead(false);
     }
   };
@@ -127,7 +126,6 @@ const NotificationManagement = () => {
     } catch {
       // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه أو أثناء تسجيل الخروج
       if (!user || isLoggingOut) return;
-      console.error('Error loading stats');
       setStats(null);
     }
   };
@@ -202,61 +200,54 @@ const NotificationManagement = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <Bell className="h-8 w-8 text-orange-600 dark:text-orange-400 ml-3" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إدارة الإشعارات</h1>
-            <p className="text-gray-600 dark:text-gray-400">عرض وإدارة الإشعارات حسب صلاحياتك</p>
-          </div>
+      <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
+        <div className="flex items-center xs:w-full xs:justify-between">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
+            <Bell className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
+            إدارة الإشعارات
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">إدارة وتنظيم الإشعارات المرسلة للمستخدمين</p>
         </div>
-        <div className="flex items-center space-x-2 space-x-reverse">
-          <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
-            <button
-              onClick={handleMarkAllAsRead}
-              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 shadow-sm"
-            >
-              تحديد الكل كمقروء
-            </button>
-          </PermissionGuard>
+        <div className="flex items-center gap-2 xs:w-full xs:justify-center xs:mt-2">
+          {/* ضع هنا أزرار الإجراءات مثل إرسال إشعار */}
         </div>
       </div>
 
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <Bell className="h-8 w-8 text-orange-600 dark:text-orange-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-400">إجمالي الإشعارات</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">إجمالي الإشعارات</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal(stats.total)}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <Eye className="h-8 w-8 text-orange-600 dark:text-orange-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-400">غير مقروءة</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">غير مقروءة</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal(stats.unread)}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-400">مقروءة</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">مقروءة</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal((stats.total || 0) - (stats.unread || 0))}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow duration-200">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <Filter className="h-8 w-8 text-purple-600 dark:text-purple-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-400">الفئات</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">الفئات</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal(Object.keys(stats.byCategory || {}).length)}</p>
               </div>
             </div>
@@ -276,7 +267,7 @@ const NotificationManagement = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="البحث في الإشعارات..."
-                className="w-full pr-10 pl-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                className="w-full pr-10 pl-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
           </div>
@@ -285,7 +276,7 @@ const NotificationManagement = () => {
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               {categories.map(category => (
                 <option key={category.id} value={category.id}>
@@ -300,7 +291,7 @@ const NotificationManagement = () => {
                 type="checkbox"
                 checked={filterUnread}
                 onChange={(e) => setFilterUnread(e.target.checked)}
-                className="ml-2 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                className="ml-2 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
               />
               <span className="text-sm text-gray-700 dark:text-gray-300">غير مقروءة فقط</span>
             </label>
@@ -312,7 +303,7 @@ const NotificationManagement = () => {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         {loading ? (
           <div className="p-8 text-center">
-            <div className="w-8 h-8 border-4 border-primary-600 dark:border-primary-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="w-8 h-8 border-4 border-orange-600 dark:border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-gray-600 dark:text-gray-400">جاري تحميل الإشعارات...</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
@@ -339,14 +330,14 @@ const NotificationManagement = () => {
                         <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                           {notification.title}
                         </h3>
-                        <span className={`text-xs px-2 py-1 rounded-full ${priorityColors[notification.priority as keyof typeof priorityColors] || 'text-gray-500 dark:text-gray-400'}`}>
+                        <span className={`text-xs px-2 py-1 rounded-full ${priorityColors[notification.priority as keyof typeof priorityColors] || 'text-gray-500'}`}>
                           {notification.priority}
                         </span>
                         <span className={`text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300`}>
                           {getCategoryName(notification.category)}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{notification.message}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">{notification.message}</p>
                       <div className="flex items-center space-x-4 space-x-reverse text-xs text-gray-500 dark:text-gray-400">
                         <span>{new Date(notification.createdAt).toLocaleString('ar-EG')}</span>
                         {notification.createdBy && (
@@ -359,7 +350,7 @@ const NotificationManagement = () => {
                     {!notification.readBy?.some((read) => read.user === user?.id) && (
                       <button
                         onClick={() => handleMarkAsRead(notification._id)}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                        className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
                         title="تحديد كمقروء"
                       >
                         <Eye className="h-4 w-4" />
@@ -368,7 +359,7 @@ const NotificationManagement = () => {
                     <PermissionGuard requiredPermissions={['users']}>
                       <button
                         onClick={() => handleDeleteNotification(notification._id)}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                        className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                         title="حذف الإشعار"
                       >
                         <Trash2 className="h-4 w-4" />

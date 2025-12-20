@@ -3,7 +3,6 @@ import { body, validationResult } from "express-validator";
 export const validateRequest = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        console.error("Validation errors:", errors.array());
         return res.status(400).json({
             success: false,
             message: "بيانات غير صحيحة",
@@ -147,6 +146,59 @@ export const validateOrder = [
     body("bill").optional().isMongoId().withMessage("معرف الفاتورة غير صحيح"),
 ];
 
+// Order update validation rules (more flexible for updates)
+export const validateOrderUpdate = [
+    body("tableNumber")
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage("رقم الطاولة يجب أن يكون رقم صحيح أكبر من 0"),
+    body("customerName")
+        .optional()
+        .trim()
+        .isLength({ min: 1, max: 100 })
+        .withMessage("اسم العميل يجب أن يكون بين 1 و 100 حرف"),
+    body("customerPhone")
+        .optional()
+        .trim()
+        .isLength({ min: 1, max: 20 })
+        .withMessage("رقم الهاتف يجب أن يكون بين 1 و 20 حرف"),
+    body("items")
+        .optional()
+        .isArray({ min: 1 })
+        .withMessage("يجب أن يحتوي الطلب على عنصر واحد على الأقل"),
+    body("items.*.name")
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage("اسم المنتج مطلوب"),
+    body("items.*.price")
+        .optional()
+        .isFloat({ min: 0 })
+        .withMessage("سعر المنتج يجب أن يكون رقم موجب"),
+    body("items.*.quantity")
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage("الكمية يجب أن تكون رقم صحيح أكبر من 0"),
+    body("items.*.notes")
+        .optional()
+        .trim()
+        .isLength({ max: 200 })
+        .withMessage("ملاحظات العنصر يجب أن تكون أقل من 200 حرف"),
+    body("items.*.menuItem")
+        .optional()
+        .isMongoId()
+        .withMessage("معرف عنصر القائمة غير صحيح"),
+    body("notes")
+        .optional()
+        .trim()
+        .isLength({ max: 500 })
+        .withMessage("ملاحظات الطلب يجب أن تكون أقل من 500 حرف"),
+    body("status")
+        .optional()
+        .isIn(["pending", "preparing", "ready", "delivered", "cancelled"])
+        .withMessage("حالة الطلب غير صحيحة"),
+];
+
 // Inventory validation rules
 export const validateInventoryItem = [
     body("name").trim().notEmpty().withMessage("اسم المنتج مطلوب"),
@@ -175,16 +227,10 @@ export const validateInventoryItem = [
 // Cost validation rules
 export const validateCost = [
     body("category")
-        .isIn([
-            "rent",
-            "utilities",
-            "salaries",
-            "maintenance",
-            "inventory",
-            "marketing",
-            "other",
-        ])
-        .withMessage("فئة التكلفة غير صحيحة"),
+        .notEmpty()
+        .withMessage("فئة التكلفة مطلوبة")
+        .isMongoId()
+        .withMessage("معرف القسم غير صحيح"),
     body("description").trim().notEmpty().withMessage("وصف التكلفة مطلوب"),
     body("amount")
         .isFloat({ min: 0 })

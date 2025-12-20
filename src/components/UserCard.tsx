@@ -40,94 +40,112 @@ const UserCard: React.FC<UserCardProps> = ({
 }) => {
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
-  const statusColor = getStatusColor(user.status);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'active': return <UserCheck className="h-3 w-3" />;
-      case 'inactive': return <UserX className="h-3 w-3" />;
-      case 'suspended': return <Shield className="h-3 w-3" />;
-      default: return <User className="h-3 w-3" />;
+      case 'active': return <UserCheck className="h-4 w-4" />;
+      case 'inactive': return <UserX className="h-4 w-4" />;
+      case 'suspended': return <Shield className="h-4 w-4" />;
+      default: return <User className="h-4 w-4" />;
     }
   };
 
-  const formatLastLogin = (date: string | Date) => {
+  const getStatusGradient = (status: string) => {
+    switch (status) {
+      case 'active': return 'from-green-500 to-emerald-600';
+      case 'inactive': return 'from-red-500 to-rose-600';
+      case 'suspended': return 'from-yellow-500 to-amber-600';
+      default: return 'from-gray-500 to-gray-600';
+    }
+  };
+
+  const formatLastLogin = (date?: Date) => {
     if (!date) return 'لم يسجل دخول';
     return new Date(date).toLocaleDateString('ar-EG', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      day: 'numeric'
     });
   };
 
   return (
     <div
-      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-200 cursor-pointer group relative overflow-hidden"
+      className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-lg border-2 border-gray-200 dark:border-gray-700 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group relative overflow-hidden animate-slideUp"
       onClick={() => onView(user)}
       tabIndex={0}
       role="button"
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onView(user); }}
       aria-label={`تفاصيل المستخدم ${user.name}`}
+      dir="rtl"
     >
       {/* Status Badge */}
-      <div className={`absolute top-3 left-3 flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${statusColor} z-10`}>
-        {getStatusIcon(user.status)}
-        {getStatusText(user.status)}
+      <div className="absolute top-4 left-4 z-10">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg bg-gradient-to-r ${getStatusGradient(user.status)} text-white font-bold text-sm`}>
+          {getStatusIcon(user.status)}
+          <span>{getStatusText(user.status)}</span>
+        </div>
       </div>
 
       {/* Main Content */}
-      <div className="p-4 pt-10">
+      <div className="p-6 pt-16">
         {/* User Header */}
-        <div className="flex items-start mb-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900 dark:to-primary-800 rounded-full flex items-center justify-center flex-shrink-0">
-            <User className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+        <div className="flex items-center mb-4">
+          <div 
+            className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
+            style={{ 
+              background: `linear-gradient(135deg, ${roleInfo.color.replace('text-', '#')} 0%, ${roleInfo.color.replace('text-', '#')}dd 100%)`,
+              boxShadow: '0 8px 24px -6px rgba(249, 115, 22, 0.4)'
+            }}
+          >
+            <User className="h-8 w-8 text-white" />
           </div>
-          <div className="mr-3 flex-1 min-w-0">
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 truncate">{user.name}</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
+          <div className="mr-4 flex-1 min-w-0">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate mb-1">{user.name}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 truncate mb-2">{user.email}</p>
+            
+            {/* Role Badge */}
+            <div className={`inline-flex items-center px-3 py-1.5 rounded-xl text-sm font-bold shadow-md ${roleInfo.bgColor} ${roleInfo.color}`}>
+              <RoleIcon className="h-4 w-4 ml-2" />
+              {roleInfo.name}
+            </div>
           </div>
-        </div>
-
-        {/* Role Badge */}
-        <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mb-2 ${roleInfo.bgColor} ${roleInfo.color}`}>
-          <RoleIcon className="h-3 w-3 ml-1" />
-          {roleInfo.name}
         </div>
 
         {/* Last Login */}
-        <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-3">
-          <Calendar className="h-3 w-3 ml-1 flex-shrink-0" />
-          <span className="truncate">
-            آخر دخول: {formatLastLogin(user.lastLogin || '')}
+        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-4 p-3 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-xl">
+          <Calendar className="h-4 w-4 ml-2 text-blue-600 dark:text-blue-400" />
+          <span className="font-semibold">
+            آخر دخول: {formatLastLogin(user.lastLogin)}
           </span>
         </div>
 
         {/* Permissions */}
-        <div className="mb-3">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">الصلاحيات:</div>
-          <div className="flex flex-wrap gap-1">
+        <div className="mb-4">
+          <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+            <Crown className="w-4 h-4 text-purple-600" />
+            الصلاحيات:
+          </div>
+          <div className="flex flex-wrap gap-2">
             {user.permissions?.includes('all') ? (
-              <span className="inline-flex items-center px-2 py-1 text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full font-medium">
-                <Crown className="h-3 w-3 ml-1" />
+              <span className="inline-flex items-center px-3 py-2 text-sm bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl font-bold shadow-md">
+                <Crown className="h-4 w-4 ml-2" />
                 جميع الصلاحيات
               </span>
             ) : user.permissions && user.permissions.length > 0 ? (
               <>
                 {user.permissions?.slice(0, 2).map(perm => (
-                  <span key={perm} className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
+                  <span key={perm} className="px-3 py-2 text-sm bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold shadow-md">
                     {permissions.find(p => p.id === perm)?.name || perm}
                   </span>
                 ))}
                 {user.permissions.length > 2 && (
-                  <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
-                    +{user.permissions.length - 2}
+                  <span className="px-3 py-2 text-sm bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl font-semibold shadow-md">
+                    +{user.permissions.length - 2} أخرى
                   </span>
                 )}
               </>
             ) : (
-              <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full">
+              <span className="px-3 py-2 text-sm bg-gradient-to-r from-gray-400 to-gray-500 text-white rounded-xl font-semibold">
                 لا توجد صلاحيات
               </span>
             )}
@@ -136,35 +154,48 @@ const UserCard: React.FC<UserCardProps> = ({
 
         {/* Action Buttons */}
         <div
-          className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100 dark:border-gray-700"
+          className="flex items-center justify-center gap-2 pt-4 border-t-2 border-gray-200 dark:border-gray-700"
           onClick={e => e.stopPropagation()}
         >
           <button
             onClick={() => onView(user)}
-            className="p-1.5 text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900 rounded transition-colors duration-200"
+            className="group relative overflow-hidden flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
             title="عرض التفاصيل"
           >
-            <Eye className="h-3.5 w-3.5" />
+            <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+            <div className="relative flex items-center justify-center gap-2">
+              <Eye className="h-4 w-4" />
+              <span>عرض</span>
+            </div>
           </button>
+          
           <button
             onClick={() => onEdit(user)}
-            className="p-1.5 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900 rounded transition-colors duration-200"
+            className="group relative overflow-hidden flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
             title="تعديل المستخدم"
           >
-            <Edit className="h-3.5 w-3.5" />
+            <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+            <div className="relative flex items-center justify-center gap-2">
+              <Edit className="h-4 w-4" />
+              <span>تعديل</span>
+            </div>
           </button>
+          
           <button
             onClick={() => onDelete(user.id)}
-            className="p-1.5 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900 rounded transition-colors duration-200"
+            className="group relative overflow-hidden px-4 py-3 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
             title="حذف المستخدم"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+            <div className="relative flex items-center justify-center">
+              <Trash2 className="h-4 w-4" />
+            </div>
           </button>
         </div>
       </div>
 
       {/* Hover Effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-primary-500/5 dark:from-primary-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 dark:from-orange-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
     </div>
   );
 };

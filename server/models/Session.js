@@ -21,6 +21,12 @@ const sessionSchema = new mongoose.Schema(
             enum: ["playstation", "computer"],
             required: true,
         },
+        table: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Table",
+            required: false,
+            default: null,
+        },
         customerName: {
             type: String,
             trim: true,
@@ -104,10 +110,13 @@ const sessionSchema = new mongoose.Schema(
     }
 );
 
-// Indexes
-sessionSchema.index({ deviceNumber: 1, status: 1 });
-sessionSchema.index({ status: 1 });
+// Indexes for better query performance
+sessionSchema.index({ deviceNumber: 1, status: 1 }); // للتحقق من استخدام الجهاز
+sessionSchema.index({ status: 1, organization: 1 }); // للبحث عن الجلسات النشطة
 sessionSchema.index({ startTime: -1 });
+sessionSchema.index({ bill: 1 }); // للربط مع الفواتير
+sessionSchema.index({ table: 1 }); // للربط مع الطاولات
+sessionSchema.index({ organization: 1, createdAt: -1 }); // للتقارير
 
 // Middleware to initialize controllersHistory on new session
 sessionSchema.pre("save", function (next) {
@@ -137,14 +146,18 @@ function getPlayStationHourlyRate(controllers) {
 
 // تعديل دالة حساب التكلفة لتستخدم الأسعار من بيانات الجهاز
 sessionSchema.methods.calculateCost = async function () {
+    
     // جلب بيانات الجهاز من قاعدة البيانات باستخدام deviceId
     const device = await Device.findById(this.deviceId);
     if (!device) {
+        console.error('❌ Device not found for deviceId:', this.deviceId);
         throw new Error("لم يتم العثور على بيانات الجهاز لحساب التكلفة");
     }
+    
+   
     const getRate = (controllers) => {
         if (device.type === "playstation" && device.playstationRates) {
-            return device.playstationRates.get(String(controllers)) || 0;
+            return device.playstationRates[String(controllers)] || 0;
         } else if (device.type === "computer") {
             return device.hourlyRate || 0;
         }
@@ -159,11 +172,20 @@ sessionSchema.methods.calculateCost = async function () {
             const hourlyRate = getRate(this.controllers);
             const minuteRate = hourlyRate / 60;
             const rawCost = minutes * minuteRate;
-            this.totalCost = Math.round(rawCost); // التقريب فقط عند حساب التكلفة النهائية
+            
+            // التقريب المخصص: إذا كان >= 0.5 ساعة، نقرب لأعلى، وإلا نبقيها كما هي
+            const hours = minutes / 60;
+            const fractionalPart = hours - Math.floor(hours);
+            
+            if (fractionalPart >= 0.5) {
+                this.totalCost = Math.ceil(rawCost);
+            } else {
+                this.totalCost = Math.round(rawCost);
+            }
         } else {
             this.totalCost = 0;
         }
-        this.finalCost = this.totalCost - this.discount;
+        this.finalCost = this.totalCost - (this.discount || 0);
         return this.finalCost;
     }
     let total = 0;
@@ -206,9 +228,24 @@ sessionSchema.methods.calculateCost = async function () {
             total = rawCost; // لا نقرب هنا أيضاً
         }
     }
-    // التقريب فقط عند حساب التكلفة النهائية
-    this.totalCost = Math.round(total);
-    this.finalCost = this.totalCost - this.discount;
+    // التقريب المخصص: إذا كان >= 0.5 ساعة، نقرب لأعلى، وإلا نبقيها كما هي
+    const hours = total / (getRate(this.controllers) || 1);
+    const fractionalPart = hours - Math.floor(hours);
+    
+    if (fractionalPart >= 0.5) {
+        // إذا كانت الساعات >= 0.5، نقرب لأعلى
+        this.totalCost = Math.ceil(total);
+    } else {
+        // إذا كانت أقل من 0.5، نبقيها كما هي
+        this.totalCost = Math.round(total);
+    }
+    
+    this.finalCost = this.totalCost - (this.discount || 0);
+    
+    // Mark fields as modified to ensure they are saved
+    this.markModified('totalCost');
+    this.markModified('finalCost');
+    
     return this.finalCost;
 };
 
@@ -243,7 +280,7 @@ sessionSchema.methods.updateControllers = function (newControllers) {
 };
 
 // End session
-sessionSchema.methods.endSession = function () {
+sessionSchema.methods.endSession = async function () {
     if (this.status !== "active") {
         throw new Error("الجلسة غير نشطة");
     }
@@ -271,16 +308,32 @@ sessionSchema.methods.endSession = function () {
     }
 
     // Calculate final cost
-    this.calculateCost();
-
+    await this.calculateCost();
+    
+    
     return this;
 };
 
-// Calculate current cost for active sessions
-sessionSchema.methods.calculateCurrentCost = function () {
+// Calculate current cost for active sessions (async version using device rates from DB)
+sessionSchema.methods.calculateCurrentCost = async function () {
     if (this.status !== "active") {
         return this.totalCost;
     }
+
+    // Fetch device data from database
+    const device = await Device.findById(this.deviceId);
+    if (!device) {
+        throw new Error("لم يتم العثور على بيانات الجهاز لحساب التكلفة");
+    }
+
+    const getRate = (controllers) => {
+        if (device.type === "playstation" && device.playstationRates) {
+            return device.playstationRates[String(controllers)] || 0;
+        } else if (device.type === "computer") {
+            return device.hourlyRate || 0;
+        }
+        return 0;
+    };
 
     const now = new Date();
     let total = 0;
@@ -289,18 +342,10 @@ sessionSchema.methods.calculateCurrentCost = function () {
     if (!this.controllersHistory || this.controllersHistory.length === 0) {
         const durationMs = now - new Date(this.startTime);
         const minutes = durationMs / (1000 * 60);
-
-        if (this.deviceType === "playstation") {
-            const hourlyRate = getPlayStationHourlyRate(this.controllers);
-            const minuteRate = hourlyRate / 60;
-            const rawCost = minutes * minuteRate;
-            total = rawCost; // لا نقرب هنا
-        } else if (this.deviceType === "computer") {
-            const hourlyRate = 15;
-            const minuteRate = hourlyRate / 60;
-            const rawCost = minutes * minuteRate;
-            total = rawCost; // لا نقرب هنا
-        }
+        const hourlyRate = getRate(this.controllers);
+        const minuteRate = hourlyRate / 60;
+        const rawCost = minutes * minuteRate;
+        total = rawCost;
     } else {
         // Calculate based on controllersHistory
         for (const period of this.controllersHistory) {
@@ -314,25 +359,16 @@ sessionSchema.methods.calculateCurrentCost = function () {
                 const minutes = durationMs / (1000 * 60);
 
                 if (minutes > 0) {
-                    if (this.deviceType === "playstation") {
-                        const hourlyRate = getPlayStationHourlyRate(
-                            period.controllers
-                        );
-                        const minuteRate = hourlyRate / 60;
-                        const rawPeriodCost = minutes * minuteRate;
-                        total += rawPeriodCost; // لا نقرب هنا
-                    } else if (this.deviceType === "computer") {
-                        const hourlyRate = 15;
-                        const minuteRate = hourlyRate / 60;
-                        const rawPeriodCost = minutes * minuteRate;
-                        total += rawPeriodCost; // لا نقرب هنا
-                    }
+                    const hourlyRate = getRate(period.controllers);
+                    const minuteRate = hourlyRate / 60;
+                    const rawPeriodCost = minutes * minuteRate;
+                    total += rawPeriodCost;
                 }
             }
         }
     }
 
-    // التقريب فقط عند إرجاع التكلفة النهائية
+    // Round only when returning final cost
     return Math.round(total);
 };
 
@@ -420,7 +456,7 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
             device &&
             device.playstationRates
         ) {
-            return device.playstationRates.get(String(controllers)) || 0;
+            return device.playstationRates[String(controllers)] || 0;
         } else if (this.deviceType === "computer" && device) {
             return device.hourlyRate || 0;
         }
@@ -482,6 +518,10 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
         breakdown,
     };
 };
+
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(sessionSchema);
 
 const Session = mongoose.model("Session", sessionSchema);
 export default Session;

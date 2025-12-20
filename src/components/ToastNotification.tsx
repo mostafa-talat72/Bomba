@@ -45,17 +45,17 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
       case 'error':
         return <AlertCircle className="h-5 w-5 text-red-500" />;
       case 'warning':
-        return <AlertCircle className="h-5 w-5 text-yellow-500" />;
+        return <AlertCircle className="h-5 w-5 text-orange-500" />;
       case 'session':
-        return <Clock className="h-5 w-5 text-blue-500" />;
+        return <Clock className="h-5 w-5 text-orange-500" />;
       case 'order':
-        return <CheckCircle className="h-5 w-5 text-purple-500" />;
+        return <CheckCircle className="h-5 w-5 text-orange-500" />;
       case 'inventory':
         return <AlertCircle className="h-5 w-5 text-orange-500" />;
       case 'billing':
         return <CheckCircle className="h-5 w-5 text-green-500" />;
       default:
-        return <Info className="h-5 w-5 text-blue-500" />;
+        return <Info className="h-5 w-5 text-orange-500" />;
     }
   };
 
@@ -66,17 +66,17 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
       case 'error':
         return 'bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-700';
       case 'warning':
-        return 'bg-yellow-50 dark:bg-yellow-900 border-yellow-200 dark:border-yellow-700';
+        return 'bg-orange-50 dark:bg-orange-900 border-orange-200 dark:border-orange-700';
       case 'session':
-        return 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700';
+        return 'bg-orange-50 dark:bg-orange-900 border-orange-200 dark:border-orange-700';
       case 'order':
-        return 'bg-purple-50 dark:bg-purple-900 border-purple-200 dark:border-purple-700';
+        return 'bg-orange-50 dark:bg-orange-900 border-orange-200 dark:border-orange-700';
       case 'inventory':
         return 'bg-orange-50 dark:bg-orange-900 border-orange-200 dark:border-orange-700';
       case 'billing':
         return 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700';
       default:
-        return 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700';
+        return 'bg-orange-50 dark:bg-orange-900 border-orange-200 dark:border-orange-700';
     }
   };
 

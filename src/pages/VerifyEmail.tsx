@@ -42,7 +42,7 @@ const VerifyEmail: React.FC = () => {
       <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
         {status === 'loading' && (
           <>
-            <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="w-16 h-16 border-4 border-orange-600 dark:border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-gray-600">جاري التحقق من الحساب...</p>
           </>
         )}

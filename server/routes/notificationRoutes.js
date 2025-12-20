@@ -28,7 +28,7 @@ router.get("/stats", getNotificationStats);
 router.put("/:id/read", markAsRead);
 
 // Mark all notifications as read (any authenticated user)
-router.put("/read-all", markAllAsRead);
+router.post("/read-all", markAllAsRead);
 
 // Delete notification (any authenticated user)
 router.delete("/:id", deleteNotification);

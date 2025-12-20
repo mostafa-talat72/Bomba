@@ -2,52 +2,111 @@ import Order from "../models/Order.js";
 import InventoryItem from "../models/InventoryItem.js";
 import MenuItem from "../models/MenuItem.js";
 import Bill from "../models/Bill.js";
+import Table from "../models/Table.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import mongoose from "mongoose";
+import performanceMetrics from "../utils/performanceMetrics.js";
+import {
+    convertQuantity,
+    calculateTotalInventoryNeeded,
+    validateInventoryAvailability,
+    calculateOrderTotalCost,
+    createOrderErrorMessages,
+    createOrderSuccessMessages,
+} from "../utils/orderUtils.js";
 
 // @desc    Get all orders
 // @route   GET /api/orders
 // @access  Private
 export const getOrders = async (req, res) => {
+    const queryStartTime = Date.now();
     try {
-        const { status, tableNumber, page = 1, limit = 10, date } = req.query;
+        const { 
+            status, 
+            table, 
+            page = 1, 
+            limit = 50, 
+            startDate,  // NEW: Date range filtering
+            endDate     // NEW: Date range filtering
+        } = req.query;
 
         const query = {};
         if (status) query.status = status;
-        if (tableNumber) query.tableNumber = tableNumber;
+        if (table) query.table = table;
         query.organization = req.user.organization;
 
-        // Filter by date if provided
-        if (date) {
-            const startDate = new Date(date);
-            const endDate = new Date(date);
-            endDate.setDate(endDate.getDate() + 1);
-
-            query.createdAt = {
-                $gte: startDate,
-                $lt: endDate,
-            };
+        // NEW: Date range filtering
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) {
+                try {
+                    query.createdAt.$gte = new Date(startDate);
+                } catch (error) {
+                    Logger.error("Invalid startDate format", { startDate });
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid date format. Use ISO 8601 format (YYYY-MM-DD)",
+                    });
+                }
+            }
+            if (endDate) {
+                try {
+                    const endDateTime = new Date(endDate);
+                    // Set to end of day to include all orders from that day
+                    endDateTime.setHours(23, 59, 59, 999);
+                    query.createdAt.$lte = endDateTime;
+                } catch (error) {
+                    Logger.error("Invalid endDate format", { endDate });
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid date format. Use ISO 8601 format (YYYY-MM-DD)",
+                    });
+                }
+            }
         }
 
+        // إزالة الحد - جلب جميع الطلبات بدون pagination
+        // تم إزالة effectiveLimit لعرض جميع الطلبات القديمة والجديدة
+
+        // Selective field projection - only essential fields + bill status + items
         const orders = await Order.find(query)
-            .populate("createdBy", "name")
-            .populate("preparedBy", "name")
-            .populate("deliveredBy", "name")
-            .populate("bill")
+            .select('orderNumber table status total createdAt bill items')
+            .populate('table', 'number name')
+            .populate('bill', 'status') // إضافة populate للفاتورة لمعرفة حالتها
             .sort({ createdAt: -1 })
-            .limit(limit * 1)
-            .skip((page - 1) * limit);
+            .lean(); // Convert to plain JS objects for better performance - جلب جميع الطلبات بدون حد
 
         const total = await Order.countDocuments(query);
 
+        const queryExecutionTime = Date.now() - queryStartTime;
+
+        // Log query performance - بدون pagination
+        Logger.queryPerformance('/api/orders', queryExecutionTime, orders.length, {
+            filters: { status, table, startDate, endDate },
+            totalRecords: total
+        });
+
+        // Record query metrics - بدون pagination
+        performanceMetrics.recordQuery({
+            endpoint: '/api/orders',
+            executionTime: queryExecutionTime,
+            recordCount: orders.length,
+            filters: { status, table, startDate, endDate },
+        });
+
+        // Response بدون pagination metadata
         res.json({
             success: true,
             count: orders.length,
             total,
-            data: orders,
+            data: orders
         });
     } catch (error) {
+        Logger.error("خطأ في جلب الطلبات", {
+            error: error.message,
+            executionTime: `${Date.now() - queryStartTime}ms`
+        });
         res.status(500).json({
             success: false,
             message: "خطأ في جلب الطلبات",
@@ -90,12 +149,103 @@ export const getOrder = async (req, res) => {
     }
 };
 
+// @desc    Calculate inventory requirements and total cost for order items
+// @route   POST /api/orders/calculate
+// @access  Private
+export const calculateOrderRequirements = async (req, res) => {
+    try {
+        const { items } = req.body;
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب إضافة عنصر واحد على الأقل للطلب",
+            });
+        }
+
+        // حساب المخزون المطلوب والتكلفة
+        const inventoryNeeded = await calculateTotalInventoryNeeded(items);
+        const totalCost = await calculateOrderTotalCost(items);
+
+        // التحقق من توفر المخزون
+        const { errors: validationErrors, details: insufficientDetails } =
+            await validateInventoryAvailability(inventoryNeeded);
+
+        // جلب تفاصيل المخزون المطلوب
+        const InventoryItem = (await import("../models/InventoryItem.js"))
+            .default;
+        const inventoryDetails = [];
+
+        for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
+            const inventoryItem = await InventoryItem.findById(inventoryItemId);
+            if (inventoryItem) {
+                // تحويل الكمية المطلوبة من وحدة المكون إلى وحدة المخزون
+                const convertedQuantityNeeded = convertQuantity(
+                    quantity,
+                    unit,
+                    inventoryItem.unit
+                );
+
+                inventoryDetails.push({
+                    inventoryItem: {
+                        _id: inventoryItem._id,
+                        name: inventoryItem.name,
+                        unit: inventoryItem.unit,
+                        currentStock: inventoryItem.currentStock,
+                        cost: inventoryItem.cost,
+                    },
+                    requiredQuantity: convertedQuantityNeeded,
+                    isAvailable:
+                        inventoryItem.currentStock >= convertedQuantityNeeded,
+                    cost: (inventoryItem.cost || 0) * convertedQuantityNeeded,
+                });
+            }
+        }
+
+        // حساب الإحصائيات
+        const totalRevenue = items.reduce((sum, item) => {
+            if (item.menuItem) {
+                return sum + (item.price || 0) * item.quantity;
+            }
+            return sum + (item.price || 0) * item.quantity;
+        }, 0);
+
+        const profit = totalRevenue - totalCost;
+        const profitMargin =
+            totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
+        const response = {
+            success: true,
+            data: {
+                inventoryRequirements: inventoryDetails,
+                totalCost,
+                totalRevenue,
+                profit,
+                profitMargin,
+                isInventoryAvailable: inventoryDetails.every(
+                    (item) => item.isAvailable
+                ),
+                validationErrors: validationErrors,
+                details: insufficientDetails, // تفاصيل المكونات الناقصة
+            },
+        };
+
+        res.json(response);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في حساب متطلبات الطلب",
+            error: error.message,
+        });
+    }
+};
+
 // @desc    Create new order
 // @route   POST /api/orders
 // @access  Private
 export const createOrder = async (req, res) => {
     try {
-        const { tableNumber, customerName, customerPhone, items, notes, bill } =
+        const { table, customerName, customerPhone, items, notes, bill } =
             req.body;
 
         // Validate items
@@ -103,6 +253,42 @@ export const createOrder = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "يجب إضافة عنصر واحد على الأقل للطلب",
+            });
+        }
+
+        // Validate table ObjectId if provided
+        if (table) {
+            if (!mongoose.Types.ObjectId.isValid(table)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "معرف الطاولة غير صحيح",
+                });
+            }
+
+            // Verify table exists
+            const tableDoc = await Table.findById(table);
+            if (!tableDoc) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الطاولة غير موجودة",
+                });
+            }
+        }
+
+        // حساب المخزون المطلوب لجميع الأصناف
+        const inventoryNeeded = await calculateTotalInventoryNeeded(items);
+
+        // التحقق من توفر المخزون
+        const { errors: validationErrors, details: insufficientDetails } =
+            await validateInventoryAvailability(inventoryNeeded);
+
+        if (validationErrors.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "المخزون غير كافي لإنشاء الطلب - راجع التفاصيل أدناه",
+                errors: validationErrors,
+                details: insufficientDetails,
+                inventoryErrors: validationErrors,
             });
         }
 
@@ -126,110 +312,55 @@ export const createOrder = async (req, res) => {
                     });
                 }
 
-                // التحقق من توفر المخزون للعنصر
-                if (menuItem.ingredients && menuItem.ingredients.length > 0) {
-                    const InventoryItem = (
-                        await import("../models/InventoryItem.js")
-                    ).default;
-
-                    // دالة لتحويل الوحدات
-                    const convertQuantity = (quantity, fromUnit, toUnit) => {
-                        const conversions = {
-                            // تحويلات الحجم
-                            لتر: { مل: 1000, لتر: 1 },
-                            مل: { لتر: 0.001, مل: 1 },
-                            // تحويلات الوزن
-                            كيلو: { جرام: 1000, كيلو: 1 },
-                            جرام: { كيلو: 0.001, جرام: 1 },
-                            // الوحدات الأخرى
-                            قطعة: { قطعة: 1 },
-                            علبة: { علبة: 1 },
-                            كيس: { كيس: 1 },
-                            زجاجة: { زجاجة: 1 },
-                        };
-
-                        const conversionRate = conversions[fromUnit]?.[toUnit];
-                        return conversionRate
-                            ? quantity * conversionRate
-                            : quantity;
-                    };
-
-                    for (const ingredient of menuItem.ingredients) {
-                        const inventoryItem = await InventoryItem.findById(
-                            ingredient.item
-                        );
-                        if (!inventoryItem) {
-                            return res.status(400).json({
-                                success: false,
-                                message: `الخامة ${ingredient.item} غير موجودة في المخزون`,
-                            });
-                        }
-
-                        // حساب الكمية المطلوبة للطلب مع التحويل
-                        const requiredQuantityForOrder =
-                            convertQuantity(
-                                ingredient.quantity,
-                                ingredient.unit,
-                                inventoryItem.unit
-                            ) * item.quantity;
-
-                        // التحقق من توفر المخزون
-                        if (
-                            inventoryItem.currentStock <
-                            requiredQuantityForOrder
-                        ) {
-                            return res.status(400).json({
-                                success: false,
-                                message: `المخزون غير كافي لـ ${inventoryItem.name}. المطلوب: ${requiredQuantityForOrder} ${inventoryItem.unit}، المتوفر: ${inventoryItem.currentStock} ${inventoryItem.unit}`,
-                            });
-                        }
-                    }
-                }
-
                 // Calculate item total
-                const itemTotal = menuItem.price * item.quantity;
+                const itemTotal = (menuItem.price || 0) * (item.quantity || 1);
                 subtotal += itemTotal;
                 processedItems.push({
                     menuItem: menuItem._id,
                     name: menuItem.name,
                     arabicName: menuItem.arabicName || menuItem.name,
-                    price: menuItem.price,
-                    quantity: item.quantity,
-                    itemTotal,
+                    price: menuItem.price || 0,
+                    quantity: item.quantity || 1,
+                    itemTotal: itemTotal,
                     notes: item.notes,
-                    preparationTime: menuItem.preparationTime,
+                    preparationTime: menuItem.preparationTime || 5,
                 });
             } else {
                 // إذا لم يوجد menuItem، استخدم بيانات العنصر كما هي
-                const itemTotal = item.price * item.quantity;
+                const itemPrice = parseFloat(item.price) || 0;
+                const itemQuantity = parseInt(item.quantity) || 1;
+                const itemTotal = itemPrice * itemQuantity;
                 subtotal += itemTotal;
                 processedItems.push({
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    itemTotal,
+                    name: item.name || 'عنصر غير محدد',
+                    price: itemPrice,
+                    quantity: itemQuantity,
+                    itemTotal: itemTotal,
                     notes: item.notes,
-                    preparationTime: item.preparationTime || 0,
+                    preparationTime: item.preparationTime || 5,
                 });
             }
         }
 
         // Create order
         const orderData = {
-            tableNumber,
-            customerName,
-            customerPhone,
-            items: processedItems,
-            subtotal,
-            finalAmount: subtotal, // No discount initially
-            notes,
-            bill,
-            createdBy: req.user.id,
+            ...req.body,
+            items: processedItems, // استخدام العناصر المعالجة
+            subtotal: subtotal, // تعيين القيمة المحسوبة
+            finalAmount: subtotal - (req.body.discount || 0), // حساب المبلغ النهائي
             organization: req.user.organization,
+            createdBy: req.user._id,
+            status: 'pending',
+            // سيتم إنشاء رقم الطلب تلقائيًا في الخطاف pre-save
         };
 
-        // Manual calculation as fallback
-        orderData.finalAmount = orderData.subtotal - (orderData.discount || 0);
+        // التأكد من عدم وجود حقول غير مرغوب فيها
+        delete orderData.orderNumber;
+        delete orderData._id;
+
+        // حساب التكلفة الإجمالية للطلب
+        const totalCost = await calculateOrderTotalCost(processedItems);
+        orderData.totalCost = totalCost;
 
         // Generate order number manually
         const today = new Date();
@@ -253,47 +384,155 @@ export const createOrder = async (req, res) => {
             "0"
         )}`;
 
+        // البحث عن فاتورة غير مدفوعة للطاولة أو إنشاء فاتورة جديدة
+        let billToUse = bill;
+        
+        // إذا كان هناك table ولم يكن bill محدداً، ابحث عن فاتورة غير مدفوعة
+        if (table && !billToUse) {
+            try {
+                // Get table info for logging
+                const tableDoc = await Table.findById(table);
+                const tableNumber = tableDoc ? tableDoc.number : table;
+                
+                // البحث عن فاتورة غير مدفوعة للطاولة (draft, partial, overdue)
+                // يشمل جميع أنواع الفواتير: playstation, computer, cafe
+                const existingBill = await Bill.findOne({
+                    table: table,
+                    organization: req.user.organization,
+                    status: { $in: ['draft', 'partial', 'overdue'] }
+                }).sort({ createdAt: -1 }); // أحدث فاتورة
+
+                if (existingBill) {
+                    billToUse = existingBill._id;
+                    Logger.info(`✓ تم العثور على فاتورة موجودة للطاولة ${tableNumber}:`, {
+                        billId: existingBill._id,
+                        billNumber: existingBill.billNumber,
+                        billType: existingBill.billType,
+                        status: existingBill.status
+                    });
+                } else {
+                    // إنشاء فاتورة جديدة للطاولة
+                    const billData = {
+                        table: table,
+                        customerName: customerName || `طاولة ${tableNumber}`,
+                        customerPhone: customerPhone || null,
+                        orders: [],
+                        sessions: [],
+                        subtotal: 0,
+                        total: 0,
+                        discount: 0,
+                        tax: 0,
+                        paid: 0,
+                        remaining: 0,
+                        status: 'draft',
+                        paymentMethod: 'cash',
+                        billType: 'cafe',
+                        createdBy: req.user._id,
+                        organization: req.user.organization,
+                    };
+
+                    const newBill = await Bill.create(billData);
+                    billToUse = newBill._id;
+                    Logger.info(`✓ تم إنشاء فاتورة جديدة للطاولة ${tableNumber}:`, {
+                        billId: newBill._id,
+                        billNumber: newBill.billNumber,
+                        billType: newBill.billType
+                    });
+                }
+
+                // Update table status to 'occupied'
+                if (tableDoc) {
+                    tableDoc.status = 'occupied';
+                    await tableDoc.save();
+                    Logger.info(`✓ تم تحديث حالة الطاولة ${tableNumber} إلى محجوزة`);
+                }
+            } catch (error) {
+                Logger.error('خطأ في البحث عن الفاتورة أو إنشائها:', error);
+            }
+        }
+
+        // ربط الطلب بالفاتورة
+        if (billToUse) {
+            orderData.bill = billToUse;
+        }
+
         const order = new Order(orderData);
 
         await order.save();
 
-        // Populate the order with related data for response
+        // Populate only essential fields for response
         const populatedOrder = await Order.findById(order._id)
-            .populate("createdBy", "name")
-            .populate("bill")
-            .populate("items.menuItem");
+            .populate("table", "number name")
+            .lean();
 
-        // Add order to bill if bill exists
-        if (bill) {
-            try {
-                const billDoc = await Bill.findById(bill);
-                if (billDoc) {
-                    billDoc.orders.push(order._id);
-                    await billDoc.save();
-
-                    // Recalculate bill totals
-                    await billDoc.calculateSubtotal();
-                }
-            } catch (error) {
-                //
-            }
-        }
-
-        // Create notification for new order
-        try {
-            await NotificationService.createOrderNotification(
-                "created",
-                populatedOrder,
-                req.user._id
-            );
-        } catch (notificationError) {
-            //
-        }
-
+        // إرسال الاستجابة فوراً قبل العمليات الإضافية
         res.status(201).json({
             success: true,
             message: "تم إنشاء الطلب بنجاح",
             data: populatedOrder,
+        });
+
+        // تنفيذ العمليات الإضافية في الخلفية (non-blocking)
+        setImmediate(async () => {
+            // Add order to bill if bill exists
+            if (billToUse) {
+                try {
+                    const billDoc = await Bill.findById(billToUse);
+                    if (billDoc) {
+                        // التأكد من أن الطلب غير موجود بالفعل في الفاتورة
+                        if (!billDoc.orders.includes(order._id)) {
+                            Logger.info(`✓ إضافة الطلب ${order.orderNumber} إلى الفاتورة ${billDoc.billNumber}`);
+                            billDoc.orders.push(order._id);
+                            
+                            // Mark orders as modified to trigger pre-save hook
+                            billDoc.markModified('orders');
+                            
+                            // حفظ الفاتورة - سيُشغل pre-save hook لتحديث itemPayments
+                            await billDoc.save();
+                            Logger.info(`✓ تم حفظ الفاتورة وتحديث itemPayments`);
+                        } else {
+                            Logger.info(`⚠️ الطلب ${order.orderNumber} موجود بالفعل في الفاتورة ${billDoc.billNumber}`);
+                        }
+
+                        // Recalculate bill totals
+                        await billDoc.calculateSubtotal();
+                    }
+                } catch (error) {
+                    Logger.error('خطأ في إضافة الطلب للفاتورة:', error);
+                }
+            }
+
+            // Create notification for new order
+            try {
+                await NotificationService.createOrderNotification(
+                    "created",
+                    populatedOrder,
+                    req.user._id
+                );
+            } catch (notificationError) {
+                //
+            }
+
+            // Emit Socket.IO event for order creation
+            if (req.io) {
+                try {
+                    req.io.notifyOrderUpdate("created", populatedOrder);
+                } catch (socketError) {
+                    Logger.error('فشل إرسال حدث Socket.IO', socketError);
+                }
+            }
+
+            // Emit table status update event if table is linked
+            if (table && req.io) {
+                try {
+                    req.io.emit('table-status-update', { 
+                        tableId: table, 
+                        status: 'occupied' 
+                    });
+                } catch (socketError) {
+                    Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
+                }
+            }
         });
     } catch (error) {
         if (error.name === "ValidationError") {
@@ -320,6 +559,13 @@ export const updateOrder = async (req, res) => {
     try {
         const { status, notes, preparedBy, deliveredBy, items } = req.body;
 
+        // Check if the ID is a valid MongoDB ObjectId
+        const mongoose = await import("mongoose");
+        const isValidObjectId = mongoose.Types.ObjectId.isValid(req.params.id);
+
+        // First check if the order exists without organization filter
+        const orderWithoutOrg = await Order.findById(req.params.id);
+
         const order = await Order.findOne({
             _id: req.params.id,
             organization: req.user.organization,
@@ -330,6 +576,45 @@ export const updateOrder = async (req, res) => {
                 success: false,
                 message: "الطلب غير موجود",
             });
+        }
+
+        // إذا تم تحديث العناصر، تحقق من المخزون
+        let calculatedTotalCost = 0; // متغير لتخزين التكلفة المحسوبة
+
+        // حساب التكلفة الإجمالية دائماً (حتى لو لم يتم تمرير items)
+        if (items && Array.isArray(items) && items.length > 0) {
+            // حساب المخزون المطلوب لجميع الأصناف
+            const inventoryNeeded = await calculateTotalInventoryNeeded(items);
+
+            // حساب التكلفة الإجمالية
+            calculatedTotalCost = await calculateOrderTotalCost(items);
+
+            // التحقق من توفر المخزون
+            const { errors: validationErrors, details: insufficientDetails } =
+                await validateInventoryAvailability(inventoryNeeded);
+
+            if (validationErrors.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "المخزون غير كافي لتعديل الطلب - راجع التفاصيل أدناه",
+                    errors: validationErrors,
+                    details: insufficientDetails,
+                    inventoryErrors: validationErrors,
+                });
+            }
+        } else {
+            // حساب التكلفة من عناصر الطلب الحالية إذا لم يتم تمرير items
+
+            const currentItems = order.items.map((item) => ({
+                menuItem: item.menuItem,
+                name: item.name,
+                price: item.price,
+                quantity: item.quantity,
+                notes: item.notes,
+            }));
+
+            calculatedTotalCost = await calculateOrderTotalCost(currentItems);
         }
 
         // Update fields
@@ -346,7 +631,39 @@ export const updateOrder = async (req, res) => {
 
         // تحديث أصناف الطلب بالكامل (إضافة/تعديل/حذف)
         if (Array.isArray(items)) {
-            // 1. تحديث أو إضافة الأصناف
+            // 1. حذف الأصناف التي لم تعد موجودة في الطلب الجديد
+            const itemsToKeep = [];
+            for (const existingItem of order.items) {
+                let shouldKeep = false;
+
+                for (const newItem of items) {
+                    if (newItem.menuItem && existingItem.menuItem) {
+                        // مقارنة بواسطة menuItem ID
+                        if (
+                            newItem.menuItem.toString() ===
+                            existingItem.menuItem.toString()
+                        ) {
+                            shouldKeep = true;
+                            break;
+                        }
+                    } else if (newItem.name && existingItem.name) {
+                        // مقارنة بواسطة الاسم
+                        if (newItem.name === existingItem.name) {
+                            shouldKeep = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (shouldKeep) {
+                    itemsToKeep.push(existingItem);
+                }
+            }
+
+            // استبدال قائمة الأصناف بالأصناف المتبقية
+            order.items = itemsToKeep;
+
+            // 2. تحديث أو إضافة الأصناف الجديدة
             for (let i = 0; i < items.length; i++) {
                 const updatedItem = items[i];
                 let orderItem = null;
@@ -378,148 +695,131 @@ export const updateOrder = async (req, res) => {
                     // أعد حساب itemTotal
                     orderItem.itemTotal = orderItem.price * orderItem.quantity;
                 } else {
-                    // إضافة صنف جديد - التحقق من توفر المخزون
+                    // إضافة صنف جديد
                     if (updatedItem.menuItem) {
-                        const MenuItem = (await import("../models/MenuItem.js"))
-                            .default;
-                        const InventoryItem = (
-                            await import("../models/InventoryItem.js")
-                        ).default;
-
-                        // دالة لتحويل الوحدات
-                        const convertQuantity = (
-                            quantity,
-                            fromUnit,
-                            toUnit
-                        ) => {
-                            const conversions = {
-                                // تحويلات الحجم
-                                لتر: { مل: 1000, لتر: 1 },
-                                مل: { لتر: 0.001, مل: 1 },
-                                // تحويلات الوزن
-                                كيلو: { جرام: 1000, كيلو: 1 },
-                                جرام: { كيلو: 0.001, جرام: 1 },
-                                // الوحدات الأخرى
-                                قطعة: { قطعة: 1 },
-                                علبة: { علبة: 1 },
-                                كيس: { كيس: 1 },
-                                زجاجة: { زجاجة: 1 },
-                            };
-
-                            const conversionRate =
-                                conversions[fromUnit]?.[toUnit];
-                            return conversionRate
-                                ? quantity * conversionRate
-                                : quantity;
-                        };
-
                         const menuItem = await MenuItem.findById(
                             updatedItem.menuItem
                         );
-                        if (
-                            menuItem &&
-                            menuItem.ingredients &&
-                            menuItem.ingredients.length > 0
-                        ) {
-                            for (const ingredient of menuItem.ingredients) {
-                                const inventoryItem =
-                                    await InventoryItem.findById(
-                                        ingredient.item
-                                    );
-                                if (!inventoryItem) {
-                                    return res.status(400).json({
-                                        success: false,
-                                        message: `الخامة ${ingredient.item} غير موجودة في المخزون`,
-                                    });
-                                }
-
-                                // حساب الكمية المطلوبة للطلب مع التحويل
-                                const requiredQuantityForOrder =
-                                    convertQuantity(
-                                        ingredient.quantity,
-                                        ingredient.unit,
-                                        inventoryItem.unit
-                                    ) * updatedItem.quantity;
-
-                                // التحقق من توفر المخزون
-                                if (
-                                    inventoryItem.currentStock <
-                                    requiredQuantityForOrder
-                                ) {
-                                    return res.status(400).json({
-                                        success: false,
-                                        message: `المخزون غير كافي لـ ${inventoryItem.name}. المطلوب: ${requiredQuantityForOrder} ${inventoryItem.unit}، المتوفر: ${inventoryItem.currentStock} ${inventoryItem.unit}`,
-                                    });
-                                }
-                            }
+                        if (!menuItem) {
+                            return res.status(400).json({
+                                success: false,
+                                message: `عنصر القائمة غير موجود: ${updatedItem.menuItem}`,
+                            });
                         }
-                    }
+                        if (!menuItem.isAvailable) {
+                            return res.status(400).json({
+                                success: false,
+                                message: `العنصر غير متاح: ${menuItem.name}`,
+                            });
+                        }
 
-                    // إضافة صنف جديد
-                    order.items.push({
-                        menuItem: updatedItem.menuItem,
-                        name: updatedItem.name,
-                        price: updatedItem.price,
-                        quantity: updatedItem.quantity,
-                        notes: updatedItem.notes || "",
-                        itemTotal: updatedItem.price * updatedItem.quantity,
-                    });
+                        const itemTotal = menuItem.price * updatedItem.quantity;
+                        order.items.push({
+                            menuItem: menuItem._id,
+                            name: menuItem.name,
+                            arabicName: menuItem.arabicName || menuItem.name,
+                            price: menuItem.price,
+                            quantity: updatedItem.quantity,
+                            itemTotal,
+                            notes: updatedItem.notes,
+                            preparationTime: menuItem.preparationTime,
+                        });
+                    } else {
+                        const itemTotal =
+                            updatedItem.price * updatedItem.quantity;
+                        order.items.push({
+                            name: updatedItem.name,
+                            price: updatedItem.price,
+                            quantity: updatedItem.quantity,
+                            itemTotal,
+                            notes: updatedItem.notes,
+                            preparationTime: updatedItem.preparationTime || 0,
+                        });
+                    }
                 }
             }
-            // 2. حذف الأصناف التي لم تعد موجودة في القائمة الجديدة
-            order.items = order.items.filter((item) => {
-                return items.some((updatedItem) => {
-                    if (updatedItem.menuItem) {
-                        return (
-                            item.menuItem?.toString() ===
-                            updatedItem.menuItem.toString()
-                        );
-                    } else {
-                        return item.name === updatedItem.name;
+
+            // 2. إعادة حساب المجموع
+            order.subtotal = order.items.reduce(
+                (sum, item) => sum + item.itemTotal,
+                0
+            );
+            order.finalAmount = order.subtotal - (order.discount || 0);
+
+            // حساب التكلفة الإجمالية للطلب
+            if (calculatedTotalCost > 0) {
+                order.totalCost = calculatedTotalCost;
+            } else if (items && Array.isArray(items) && items.length > 0) {
+                const totalCost = await calculateOrderTotalCost(items);
+                order.totalCost = totalCost;
+            } else {
+                // حساب التكلفة من عناصر الطلب الحالية
+                const currentItems = order.items.map((item) => ({
+                    menuItem: item.menuItem,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    notes: item.notes,
+                }));
+                const totalCost = await calculateOrderTotalCost(currentItems);
+                order.totalCost = totalCost;
+            }
+        }
+
+        await order.save();
+
+        // Populate only essential fields for response
+        const updatedOrder = await Order.findById(order._id)
+            .populate("table", "number name")
+            .lean();
+
+        // Update bill totals in background (non-blocking)
+        if (order.bill) {
+            setImmediate(() => {
+                Bill.findById(order.bill).then(billDoc => {
+                    if (billDoc) {
+                        return billDoc.calculateSubtotal();
                     }
+                }).catch(err => {
+                    Logger.error('Error updating bill totals:', err);
                 });
             });
         }
 
-        // أعد حساب subtotal و finalAmount
-        if (order.items && order.items.length > 0) {
-            order.subtotal = order.items.reduce((total, item) => {
-                const itemTotal = item.price * item.quantity;
-                item.itemTotal = itemTotal;
-                return total + itemTotal;
-            }, 0);
-        } else {
-            order.subtotal = 0;
-        }
-        order.finalAmount = order.subtotal - (order.discount || 0);
-
-        await order.save();
-        await order.populate(
-            ["createdBy", "preparedBy", "deliveredBy"],
-            "name"
-        );
-
-        // تحديث الفاتورة إذا كان الطلب مرتبطًا بفاتورة
-        if (order.bill) {
-            const Bill = (await import("../models/Bill.js")).default;
-            const billDoc = await Bill.findById(order.bill);
-            if (billDoc) {
-                await billDoc.calculateSubtotal();
-                await billDoc.save();
-            }
-        }
-
-        // Notify via Socket.IO
+        // Emit Socket.IO event in background (non-blocking)
         if (req.io) {
-            req.io.notifyOrderUpdate("status-changed", order);
+            setImmediate(() => {
+                try {
+                    req.io.notifyOrderUpdate("updated", updatedOrder);
+                } catch (socketError) {
+                    Logger.error('فشل إرسال حدث Socket.IO', socketError);
+                }
+            });
         }
 
         res.json({
             success: true,
             message: "تم تحديث الطلب بنجاح",
-            data: order,
+            data: updatedOrder,
         });
     } catch (error) {
+        // Handle specific error types
+        if (error.name === "ValidationError") {
+            const errors = Object.values(error.errors).map((e) => e.message);
+            return res.status(400).json({
+                success: false,
+                message: "بيانات الطلب غير صحيحة",
+                errors,
+            });
+        }
+
+        if (error.name === "CastError") {
+            return res.status(400).json({
+                success: false,
+                message: "معرف الطلب غير صحيح",
+            });
+        }
+
         res.status(500).json({
             success: false,
             message: "خطأ في تحديث الطلب",
@@ -560,24 +860,6 @@ export const deleteOrder = async (req, res) => {
                 .default;
 
             // دالة لتحويل الوحدات
-            const convertQuantity = (quantity, fromUnit, toUnit) => {
-                const conversions = {
-                    // تحويلات الحجم
-                    لتر: { مل: 1000, لتر: 1 },
-                    مل: { لتر: 0.001, مل: 1 },
-                    // تحويلات الوزن
-                    كيلو: { جرام: 1000, كيلو: 1 },
-                    جرام: { كيلو: 0.001, جرام: 1 },
-                    // الوحدات الأخرى
-                    قطعة: { قطعة: 1 },
-                    علبة: { علبة: 1 },
-                    كيس: { كيس: 1 },
-                    زجاجة: { زجاجة: 1 },
-                };
-
-                const conversionRate = conversions[fromUnit]?.[toUnit];
-                return conversionRate ? quantity * conversionRate : quantity;
-            };
 
             for (const item of order.items) {
                 if (
@@ -618,30 +900,136 @@ export const deleteOrder = async (req, res) => {
                 }
             }
         } catch (error) {
-            console.error("Error restoring inventory:", error);
             // لا نوقف عملية الحذف إذا فشل استرداد المخزون
         }
 
-        // Remove order from bill.orders if linked to a bill
+        // Remove order from bill.orders if linked to a bill BEFORE deleting the order
+        let billIdToCheck = null;
+        let tableIdToUpdate = null;
         if (order.bill) {
             const Bill = (await import("../models/Bill.js")).default;
+            const Session = (await import("../models/Session.js")).default;
             const orderIdStr = order._id.toString();
+            billIdToCheck = order.bill;
+            
             let billDoc = await Bill.findById(order.bill); // بدون populate
             if (billDoc) {
+                // Save bill ID and table ID before removing reference
+                const billId = billDoc._id;
+                tableIdToUpdate = billDoc.table;
+                
+                // Remove order from bill
                 billDoc.orders = billDoc.orders.filter(
                     (id) => id.toString() !== orderIdStr
                 );
+                
+                // Remove bill reference from the order before deleting
+                order.bill = undefined;
+                await order.save();
+                
+                // Save bill after removing order
                 await billDoc.save();
+                
+                // Check if bill is now empty (no orders and no sessions)
+                // Reload bill to get fresh data after removing order
+                billDoc = await Bill.findById(billId);
+                if (billDoc) {
+                    const hasOrders = billDoc.orders && billDoc.orders.length > 0;
+                    const hasSessions = billDoc.sessions && billDoc.sessions.length > 0;
+                    
+                    if (!hasOrders && !hasSessions) {
+                        // Delete the bill if it has no orders or sessions
+                        // Remove bill reference from any remaining orders and sessions before deletion
+                        await Order.updateMany({ bill: billId }, { $unset: { bill: 1 } });
+                        await Session.updateMany({ bill: billId }, { $unset: { bill: 1 } });
+                        
+                        // Delete the bill from Local and Atlas
+                        Logger.info(`🗑️ Deleting empty bill ${billDoc.billNumber}`);
+                        const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
+                        await deleteFromBothDatabases(billDoc, 'bills', `bill ${billDoc.billNumber}`);
+
+                        // Update table status to 'empty' if bill is deleted
+                        if (tableIdToUpdate) {
+                            try {
+                                const tableDoc = await Table.findById(tableIdToUpdate);
+                                if (tableDoc) {
+                                    tableDoc.status = 'empty';
+                                    await tableDoc.save();
+                                    Logger.info(`✓ تم تحديث حالة الطاولة ${tableDoc.number} إلى فارغة`);
+
+                                    // Emit table status update event
+                                    if (req.io) {
+                                        req.io.emit('table-status-update', { 
+                                            tableId: tableIdToUpdate, 
+                                            status: 'empty' 
+                                        });
+                                    }
+                                }
+                            } catch (tableError) {
+                                Logger.error('خطأ في تحديث حالة الطاولة:', tableError);
+                            }
+                        }
+                    } else {
+                        // Recalculate bill totals if there are still orders/sessions
+                        await billDoc.calculateSubtotal();
+                        await billDoc.save();
+                    }
+                }
             }
         }
 
-        await order.deleteOne();
+        // Delete the order from Local and Atlas
+        const orderId = order._id;
+        const orderNumber = order.orderNumber;
+        
+        // تعطيل Sync Middleware مؤقتاً لتجنب إعادة المزامنة
+        const syncConfig = (await import('../config/syncConfig.js')).default;
+        const dualDatabaseManager = (await import('../config/dualDatabaseManager.js')).default;
+        const originalSyncEnabled = syncConfig.enabled;
+        
+        try {
+            // تعطيل المزامنة التلقائية
+            syncConfig.enabled = false;
+            Logger.info(`🔒 Sync middleware disabled for direct delete operation`);
+            
+            // حذف من Local
+            await order.deleteOne();
+            Logger.info(`✓ Deleted order ${orderNumber} from Local MongoDB`);
+            
+            // حذف من Atlas مباشرة
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const atlasOrdersCollection = atlasConnection.collection('orders');
+                    const atlasDeleteResult = await atlasOrdersCollection.deleteOne({ _id: orderId });
+                    Logger.info(`✓ Deleted order ${orderNumber} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
+                } catch (atlasError) {
+                    Logger.warn(`⚠️ Failed to delete order from Atlas: ${atlasError.message}`);
+                }
+            } else {
+                Logger.warn(`⚠️ Atlas connection not available - order will be synced later`);
+            }
+        } finally {
+            // إعادة تفعيل المزامنة
+            syncConfig.enabled = originalSyncEnabled;
+            Logger.info(`🔓 Sync middleware re-enabled`);
+        }
+
+        // Emit Socket.IO event for order deletion
+        if (req.io) {
+            try {
+                req.io.notifyOrderUpdate("deleted", { _id: req.params.id });
+            } catch (socketError) {
+                Logger.error('فشل إرسال حدث Socket.IO', socketError);
+            }
+        }
 
         res.json({
             success: true,
             message: "تم حذف الطلب بنجاح",
         });
     } catch (error) {
+        Logger.error("خطأ في حذف الطلب", error);
         res.status(500).json({
             success: false,
             message: "خطأ في حذف الطلب",
@@ -660,7 +1048,14 @@ export const getPendingOrders = async (req, res) => {
             organization: req.user.organization,
         })
             .populate("items.menuItem", "name arabicName preparationTime")
-            .populate("bill", "billNumber customerName tableNumber")
+            .populate("bill", "billNumber customerName table")
+            .populate({
+                path: "bill",
+                populate: {
+                    path: "table",
+                    select: "number name"
+                }
+            })
             .populate("createdBy", "name")
             .sort({ createdAt: 1 });
 
@@ -910,26 +1305,6 @@ export const updateOrderStatus = async (req, res) => {
                 ).default;
 
                 // دالة لتحويل الوحدات
-                const convertQuantity = (quantity, fromUnit, toUnit) => {
-                    const conversions = {
-                        // تحويلات الحجم
-                        لتر: { مل: 1000, لتر: 1 },
-                        مل: { لتر: 0.001, مل: 1 },
-                        // تحويلات الوزن
-                        كيلو: { جرام: 1000, كيلو: 1 },
-                        جرام: { كيلو: 0.001, جرام: 1 },
-                        // الوحدات الأخرى
-                        قطعة: { قطعة: 1 },
-                        علبة: { علبة: 1 },
-                        كيس: { كيس: 1 },
-                        زجاجة: { زجاجة: 1 },
-                    };
-
-                    const conversionRate = conversions[fromUnit]?.[toUnit];
-                    return conversionRate
-                        ? quantity * conversionRate
-                        : quantity;
-                };
 
                 for (const item of order.items) {
                     if (
@@ -949,10 +1324,13 @@ export const updateOrderStatus = async (req, res) => {
                                         ingredient.item
                                     );
                                 if (inventoryItem) {
-                                    // حساب الكمية المستردة
+                                    // حساب الكمية المستردة مع التحويل
                                     const quantityToRestore =
-                                        ingredient.quantity *
-                                        item.preparedCount;
+                                        convertQuantity(
+                                            ingredient.quantity,
+                                            ingredient.unit,
+                                            inventoryItem.unit
+                                        ) * item.preparedCount;
 
                                     // استرداد المخزون
                                     await inventoryItem.addStockMovement(
@@ -968,10 +1346,6 @@ export const updateOrderStatus = async (req, res) => {
                     }
                 }
             } catch (error) {
-                console.error(
-                    "Error restoring inventory on cancellation:",
-                    error
-                );
                 // لا نوقف عملية الإلغاء إذا فشل استرداد المخزون
             }
         }
@@ -982,6 +1356,7 @@ export const updateOrderStatus = async (req, res) => {
         })
             .populate("items.menuItem", "name arabicName")
             .populate("bill", "billNumber customerName")
+            .populate("table", "number name")
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
             .populate("deliveredBy", "name");
@@ -1067,26 +1442,6 @@ export const updateOrderItemPrepared = async (req, res) => {
                 ).default;
 
                 // دالة لتحويل الوحدات
-                const convertQuantity = (quantity, fromUnit, toUnit) => {
-                    const conversions = {
-                        // تحويلات الحجم
-                        لتر: { مل: 1000, لتر: 1 },
-                        مل: { لتر: 0.001, مل: 1 },
-                        // تحويلات الوزن
-                        كيلو: { جرام: 1000, كيلو: 1 },
-                        جرام: { كيلو: 0.001, جرام: 1 },
-                        // الوحدات الأخرى
-                        قطعة: { قطعة: 1 },
-                        علبة: { علبة: 1 },
-                        كيس: { كيس: 1 },
-                        زجاجة: { زجاجة: 1 },
-                    };
-
-                    const conversionRate = conversions[fromUnit]?.[toUnit];
-                    return conversionRate
-                        ? quantity * conversionRate
-                        : quantity;
-                };
 
                 const menuItem = await MenuItem.findById(currentItem.menuItem);
 
@@ -1129,7 +1484,6 @@ export const updateOrderItemPrepared = async (req, res) => {
                     }
                 }
             } catch (error) {
-                console.error("Error deducting inventory:", error);
                 return res.status(500).json({
                     success: false,
                     message: "خطأ في خصم المخزون",
@@ -1148,95 +1502,227 @@ export const updateOrderItemPrepared = async (req, res) => {
         }
 
         // التحقق من حالة الطلب الكلية وتحديثها إذا لزم الأمر
-        const allItemsReady = order.items.every(
-            (item) => (item.preparedCount || 0) >= (item.quantity || 0)
-        );
+        const allItemsReady = order.items.every((item) => item.isReady);
         const anyItemsPrepared = order.items.some(
-            (item) => (item.preparedCount || 0) > 0
+            (item) => item.preparedCount > 0
         );
 
-        // تحديث حالة الطلب بناءً على حالة الأصناف - نظام مبسط
         if (allItemsReady && order.status !== "ready") {
-            // إذا تم تجهيز جميع الأصناف بالكامل، الطلب أصبح ready
             order.status = "ready";
-            order.actualReadyTime = new Date();
-        } else if (anyItemsPrepared && order.status !== "preparing") {
-            // إذا كان هناك أي صنف مجهز، الطلب أصبح preparing
+            order.preparedAt = new Date();
+            order.preparedBy = req.user._id;
+        } else if (anyItemsPrepared && order.status === "pending") {
             order.status = "preparing";
-        } else if (!anyItemsPrepared && order.status !== "pending") {
-            // إذا لم تكن هناك أي أصناف مجهزة، الطلب أصبح pending
-            order.status = "pending";
+            if (!order.preparedBy) {
+                order.preparedBy = req.user._id;
+            }
         }
 
         await order.save();
 
-        // إعادة تحميل الطلب مع البيانات المحدثة
+        // Populate the order with related data for response
         const updatedOrder = await Order.findById(order._id)
-            .populate("items.menuItem", "name arabicName preparationTime")
-            .populate("bill", "billNumber customerName tableNumber")
+            .populate("items.menuItem", "name arabicName")
+            .populate("bill", "billNumber customerName")
+            .populate("table", "number name")
             .populate("createdBy", "name")
             .populate("preparedBy", "name")
-            .populate("deliveredBy", "name")
-            .lean(); // استخدام lean() للحصول على كائن JavaScript عادي
+            .populate("deliveredBy", "name");
 
-        if (!updatedOrder) {
-            return res.status(500).json({
-                success: false,
-                message: "خطأ في إعادة تحميل الطلب المحدث",
-                error: "Order not found after update",
-            });
-        }
-
-        // التحقق من حالة الطلب الكلية (بعد التحديث)
-        const finalAllItemsReady = updatedOrder.items?.every(
-            (item) => (item.preparedCount || 0) >= (item.quantity || 0)
-        );
-        const finalAnyItemsPrepared = updatedOrder.items?.some(
-            (item) => (item.preparedCount || 0) > 0
-        );
-
-        // تحديث حالة الطلب النهائية إذا لزم الأمر
-        if (finalAllItemsReady && updatedOrder.status !== "ready") {
-            await Order.findByIdAndUpdate(order._id, {
-                status: "ready",
-                actualReadyTime: new Date(),
-            });
-            updatedOrder.status = "ready";
-            updatedOrder.actualReadyTime = new Date();
-        } else if (
-            finalAnyItemsPrepared &&
-            updatedOrder.status !== "preparing"
-        ) {
-            await Order.findByIdAndUpdate(order._id, { status: "preparing" });
-            updatedOrder.status = "preparing";
-        } else if (
-            !finalAnyItemsPrepared &&
-            updatedOrder.status !== "pending"
-        ) {
-            await Order.findByIdAndUpdate(order._id, { status: "pending" });
-            updatedOrder.status = "pending";
-        }
-
-        // Notify via Socket.IO
-        if (req.io) {
-            req.io.notifyOrderUpdate("item-prepared", updatedOrder);
+        // Create notification for order status change
+        try {
+            if (order.status === "ready") {
+                await NotificationService.createOrderNotification(
+                    "ready",
+                    updatedOrder,
+                    req.user._id
+                );
+            }
+        } catch (notificationError) {
+            //
         }
 
         res.json({
             success: true,
-            message: `تم تحديث عدد التجهيز لـ ${currentItem.name} إلى ${newPreparedCount}`,
+            message: "تم تحديث عدد الأصناف الجاهزة بنجاح",
             data: updatedOrder,
-            preparedItem: {
-                name: currentItem.name,
-                previousCount: previousPreparedCount,
-                newCount: newPreparedCount,
-                addedAmount: addedQuantity,
-            },
         });
     } catch (error) {
         res.status(500).json({
             success: false,
-            message: "خطأ في تحديث عدد التجهيز",
+            message: "خطأ في تحديث عدد الأصناف الجاهزة",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Deduct all inventory for order preparation
+// @route   POST /api/orders/:orderId/deduct-inventory
+// @access  Private
+export const deductOrderInventory = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const order = await Order.findOne({
+            _id: orderId,
+            organization: req.user.organization,
+        });
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: "الطلب غير موجود",
+            });
+        }
+
+        // تجميع جميع المكونات المطلوبة من جميع الأصناف
+        const allIngredientsNeeded = new Map(); // Map<inventoryItemId, { quantity, unit, itemName }>
+
+        for (const item of order.items) {
+            if (item.menuItem) {
+                const menuItem = await MenuItem.findById(item.menuItem);
+                if (
+                    menuItem &&
+                    menuItem.ingredients &&
+                    menuItem.ingredients.length > 0
+                ) {
+                    for (const ingredient of menuItem.ingredients) {
+                        const key = ingredient.item.toString();
+                        const currentQuantity =
+                            allIngredientsNeeded.get(key)?.quantity || 0;
+                        const totalQuantity =
+                            currentQuantity +
+                            ingredient.quantity * item.quantity;
+
+                        allIngredientsNeeded.set(key, {
+                            quantity: totalQuantity,
+                            unit: ingredient.unit,
+                            itemName: menuItem.name,
+                        });
+                    }
+                }
+            }
+        }
+
+        // التحقق من توفر المخزون لجميع المكونات
+        const insufficientItems = [];
+
+        for (const [inventoryItemId, ingredientData] of allIngredientsNeeded) {
+            const inventoryItem = await InventoryItem.findById(inventoryItemId);
+            if (!inventoryItem) {
+                insufficientItems.push({
+                    name: ingredientData.itemName,
+                    required: ingredientData.quantity,
+                    available: 0,
+                    unit: ingredientData.unit,
+                });
+                continue;
+            }
+
+            // تحويل الوحدات
+            const convertedQuantityNeeded = convertQuantity(
+                ingredientData.quantity,
+                ingredientData.unit,
+                inventoryItem.unit
+            );
+
+            if (inventoryItem.currentStock < convertedQuantityNeeded) {
+                insufficientItems.push({
+                    name: inventoryItem.name,
+                    required: convertedQuantityNeeded,
+                    available: inventoryItem.currentStock,
+                    unit: inventoryItem.unit,
+                });
+            }
+        }
+
+        // إذا كان هناك مكونات ناقصة، إرجاع الخطأ
+        if (insufficientItems.length > 0) {
+            const errorMessage = insufficientItems
+                .map(
+                    (item) =>
+                        `• ${item.name}: المطلوب ${item.required} ${item.unit}، المتوفر ${item.available} ${item.unit}`
+                )
+                .join("\n");
+
+            return res.status(400).json({
+                success: false,
+                message: "المخزون غير كافي لتجهيز الطلب",
+                details: insufficientItems,
+                errorMessage,
+            });
+        }
+
+        // خصم جميع المكونات دفعة واحدة
+        const deductionPromises = [];
+
+        for (const [inventoryItemId, ingredientData] of allIngredientsNeeded) {
+            const inventoryItem = await InventoryItem.findById(inventoryItemId);
+            if (inventoryItem) {
+                const convertedQuantityNeeded = convertQuantity(
+                    ingredientData.quantity,
+                    ingredientData.unit,
+                    inventoryItem.unit
+                );
+
+                const deductionPromise = inventoryItem.addStockMovement(
+                    "out",
+                    convertedQuantityNeeded,
+                    `استهلاك لتحضير طلب رقم ${order.orderNumber} - ${ingredientData.itemName}`,
+                    req.user._id,
+                    order._id.toString()
+                );
+
+                deductionPromises.push(deductionPromise);
+            }
+        }
+
+        // انتظار اكتمال جميع عمليات الخصم
+        await Promise.all(deductionPromises);
+
+        // تحديث حالة جميع الأصناف إلى مجهزة بالكامل
+        for (let i = 0; i < order.items.length; i++) {
+            order.items[i].preparedCount = order.items[i].quantity;
+            order.items[i].isReady = true;
+            order.items[i].wasEverReady = true;
+        }
+
+        // تحديث حالة الطلب
+        order.status = "ready";
+        order.preparedAt = new Date();
+        order.preparedBy = req.user._id;
+
+        await order.save();
+
+        // Populate the order with related data for response
+        const updatedOrder = await Order.findById(order._id)
+            .populate("items.menuItem", "name arabicName")
+            .populate("bill", "billNumber customerName")
+            .populate("table", "number name")
+            .populate("createdBy", "name")
+            .populate("preparedBy", "name")
+            .populate("deliveredBy", "name");
+
+        // Create notification for order status change
+        try {
+            await NotificationService.createOrderNotification(
+                "ready",
+                updatedOrder,
+                req.user._id
+            );
+        } catch (notificationError) {
+            //
+        }
+
+        res.json({
+            success: true,
+            message: "تم خصم المخزون وتجهيز الطلب بنجاح",
+            data: updatedOrder,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في خصم المخزون",
             error: error.message,
         });
     }

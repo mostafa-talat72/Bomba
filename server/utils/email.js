@@ -169,37 +169,181 @@ export const sendEmail = async (options) => {
 // Email templates
 export const emailTemplates = {
     // Low stock alert
-    lowStockAlert: (items) => ({
-        subject: "تنبيه: انخفاض المخزون - نظام Bomba",
-        html: `
-      <div dir="rtl" style="font-family: Arial, sans-serif;">
-        <h2>تنبيه انخفاض المخزون</h2>
-        <p>المنتجات التالية وصلت للحد الأدنى من المخزون:</p>
-        <ul>
-          ${items
-              .map(
-                  (item) => `
-            <li>
-              <strong>${item.name}</strong> -
-              متبقي: ${item.currentStock} ${item.unit}
-              (الحد الأدنى: ${item.minStock})
-            </li>
-          `
-              )
-              .join("")}
-        </ul>
-        <p>يرجى إعادة تعبئة المخزون في أقرب وقت ممكن.</p>
-        <hr>
-                  <small>هذه رسالة تلقائية من نظام Bomba</small>
-      </div>
-    `,
-    }),
+    lowStockAlert: ({ items, organizationName, adminNames = [], timestamp = new Date() }) => {
+        const formattedDate = new Date(timestamp).toLocaleString('ar-EG', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        return {
+            subject: `تنبيه: انخفاض المخزون - ${organizationName || 'نظام Bomba'}`,
+            html: `
+                <!DOCTYPE html>
+                <html dir="rtl" lang="ar">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>تنبيه انخفاض المخزون</title>
+                    <style>
+                        body {
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                            max-width: 800px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            background-color: #f9f9f9;
+                        }
+                        .container {
+                            background-color: #fff;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                            overflow: hidden;
+                        }
+                        .header {
+                            background-color: #e74c3c;
+                            color: white;
+                            padding: 20px;
+                            text-align: center;
+                        }
+                        .header h1 {
+                            margin: 0;
+                            font-size: 24px;
+                        }
+                        .content {
+                            padding: 25px;
+                        }
+                        .alert-message {
+                            background-color: #f8d7da;
+                            color: #721c24;
+                            padding: 15px;
+                            border-radius: 5px;
+                            margin-bottom: 20px;
+                            border-right: 5px solid #f5c6cb;
+                        }
+                        .items-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin: 20px 0;
+                        }
+                        .items-table th, .items-table td {
+                            padding: 12px 15px;
+                            text-align: right;
+                            border-bottom: 1px solid #ddd;
+                        }
+                        .items-table th {
+                            background-color: #f8f9fa;
+                            font-weight: bold;
+                        }
+                        .items-table tr:hover {
+                            background-color: #f5f5f5;
+                        }
+                        .stock-critical {
+                            color: #e74c3c;
+                            font-weight: bold;
+                        }
+                        .footer {
+                            text-align: center;
+                            padding: 15px;
+                            font-size: 14px;
+                            color: #777;
+                            border-top: 1px solid #eee;
+                            margin-top: 20px;
+                        }
+                        .urgency-badge {
+                            display: inline-block;
+                            padding: 3px 8px;
+                            border-radius: 12px;
+                            font-size: 12px;
+                            font-weight: bold;
+                            margin-right: 5px;
+                        }
+                        .critical {
+                            background-color: #f8d7da;
+                            color: #721c24;
+                        }
+                        .warning {
+                            background-color: #fff3cd;
+                            color: #856404;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>🚨 تنبيه انخفاض المخزون</h1>
+                            <p>${organizationName || 'نظام إدارة المخزون'}</p>
+                        </div>
+                        
+                        <div class="content">
+                            <div class="alert-message">
+                                <p>يوجد <strong>${items.length} منتج</strong> يحتاج إلى إعادة تعبئة فورية!</p>
+                            </div>
+                            
+                            <h2>تفاصيل المنتجات منخفضة المخزون</h2>
+                            <table class="items-table">
+                                <thead>
+                                    <tr>
+                                        <th>المنتج</th>
+                                        <th>الكمية المتوفرة</th>
+                                        <th>الحد الأدنى</th>
+                                        <th>الوحدة</th>
+                                        <th>الحالة</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${items.map(item => {
+                                        const isCritical = item.currentStock <= (item.minStock * 0.3);
+                                        const status = isCritical ? 'حرج' : 'تحذير';
+                                        const statusClass = isCritical ? 'critical' : 'warning';
+                                        return `
+                                            <tr>
+                                                <td><strong>${item.name}</strong></td>
+                                                <td class="${isCritical ? 'stock-critical' : ''}">${item.currentStock}</td>
+                                                <td>${item.minStock}</td>
+                                                <td>${item.unit || 'قطعة'}</td>
+                                                <td>
+                                                    <span class="urgency-badge ${statusClass}">
+                                                        ${status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                            
+                            <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+                                <h3>الإجراء المطلوب:</h3>
+                                <p>يرجى اتخاذ الإجراء اللازم لإعادة تعبئة المخزون في أقرب وقت ممكن لتجنب نفاد المنتجات.</p>
+                                ${adminNames.length > 0 ? `
+                                    <p>تم إرسال هذا التنبيه إلى: ${adminNames.join('، ')}</p>
+                                ` : ''}
+                            </div>
+                        </div>
+                        
+                        <div class="footer">
+                            <p>⏱️ تم إنشاء هذا التقرير في: ${formattedDate}</p>
+                            <p>📞 للدعم الفني، يرجى التواصل مع فريق الدعم الفني</p>
+                            <p>© ${new Date().getFullYear()} نظام Bomba - جميع الحقوق محفوظة</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `
+        };
+    },
 
     // Daily report
     dailyReport: (data) => ({
-        subject: `📊 التقرير اليومي - ${
-            data.organizationName || "منشأتك"
-        } - ${new Date().toLocaleDateString("ar-EG")}`,
+        subject: `📊 التقرير اليومي - ${data.organizationName || "منشأتك"} - ${
+            data.date || new Date().toLocaleDateString("ar-EG")
+        }`,
         html: `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
@@ -340,6 +484,18 @@ export const emailTemplates = {
             z-index: 1;
           }
 
+          .period-badge {
+            background: rgba(255,255,255,0.15);
+            padding: 6px 12px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 12px;
+            position: relative;
+            z-index: 1;
+            border: 1px solid rgba(255,255,255,0.3);
+          }
+
           .content {
             padding: 40px 30px;
           }
@@ -405,11 +561,6 @@ export const emailTemplates = {
             font-weight: 500;
           }
 
-          .revenue { background: linear-gradient(135deg, #28a745, #20c997); }
-          .bills { background: linear-gradient(135deg, #007bff, #6610f2); }
-          .orders { background: linear-gradient(135deg, #fd7e14, #ffc107); }
-          .sessions { background: linear-gradient(135deg, #6f42c1, #e83e8c); }
-
           .section {
             margin-bottom: 40px;
           }
@@ -419,140 +570,18 @@ export const emailTemplates = {
             font-weight: 600;
             color: #2c3e50;
             margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e9ecef;
-            position: relative;
-          }
-
-          .section-title::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            right: 0;
-            width: 50px;
-            height: 2px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-          }
-
-          .top-products {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 25px;
-            border: 1px solid #e9ecef;
-          }
-
-          .product-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 0;
-            border-bottom: 1px solid #e9ecef;
-            transition: all 0.3s ease;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 5px;
-          }
-
-          .product-item:hover {
-            background: rgba(102, 126, 234, 0.05);
-            transform: translateX(-5px);
-          }
-
-          .product-item:last-child {
-            border-bottom: none;
-          }
-
-          .product-rank {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            font-size: 14px;
-          }
-
-          .product-name {
-            font-weight: 500;
-            color: #2c3e50;
-            flex: 1;
-            margin: 0 15px;
-          }
-
-          .product-quantity {
-            background: #e9ecef;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            color: #6c757d;
-          }
-
-          .footer {
-            background: #f8f9fa;
-            padding: 30px;
-            text-align: center;
-            border-top: 1px solid #e9ecef;
-          }
-
-          .footer-logo {
-            font-size: 24px;
-            font-weight: 700;
-            color: #667eea;
-            margin-bottom: 10px;
-          }
-
-          .footer-text {
-            color: #6c757d;
-            font-size: 14px;
-            margin-bottom: 20px;
-          }
-
-          .footer-actions {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #e9ecef;
-          }
-
-          .action-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 15px;
-            background: rgba(102, 126, 234, 0.1);
-            border-radius: 20px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-          }
-
-          .action-item:hover {
-            background: rgba(102, 126, 234, 0.2);
-            transform: translateY(-2px);
-          }
-
-          .action-icon {
-            font-size: 16px;
-          }
-
-          .action-text {
-            font-size: 12px;
-            color: #667eea;
-            font-weight: 500;
+            gap: 10px;
           }
 
           .profit-section {
-            background: linear-gradient(135deg, #28a745, #20c997);
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
             color: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
+            padding: 30px;
+            border-radius: 20px;
             text-align: center;
+            margin-bottom: 30px;
             position: relative;
             overflow: hidden;
           }
@@ -560,68 +589,62 @@ export const emailTemplates = {
           .profit-section::before {
             content: '';
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-            animation: shimmer 3s ease-in-out infinite;
-          }
-
-          @keyframes shimmer {
-            0%, 100% { transform: rotate(0deg); }
-            50% { transform: rotate(180deg); }
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="profit-grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23profit-grain)"/></svg>');
+            opacity: 0.3;
           }
 
           .profit-title {
             font-size: 18px;
             font-weight: 600;
             margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
           }
 
           .profit-amount {
-            font-size: 32px;
+            font-size: 36px;
             font-weight: 700;
-            margin-bottom: 5px;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
           }
 
           .profit-subtitle {
             font-size: 14px;
             opacity: 0.9;
+            position: relative;
+            z-index: 1;
           }
 
           .performance-summary {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
           }
 
           .performance-item {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            background: #f8f9fa;
             border-radius: 15px;
             padding: 20px;
             display: flex;
             align-items: center;
+            gap: 15px;
             border: 1px solid #e9ecef;
-            transition: all 0.3s ease;
-          }
-
-          .performance-item:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
           }
 
           .performance-icon {
-            font-size: 32px;
-            margin-left: 15px;
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            font-size: 18px;
             color: white;
           }
 
@@ -632,19 +655,83 @@ export const emailTemplates = {
           .performance-title {
             font-size: 14px;
             color: #6c757d;
-            font-weight: 500;
             margin-bottom: 5px;
           }
 
           .performance-value {
-            font-size: 24px;
-            font-weight: 700;
+            font-size: 20px;
+            font-weight: 600;
             color: #2c3e50;
           }
 
+          .products-list {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+          }
+
+          .product-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #e9ecef;
+          }
+
+          .product-item:last-child {
+            border-bottom: none;
+          }
+
+          .product-name {
+            font-weight: 500;
+            color: #2c3e50;
+          }
+
+          .product-quantity {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+          }
+
+          .footer {
+            background: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e9ecef;
+          }
+
+          .footer p {
+            color: #6c757d;
+            font-size: 14px;
+            margin-bottom: 10px;
+          }
+
+          .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+          }
+
+          .footer-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+          }
+
+          .footer-link:hover {
+            color: #764ba2;
+          }
+
           @media (max-width: 600px) {
-            .stats-grid {
-              grid-template-columns: 1fr;
+            .email-container {
+              margin: 10px;
+              border-radius: 15px;
             }
 
             .content {
@@ -667,12 +754,21 @@ export const emailTemplates = {
                   data.organizationName || "منشأتك"
               }</div>
               <div class="date-badge">
-                ${new Date().toLocaleDateString("ar-EG", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                })}
+                ${
+                    data.date ||
+                    new Date().toLocaleDateString("ar-EG", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                    })
+                }
+              </div>
+              <div class="period-badge">
+                ${data.reportPeriod || `
+                  من 5:00 صباحاً يوم ${new Date(data.startOfReport).toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}
+                  إلى 5:00 صباحاً يوم ${new Date(data.endOfReport).toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}
+                `}
               </div>
             </div>
             <div class="header-decoration">
@@ -748,46 +844,39 @@ export const emailTemplates = {
             <!-- Top Products Section -->
             <div class="section">
               <h2 class="section-title">🏆 أكثر المنتجات مبيعاً</h2>
-              <div class="top-products">
+              <div class="products-list">
                 ${
                     data.topProducts && data.topProducts.length > 0
                         ? data.topProducts
                               .map(
                                   (product, index) => `
                     <div class="product-item">
-                      <div class="product-rank">${index + 1}</div>
-                      <div class="product-name">${product.name}</div>
+                      <div class="product-name">${index + 1}. ${
+                                      product.name
+                                  }</div>
                       <div class="product-quantity">${
                           product.quantity
-                      } قطعة</div>
+                      } وحدة</div>
                     </div>
                   `
                               )
                               .join("")
-                        : '<div style="text-align: center; color: #6c757d; padding: 20px;">لا توجد مبيعات اليوم</div>'
+                        : `<div style="text-align: center; color: #6c757d; padding: 20px;">لا توجد بيانات متاحة</div>`
                 }
               </div>
             </div>
           </div>
 
           <div class="footer">
-            <div class="footer-logo">🎮 Bomba System</div>
-            <div class="footer-text">
-              تقرير تلقائي من نظام إدارة المنشآت<br>
-              تم إنشاؤه في ${new Date().toLocaleTimeString("ar-EG")}
-            </div>
-            <div class="footer-actions">
-              <div class="action-item">
-                <span class="action-icon">📊</span>
-                <span class="action-text">عرض التقارير التفصيلية</span>
-              </div>
-              <div class="action-item">
-                <span class="action-icon">⚙️</span>
-                <span class="action-text">إعدادات الإشعارات</span>
-              </div>
+            <p>تم إرسال هذا التقرير تلقائياً من نظام Bomba</p>
+            <p>للمزيد من التفاصيل، يرجى تسجيل الدخول إلى لوحة التحكم</p>
+            <div class="footer-links">
+              <a href="#" class="footer-link">لوحة التحكم</a>
+              <a href="#" class="footer-link">التقارير التفصيلية</a>
+              <a href="#" class="footer-link">الإعدادات</a>
             </div>
           </div>
-      </div>
+        </div>
       </body>
       </html>
     `,
@@ -999,24 +1088,72 @@ export const emailTemplates = {
 };
 
 // Send low stock alert
-export const sendLowStockAlert = async (items, adminEmails) => {
-    if (!adminEmails || adminEmails.length === 0) return;
+export const sendLowStockAlert = async ({
+    items,
+    organizationName,
+    recipientEmails,
+    adminNames = []
+}) => {
+    if (!recipientEmails || recipientEmails.length === 0) {
+        Logger.warn("No recipient emails provided for low stock alert");
+        return;
+    }
 
-    const template = emailTemplates.lowStockAlert(items);
+    Logger.info(`Sending low stock alert to ${recipientEmails.length} recipients`, {
+        organizationName,
+        itemCount: items.length,
+        firstFewItems: items.slice(0, 3).map(i => i.name)
+    });
 
-    for (const email of adminEmails) {
+    const template = emailTemplates.lowStockAlert({
+        items,
+        organizationName,
+        adminNames,
+        timestamp: new Date()
+    });
+
+    const results = [];
+    
+    for (const email of recipientEmails) {
+        const startTime = Date.now();
         try {
             await sendEmail({
                 to: email,
                 ...template,
             });
+            results.push({
+                email,
+                status: 'success',
+                duration: Date.now() - startTime
+            });
         } catch (error) {
             Logger.error("Failed to send low stock alert", {
                 email,
                 error: error.message,
+                stack: error.stack,
+                duration: Date.now() - startTime
+            });
+            results.push({
+                email,
+                status: 'failed',
+                error: error.message,
+                duration: Date.now() - startTime
             });
         }
     }
+
+    const successCount = results.filter(r => r.status === 'success').length;
+    const failureCount = results.filter(r => r.status === 'failed').length;
+
+    Logger.info(`Low stock alert sending completed`, {
+        organizationName,
+        totalRecipients: recipientEmails.length,
+        successCount,
+        failureCount,
+        successRate: (successCount / recipientEmails.length * 100).toFixed(1) + '%'
+    });
+
+    return { success: failureCount === 0, results };
 };
 
 // Send daily report

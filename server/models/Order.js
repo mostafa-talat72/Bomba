@@ -62,10 +62,11 @@ const orderSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
-        tableNumber: {
-            type: Number,
+        table: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Table",
             required: false,
-            min: 1,
+            default: null,
         },
         customerName: {
             type: String,
@@ -94,6 +95,11 @@ const orderSchema = new mongoose.Schema(
         finalAmount: {
             type: Number,
             required: true,
+            min: 0,
+        },
+        totalCost: {
+            type: Number,
+            default: 0,
             min: 0,
         },
         notes: {
@@ -143,31 +149,36 @@ const orderSchema = new mongoose.Schema(
     }
 );
 
+// Add pre-validate hook to ensure order number is set before validation
+orderSchema.pre("validate", function (next) {
+    if (!this.orderNumber) {
+        // Set a temporary value to pass validation
+        this.orderNumber = "TEMP";
+    }
+    next();
+});
+
 // Combined pre-save hook for all operations
 orderSchema.pre("save", async function (next) {
     try {
-        // Generate order number if new
-        if (this.isNew) {
-            const today = new Date();
-            const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
-            const count = await this.constructor.countDocuments({
-                createdAt: {
-                    $gte: new Date(
-                        today.getFullYear(),
-                        today.getMonth(),
-                        today.getDate()
-                    ),
-                    $lt: new Date(
-                        today.getFullYear(),
-                        today.getMonth(),
-                        today.getDate() + 1
-                    ),
-                },
-            });
-            this.orderNumber = `ORD-${dateStr}-${String(count + 1).padStart(
-                3,
-                "0"
-            )}`;
+        // Generate order number if new or if it's temporary
+        if (this.isNew || this.orderNumber === "TEMP") {
+            const now = new Date();
+
+            // Format date and time
+            const year = now.getFullYear().toString().slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, "0");
+            const day = String(now.getDate()).padStart(2, "0");
+            const hours = String(now.getHours()).padStart(2, "0");
+            const minutes = String(now.getMinutes()).padStart(2, "0");
+            const seconds = String(now.getSeconds()).padStart(2, "0");
+            const milliseconds = String(now.getMilliseconds()).padStart(3, "0");
+
+            // Create a unique identifier using the full timestamp
+            const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}${milliseconds}`;
+
+            // Create order number using the timestamp
+            this.orderNumber = `ORD-${timestamp}`;
         }
 
         // Calculate item totals and subtotal
@@ -211,7 +222,6 @@ orderSchema.pre("save", async function (next) {
 
         next();
     } catch (error) {
-        console.error("❌ Pre-save hook error:", error);
         next(error);
     }
 });
@@ -226,25 +236,23 @@ orderSchema.post("save", function (doc, next) {
 // Add post-save hook for error logging
 orderSchema.post("save", function (error, doc, next) {
     if (error) {
-        console.error("❌ Order save error:", {
-            error: error.message,
-            orderData: doc
-                ? {
-                      customerName: doc.customerName,
-                      itemsCount: doc.items ? doc.items.length : 0,
-                      subtotal: doc.subtotal,
-                  }
-                : "No doc",
-        });
     }
     next(error);
 });
 
-// Indexes
+// Indexes for performance optimization
 orderSchema.index({ orderNumber: 1 }, { unique: true });
-orderSchema.index({ tableNumber: 1 });
-orderSchema.index({ status: 1 });
-orderSchema.index({ createdAt: 1 });
 orderSchema.index({ bill: 1 });
+orderSchema.index({ table: 1 }); // Index for table field query performance
+
+// Compound indexes for common query patterns
+orderSchema.index({ organization: 1, status: 1, createdAt: -1 });
+orderSchema.index({ organization: 1, table: 1, createdAt: -1 });
+orderSchema.index({ organization: 1, createdAt: -1 });
+orderSchema.index({ table: 1, status: 1 }); // Index for table-status queries
+
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(orderSchema);
 
 export default mongoose.model("Order", orderSchema);

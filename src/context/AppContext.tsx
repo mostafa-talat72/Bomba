@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
-import api, { User, Session, Order, InventoryItem, Bill, Cost, Device, MenuItem, BillItem } from '../services/api';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useMemo } from 'react';
+import api, { User, Session, Order, InventoryItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { useSmartPolling } from '../hooks/useSmartPolling';
 
 // تعريف Notification (مأخوذ من NotificationCenter)
 interface Notification {
@@ -41,6 +42,10 @@ interface AppContextType {
   costs: Cost[];
   devices: Device[];
   menuItems: MenuItem[];
+  menuSections: MenuSection[];
+  menuCategories: MenuCategory[];
+  tableSections: any[];
+  tables: any[];
   settings: any;
   inventoryItems: InventoryItem[];
   users: User[];
@@ -51,6 +56,7 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   refreshData: () => Promise<void>;
+  forceRefreshData: () => Promise<void>;
   resendVerification: (email: string) => Promise<{ success: boolean; message?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; message?: string }>;
@@ -63,6 +69,8 @@ interface AppContextType {
   fetchCosts: () => Promise<void>;
   fetchMenuItems: () => Promise<void>;
   fetchAvailableMenuItems: () => Promise<void>; // دالة جديدة لجلب العناصر المتوفرة فقط
+  fetchMenuSections: () => Promise<void>;
+  fetchMenuCategories: (sectionId?: string) => Promise<void>;
   fetchDevices: () => Promise<void>;
   fetchInventoryItems: () => Promise<void>;
   fetchUsers: () => Promise<void>;
@@ -71,7 +79,7 @@ interface AppContextType {
   // CRUD methods
   createSession: (sessionData: any) => Promise<Session | null>;
   updateSession: (id: string, updates: any) => Promise<Session | null>;
-  endSession: (id: string) => Promise<Session | null>;
+  endSession: (id: string, customerName?: string) => Promise<Session | null>;
 
   createOrder: (orderData: any) => Promise<Order | null>;
   updateOrder: (id: string, updates: any) => Promise<Order | null>;
@@ -106,6 +114,29 @@ interface AppContextType {
   getMenuItemsByCategory: (category: string) => Promise<MenuItem[]>;
   getPopularMenuItems: (limit?: number) => Promise<MenuItem[]>;
   getMenuStats: () => Promise<any>;
+  
+  // Menu Sections CRUD methods
+  createMenuSection: (sectionData: any) => Promise<MenuSection | null>;
+  updateMenuSection: (id: string, updates: any) => Promise<MenuSection | null>;
+  deleteMenuSection: (id: string) => Promise<boolean>;
+  
+  // Menu Categories CRUD methods
+  createMenuCategory: (categoryData: any) => Promise<MenuCategory | null>;
+  updateMenuCategory: (id: string, updates: any) => Promise<MenuCategory | null>;
+  deleteMenuCategory: (id: string) => Promise<boolean>;
+
+  // Table Sections CRUD methods
+  fetchTableSections: () => Promise<void>;
+  createTableSection: (sectionData: any) => Promise<any>;
+  updateTableSection: (id: string, updates: any) => Promise<any>;
+  deleteTableSection: (id: string) => Promise<boolean>;
+
+  // Tables CRUD methods
+  fetchTables: (sectionId?: string) => Promise<void>;
+  getTableStatus: (id: string) => Promise<{ table: any; hasUnpaidOrders: boolean; orders: Order[]; bills?: Bill[] } | null>;
+  createTable: (tableData: any) => Promise<any>;
+  updateTable: (id: string, updates: any) => Promise<any>;
+  deleteTable: (id: string) => Promise<boolean>;
 
   // User CRUD methods
   createUser: (userData: any) => Promise<User | null>;
@@ -121,10 +152,10 @@ interface AppContextType {
   getRecentActivity: (limit?: number) => Promise<any[]>;
 
   // Report methods
-  getSalesReport: (period?: string, groupBy?: string) => Promise<any>;
-  getSessionsReport: (period?: string, device?: string) => Promise<any>;
+  getSalesReport: (filter: any, groupBy?: string) => Promise<any>;
+  getSessionsReport: (filter: any, device?: string) => Promise<any>;
   getInventoryReport: (category?: string) => Promise<any>;
-  getFinancialReport: (period?: string) => Promise<any>;
+  getFinancialReport: (filter: any) => Promise<any>;
 
   // Notification methods
   getNotifications: (options?: { category?: string; unreadOnly?: boolean; limit?: number }) => Promise<Notification[]>;
@@ -139,8 +170,8 @@ interface AppContextType {
   forceRefreshNotifications: () => Promise<void>;
 
   // Export functions
-  exportReportToExcel: (reportType: string, period?: string) => Promise<void>;
-  exportReportToPDF: (reportType: string, period?: string) => Promise<void>;
+  exportReportToExcel: (reportType: string, filter: Filter) => Promise<void>;
+  exportReportToPDF: (reportType: string, filter: Filter) => Promise<void>;
 
   // Settings methods
   updateUserProfile: (profileData: any) => Promise<boolean>;
@@ -148,6 +179,14 @@ interface AppContextType {
   updateNotificationSettings: (settings: any) => Promise<boolean>;
   updateGeneralSettings: (settings: any) => Promise<boolean>;
 }
+
+export type Filter = {
+  period?: 'today' | 'yesterday' | 'week' | 'month' | 'year';
+  type?: 'daily' | 'monthly' | 'yearly';
+  day?: string; // YYYY-MM-DD
+  month?: string; // YYYY-MM
+  year?: string; // YYYY
+};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -168,6 +207,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [costs, setCosts] = useState<Cost[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuSections, setMenuSections] = useState<MenuSection[]>([]);
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
+  const [tableSections, setTableSections] = useState<any[]>([]);
+  const [tables, setTables] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [settings, setSettings] = useState<any>({});
@@ -222,69 +265,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     checkAuth();
   }, []);
-
-  // جلب الإشعارات غير المقروءة بشكل لحظي
-  useEffect(() => {
-    if (!isAuthenticated || isLoggingOut) return;
-    let interval: ReturnType<typeof setInterval>;
-    const fetchUnreadNotifications = async () => {
-      try {
-        const notifs = await getNotifications({ limit: 100 });
-        setNotifications(notifs);
-      } catch (error) {
-        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
-        if (!isAuthenticated || isLoggingOut) return;
-        console.error('Error fetching notifications:', error);
-      }
-    };
-    fetchUnreadNotifications();
-    interval = setInterval(fetchUnreadNotifications, 5000); // كل 5 ثوانٍ
-    return () => clearInterval(interval);
-  }, [isAuthenticated, isLoggingOut]);
-
-  // جلب الطلبات بشكل لحظي
-  useEffect(() => {
-    if (!isAuthenticated || isLoggingOut) return;
-    let interval: ReturnType<typeof setInterval>;
-    const fetchCafeOrders = async () => {
-      try {
-        await fetchOrders();
-      } catch (error) {
-        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
-        if (!isAuthenticated || isLoggingOut) return;
-        console.error('Error fetching orders:', error);
-      }
-    };
-    fetchCafeOrders();
-    interval = setInterval(fetchCafeOrders, 5000); // كل 5 ثوانٍ
-    return () => clearInterval(interval);
-  }, [isAuthenticated, isLoggingOut]);
-
-  // تحقق من صلاحية مشاهدة الجلسات
-  const canViewSessions = user && user.permissions && (
-    user.permissions.includes('playstation') ||
-    user.permissions.includes('computer') ||
-    user.permissions.includes('all')
-  );
-
-  // جلب الجلسات النشطة بشكل لحظي فقط إذا كان لديه الصلاحية
-  useEffect(() => {
-    if (!isAuthenticated || isLoggingOut) return;
-    if (!canViewSessions) return;
-    let interval: ReturnType<typeof setInterval>;
-    const fetchActiveSessions = async () => {
-      try {
-        await fetchSessions();
-      } catch (error) {
-        // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه
-        if (!isAuthenticated || isLoggingOut) return;
-        console.error('Error fetching sessions:', error);
-      }
-    };
-    fetchActiveSessions();
-    interval = setInterval(fetchActiveSessions, 5000); // كل 5 ثوانٍ
-    return () => clearInterval(interval);
-  }, [isAuthenticated, canViewSessions, isLoggingOut]);
 
   useEffect(() => {
     if (!isAuthenticated || isLoggingOut) return;
@@ -346,7 +326,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
               }
             } catch (refreshError) {
-              console.log('فشل في تجديد التوكن:', refreshError);
+              // تجاهل الأخطاء
             }
           }
           // إذا فشل التجديد أو لم يوجد refreshToken
@@ -370,7 +350,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('خطأ في التحقق من المصادقة:', error);
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       api.clearToken();
@@ -500,6 +479,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Data fetching methods
   const fetchSessions = async (): Promise<void> => {
+    // Skip if not authenticated or logging out
+    if (!isAuthenticated || isLoggingOut) return;
+    
     try {
       const response = await api.getActiveSessions();
       if (response.success && response.data) {
@@ -508,20 +490,51 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // إذا لم يكن لديه صلاحية أو فشل الطلب، لا تعرض أي إشعار
         setSessions([]);
       }
-    } catch {
+    } catch (error) {
       // تجاهل أي خطأ (خاصة 403) ولا تعرض أي إشعار
+      // Only log if still authenticated
+      if (isAuthenticated && !isLoggingOut) {
+        }
       setSessions([]);
     }
   };
 
   const fetchOrders = async (): Promise<void> => {
+    // Skip if not authenticated or logging out
+    if (!isAuthenticated || isLoggingOut) return;
+    
     try {
+      // جلب جميع الطلبات
       const response = await api.getOrders();
       if (response.success && response.data) {
-        setOrders(response.data);
+        // فلترة: فقط الطلبات المرتبطة بفواتير غير مدفوعة بالكامل
+        const filteredOrders = response.data.filter((order: any) => {
+          // إذا لم يكن للطلب فاتورة، نعرضه
+          if (!order.bill) return true;
+          
+          // إذا كانت الفاتورة object، نتحقق من حالتها
+          if (typeof order.bill === 'object' && order.bill !== null) {
+            const billStatus = order.bill.status;
+            // نعرض فقط الطلبات المرتبطة بفواتير غير مدفوعة
+            return billStatus !== 'paid' && billStatus !== 'cancelled';
+          }
+          
+          // إذا كانت الفاتورة مجرد ID، نفترض أنها غير مدفوعة
+          return true;
+        });
+        
+        setOrders(filteredOrders);
+      } else {
+        // إذا فشل الطلب، تأكد من أن القائمة فارغة بدلاً من undefined
+        setOrders([]);
       }
     } catch (error) {
-      console.error('❌ Failed to fetch orders:', error);
+      // Only log errors if still authenticated
+      if (isAuthenticated && !isLoggingOut) {
+        console.warn('Failed to fetch orders:', error);
+        // تأكد من أن القائمة فارغة بدلاً من undefined
+        setOrders([]);
+      }
     }
   };
 
@@ -532,18 +545,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setInventory(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch inventory:', error);
-    }
+      }
   };
 
   const fetchBills = async (): Promise<void> => {
+    // Skip if not authenticated or logging out
+    if (!isAuthenticated || isLoggingOut) return;
+    
     try {
+      // جلب جميع الفواتير بدون حد - لضمان ظهور الفواتير القديمة والطاولات المحجوزة
+      // تم إزالة limit: 100 لعرض جميع الفواتير بغض النظر عن التاريخ
       const response = await api.getBills();
       if (response.success && response.data) {
         setBills(response.data);
+      } else {
+        // إذا فشل الطلب، تأكد من أن القائمة فارغة بدلاً من undefined
+        setBills([]);
       }
     } catch (error) {
-      console.error('Failed to fetch bills:', error);
+      // Only log errors if still authenticated
+      if (isAuthenticated && !isLoggingOut) {
+        console.warn('Failed to fetch bills:', error);
+        // تأكد من أن القائمة فارغة بدلاً من undefined
+        setBills([]);
+      }
     }
   };
 
@@ -554,8 +579,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setCosts(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch costs:', error);
-    }
+      }
   };
 
   const fetchMenuItems = async (): Promise<void> => {
@@ -566,8 +590,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setMenuItems(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch menu items:', error);
-    }
+      }
   };
 
   // دالة جديدة لجلب عناصر القائمة مع التحقق من توفر المخزون للطلبات
@@ -579,8 +602,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setMenuItems(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch available menu items:', error);
-    }
+      }
   };
 
   const fetchDevices = async (): Promise<void> => {
@@ -590,8 +612,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setDevices(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch devices:', error);
-    }
+      }
   };
 
   const fetchInventoryItems = async (): Promise<void> => {
@@ -601,8 +622,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setInventoryItems(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch inventory items:', error);
-    }
+      }
   };
 
   const fetchUsers = async (): Promise<void> => {
@@ -612,8 +632,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setUsers(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch users:', error);
-    }
+      }
   };
 
   const fetchSettings = async (): Promise<void> => {
@@ -623,9 +642,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSettings(response.data);
       }
     } catch (error) {
-      console.error('Failed to fetch settings:', error);
-    }
+      }
   };
+
+  // Determine if there's activity that requires polling
+  const hasActivity = useMemo(() => {
+    // Check for active sessions
+    const hasActiveSessions = sessions.some(session => session.status === 'active');
+    
+    // Check for pending orders
+    const hasPendingOrders = orders.some(order => 
+      order.status === 'pending' || order.status === 'preparing'
+    );
+    
+    return hasActiveSessions || hasPendingOrders;
+  }, [sessions, orders]);
+
+  // Check if user can view sessions
+  const canViewSessions = user && user.permissions && (
+    user.permissions.includes('playstation') ||
+    user.permissions.includes('computer') ||
+    user.permissions.includes('all')
+  );
+
+  // Disable polling temporarily to prevent ERR_INSUFFICIENT_RESOURCES
+  // The pages will fetch data manually when needed
+  // Smart polling for orders - DISABLED
+  // useSmartPolling({
+  //   fetchFunction: fetchOrders,
+  //   hasActivity,
+  //   interval: 30000,
+  //   enabled: isAuthenticated && !isLoggingOut
+  // });
+
+  // Smart polling for bills - DISABLED
+  // useSmartPolling({
+  //   fetchFunction: fetchBills,
+  //   hasActivity,
+  //   interval: 30000,
+  //   enabled: isAuthenticated && !isLoggingOut
+  // });
+
+  // Smart polling for sessions - DISABLED
+  // useSmartPolling({
+  //   fetchFunction: fetchSessions,
+  //   hasActivity,
+  //   interval: 30000,
+  //   enabled: isAuthenticated && !isLoggingOut && !!canViewSessions
+  // });
 
   // CRUD methods for sessions
   const createSession = async (sessionData: any): Promise<Session | null> => {
@@ -675,17 +739,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const endSession = async (id: string): Promise<Session | null> => {
+  const endSession = async (id: string, customerName?: string): Promise<Session | null> => {
     try {
-      const response = await api.endSession(id);
+      const response = await api.endSession(id, customerName);
       if (response.success && response.data) {
         const data = response.data as any;
         const session = data.session;
         const bill = data.bill;
 
-        setSessions(prev => prev.map(s =>
-          s.id === id ? session : s
-        ));
+        // Remove the session from active sessions list since it's now completed
+        setSessions(prev => prev.filter(s => s.id !== id));
 
         // Update bill in bills list if exists
         if (bill) {
@@ -697,11 +760,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         return session;
       }
-      return null;
+      // If response is not successful, throw error
+      throw new Error(response.message || 'فشل في إنهاء الجلسة');
     } catch (error: unknown) {
       const err = error as { message?: string };
       showNotification(err.message || 'فشل في إنهاء الجلسة', 'error');
-      return null;
+      throw error; // Re-throw error so calling code knows it failed
     }
   };
 
@@ -723,11 +787,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
 
+      // Ensure table is sent as ObjectId (string format)
+      // The table field should already be an ObjectId string from the calling component
+      if (orderData.table && typeof orderData.table !== 'string') {
+        showNotification('معرف الطاولة غير صحيح', 'error');
+        return null;
+      }
+
       const response = await api.createOrder(orderData);
 
       if (response.success && response.data) {
         const newOrder = response.data;
+        // The response should include populated table data
+        // Update orders list with the new order
         setOrders(prev => [...prev, newOrder]);
+        
+        // If the order has a bill, update bills list as well
+        if (newOrder.bill) {
+          // Fetch bills to get the updated bill with the new order
+          await fetchBills();
+        }
+        
         showNotification(`تم إنشاء طلب جديد: ${newOrder.orderNumber}`, 'success');
         updateNotificationCount(1);
         return newOrder;
@@ -745,6 +825,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateOrder = async (id: string, updates: any): Promise<Order | null> => {
     try {
+
       const response = await api.updateOrder(id, updates);
       if (response.success && response.data) {
         setOrders(prev => prev.map(order =>
@@ -753,6 +834,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         showNotification('تم تحديث الطلب بنجاح', 'success');
         return response.data;
       }
+
+      // Handle error response from backend
+      if (response && !response.success) {
+        // Handle detailed inventory insufficiency messages
+        if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
+          const detailsMessage = response.data.details
+            .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+            .join('\n');
+          showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
+        } else if (response.data && Array.isArray(response.data.errors) && response.data.errors.length > 0) {
+          showNotification(`المخزون غير كافي لتحديث الطلب:\n${response.data.errors.join('\n')}`, 'error');
+        } else {
+          showNotification(response.message || 'حدث خطأ أثناء تحديث الطلب', 'error');
+        }
+        return null;
+      }
+
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
@@ -1196,6 +1294,271 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Menu Sections CRUD methods
+  const fetchMenuSections = async (): Promise<void> => {
+    try {
+      const response = await api.getMenuSections();
+      if (response.success && response.data) {
+        setMenuSections(response.data);
+      }
+    } catch (error) {
+      }
+  };
+
+  const createMenuSection = async (sectionData: any): Promise<MenuSection | null> => {
+    try {
+      const response = await api.createMenuSection(sectionData);
+      if (response.success && response.data) {
+        await fetchMenuSections();
+        showNotification('تم إضافة القسم بنجاح', 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في إضافة القسم', 'error');
+      return null;
+    }
+  };
+
+  const updateMenuSection = async (id: string, updates: any): Promise<MenuSection | null> => {
+    try {
+      const response = await api.updateMenuSection(id, updates);
+      if (response.success && response.data) {
+        await fetchMenuSections();
+        showNotification('تم تحديث القسم بنجاح', 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في تحديث القسم', 'error');
+      return null;
+    }
+  };
+
+  const deleteMenuSection = async (id: string): Promise<boolean> => {
+    try {
+      const response = await api.deleteMenuSection(id);
+      if (response.success) {
+        await fetchMenuSections();
+        showNotification('تم حذف القسم بنجاح', 'success');
+        return true;
+      }
+      return false;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في حذف القسم', 'error');
+      return false;
+    }
+  };
+
+  // Menu Categories CRUD methods
+  const fetchMenuCategories = async (sectionId?: string): Promise<void> => {
+    try {
+      const response = await api.getMenuCategories(sectionId ? { section: sectionId } : undefined);
+      if (response.success && response.data) {
+        setMenuCategories(response.data);
+      }
+    } catch (error) {
+      }
+  };
+
+  const createMenuCategory = async (categoryData: any): Promise<MenuCategory | null> => {
+    try {
+      const response = await api.createMenuCategory(categoryData);
+      if (response.success && response.data) {
+        await fetchMenuCategories();
+        showNotification('تم إضافة الفئة بنجاح', 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في إضافة الفئة', 'error');
+      return null;
+    }
+  };
+
+  const updateMenuCategory = async (id: string, updates: any): Promise<MenuCategory | null> => {
+    try {
+      const response = await api.updateMenuCategory(id, updates);
+      if (response.success && response.data) {
+        await fetchMenuCategories();
+        showNotification('تم تحديث الفئة بنجاح', 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في تحديث الفئة', 'error');
+      return null;
+    }
+  };
+
+  const deleteMenuCategory = async (id: string): Promise<boolean> => {
+    try {
+      const response = await api.deleteMenuCategory(id);
+      if (response.success) {
+        await fetchMenuCategories();
+        showNotification('تم حذف الفئة بنجاح', 'success');
+        return true;
+      }
+      return false;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في حذف الفئة', 'error');
+      return false;
+    }
+  };
+
+  // Table Sections CRUD methods
+  const fetchTableSections = async () => {
+    try {
+      const response = await api.getTableSections();
+      if (response.success && response.data) {
+        setTableSections(response.data);
+      }
+    } catch (error) {
+      }
+  };
+
+  const createTableSection = async (sectionData: any): Promise<any> => {
+    try {
+      const response = await api.createTableSection(sectionData);
+      if (response.success && response.data) {
+        await fetchTableSections();
+        showNotification('تم إضافة القسم بنجاح', 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في إضافة القسم', 'error');
+      return null;
+    }
+  };
+
+  const updateTableSection = async (id: string, updates: any): Promise<any> => {
+    try {
+      const response = await api.updateTableSection(id, updates);
+      if (response.success && response.data) {
+        await fetchTableSections();
+        showNotification('تم تحديث القسم بنجاح', 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في تحديث القسم', 'error');
+      return null;
+    }
+  };
+
+  const deleteTableSection = async (id: string): Promise<boolean> => {
+    try {
+      const response = await api.deleteTableSection(id);
+      if (response.success) {
+        await fetchTableSections();
+        showNotification('تم حذف القسم بنجاح', 'success');
+        return true;
+      }
+      return false;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في حذف القسم', 'error');
+      return false;
+    }
+  };
+
+  // Tables CRUD methods
+  const fetchTables = async (sectionId?: string) => {
+    try {
+      const response = await api.getTables(sectionId ? { section: sectionId } : undefined);
+      if (response.success && response.data) {
+        setTables(response.data);
+      }
+    } catch (error) {
+      }
+  };
+
+  const getTableStatus = async (id: string): Promise<{ table: any; hasUnpaidOrders: boolean; orders: Order[]; bills?: Bill[] } | null> => {
+    try {
+      const response = await api.getTableStatus(id);
+      if (response.success && response.data) {
+        // Filter bills by table._id === tableId and unpaid status
+        const tableBills = bills.filter(bill => 
+          bill.table && 
+          (bill.table as any)._id === id && 
+          bill.status !== 'paid' && 
+          bill.status !== 'cancelled'
+        );
+        
+        return {
+          ...response.data,
+          bills: tableBills
+        };
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في جلب حالة الطاولة', 'error');
+      return null;
+    }
+  };
+
+  const createTable = async (tableData: any): Promise<any> => {
+    try {
+      const response = await api.createTable(tableData);
+      
+      if (response.success && response.data) {
+        await fetchTables();
+        showNotification('تم إضافة الطاولة بنجاح', 'success');
+        return response.data;
+      }
+      
+      console.warn('⚠️ Frontend: Response not successful:', response);
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error('❌ Frontend: Error creating table:', error);
+      showNotification(err.message || 'خطأ في إضافة الطاولة', 'error');
+      return null;
+    }
+  };
+
+  const updateTable = async (id: string, updates: any): Promise<any> => {
+    try {
+      const response = await api.updateTable(id, updates);
+      if (response.success && response.data) {
+        await fetchTables();
+        showNotification('تم تحديث الطاولة بنجاح', 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في تحديث الطاولة', 'error');
+      return null;
+    }
+  };
+
+  const deleteTable = async (id: string): Promise<boolean> => {
+    try {
+      const response = await api.deleteTable(id);
+      if (response.success) {
+        await fetchTables();
+        showNotification('تم حذف الطاولة بنجاح', 'success');
+        return true;
+      }
+      return false;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || 'خطأ في حذف الطاولة', 'error');
+      return false;
+    }
+  };
+
   // User CRUD methods
   const createUser = async (userData: any): Promise<User | null> => {
     try {
@@ -1259,17 +1622,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Utility methods
-  const refreshData = async (): Promise<void> => {
+  const forceRefreshData = async (): Promise<void> => {
+    if (!isAuthenticated || !user) {
+      return;
+    }
+
+
+    
+    // إعادة تعيين البيانات أولاً
+    setOrders([]);
+    setBills([]);
+    setSessions([]);
+    
+    // ثم جلب البيانات مرة أخرى
+    await refreshData(0);
+  };
+
+  const refreshData = async (retryCount = 0): Promise<void> => {
     if (!isAuthenticated && !user) {
       return;
     }
 
     try {
+      // جلب البيانات الأساسية أولاً
       await Promise.all([
-        fetchSessions(),
         fetchOrders(),
-        fetchInventory(),
         fetchBills(),
+        fetchSessions(),
+        fetchInventory(),
         fetchCosts(),
         fetchDevices(),
         fetchMenuItems(),
@@ -1278,7 +1658,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchSettings(),
       ]);
     } catch (error) {
-      console.error('❌ Failed to refresh data:', error);
+      console.warn('Error in refreshData:', error);
+      
+      // إعادة المحاولة مرة واحدة بعد تأخير قصير
+      if (retryCount < 1 && isAuthenticated && !isLoggingOut) {
+        setTimeout(() => {
+          refreshData(retryCount + 1);
+        }, 1000);
+      }
     }
   };
 
@@ -1326,9 +1713,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Report methods
-  const getSalesReport = async (period?: string, groupBy?: string): Promise<any> => {
+  const getSalesReport = async (filter: Filter): Promise<any> => {
     try {
-      const response = await api.getSalesReport(period, groupBy);
+      const response = await api.getSalesReport(filter);
+      return response.success ? response.data : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const getSessionsReport = async (filter: Filter): Promise<any> => {
+    try {
+      const response = await api.getSessionsReport(filter);
+      return response.success ? response.data : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const getInventoryReport = async (): Promise<any> => {
+    try {
+      const response = await api.getInventoryReport();
+      return response.success ? response.data : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const getFinancialReport = async (filter: Filter): Promise<any> => {
+    try {
+      const response = await api.getFinancialReport(filter);
       return response.success ? response.data : null;
     } catch (error) {
       return null;
@@ -1347,7 +1761,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // دالة تجبر تحديث notifications في الـcontext (مثلاً عند فتح نافذة الإشعارات)
   const forceRefreshNotifications = async (): Promise<void> => {
-    const notifs = await getNotifications({ limit: 100 });
+    const notifs = await getNotifications();
     setNotifications(notifs);
   };
 
@@ -1365,7 +1779,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.markNotificationAsRead(notificationId);
       if (response.success) {
         // تحديث notifications فوراً
-        const notifs = await getNotifications({ limit: 100 });
+        const notifs = await getNotifications();
         setNotifications(notifs);
       }
       return response.success;
@@ -1379,7 +1793,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.markAllNotificationsAsRead();
       if (response.success) {
         // تحديث notifications فوراً
-        const notifs = await getNotifications({ limit: 100 });
+        const notifs = await getNotifications();
         setNotifications(notifs);
       }
       return response.success;
@@ -1393,7 +1807,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.deleteNotification(notificationId);
       if (response.success) {
         // تحديث notifications فوراً بعد الحذف
-        const notifs = await getNotifications({ limit: 100 });
+        const notifs = await getNotifications();
         setNotifications(notifs);
       }
       return response.success;
@@ -1468,58 +1882,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const getSessionsReport = async (period?: string, device?: string): Promise<any> => {
+  const exportReportToExcel = async (reportType: string, filter: Filter) => {
     try {
-      const response = await api.getSessionsReport(period, device);
-      return response.success ? response.data : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const getInventoryReport = async (category?: string): Promise<any> => {
-    try {
-      const response = await api.getInventoryReport(category);
-      return response.success ? response.data : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const getFinancialReport = async (period?: string): Promise<any> => {
-    try {
-      const response = await api.getFinancialReport(period);
-      return response.success ? response.data : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const exportReportToExcel = async (reportType: string, period: string = 'today') => {
-    try {
-      const blob = await api.exportReportToExcel(reportType, period);
+      const blob = await api.exportReportToExcel(reportType, filter);
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `تقرير_${reportType}_${period}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportType}_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       window.URL.revokeObjectURL(url);
       showNotification('تم تصدير التقرير بنجاح', 'success');
-    } catch (error: unknown) {
-      const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تصدير التقرير', 'error');
+    } catch (error) {
+      showNotification('فشل في تصدير التقرير', 'error');
     }
   };
 
-  const exportReportToPDF = async (reportType: string, period: string = 'today') => {
+  const exportReportToPDF = async (reportType: string, filter: Filter) => {
     try {
-      const blob = await api.exportReportToPDF(reportType, period);
+      const blob = await api.exportReportToPDF(reportType, filter);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `تقرير_${reportType}_${period}_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.download = `تقرير_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1613,6 +1999,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     costs,
     devices,
     menuItems,
+    menuSections,
+    menuCategories,
+    tableSections,
+    tables,
     settings,
     inventoryItems,
     users,
@@ -1623,6 +2013,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     login,
     logout,
     refreshData,
+    forceRefreshData,
     resendVerification,
     forgotPassword,
     resetPassword,
@@ -1635,6 +2026,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchCosts,
     fetchMenuItems,
     fetchAvailableMenuItems,
+    fetchMenuSections,
+    fetchMenuCategories,
     fetchDevices,
     fetchInventoryItems,
     fetchUsers,
@@ -1670,6 +2063,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     getMenuItemsByCategory,
     getPopularMenuItems,
     getMenuStats,
+    createMenuSection,
+    updateMenuSection,
+    deleteMenuSection,
+    createMenuCategory,
+    updateMenuCategory,
+    deleteMenuCategory,
+    fetchTableSections,
+    createTableSection,
+    updateTableSection,
+    deleteTableSection,
+    fetchTables,
+    getTableStatus,
+    createTable,
+    updateTable,
+    deleteTable,
     createUser,
     updateUser,
     deleteUser,

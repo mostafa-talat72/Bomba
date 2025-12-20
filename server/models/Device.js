@@ -10,7 +10,7 @@ const deviceSchema = new mongoose.Schema(
         number: {
             type: String,
             required: [true, "رقم الجهاز مطلوب"],
-            unique: true,
+            // إزالة unique: true لأن الفهرس المركب سيتولى هذا الأمر
         },
         type: {
             type: String,
@@ -45,13 +45,24 @@ const deviceSchema = new mongoose.Schema(
         },
         // أسعار الساعة لكل عدد دراعات للبلايستيشن
         playstationRates: {
-            type: Map,
-            of: Number,
+            type: Object,
             required: function () {
                 return this.type === "playstation";
             },
             // مثال: { '1': 20, '2': 20, '3': 25, '4': 30 }
             default: undefined,
+            validate: {
+                validator: function(value) {
+                    if (this.type === "playstation" && value) {
+                        // التحقق من أن القيم أرقام موجبة
+                        return Object.values(value).every(rate => 
+                            typeof rate === 'number' && rate > 0
+                        );
+                    }
+                    return true;
+                },
+                message: 'أسعار البلايستيشن يجب أن تكون أرقام موجبة'
+            }
         },
     },
     {
@@ -59,8 +70,10 @@ const deviceSchema = new mongoose.Schema(
     }
 );
 
-// Index for faster queries
-deviceSchema.index({ status: 1 });
+// Indexes for faster queries
+deviceSchema.index({ status: 1, organization: 1 }); // للبحث عن الأجهزة المتاحة
+deviceSchema.index({ type: 1, organization: 1 }); // للبحث حسب النوع
+deviceSchema.index({ number: 1, organization: 1 }, { unique: true }); // رقم الجهاز فريد لكل منظمة
 
 // Middleware to generate number with prefix before saving
 deviceSchema.pre("save", function (next) {
@@ -90,6 +103,10 @@ deviceSchema.pre("save", function (next) {
     }
     next();
 });
+
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(deviceSchema);
 
 const Device = mongoose.model("Device", deviceSchema);
 export default Device;

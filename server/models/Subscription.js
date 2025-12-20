@@ -23,4 +23,8 @@ const SubscriptionSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
 });
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(SubscriptionSchema);
+
 export default mongoose.model("Subscription", SubscriptionSchema);

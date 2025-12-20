@@ -11,6 +11,20 @@ import {
     updateMenuItemsOrder,
     incrementOrderCount,
 } from "../controllers/menuController.js";
+import {
+    getAllMenuSections,
+    getMenuSectionById,
+    createMenuSection,
+    updateMenuSection,
+    deleteMenuSection,
+} from "../controllers/menuSectionController.js";
+import {
+    getAllMenuCategories,
+    getMenuCategoryById,
+    createMenuCategory,
+    updateMenuCategory,
+    deleteMenuCategory,
+} from "../controllers/menuCategoryController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
 import { protect } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validation.js";
@@ -26,16 +40,10 @@ const menuItemValidation = [
         .withMessage("اسم العنصر يجب أن يكون بين 2 و 100 حرف"),
     body("price").isFloat({ min: 0 }).withMessage("السعر يجب أن يكون رقم موجب"),
     body("category")
-        .isIn([
-            "مشروبات ساخنة",
-            "مشروبات باردة",
-            "طعام",
-            "حلويات",
-            "وجبات سريعة",
-            "عصائر طبيعية",
-            "منتجات أخرى",
-        ])
-        .withMessage("فئة غير صحيحة"),
+        .notEmpty()
+        .withMessage("الفئة مطلوبة")
+        .isMongoId()
+        .withMessage("معرف الفئة غير صحيح"),
     body("description")
         .optional()
         .trim()
@@ -71,6 +79,20 @@ router.get("/items/:id", getMenuItemById);
 
 // Protected routes (for staff)
 router.use(authenticateToken);
+
+// Menu Sections routes (menu permission required)
+router.get("/sections", authorize("menu", "all"), getAllMenuSections);
+router.get("/sections/:id", authorize("menu", "all"), getMenuSectionById);
+router.post("/sections", authorize("menu", "all"), createMenuSection);
+router.put("/sections/:id", authorize("menu", "all"), updateMenuSection);
+router.delete("/sections/:id", authorize("menu", "all"), deleteMenuSection);
+
+// Menu Categories routes (menu permission required)
+router.get("/categories-all", authorize("menu", "all"), getAllMenuCategories);
+router.get("/categories/:id", authorize("menu", "all"), getMenuCategoryById);
+router.post("/categories", authorize("menu", "all"), createMenuCategory);
+router.put("/categories/:id", authorize("menu", "all"), updateMenuCategory);
+router.delete("/categories/:id", authorize("menu", "all"), deleteMenuCategory);
 
 // Menu management routes (menu permission required)
 router.post(

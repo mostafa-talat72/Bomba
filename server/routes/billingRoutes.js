@@ -6,14 +6,18 @@ import {
     updateBill,
     addPayment,
     addOrderToBill,
+    removeOrderFromBill,
     addSessionToBill,
     getBillByQR,
     cancelBill,
+    deleteBill,
     addPartialPayment,
     getBillItems,
     getSubscriptionStatus,
     createSubscriptionPayment,
     fawryWebhook,
+    payForItems,
+    paySessionPartial,
 } from "../controllers/billingController.js";
 import { protect, authorize, adminOnly } from "../middleware/auth.js";
 
@@ -29,17 +33,19 @@ router.use(protect);
 
 router
     .route("/")
-    .get(authorize("billing", "all"), getBills)
-    .post(authorize("billing", "all"), createBill);
+    .get(authorize("billing", "staff", "all"), getBills)
+    .post(authorize("billing", "staff", "all"), createBill);
 
 router
     .route("/:id")
     .get(authorize("billing", "all"), getBill)
-    .put(authorize("billing", "all"), updateBill);
+    .put(authorize("billing", "all"), updateBill)
+    .delete(authorize("billing", "all"), deleteBill);
 
 router.post("/:id/payment", authorize("billing", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "all"), addPayment);
 router.post("/:id/orders", authorize("billing", "all"), addOrderToBill);
+router.delete("/:id/orders/:orderId", authorize("billing", "all"), removeOrderFromBill);
 router.post("/:id/sessions", authorize("billing", "all"), addSessionToBill);
 // إلغاء الفاتورة - للمدير فقط
 router.put("/:id/cancel", protect, adminOnly, cancelBill);
@@ -49,6 +55,10 @@ router.post(
     authorize("billing", "all"),
     addPartialPayment
 );
+// دفع أصناف محددة من الفاتورة
+router.post("/:id/pay-items", authorize("billing", "all"), payForItems);
+// دفع جزئي لجلسة محددة
+router.post("/:id/pay-session-partial", authorize("billing", "all"), paySessionPartial);
 router.post("/subscription/payment", protect, createSubscriptionPayment);
 router.post("/subscription/fawry-webhook", fawryWebhook);
 

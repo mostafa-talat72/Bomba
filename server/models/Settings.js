@@ -27,4 +27,8 @@ const settingsSchema = new mongoose.Schema(
     }
 );
 
+// Apply sync middleware
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+applySyncMiddleware(settingsSchema);
+
 export default mongoose.model("Settings", settingsSchema);
