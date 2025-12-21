@@ -862,6 +862,34 @@ class ApiClient {
     });
   }
 
+  async updateControllersPeriodTime(sessionId: string, periodIndex: number, newStartTime: string, newEndTime?: string, forceUpdate?: boolean): Promise<ApiResponse<Session>> {
+    const body: any = { periodIndex, newStartTime };
+    if (newEndTime) {
+      body.newEndTime = newEndTime;
+    }
+    if (forceUpdate) {
+      body.forceUpdate = forceUpdate;
+    }
+    
+    return this.request<Session>(`/sessions/${sessionId}/controllers-period-time`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async resolveControllersPeriodConflict(sessionId: string, conflictResolution: {
+    periodIndex: number;
+    newStartTime: string;
+    newEndTime?: string;
+    resolutionAction: string;
+    actionDetails: any;
+  }): Promise<ApiResponse<Session>> {
+    return this.request<Session>(`/sessions/${sessionId}/resolve-period-conflict`, {
+      method: 'PUT',
+      body: JSON.stringify(conflictResolution),
+    });
+  }
+
   async updateSessionCost(sessionId: string): Promise<ApiResponse<{
     sessionId: string;
     currentCost: number;

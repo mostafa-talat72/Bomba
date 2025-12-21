@@ -84,9 +84,41 @@ const PlayStation: React.FC = () => {
   const [newStartTime, setNewStartTime] = useState('');
   const [isUpdatingStartTime, setIsUpdatingStartTime] = useState(false);
 
+  // نافذة تعديل وقت فترة الدراعات
+  const [showEditPeriodTimeModal, setShowEditPeriodTimeModal] = useState(false);
+  const [selectedSessionForPeriodEdit, setSelectedSessionForPeriodEdit] = useState<Session | null>(null);
+  const [selectedPeriodIndex, setSelectedPeriodIndex] = useState<number>(0);
+  const [newPeriodStartTime, setNewPeriodStartTime] = useState('');
+  const [newPeriodEndTime, setNewPeriodEndTime] = useState('');
+  const [isUpdatingPeriodTime, setIsUpdatingPeriodTime] = useState(false);
+
   // نافذة تأكيد تعديل عدد الأذرع
   const [showControllersConfirm, setShowControllersConfirm] = useState(false);
   const [controllersChangeData, setControllersChangeData] = useState<{sessionId: string, newCount: number, oldCount: number, deviceName: string} | null>(null);
+
+  // نافذة حل التداخلات في أوقات الفترات
+  const [showConflictResolutionModal, setShowConflictResolutionModal] = useState(false);
+  const [conflictDetails, setConflictDetails] = useState<any>(null);
+  const [selectedResolutionAction, setSelectedResolutionAction] = useState<string>('');
+  const [isResolvingConflict, setIsResolvingConflict] = useState(false);
+  const [pendingPeriodEdit, setPendingPeriodEdit] = useState<{
+    sessionId: string;
+    periodIndex: number;
+    newStartTime: string;
+    newEndTime?: string;
+  } | null>(null);
+
+  // نافذة التأكيد المخصصة
+  const [showCustomConfirm, setShowCustomConfirm] = useState(false);
+  const [confirmData, setConfirmData] = useState<{
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    type: 'warning' | 'danger' | 'info';
+    onConfirm: () => void;
+    onCancel?: () => void;
+  } | null>(null);
 
   // Loading states for better UX
   // Start with false if we already have data from context
@@ -517,6 +549,319 @@ const PlayStation: React.FC = () => {
     setShowEditStartTimeModal(true);
   };
 
+  // دالة فتح نافذة تعديل وقت فترة الدراعات
+  const openEditPeriodTimeModal = (session: Session, periodIndex: number) => {
+    setSelectedSessionForPeriodEdit(session);
+    setSelectedPeriodIndex(periodIndex);
+    
+    // الحصول على الفترة المحددة
+    const period = session.controllersHistory?.[periodIndex];
+    if (!period) {
+      showNotification('الفترة غير موجودة', 'error');
+      return;
+    }
+    
+    // تحويل وقت بداية الفترة من UTC إلى التوقيت المحلي للعرض
+    const utcStartTime = new Date(period.from);
+    const year = utcStartTime.getFullYear();
+    const month = String(utcStartTime.getMonth() + 1).padStart(2, '0');
+    const day = String(utcStartTime.getDate()).padStart(2, '0');
+    const hours = String(utcStartTime.getHours()).padStart(2, '0');
+    const minutes = String(utcStartTime.getMinutes()).padStart(2, '0');
+    const formattedStartTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+    setNewPeriodStartTime(formattedStartTime);
+    
+    // إذا كانت الفترة منتهية (لها وقت نهاية)، تحويل وقت النهاية أيضاً
+    if (period.to) {
+      const utcEndTime = new Date(period.to);
+      const endYear = utcEndTime.getFullYear();
+      const endMonth = String(utcEndTime.getMonth() + 1).padStart(2, '0');
+      const endDay = String(utcEndTime.getDate()).padStart(2, '0');
+      const endHours = String(utcEndTime.getHours()).padStart(2, '0');
+      const endMinutes = String(utcEndTime.getMinutes()).padStart(2, '0');
+      const formattedEndTime = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`;
+      setNewPeriodEndTime(formattedEndTime);
+    } else {
+      // الفترة النشطة - لا يوجد وقت نهاية
+      setNewPeriodEndTime('');
+    }
+    
+    setShowEditPeriodTimeModal(true);
+  };
+
+  // دالة تنفيذ التعديل
+  const executeEditPeriodTime = async (forceUpdate = false) => {
+    if (!selectedSessionForPeriodEdit) {
+      showNotification('❌ لم يتم العثور على الجلسة المحددة', 'error');
+      return;
+    }
+    
+    const localStartDateTime = dayjs(newPeriodStartTime);
+    const localEndDateTime = newPeriodEndTime ? dayjs(newPeriodEndTime) : null;
+    
+    // محاولة إرسال طلب تعديل وقت فترة الدراعات للخادم
+    try {
+      setIsUpdatingPeriodTime(true);
+      
+      await api.updateControllersPeriodTime(
+        selectedSessionForPeriodEdit.id, 
+        selectedPeriodIndex, 
+        localStartDateTime.toISOString(),
+        localEndDateTime ? localEndDateTime.toISOString() : undefined,
+        forceUpdate // إرسال معلومة أن المستخدم وافق على التجاهل
+      );
+
+      showNotification('✅ تم تحديث أوقات فترة الدراعات بنجاح', 'success');
+      
+      // إعادة تحميل الجلسات لتحديث البيانات
+      await fetchSessions();
+      
+      // إغلاق النافذة وتنظيف البيانات
+      setShowEditPeriodTimeModal(false);
+      setSelectedSessionForPeriodEdit(null);
+      setSelectedPeriodIndex(0);
+      setNewPeriodStartTime('');
+      setNewPeriodEndTime('');
+
+    } catch (error: any) {
+      // التحقق من وجود تداخلات
+      if (error?.response?.status === 409) {
+        if (error?.response?.data?.requiresUserChoice) {
+          // حفظ بيانات التعديل المطلوب
+          setPendingPeriodEdit({
+            sessionId: selectedSessionForPeriodEdit.id,
+            periodIndex: selectedPeriodIndex,
+            newStartTime: localStartDateTime.toISOString(),
+            newEndTime: localEndDateTime ? localEndDateTime.toISOString() : undefined
+          });
+          
+          // عرض نافذة حل التداخلات
+          setConflictDetails(error.response.data.conflictDetails);
+          setShowConflictResolutionModal(true);
+          
+          // إغلاق نافذة التعديل الأساسية
+          setShowEditPeriodTimeModal(false);
+          
+          return; // لا نعرض رسالة خطأ، بل ننتظر اختيار المستخدم
+        } else {
+          const errorMessage = error?.response?.data?.message || 'يوجد تداخل في الأوقات';
+          showNotification(`❌ ${errorMessage}`, 'error');
+          return;
+        }
+      }
+      
+      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء تحديث وقت فترة الدراعات';
+      showNotification(`❌ ${errorMessage}`, 'error');
+    } finally {
+      setIsUpdatingPeriodTime(false);
+    }
+  };
+
+  // دالة متابعة التعديل
+  const continueEditPeriodTime = async () => {
+    if (!selectedSessionForPeriodEdit) {
+      showNotification('❌ لم يتم العثور على الجلسة المحددة', 'error');
+      return;
+    }
+    
+    const period = selectedSessionForPeriodEdit.controllersHistory?.[selectedPeriodIndex];
+    if (!period) {
+      showNotification('❌ لم يتم العثور على الفترة المحددة', 'error');
+      return;
+    }
+    
+    // تنفيذ التعديل مباشرة - المستخدم وافق بالفعل على التحديثات التلقائية
+    executeEditPeriodTime(true); // تمرير forceUpdate=true لتجاهل التداخلات
+  };
+
+  // دالة تعديل وقت فترة الدراعات
+  const handleEditPeriodTime = async () => {
+    if (!selectedSessionForPeriodEdit || !newPeriodStartTime) {
+      showNotification('يرجى تحديد وقت البداية', 'error');
+      return;
+    }
+
+    // التحقق من الفترة المحددة
+    const period = selectedSessionForPeriodEdit.controllersHistory?.[selectedPeriodIndex];
+    if (!period) {
+      showNotification('الفترة غير موجودة', 'error');
+      return;
+    }
+
+    const isActivePeriod = !period.to; // الفترة النشطة ليس لها وقت نهاية
+    const controllersHistory = selectedSessionForPeriodEdit.controllersHistory || [];
+
+    // للفترات المنتهية، التحقق من وجود وقت النهاية
+    if (!isActivePeriod && !newPeriodEndTime) {
+      showNotification('يرجى تحديد وقت النهاية للفترة المنتهية', 'error');
+      return;
+    }
+
+    try {
+      setIsUpdatingPeriodTime(true);
+      
+      // تحويل الأوقات المدخلة من datetime-local بشكل صحيح
+      const localStartDateTime = dayjs(newPeriodStartTime);
+      const currentTime = dayjs();
+      
+      // التحقق من أن وقت البداية ليس في المستقبل
+      if (localStartDateTime.isAfter(currentTime)) {
+        showNotification('❌ لا يمكن تعديل وقت البداية إلى المستقبل', 'error');
+        return;
+      }
+      
+      // التحقق من أن وقت البداية ليس قبل بداية الجلسة
+      const sessionStartTime = dayjs(selectedSessionForPeriodEdit.startTime);
+      if (localStartDateTime.isBefore(sessionStartTime)) {
+        showNotification('❌ لا يمكن تعديل وقت البداية إلى ما قبل بداية الجلسة', 'error');
+        return;
+      }
+
+      // التحقق من التسلسل مع الفترة السابقة - نسمح بالتعديل لأن الخادم سيحدث الفترة السابقة تلقائياً
+      if (selectedPeriodIndex > 0) {
+        const previousPeriod = controllersHistory[selectedPeriodIndex - 1];
+        if (previousPeriod.from) {
+          const previousStartTime = dayjs(previousPeriod.from);
+          if (localStartDateTime.isBefore(previousStartTime) || localStartDateTime.isSame(previousStartTime)) {
+            showNotification('❌ وقت البداية لا يمكن أن يكون قبل أو مساوي لبداية الفترة السابقة', 'error');
+            return;
+          }
+        }
+        
+        // تحذير المستخدم أن الفترة السابقة ستتحدث تلقائياً
+        const previousEndTime = dayjs(previousPeriod.to);
+        if (!localStartDateTime.isSame(previousEndTime)) {
+          // عرض تأكيد مخصص للتحديث التلقائي
+          showConfirm({
+            title: '🔄 تحديث تلقائي مطلوب',
+            message: `سيتم تحديث وقت نهاية الفترة السابقة تلقائياً من ${formatTimeInArabic(previousEndTime)} إلى ${formatTimeInArabic(localStartDateTime)}. هل تريد المتابعة؟`,
+            confirmText: 'نعم، تابع',
+            cancelText: 'إلغاء',
+            type: 'warning',
+            onConfirm: () => {
+              // متابعة التعديل
+              continueEditPeriodTime();
+            }
+          });
+          return;
+        }
+      }
+
+      // متابعة التعديل مباشرة إذا لم يكن هناك تداخل
+      continueEditPeriodTime();
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء التحقق من البيانات';
+      showNotification(`❌ ${errorMessage}`, 'error');
+    } finally {
+      setIsUpdatingPeriodTime(false);
+    }
+  };
+
+  // دالة حل التداخلات
+  const handleResolveConflict = async () => {
+    if (!pendingPeriodEdit || !selectedResolutionAction || !conflictDetails) {
+      showNotification('يرجى اختيار طريقة الحل', 'error');
+      return;
+    }
+
+    try {
+      setIsResolvingConflict(true);
+      
+      // العثور على تفاصيل الإجراء المختار
+      const actionDetails = conflictDetails.suggestedActions.find(
+        (action: any) => action.action === selectedResolutionAction
+      );
+
+      if (!actionDetails) {
+        showNotification('الإجراء المختار غير صحيح', 'error');
+        return;
+      }
+
+      // إرسال طلب حل التداخل
+      await api.resolveControllersPeriodConflict(pendingPeriodEdit.sessionId, {
+        periodIndex: pendingPeriodEdit.periodIndex,
+        newStartTime: pendingPeriodEdit.newStartTime,
+        newEndTime: pendingPeriodEdit.newEndTime,
+        resolutionAction: selectedResolutionAction,
+        actionDetails: actionDetails
+      });
+
+      showNotification('✅ تم حل التداخل وتحديث أوقات الفترات بنجاح', 'success');
+      
+      // إعادة تحميل الجلسات لتحديث البيانات
+      await fetchSessions();
+      
+      // إغلاق النافذة وتنظيف البيانات
+      setShowConflictResolutionModal(false);
+      setConflictDetails(null);
+      setSelectedResolutionAction('');
+      setPendingPeriodEdit(null);
+
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء حل التداخل';
+      showNotification(`❌ ${errorMessage}`, 'error');
+    } finally {
+      setIsResolvingConflict(false);
+    }
+  };
+
+  // دالة إلغاء حل التداخل
+  const handleCancelConflictResolution = () => {
+    setShowConflictResolutionModal(false);
+    setConflictDetails(null);
+    setSelectedResolutionAction('');
+    setPendingPeriodEdit(null);
+    
+    // إعادة فتح نافذة التعديل الأساسية
+    if (selectedSessionForPeriodEdit) {
+      setShowEditPeriodTimeModal(true);
+    }
+  };
+
+  // دالة عرض التأكيد المخصص
+  const showConfirm = (options: {
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: 'warning' | 'danger' | 'info';
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }) => {
+    setConfirmData({
+      title: options.title,
+      message: options.message,
+      confirmText: options.confirmText || 'تأكيد',
+      cancelText: options.cancelText || 'إلغاء',
+      type: options.type || 'warning',
+      onConfirm: options.onConfirm,
+      onCancel: options.onCancel
+    });
+    setShowCustomConfirm(true);
+  };
+
+  // دالة إغلاق التأكيد المخصص
+  const hideConfirm = () => {
+    setShowCustomConfirm(false);
+    setConfirmData(null);
+  };
+
+  // دالة التأكيد
+  const handleConfirm = () => {
+    if (confirmData?.onConfirm) {
+      confirmData.onConfirm();
+    }
+    hideConfirm();
+  };
+
+  // دالة الإلغاء
+  const handleConfirmCancel = () => {
+    if (confirmData?.onCancel) {
+      confirmData.onCancel();
+    }
+    hideConfirm();
+  };
+
   const handleEndSession = async (sessionId: string) => {
     // البحث عن الجلسة
     const session = sessions.find(s => s.id === sessionId);
@@ -584,6 +929,27 @@ const PlayStation: React.FC = () => {
   const handleUpdateControllersClick = (sessionId: string, newCount: number, oldCount: number, deviceName: string) => {
     setControllersChangeData({ sessionId, newCount, oldCount, deviceName });
     setShowControllersConfirm(true);
+  };
+
+  // فتح نافذة تعديل الأذرع (تفتح نافذة التأكيد مباشرة)
+  const openControllersEditor = (session: Session) => {
+    const currentCount = session.controllers ?? 1;
+    setControllersChangeData({ 
+      sessionId: session.id, 
+      newCount: currentCount, 
+      oldCount: currentCount, 
+      deviceName: session.deviceName 
+    });
+    setShowControllersConfirm(true);
+  };
+
+  // تغيير العدد داخل نافذة التأكيد
+  const changeControllersInModal = (newCount: number) => {
+    if (!controllersChangeData) return;
+    setControllersChangeData({
+      ...controllersChangeData,
+      newCount: newCount
+    });
   };
 
   const confirmUpdateControllers = async () => {
@@ -899,6 +1265,63 @@ const PlayStation: React.FC = () => {
                     <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{toArabicNumbers(String(activeSession.controllers ?? 1))} دراع</span>
                   </div>
+
+                  {/* تاريخ الدراعات */}
+                  {activeSession.controllersHistory && activeSession.controllersHistory.length > 0 && (
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-xl border-2 border-purple-300 dark:border-purple-700 shadow-sm">
+                      <h4 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        تاريخ تغيير الدراعات
+                      </h4>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {activeSession.controllersHistory.map((period, index) => {
+                          const isCurrentPeriod = !period.to;
+                          const startTime = dayjs(period.from).utc().add(2, 'hour');
+                          const endTime = period.to ? dayjs(period.to).utc().add(2, 'hour') : null;
+                          
+                          return (
+                            <div key={index} className={`flex items-center justify-between p-2 rounded-lg border ${
+                              isCurrentPeriod 
+                                ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' 
+                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600'
+                            }`}>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                    isCurrentPeriod 
+                                      ? 'bg-green-500 text-white' 
+                                      : 'bg-purple-500 text-white'
+                                  }`}>
+                                    {toArabicNumbers(String(period.controllers))} دراع
+                                  </span>
+                                  {isCurrentPeriod && (
+                                    <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full animate-pulse">
+                                      نشط
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                  من: {formatTimeInArabic(startTime)}
+                                  {endTime && (
+                                    <span> - إلى: {formatTimeInArabic(endTime)}</span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* زر تعديل وقت الفترة */}
+                              <button
+                                onClick={() => openEditPeriodTimeModal(activeSession, index)}
+                                className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105 flex items-center justify-center"
+                                title="تعديل وقت بداية هذه الفترة"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   
                   {/* عرض حالة ربط الطاولة فقط (بدون أزرار) */}
                   {activeSession.bill && (() => {
@@ -953,12 +1376,17 @@ const PlayStation: React.FC = () => {
                           <span className="text-xl">-</span>
                         )}
                       </button>
-                      <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm min-w-[80px]">
+                      <button
+                        className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm min-w-[80px] hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                        onClick={() => openControllersEditor(activeSession)}
+                        disabled={updatingControllers[activeSession.id]}
+                        title="تعديل عدد الأذرع"
+                      >
                         <span className="font-bold text-xl text-orange-600 dark:text-orange-400 block text-center">
                           {toArabicNumbers(String(activeSession.controllers ?? 1))}
                         </span>
                         <span className="text-xs text-gray-600 dark:text-gray-400 block text-center">دراع</span>
-                      </div>
+                      </button>
                       <button
                         className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-bold text-white transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110"
                         disabled={(activeSession.controllers ?? 1) >= 4 || updatingControllers[activeSession.id]}
@@ -1598,7 +2026,7 @@ const PlayStation: React.FC = () => {
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
                   <Users className="h-6 w-6 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">تأكيد تعديل عدد الأذرع</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">تعديل عدد الأذرع</h2>
               </div>
               <button
                 onClick={() => {
@@ -1612,37 +2040,79 @@ const PlayStation: React.FC = () => {
             </div>
             
             <div className="mb-6 space-y-4">
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-5 shadow-sm">
-                <p className="text-blue-900 dark:text-blue-100 font-bold mb-3 flex items-center gap-2">
+              {/* معلومات الجهاز */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-4 shadow-sm">
+                <p className="text-blue-900 dark:text-blue-100 font-bold mb-2 flex items-center gap-2">
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  تفاصيل التعديل
+                  جلسة {controllersChangeData.deviceName}
                 </p>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">الجهاز</span>
-                    <span className="font-bold text-blue-900 dark:text-blue-100">{controllersChangeData.deviceName}</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">العدد الحالي</span>
-                    <span className="font-bold text-red-600 dark:text-red-400">{toArabicNumbers(String(controllersChangeData.oldCount))} دراع</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">العدد الجديد</span>
-                    <span className="font-bold text-green-600 dark:text-green-400">{toArabicNumbers(String(controllersChangeData.newCount))} دراع</span>
-                  </div>
+                <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">العدد الحالي:</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400">{toArabicNumbers(String(controllersChangeData.oldCount))} دراع</span>
                 </div>
               </div>
-              
-              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-700 rounded-xl p-4 shadow-sm">
-                <p className="text-sm text-yellow-900 dark:text-yellow-100 font-semibold flex items-center gap-2">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  سيتم إعادة حساب التكلفة بناءً على العدد الجديد من الأذرع
-                </p>
+
+              {/* اختيار عدد الأذرع */}
+              <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 border-2 border-orange-300 dark:border-orange-700 rounded-xl p-4 shadow-sm">
+                <p className="text-orange-900 dark:text-orange-100 font-bold mb-3 text-center">اختر العدد الجديد</p>
+                <div className="grid grid-cols-4 gap-3">
+                  {[1, 2, 3, 4].map((count) => {
+                    const isSelected = count === controllersChangeData.newCount;
+                    const isOriginal = count === controllersChangeData.oldCount;
+                    return (
+                      <button
+                        key={count}
+                        onClick={() => changeControllersInModal(count)}
+                        className={`
+                          p-3 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-105 border-2
+                          ${isSelected 
+                            ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg border-orange-600' 
+                            : isOriginal
+                            ? 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-600'
+                            : 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-500 border-gray-300 dark:border-gray-500'
+                          }
+                        `}
+                      >
+                        <div className="text-center">
+                          <div className="text-xl mb-1">{toArabicNumbers(String(count))}</div>
+                          <div className="text-xs">
+                            {isOriginal ? 'حالي' : 'دراع'}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                {/* عرض التغيير */}
+                {controllersChangeData.newCount !== controllersChangeData.oldCount && (
+                  <div className="mt-3 bg-white dark:bg-gray-800 p-3 rounded-lg border border-orange-200 dark:border-orange-600">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">التغيير:</span>
+                      <span className="font-bold text-orange-600 dark:text-orange-400">
+                        {controllersChangeData.newCount > controllersChangeData.oldCount 
+                          ? `+${controllersChangeData.newCount - controllersChangeData.oldCount} دراع` 
+                          : `${controllersChangeData.newCount - controllersChangeData.oldCount} دراع`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
+              
+              {/* تحذير إعادة الحساب */}
+              {controllersChangeData.newCount !== controllersChangeData.oldCount && (
+                <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-700 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm text-yellow-900 dark:text-yellow-100 font-semibold flex items-center gap-2">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    سيتم إعادة حساب التكلفة بناءً على العدد الجديد من الأذرع
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3">
@@ -1657,10 +2127,20 @@ const PlayStation: React.FC = () => {
               </button>
               <button
                 onClick={confirmUpdateControllers}
-                className="px-8 py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl flex items-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
+                disabled={controllersChangeData.newCount === controllersChangeData.oldCount || updatingControllers[controllersChangeData.sessionId]}
+                className="px-8 py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl flex items-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
               >
-                <Users className="h-5 w-5 ml-2" />
-                تأكيد التعديل
+                {updatingControllers[controllersChangeData.sessionId] ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin ml-2"></div>
+                    جاري التحديث...
+                  </>
+                ) : (
+                  <>
+                    <Users className="h-5 w-5 ml-2" />
+                    تأكيد التعديل
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -2087,6 +2567,485 @@ const PlayStation: React.FC = () => {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تعديل وقت فترة الدراعات */}
+      {showEditPeriodTimeModal && selectedSessionForPeriodEdit && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Users className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">تعديل وقت فترة الدراعات</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{selectedSessionForPeriodEdit.deviceName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditPeriodTimeModal(false);
+                  setSelectedSessionForPeriodEdit(null);
+                  setSelectedPeriodIndex(0);
+                  setNewPeriodStartTime('');
+                  setNewPeriodEndTime('');
+                }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors duration-200"
+                disabled={isUpdatingPeriodTime}
+              >
+                <X className="h-6 w-6 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* معلومات الفترة الحالية */}
+            <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-700">
+              <h4 className="font-bold text-purple-900 dark:text-purple-100 mb-2">معلومات الفترة</h4>
+              {selectedSessionForPeriodEdit.controllersHistory && selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] && (() => {
+                const period = selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex];
+                const isActivePeriod = !period.to;
+                const controllersHistory = selectedSessionForPeriodEdit.controllersHistory;
+                
+                return (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">عدد الدراعات:</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {toArabicNumbers(String(period.controllers))} دراع
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">نوع الفترة:</span>
+                      <span className={`font-medium px-2 py-1 rounded-full text-xs ${
+                        isActivePeriod 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                      }`}>
+                        {isActivePeriod ? '🟢 فترة نشطة' : '🔵 فترة منتهية'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">وقت البداية الحالي:</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {formatTimeInArabic(dayjs(period.from).utc().add(2, 'hour'))}
+                      </span>
+                    </div>
+                    {!isActivePeriod && period.to && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600 dark:text-gray-400">وقت النهاية الحالي:</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          {formatTimeInArabic(dayjs(period.to).utc().add(2, 'hour'))}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* معلومات الفترات المجاورة */}
+                    <div className="mt-4 pt-3 border-t border-purple-200 dark:border-purple-600">
+                      <h5 className="text-sm font-bold text-purple-800 dark:text-purple-200 mb-2">الفترات المجاورة:</h5>
+                      <div className="space-y-1 text-xs">
+                        {selectedPeriodIndex > 0 && (
+                          <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/30 rounded">
+                            <span>الفترة السابقة ({toArabicNumbers(String(controllersHistory[selectedPeriodIndex - 1].controllers))} دراع):</span>
+                            <span className="font-medium">
+                              {controllersHistory[selectedPeriodIndex - 1].to 
+                                ? `تنتهي: ${formatTimeInArabic(dayjs(controllersHistory[selectedPeriodIndex - 1].to).utc().add(2, 'hour'))}`
+                                : 'نشطة'
+                              }
+                            </span>
+                          </div>
+                        )}
+                        {selectedPeriodIndex < controllersHistory.length - 1 && (
+                          <div className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/30 rounded">
+                            <span>الفترة التالية ({toArabicNumbers(String(controllersHistory[selectedPeriodIndex + 1].controllers))} دراع):</span>
+                            <span className="font-medium">
+                              تبدأ: {formatTimeInArabic(dayjs(controllersHistory[selectedPeriodIndex + 1].from).utc().add(2, 'hour'))}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* إدخال الأوقات الجديدة */}
+            <div className="mb-6 space-y-4">
+              {/* وقت البداية */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                  وقت البداية الجديد
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newPeriodStartTime}
+                  onChange={(e) => setNewPeriodStartTime(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-all duration-200"
+                  disabled={isUpdatingPeriodTime}
+                />
+                {newPeriodStartTime && (
+                  <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                    <p className="text-sm text-purple-800 dark:text-purple-200 font-medium">
+                      📅 وقت البداية: {formatDateTimeLocalToArabic(newPeriodStartTime)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* وقت النهاية - يظهر فقط للفترات المنتهية */}
+              {selectedSessionForPeriodEdit.controllersHistory && 
+               selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] && 
+               selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex].to && (
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                    وقت النهاية الجديد
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={newPeriodEndTime}
+                    onChange={(e) => setNewPeriodEndTime(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-all duration-200"
+                    disabled={isUpdatingPeriodTime}
+                  />
+                  {newPeriodEndTime && (
+                    <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                      <p className="text-sm text-purple-800 dark:text-purple-200 font-medium">
+                        📅 وقت النهاية: {formatDateTimeLocalToArabic(newPeriodEndTime)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* تحذير */}
+            <div className="mb-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                ⚠️ تعديل أوقات فترة الدراعات سيؤثر على حساب التكلفة الإجمالية للجلسة
+              </p>
+              {selectedSessionForPeriodEdit.controllersHistory && 
+               selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] && 
+               !selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex].to && (
+                <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                  ℹ️ هذه فترة نشطة - يمكن تعديل وقت البداية فقط
+                </p>
+              )}
+              <div className="mt-2 p-2 bg-orange-50 dark:bg-orange-900/30 rounded border border-orange-200 dark:border-orange-600">
+                <p className="text-xs text-orange-800 dark:text-orange-200 font-medium">
+                  📋 قواعد التعديل:
+                </p>
+                <ul className="text-xs text-orange-700 dark:text-orange-300 mt-1 space-y-1">
+                  <li>• يجب أن تبدأ كل فترة بالضبط عند انتهاء الفترة السابقة</li>
+                  <li>• لا يمكن وجود فجوات زمنية بين الفترات</li>
+                  <li>• تعديل وقت النهاية سيحدث وقت بداية الفترة التالية تلقائياً</li>
+                  <li>• الفترة النشطة يمكن تعديل وقت بدايتها فقط</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* الأزرار */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowEditPeriodTimeModal(false);
+                  setSelectedSessionForPeriodEdit(null);
+                  setSelectedPeriodIndex(0);
+                  setNewPeriodStartTime('');
+                  setNewPeriodEndTime('');
+                }}
+                className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-medium"
+                disabled={isUpdatingPeriodTime}
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleEditPeriodTime}
+                className={`w-full sm:w-auto px-8 py-3 rounded-xl flex items-center justify-center min-w-[160px] transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                  !newPeriodStartTime || isUpdatingPeriodTime
+                    ? 'bg-purple-400 dark:bg-purple-700 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                } text-white`}
+                disabled={!newPeriodStartTime || isUpdatingPeriodTime}
+              >
+                {isUpdatingPeriodTime ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    جاري التحديث...
+                  </>
+                ) : (
+                  <>
+                    <Edit className="h-5 w-5 ml-2" />
+                    تحديث الوقت
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة حل التداخلات في أوقات الفترات */}
+      {showConflictResolutionModal && conflictDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* العنوان */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                  <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-xl ml-3">
+                    <svg className="h-6 w-6 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                      ⚠️ تداخل في أوقات الفترات
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      يرجى اختيار طريقة حل التداخل لتجنب فقدان البيانات
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCancelConflictResolution}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  disabled={isResolvingConflict}
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* تفاصيل التداخل */}
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 rounded-xl border border-red-200 dark:border-red-600">
+                <h4 className="font-bold text-red-800 dark:text-red-200 mb-2">📊 تحليل التداخل:</h4>
+                <p className="text-red-700 dark:text-red-300 mb-3">{conflictDetails.warningMessage}</p>
+                
+                {conflictDetails.detailedAnalysis && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">الفترات المتأثرة</p>
+                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                        {conflictDetails.detailedAnalysis.totalAffectedPeriods}
+                      </p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">الوقت المفقود</p>
+                      <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                        {conflictDetails.detailedAnalysis.totalLostMinutes} دقيقة
+                      </p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">الخسارة المتوقعة</p>
+                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                        {conflictDetails.detailedAnalysis.estimatedRevenueLoss?.toFixed(2)} ج.م
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* الفترات المتأثرة */}
+              {conflictDetails.affectedPeriods && conflictDetails.affectedPeriods.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="font-bold text-gray-900 dark:text-gray-100 mb-3">🎮 الفترات المتأثرة:</h4>
+                  <div className="space-y-2">
+                    {conflictDetails.affectedPeriods.map((period: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-600">
+                        <div className="flex items-center">
+                          <div className="bg-yellow-100 dark:bg-yellow-800 px-3 py-1 rounded-full text-sm font-medium text-yellow-800 dark:text-yellow-200 ml-3">
+                            فترة {period.index + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
+                              {period.controllers} أذرع
+                            </p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {new Date(period.originalStart).toLocaleTimeString('ar-EG')} - {period.originalEnd ? new Date(period.originalEnd).toLocaleTimeString('ar-EG') : 'نشطة'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                            تداخل: {period.overlapMinutes} دقيقة
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* خيارات الحل */}
+              <div className="mb-6">
+                <h4 className="font-bold text-gray-900 dark:text-gray-100 mb-3">🔧 اختر طريقة الحل:</h4>
+                <div className="space-y-3">
+                  {conflictDetails.suggestedActions?.map((action: any, index: number) => (
+                    <label key={index} className="flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <input
+                        type="radio"
+                        name="resolutionAction"
+                        value={action.action}
+                        checked={selectedResolutionAction === action.action}
+                        onChange={(e) => setSelectedResolutionAction(e.target.value)}
+                        className="mt-1 ml-3"
+                        disabled={isResolvingConflict}
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                          {action.description}
+                        </p>
+                        {action.lostTime && (
+                          <p className="text-sm text-orange-600 dark:text-orange-400">
+                            ⏰ وقت مفقود: {action.lostTime} دقيقة
+                          </p>
+                        )}
+                        {action.mergeDetails && (
+                          <p className="text-sm text-blue-600 dark:text-blue-400">
+                            🔗 دمج مع {action.mergeDetails.suggestedControllers} أذرع
+                          </p>
+                        )}
+                      </div>
+                      {conflictDetails.detailedAnalysis?.recommendedAction?.action === action.action && (
+                        <div className="bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
+                          <span className="text-xs font-medium text-green-800 dark:text-green-200">مُوصى به</span>
+                        </div>
+                      )}
+                    </label>
+                  ))}
+                  
+                  {/* خيار التحديث القسري */}
+                  <label className="flex items-start p-4 border-2 border-red-200 dark:border-red-600 rounded-xl cursor-pointer transition-all hover:bg-red-50 dark:hover:bg-red-900/20">
+                    <input
+                      type="radio"
+                      name="resolutionAction"
+                      value="FORCE_UPDATE"
+                      checked={selectedResolutionAction === 'FORCE_UPDATE'}
+                      onChange={(e) => setSelectedResolutionAction(e.target.value)}
+                      className="mt-1 ml-3"
+                      disabled={isResolvingConflict}
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-red-800 dark:text-red-200 mb-1">
+                        ⚠️ تحديث قسري (غير مُوصى به)
+                      </p>
+                      <p className="text-sm text-red-600 dark:text-red-400">
+                        تطبيق التعديل مع تجاهل التداخلات - قد يؤدي لفقدان بيانات
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* الأزرار */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-end">
+                <button
+                  onClick={handleCancelConflictResolution}
+                  className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-medium"
+                  disabled={isResolvingConflict}
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleResolveConflict}
+                  className={`w-full sm:w-auto px-8 py-3 rounded-xl flex items-center justify-center min-w-[160px] transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                    !selectedResolutionAction || isResolvingConflict
+                      ? 'bg-orange-400 dark:bg-orange-700 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700'
+                  } text-white`}
+                  disabled={!selectedResolutionAction || isResolvingConflict}
+                >
+                  {isResolvingConflict ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      جاري الحل...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-5 w-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      تطبيق الحل
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة التأكيد المخصصة */}
+      {showCustomConfirm && confirmData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300 scale-100">
+            <div className="p-6">
+              {/* الأيقونة والعنوان */}
+              <div className="flex items-center mb-4">
+                <div className={`p-3 rounded-xl ml-3 ${
+                  confirmData.type === 'danger' 
+                    ? 'bg-red-100 dark:bg-red-900/30' 
+                    : confirmData.type === 'info'
+                    ? 'bg-blue-100 dark:bg-blue-900/30'
+                    : 'bg-orange-100 dark:bg-orange-900/30'
+                }`}>
+                  {confirmData.type === 'danger' ? (
+                    <svg className="h-6 w-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  ) : confirmData.type === 'info' ? (
+                    <svg className="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="h-6 w-6 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                  {confirmData.title}
+                </h3>
+              </div>
+
+              {/* الرسالة */}
+              <div className="mb-6">
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {confirmData.message}
+                </p>
+              </div>
+
+              {/* الأزرار */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-end">
+                <button
+                  onClick={handleConfirmCancel}
+                  className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-medium"
+                >
+                  {confirmData.cancelText}
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  className={`w-full sm:w-auto px-6 py-3 rounded-xl font-bold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                    confirmData.type === 'danger'
+                      ? 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white'
+                      : confirmData.type === 'info'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white'
+                      : 'bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white'
+                  }`}
+                >
+                  {confirmData.confirmText}
+                </button>
+              </div>
             </div>
           </div>
         </div>

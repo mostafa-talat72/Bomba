@@ -42,6 +42,20 @@ router.put(
     sessionController.updateControllers
 );
 
+// Update controllers period start time (playstation and computer permissions)
+router.put(
+    "/:sessionId/controllers-period-time",
+    authorize("playstation", "computer", "all"),
+    sessionController.updateControllersPeriodTime
+);
+
+// Resolve controllers period time conflicts (playstation and computer permissions)
+router.put(
+    "/:sessionId/resolve-period-conflict",
+    authorize("playstation", "computer", "all"),
+    sessionController.resolveControllersPeriodConflict
+);
+
 // Update session cost in real-time (playstation and computer permissions)
 router.put(
     "/:id/update-cost",

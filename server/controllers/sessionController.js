@@ -147,6 +147,145 @@ const performCleanupHelper = async (organizationId) => {
     return { cleanedCount, deletedBillsCount };
 };
 
+// دالة تحليل التداخلات وإعطاء خيارات للمستخدم
+const analyzeTimeConflicts = (controllersHistory, editingIndex, newStartTime, newEndTime) => {
+    const conflicts = {
+        hasConflicts: false,
+        conflictType: null,
+        affectedPeriods: [],
+        suggestedActions: [],
+        warningMessage: "",
+        detailedAnalysis: {}
+    };
+
+    const editingPeriod = controllersHistory[editingIndex];
+    const isActivePeriod = !editingPeriod.to;
+
+    // تحليل التداخل مع الفترات السابقة
+    for (let i = 0; i < editingIndex; i++) {
+        const previousPeriod = controllersHistory[i];
+        const prevStart = new Date(previousPeriod.from);
+        const prevEnd = previousPeriod.to ? new Date(previousPeriod.to) : null;
+
+        // إذا كان وقت البداية الجديد قبل نهاية فترة سابقة
+        if (prevEnd && newStartTime < prevEnd) {
+            conflicts.hasConflicts = true;
+            conflicts.conflictType = 'OVERLAPS_PREVIOUS';
+            
+            const overlapDuration = Math.round((prevEnd - newStartTime) / (1000 * 60)); // بالدقائق
+            
+            conflicts.affectedPeriods.push({
+                index: i,
+                controllers: previousPeriod.controllers,
+                originalStart: prevStart,
+                originalEnd: prevEnd,
+                overlapMinutes: overlapDuration
+            });
+
+            // اقتراح خيارات للحل
+            conflicts.suggestedActions.push({
+                action: 'TRUNCATE_PREVIOUS',
+                description: `قص الفترة ${i + 1} (${previousPeriod.controllers} أذرع) لتنتهي عند ${newStartTime.toLocaleTimeString('ar-EG')}`,
+                lostTime: overlapDuration,
+                affectedPeriodIndex: i
+            });
+
+            conflicts.suggestedActions.push({
+                action: 'MERGE_PERIODS',
+                description: `دمج الفترة ${i + 1} مع الفترة ${editingIndex + 1} باستخدام عدد الأذرع الأكبر`,
+                mergeDetails: {
+                    fromIndex: i,
+                    toIndex: editingIndex,
+                    suggestedControllers: Math.max(previousPeriod.controllers, editingPeriod.controllers)
+                }
+            });
+        }
+    }
+
+    // تحليل التداخل مع الفترات التالية (للفترات المنتهية فقط)
+    if (!isActivePeriod && newEndTime) {
+        for (let i = editingIndex + 1; i < controllersHistory.length; i++) {
+            const nextPeriod = controllersHistory[i];
+            const nextStart = new Date(nextPeriod.from);
+            const nextEnd = nextPeriod.to ? new Date(nextPeriod.to) : null;
+
+            // إذا كان وقت النهاية الجديد بعد بداية فترة تالية
+            if (newEndTime > nextStart) {
+                conflicts.hasConflicts = true;
+                conflicts.conflictType = conflicts.conflictType ? 'MULTIPLE_OVERLAPS' : 'OVERLAPS_NEXT';
+                
+                const overlapDuration = nextEnd ? 
+                    Math.round((Math.min(newEndTime, nextEnd) - nextStart) / (1000 * 60)) :
+                    Math.round((newEndTime - nextStart) / (1000 * 60));
+                
+                conflicts.affectedPeriods.push({
+                    index: i,
+                    controllers: nextPeriod.controllers,
+                    originalStart: nextStart,
+                    originalEnd: nextEnd,
+                    overlapMinutes: overlapDuration
+                });
+
+                // اقتراح خيارات للحل
+                conflicts.suggestedActions.push({
+                    action: 'TRUNCATE_NEXT',
+                    description: `قص الفترة ${i + 1} (${nextPeriod.controllers} أذرع) لتبدأ من ${newEndTime.toLocaleTimeString('ar-EG')}`,
+                    lostTime: overlapDuration,
+                    affectedPeriodIndex: i
+                });
+
+                conflicts.suggestedActions.push({
+                    action: 'EXTEND_CURRENT',
+                    description: `تمديد الفترة الحالية وحذف الفترة ${i + 1}`,
+                    deletedPeriodIndex: i
+                });
+            }
+        }
+    }
+
+    // إنشاء رسالة تحذيرية مفصلة
+    if (conflicts.hasConflicts) {
+        const totalLostMinutes = conflicts.affectedPeriods.reduce((sum, period) => sum + period.overlapMinutes, 0);
+        conflicts.warningMessage = `⚠️ التعديل المطلوب سيؤثر على ${conflicts.affectedPeriods.length} فترة أخرى وقد يؤدي لفقدان ${totalLostMinutes} دقيقة من الوقت المحسوب.`;
+        
+        conflicts.detailedAnalysis = {
+            totalAffectedPeriods: conflicts.affectedPeriods.length,
+            totalLostMinutes: totalLostMinutes,
+            estimatedRevenueLoss: calculateRevenueLoss(conflicts.affectedPeriods),
+            recommendedAction: getRecommendedAction(conflicts.suggestedActions)
+        };
+    }
+
+    return conflicts;
+};
+
+// حساب الخسارة المتوقعة في الإيرادات
+const calculateRevenueLoss = (affectedPeriods) => {
+    // أسعار افتراضية - يمكن تحسينها لاحقاً لتأتي من إعدادات النظام
+    const rates = { 1: 20, 2: 20, 3: 25, 4: 30 };
+    
+    return affectedPeriods.reduce((total, period) => {
+        const hourlyRate = rates[period.controllers] || 20;
+        const lostRevenue = (period.overlapMinutes / 60) * hourlyRate;
+        return total + lostRevenue;
+    }, 0);
+};
+
+// اقتراح أفضل إجراء
+const getRecommendedAction = (actions) => {
+    if (actions.length === 0) return null;
+    
+    // ترتيب الأولوية: قص الفترات > الدمج > الحذف
+    const priority = ['TRUNCATE_PREVIOUS', 'TRUNCATE_NEXT', 'MERGE_PERIODS', 'EXTEND_CURRENT'];
+    
+    for (const actionType of priority) {
+        const action = actions.find(a => a.action === actionType);
+        if (action) return action;
+    }
+    
+    return actions[0];
+};
+
 const sessionController = {
     // Get all sessions
     getSessions: async (req, res) => {
@@ -522,6 +661,292 @@ const sessionController = {
             res.status(400).json({
                 success: false,
                 message: "خطأ في تحديث عدد الدراعات",
+                error: err.message,
+            });
+        }
+    },
+
+    // Update controllers period start time
+    updateControllersPeriodTime: async (req, res) => {
+        try {
+            const { sessionId } = req.params;
+            const { periodIndex, newStartTime, newEndTime, forceUpdate } = req.body;
+
+            if (periodIndex === undefined || periodIndex < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "فهرس الفترة غير صحيح",
+                    error: "Invalid period index",
+                });
+            }
+
+            if (!newStartTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: "وقت البداية الجديد مطلوب",
+                    error: "New start time is required",
+                });
+            }
+
+            const session = await Session.findOne({
+                _id: sessionId,
+                organization: req.user.organization,
+            });
+
+            if (!session) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الجلسة غير موجودة",
+                    error: "Session not found",
+                });
+            }
+
+            if (!session.controllersHistory || session.controllersHistory.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "لا يوجد تاريخ للدراعات في هذه الجلسة",
+                    error: "No controllers history found",
+                });
+            }
+
+            if (periodIndex >= session.controllersHistory.length) {
+                return res.status(400).json({
+                    success: false,
+                    message: "فهرس الفترة غير موجود",
+                    error: "Period index out of range",
+                });
+            }
+
+            const newStartDate = new Date(newStartTime);
+            const sessionStartTime = new Date(session.startTime);
+            const currentTime = new Date();
+
+            // التحقق من أن الوقت الجديد ليس في المستقبل
+            if (newStartDate > currentTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: "لا يمكن تعديل الوقت إلى المستقبل",
+                    error: "Cannot set time in the future",
+                });
+            }
+
+            // التحقق من أن الوقت الجديد ليس قبل بداية الجلسة
+            if (newStartDate < sessionStartTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: "لا يمكن تعديل الوقت إلى ما قبل بداية الجلسة",
+                    error: "Cannot set time before session start",
+                });
+            }
+
+            const targetPeriod = session.controllersHistory[periodIndex];
+            const isActivePeriod = !targetPeriod.to; // الفترة النشطة ليس لها وقت نهاية
+
+            // إذا لم يكن forceUpdate، تحليل التداخلات المحتملة وإعطاء خيارات للمستخدم
+            if (!forceUpdate) {
+                const conflictAnalysis = analyzeTimeConflicts(session.controllersHistory, periodIndex, newStartDate, newEndTime ? new Date(newEndTime) : null);
+                
+                if (conflictAnalysis.hasConflicts) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "يوجد تداخل مع فترات أخرى",
+                        error: "Time conflicts detected",
+                        conflictDetails: conflictAnalysis,
+                        requiresUserChoice: true
+                    });
+                }
+            } else {
+                Logger.info(`Force update enabled - skipping conflict analysis for session ${sessionId}, period ${periodIndex}`);
+            }
+
+            // تحديث وقت بداية الفترة المحددة
+            session.controllersHistory[periodIndex].from = newStartDate;
+
+            // تحديث وقت نهاية الفترة السابقة تلقائياً (إن وجدت)
+            if (periodIndex > 0) {
+                session.controllersHistory[periodIndex - 1].to = newStartDate;
+                Logger.info(`Auto-updated previous period end time to: ${newStartDate}`);
+            }
+
+            // إذا كانت فترة منتهية (غير نشطة) ووقت النهاية مُعطى
+            if (!isActivePeriod && newEndTime) {
+                const newEndDate = new Date(newEndTime);
+
+                // التحقق من أن وقت النهاية بعد وقت البداية
+                if (newEndDate <= newStartDate) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "وقت النهاية يجب أن يكون بعد وقت البداية",
+                        error: "End time must be after start time",
+                    });
+                }
+
+                // التحقق من أن وقت النهاية ليس في المستقبل
+                if (newEndDate > currentTime) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "لا يمكن تعديل وقت النهاية إلى المستقبل",
+                        error: "Cannot set end time in the future",
+                    });
+                }
+
+                // تحديث وقت نهاية الفترة
+                session.controllersHistory[periodIndex].to = newEndDate;
+
+                // تحديث وقت بداية الفترة التالية تلقائياً (إن وجدت)
+                if (periodIndex < session.controllersHistory.length - 1) {
+                    session.controllersHistory[periodIndex + 1].from = newEndDate;
+                    Logger.info(`Auto-updated next period start time to: ${newEndDate}`);
+                }
+            }
+
+            // إذا كانت هذه الفترة الأولى، تحديث وقت بداية الجلسة أيضاً
+            if (periodIndex === 0) {
+                session.startTime = newStartDate;
+                Logger.info(`Updated session start time to: ${newStartDate}`);
+            }
+
+            session.updatedBy = req.user._id;
+            await session.save();
+            await session.populate(["createdBy", "updatedBy"], "name");
+
+            Logger.info(`Controllers period time updated for session ${sessionId}:`, {
+                periodIndex,
+                newStartTime: newStartDate,
+                newEndTime: newEndTime ? new Date(newEndTime) : null,
+                isActivePeriod,
+                forceUpdate,
+                updatedPeriod: session.controllersHistory[periodIndex]
+            });
+
+            res.json({
+                success: true,
+                message: "تم تحديث وقت فترة الدراعات بنجاح",
+                data: session,
+            });
+        } catch (err) {
+            Logger.error("updateControllersPeriodTime error:", err);
+            res.status(400).json({
+                success: false,
+                message: "خطأ في تحديث وقت فترة الدراعات",
+                error: err.message,
+            });
+        }
+    },
+
+    // حل التداخلات مع اختيار المستخدم
+    resolveControllersPeriodConflict: async (req, res) => {
+        try {
+            const { sessionId } = req.params;
+            const { periodIndex, newStartTime, newEndTime, resolutionAction, actionDetails } = req.body;
+
+            const session = await Session.findOne({
+                _id: sessionId,
+                organization: req.user.organization,
+            });
+
+            if (!session) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الجلسة غير موجودة",
+                    error: "Session not found",
+                });
+            }
+
+            const newStartDate = new Date(newStartTime);
+            const newEndDate = newEndTime ? new Date(newEndTime) : null;
+
+            // تطبيق الحل المختار
+            switch (resolutionAction) {
+                case 'TRUNCATE_PREVIOUS':
+                    // قص الفترة السابقة
+                    const prevIndex = actionDetails.affectedPeriodIndex;
+                    session.controllersHistory[prevIndex].to = newStartDate;
+                    Logger.info(`Truncated previous period ${prevIndex} to end at: ${newStartDate}`);
+                    break;
+
+                case 'TRUNCATE_NEXT':
+                    // قص الفترة التالية
+                    const nextIndex = actionDetails.affectedPeriodIndex;
+                    session.controllersHistory[nextIndex].from = newEndDate;
+                    Logger.info(`Truncated next period ${nextIndex} to start at: ${newEndDate}`);
+                    break;
+
+                case 'MERGE_PERIODS':
+                    // دمج الفترات
+                    const mergeFrom = actionDetails.mergeDetails.fromIndex;
+                    const mergeTo = actionDetails.mergeDetails.toIndex;
+                    const mergedControllers = actionDetails.mergeDetails.suggestedControllers;
+                    
+                    // تحديث الفترة الأولى لتشمل النطاق الكامل
+                    session.controllersHistory[mergeFrom].to = newEndDate || session.controllersHistory[mergeTo].to;
+                    session.controllersHistory[mergeFrom].controllers = mergedControllers;
+                    
+                    // حذف الفترات المدموجة
+                    session.controllersHistory.splice(mergeFrom + 1, mergeTo - mergeFrom);
+                    Logger.info(`Merged periods ${mergeFrom} to ${mergeTo} with ${mergedControllers} controllers`);
+                    break;
+
+                case 'EXTEND_CURRENT':
+                    // تمديد الفترة الحالية وحذف التالية
+                    const deleteIndex = actionDetails.deletedPeriodIndex;
+                    const deletedPeriod = session.controllersHistory[deleteIndex];
+                    
+                    // تمديد الفترة الحالية لتشمل الفترة المحذوفة
+                    session.controllersHistory[periodIndex].to = deletedPeriod.to;
+                    
+                    // حذف الفترة التالية
+                    session.controllersHistory.splice(deleteIndex, 1);
+                    Logger.info(`Extended current period and deleted period ${deleteIndex}`);
+                    break;
+
+                case 'FORCE_UPDATE':
+                    // تحديث قسري مع تجاهل التداخلات (خيار متقدم)
+                    Logger.warn(`Force update applied - potential data loss accepted by user`);
+                    break;
+
+                default:
+                    return res.status(400).json({
+                        success: false,
+                        message: "نوع الحل غير مدعوم",
+                        error: "Unsupported resolution action",
+                    });
+            }
+
+            // تطبيق التعديل الأساسي
+            session.controllersHistory[periodIndex].from = newStartDate;
+            if (newEndDate) {
+                session.controllersHistory[periodIndex].to = newEndDate;
+            }
+
+            // تحديث وقت بداية الجلسة إذا كانت الفترة الأولى
+            if (periodIndex === 0) {
+                session.startTime = newStartDate;
+            }
+
+            session.updatedBy = req.user._id;
+            await session.save();
+            await session.populate(["createdBy", "updatedBy"], "name");
+
+            Logger.info(`Controllers period conflict resolved for session ${sessionId}:`, {
+                periodIndex,
+                resolutionAction,
+                newStartTime: newStartDate,
+                newEndTime: newEndDate
+            });
+
+            res.json({
+                success: true,
+                message: "تم حل التداخل وتحديث أوقات الفترات بنجاح",
+                data: session,
+                appliedResolution: resolutionAction
+            });
+
+        } catch (err) {
+            Logger.error("resolveControllersPeriodConflict error:", err);
+            res.status(400).json({
+                success: false,
+                message: "خطأ في حل تداخل أوقات الفترات",
                 error: err.message,
             });
         }
