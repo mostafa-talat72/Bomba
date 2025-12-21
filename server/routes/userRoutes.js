@@ -196,7 +196,6 @@ router.put("/:id", async (req, res) => {
         
         // Handle password update
         if (password && password.trim() !== '') {
-            console.log('Updating password for user:', user.email);
             user.password = password;
             user.markModified('password'); // تأكد من أن Mongoose يعرف أن كلمة المرور تغيرت
         }

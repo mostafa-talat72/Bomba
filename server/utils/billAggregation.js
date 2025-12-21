@@ -104,15 +104,12 @@ function calculateAggregatedPaidQuantity(
                     : (payment.quantity || 0);
             }
             
-            console.log(`📊 Item ${itemId} (${itemName}): paid ${itemPaidQty} of ${currentItem?.quantity || payment.quantity || 0}`);
             totalPaidQty += itemPaidQty;
         } else {
-            console.log(`📊 Item ${itemId} (${itemName}): no payment found (unpaid)`);
         }
         // If no payment found for this item, it's unpaid (0)
     }
 
-    console.log(`📊 Total paid for ${itemName}: ${totalPaidQty} of ${allItemIds.length} items`);
     return totalPaidQty;
 }
 
