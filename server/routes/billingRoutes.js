@@ -19,6 +19,8 @@ import {
     fawryWebhook,
     payForItems,
     paySessionPartial,
+    getBillAggregatedItems,
+    addPartialPaymentAggregated,
 } from "../controllers/billingController.js";
 import { protect, authorize, adminOnly } from "../middleware/auth.js";
 
@@ -56,6 +58,9 @@ router.post(
     authorize("billing", "all"),
     addPartialPayment
 );
+// Backend aggregated partial payment (NEW)
+router.get("/:id/aggregated-items", authorize("billing", "all"), getBillAggregatedItems);
+router.post("/:id/partial-payment-aggregated", authorize("billing", "all"), addPartialPaymentAggregated);
 // تنظيف دفعات الأصناف المحذوفة
 router.post("/:id/cleanup-payments", authorize("billing", "all"), cleanupBillPayments);
 // دفع أصناف محددة من الفاتورة

@@ -13,6 +13,7 @@ import {
     getAvailableBillsForSession,
     payForItems,
     paySessionPartial,
+    redistributePayments,
 } from "../controllers/billingController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -43,6 +44,7 @@ router.post("/:id/payment", authorize("billing", "staff", "all"), addPayment);
 router.put("/:id/payment", authorize("billing", "staff", "all"), addPayment);
 router.post("/:id/pay-items", authorize("billing", "staff", "all"), payForItems);
 router.post("/:id/pay-session-partial", authorize("billing", "staff", "all"), paySessionPartial);
+router.post("/:id/redistribute-payments", authorize("billing", "staff", "all"), redistributePayments);
 router.post("/:id/orders", authorize("billing", "staff", "all"), addOrderToBill);
 router.post("/:id/sessions", authorize("billing", "staff", "all"), addSessionToBill);
 router.put("/:id/cancel", authorize("billing", "staff", "all"), cancelBill);

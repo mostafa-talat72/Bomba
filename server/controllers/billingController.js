@@ -12,6 +12,7 @@ import { createFawryPayment } from "../services/fawryService.js";
 import performanceMetrics from "../utils/performanceMetrics.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import syncConfig from "../config/syncConfig.js";
+import { aggregateItemsWithPayments, expandAggregatedItemsForPayment } from "../utils/billAggregation.js";
 
 // دالة لتحويل الأرقام الإنجليزية إلى العربية
 const convertToArabicNumbers = (str) => {
@@ -1668,21 +1669,31 @@ export const addPartialPayment = async (req, res) => {
             });
         }
 
-        // تأكد من وجود itemPayments
-        if (!bill.itemPayments || bill.itemPayments.length === 0) {
-            Logger.info(`🔧 [addPartialPayment] Initializing itemPayments for bill: ${bill.billNumber}`);
-            
+        // تأكد من وجود itemPayments وإنشاء المفقودة فقط
+        if (!bill.itemPayments) {
             bill.itemPayments = [];
-            if (bill.orders && bill.orders.length > 0) {
-                bill.orders.forEach((order) => {
-                    if (order.items && order.items.length > 0) {
-                        order.items.forEach((item, index) => {
+        }
+
+        // إنشاء itemPayments للعناصر المفقودة فقط (بدلاً من إعادة إنشاء الكل)
+        if (bill.orders && bill.orders.length > 0) {
+            bill.orders.forEach((order) => {
+                if (order.items && order.items.length > 0) {
+                    order.items.forEach((item, index) => {
+                        const itemId = `${order._id}-${index}`;
+                        
+                        // تحقق من وجود itemPayment لهذا العنصر
+                        const existingPayment = bill.itemPayments.find(ip => ip.itemId === itemId);
+                        
+                        if (!existingPayment) {
+                            // إنشاء itemPayment فقط للعناصر المفقودة
+                            Logger.info(`🔧 [addPartialPayment] Creating missing itemPayment for: ${itemId} (${item.name})`);
+                            
                             bill.itemPayments.push({
                                 orderId: order._id,
-                                itemId: `${order._id}-${index}`,
+                                itemId: itemId,
                                 itemName: item.name,
                                 quantity: item.quantity,
-                                paidQuantity: 0,
+                                paidQuantity: 0, // العناصر الجديدة تبدأ غير مدفوعة
                                 pricePerUnit: item.price,
                                 totalPrice: item.price * item.quantity,
                                 paidAmount: 0,
@@ -1690,10 +1701,25 @@ export const addPartialPayment = async (req, res) => {
                                 addons: item.addons || [],
                                 paymentHistory: [],
                             });
-                        });
-                    }
-                });
-            }
+                        } else {
+                            // تحديث الكمية إذا تغيرت (في حالة تعديل الطلب)
+                            if (existingPayment.quantity !== item.quantity) {
+                                Logger.info(`🔄 [addPartialPayment] Updating quantity for: ${itemId} from ${existingPayment.quantity} to ${item.quantity}`);
+                                existingPayment.quantity = item.quantity;
+                                existingPayment.totalPrice = item.price * item.quantity;
+                                
+                                // إذا كانت الكمية الجديدة أقل من المدفوعة، اضبط المدفوعة
+                                if (existingPayment.paidQuantity > item.quantity) {
+                                    Logger.warn(`⚠️ [addPartialPayment] Adjusting paidQuantity for: ${itemId} from ${existingPayment.paidQuantity} to ${item.quantity}`);
+                                    existingPayment.paidQuantity = item.quantity;
+                                    existingPayment.paidAmount = item.price * item.quantity;
+                                    existingPayment.isPaid = true;
+                                }
+                            }
+                        }
+                    });
+                }
+            });
         }
 
         let totalPaymentAmount = 0;
@@ -1846,6 +1872,51 @@ export const addPartialPayment = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في إضافة الدفع الجزئي",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Redistribute payments after order modifications
+// @route   POST /api/bills/:id/redistribute-payments
+// @access  Private
+export const redistributePayments = async (req, res) => {
+    try {
+        const bill = await Bill.findById(req.params.id).populate("orders");
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة",
+            });
+        }
+
+        Logger.info(`🔄 [redistributePayments] Redistributing payments for bill: ${bill.billNumber}`);
+
+        // Force recalculation by marking orders as modified
+        bill.markModified('orders');
+        await bill.save();
+
+        // Populate for response
+        await bill.populate([
+            "orders",
+            "sessions", 
+            "createdBy",
+            "itemPayments.paidBy",
+            "payments.user"
+        ]);
+
+        res.json({
+            success: true,
+            message: "تم إعادة توزيع المدفوعات بنجاح",
+            data: bill
+        });
+
+    } catch (error) {
+        Logger.error("خطأ في إعادة توزيع المدفوعات", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إعادة توزيع المدفوعات",
             error: error.message,
         });
     }
@@ -2566,6 +2637,305 @@ export const paySessionPartial = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في الدفع الجزئي للجلسة",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get aggregated bill items with payment information
+// @route   GET /api/bills/:id/aggregated-items
+// @access  Private
+export const getBillAggregatedItems = async (req, res) => {
+    try {
+        const bill = await Bill.findOne({
+            _id: req.params.id,
+            organization: req.user.organization,
+        }).populate('orders').populate('sessions');
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة أو غير مصرح لك بالوصول إليها",
+            });
+        }
+
+        // Aggregate items using backend logic
+        const aggregatedItems = aggregateItemsWithPayments(
+            bill.orders || [],
+            bill.itemPayments || [],
+            bill.status,
+            bill.paid,
+            bill.total
+        );
+
+        Logger.info(`📊 [getBillAggregatedItems] Aggregated ${aggregatedItems.length} items for bill: ${bill.billNumber}`);
+
+        res.json({
+            success: true,
+            data: {
+                bill: {
+                    _id: bill._id,
+                    id: bill.id,
+                    billNumber: bill.billNumber,
+                    status: bill.status,
+                    total: bill.total,
+                    paid: bill.paid,
+                    remaining: bill.remaining,
+                },
+                aggregatedItems
+            }
+        });
+
+    } catch (error) {
+        Logger.error("خطأ في جلب العناصر المجمعة للفاتورة", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب العناصر المجمعة للفاتورة",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Process partial payment with backend aggregation
+// @route   POST /api/bills/:id/partial-payment-aggregated
+// @access  Private
+export const addPartialPaymentAggregated = async (req, res) => {
+    try {
+        const { items, paymentMethod } = req.body;
+
+        Logger.info(`🔄 [addPartialPaymentAggregated] Processing aggregated partial payment for bill: ${req.params.id}`, {
+            itemsCount: items?.length,
+            paymentMethod,
+            items: items
+        });
+
+        const bill = await Bill.findById(req.params.id).populate("orders");
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة",
+            });
+        }
+
+        // Validate items
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "يجب تحديد العناصر المطلوب دفعها",
+            });
+        }
+
+        // Expand aggregated items to individual itemIds using backend logic
+        const expandedItems = expandAggregatedItemsForPayment(
+            items,
+            bill.orders || [],
+            bill.itemPayments || []
+        );
+
+        Logger.info(`📈 [addPartialPaymentAggregated] Expanded ${items.length} aggregated items to ${expandedItems.length} individual items`);
+
+        if (expandedItems.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "لا توجد عناصر صالحة للدفع",
+            });
+        }
+
+        // تأكد من وجود itemPayments وإنشاء المفقودة فقط
+        if (!bill.itemPayments) {
+            bill.itemPayments = [];
+        }
+
+        // إنشاء itemPayments للعناصر المفقودة فقط (بدلاً من إعادة إنشاء الكل)
+        if (bill.orders && bill.orders.length > 0) {
+            bill.orders.forEach((order) => {
+                if (order.items && order.items.length > 0) {
+                    order.items.forEach((item, index) => {
+                        const itemId = `${order._id}-${index}`;
+                        
+                        // تحقق من وجود itemPayment لهذا العنصر
+                        const existingPayment = bill.itemPayments.find(ip => ip.itemId === itemId);
+                        
+                        if (!existingPayment) {
+                            // إنشاء itemPayment فقط للعناصر المفقودة
+                            Logger.info(`🔧 [addPartialPaymentAggregated] Creating missing itemPayment for: ${itemId} (${item.name})`);
+                            
+                            bill.itemPayments.push({
+                                orderId: order._id,
+                                itemId: itemId,
+                                itemName: item.name,
+                                quantity: item.quantity,
+                                paidQuantity: 0, // العناصر الجديدة تبدأ غير مدفوعة
+                                pricePerUnit: item.price,
+                                totalPrice: item.price * item.quantity,
+                                paidAmount: 0,
+                                isPaid: false,
+                                addons: item.addons || [],
+                                paymentHistory: [],
+                            });
+                        } else {
+                            // تحديث الكمية إذا تغيرت (في حالة تعديل الطلب)
+                            if (existingPayment.quantity !== item.quantity) {
+                                Logger.info(`🔄 [addPartialPaymentAggregated] Updating quantity for: ${itemId} from ${existingPayment.quantity} to ${item.quantity}`);
+                                existingPayment.quantity = item.quantity;
+                                existingPayment.totalPrice = item.price * item.quantity;
+                                
+                                // إذا كانت الكمية الجديدة أقل من المدفوعة، اضبط المدفوعة
+                                if (existingPayment.paidQuantity > item.quantity) {
+                                    Logger.warn(`⚠️ [addPartialPaymentAggregated] Adjusting paidQuantity for: ${itemId} from ${existingPayment.paidQuantity} to ${item.quantity}`);
+                                    existingPayment.paidQuantity = item.quantity;
+                                    existingPayment.paidAmount = item.price * item.quantity;
+                                    existingPayment.isPaid = true;
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        let totalPaymentAmount = 0;
+        const processedItems = [];
+
+        // Process each expanded item for payment
+        for (const paymentItem of expandedItems) {
+            Logger.info(`🔍 [addPartialPaymentAggregated] Processing payment item:`, paymentItem);
+
+            // التحقق من صحة البيانات
+            if (!paymentItem.quantity || paymentItem.quantity <= 0) {
+                Logger.error(`❌ [addPartialPaymentAggregated] Invalid quantity:`, paymentItem);
+                continue;
+            }
+
+            if (!paymentItem.itemId) {
+                Logger.error(`❌ [addPartialPaymentAggregated] Missing itemId:`, paymentItem);
+                continue;
+            }
+
+            // البحث عن الصنف بالـ itemId مباشرة
+            const targetItem = bill.itemPayments.find(ip => ip.itemId === paymentItem.itemId);
+            
+            if (!targetItem) {
+                Logger.error(`❌ [addPartialPaymentAggregated] ItemPayment not found for itemId: ${paymentItem.itemId}`);
+                continue; // Skip this item instead of returning error
+            }
+
+            Logger.info(`🔍 [addPartialPaymentAggregated] Processing: ${targetItem.itemName} (ID: ${paymentItem.itemId}), quantity: ${paymentItem.quantity}`);
+
+            // حساب الكمية المتبقية للصنف المحدد
+            const remainingQuantity = (targetItem.quantity || 0) - (targetItem.paidQuantity || 0);
+
+            if (remainingQuantity <= 0) {
+                Logger.error(`❌ [addPartialPaymentAggregated] Item already fully paid: ${targetItem.itemName}`);
+                continue; // Skip this item
+            }
+
+            // التحقق من أن الكمية المطلوبة لا تتجاوز المتبقية
+            if (paymentItem.quantity > remainingQuantity) {
+                Logger.error(`❌ [addPartialPaymentAggregated] Quantity exceeds remaining: ${paymentItem.quantity} > ${remainingQuantity} for ${targetItem.itemName}`);
+                continue; // Skip this item
+            }
+
+            // تحديث الدفع للصنف المحدد
+            const paymentAmount = targetItem.pricePerUnit * paymentItem.quantity;
+
+            targetItem.paidQuantity = (targetItem.paidQuantity || 0) + paymentItem.quantity;
+            targetItem.paidAmount = (targetItem.paidAmount || 0) + paymentAmount;
+            targetItem.isPaid = targetItem.paidQuantity >= targetItem.quantity;
+            targetItem.paidAt = new Date();
+            targetItem.paidBy = req.user._id;
+
+            // إضافة سجل الدفع
+            if (!targetItem.paymentHistory) {
+                targetItem.paymentHistory = [];
+            }
+            targetItem.paymentHistory.push({
+                quantity: paymentItem.quantity,
+                amount: paymentAmount,
+                paidAt: new Date(),
+                paidBy: req.user._id,
+                method: paymentMethod || "cash"
+            });
+
+            totalPaymentAmount += paymentAmount;
+
+            Logger.info(`✅ [addPartialPaymentAggregated] Paid ${paymentItem.quantity} from item ${targetItem.itemId}`, {
+                itemName: targetItem.itemName,
+                newPaidQuantity: targetItem.paidQuantity,
+                totalQuantity: targetItem.quantity,
+                paymentAmount: paymentAmount
+            });
+
+            // إضافة العنصر المعالج إلى القائمة
+            processedItems.push({
+                itemName: targetItem.itemName,
+                quantity: paymentItem.quantity,
+                price: targetItem.pricePerUnit,
+                amount: paymentAmount
+            });
+        }
+
+        if (totalPaymentAmount === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "لم يتم معالجة أي عناصر للدفع",
+            });
+        }
+
+        Logger.info(`💰 [addPartialPaymentAggregated] Payment processed successfully:`, {
+            totalPaymentAmount,
+            processedItemsCount: processedItems.length,
+            processedItems
+        });
+
+        // حفظ الفاتورة
+        await bill.save();
+
+        Logger.info(`📊 [addPartialPaymentAggregated] Bill status after save:`, {
+            billId: bill._id,
+            status: bill.status,
+            paid: bill.paid,
+            remaining: bill.remaining,
+            total: bill.total
+        });
+
+        // Populate للاستجابة
+        await bill.populate([
+            "orders",
+            "sessions", 
+            "createdBy",
+            "itemPayments.paidBy",
+            "payments.user"
+        ]);
+
+        // إرسال تحديث Socket.IO
+        if (req.io) {
+            req.io.emit('partial-payment-received', {
+                type: 'partial-payment',
+                bill: bill,
+                amount: totalPaymentAmount,
+                items: processedItems,
+                message: 'تم إضافة الدفع الجزئي بنجاح'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: `تم دفع ${totalPaymentAmount} جنيه بنجاح`,
+            data: bill,
+            paymentDetails: {
+                amount: totalPaymentAmount,
+                items: processedItems,
+                method: paymentMethod || "cash"
+            }
+        });
+
+    } catch (error) {
+        Logger.error("خطأ في إضافة الدفع الجزئي المجمع", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إضافة الدفع الجزئي المجمع",
             error: error.message,
         });
     }

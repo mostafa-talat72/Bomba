@@ -1274,6 +1274,60 @@ class ApiClient {
   }
 
   /**
+   * Get aggregated bill items (Backend processed)
+   */
+  async getBillAggregatedItems(id: string): Promise<ApiResponse<{
+    bill: Bill;
+    aggregatedItems: Array<{
+      id: string;
+      name: string;
+      price: number;
+      totalQuantity: number;
+      paidQuantity: number;
+      remainingQuantity: number;
+      addons?: Array<{ name: string; price: number }>;
+      hasAddons?: boolean;
+      orderId: string;
+    }>;
+  }>> {
+    const response = await this.request<{
+      bill: Bill;
+      aggregatedItems: Array<{
+        id: string;
+        name: string;
+        price: number;
+        totalQuantity: number;
+        paidQuantity: number;
+        remainingQuantity: number;
+        addons?: Array<{ name: string; price: number }>;
+        hasAddons?: boolean;
+        orderId: string;
+      }>;
+    }>(`/billing/${id}/aggregated-items`);
+    return response;
+  }
+
+  /**
+   * Add partial payment with backend aggregation
+   */
+  async addPartialPaymentAggregated(id: string, paymentData: {
+    items: Array<{
+      itemId: string;
+      quantity: number;
+    }>;
+    paymentMethod: 'cash' | 'card' | 'transfer';
+  }): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(`/billing/${id}/partial-payment-aggregated`, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  /**
    * Pay for specific quantities of items in a bill
    * 
    * @param id - Bill ID

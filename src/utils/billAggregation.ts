@@ -70,7 +70,8 @@ function createItemKey(itemName: string, itemPrice: number, addons?: { name: str
 
 /**
  * Calculates the paid quantity for aggregated items using all matching itemIds
- * Sums up payments from all items that match the same name+price+addons
+ * Only counts payments for items that actually exist in current orders
+ * ENHANCED: Better handling of deleted/modified items
  */
 function calculateAggregatedPaidQuantity(
   itemName: string,
@@ -86,7 +87,7 @@ function calculateAggregatedPaidQuantity(
 
   // Only consider bill fully paid if the remaining amount is actually 0
   if (billStatus === 'paid' && billPaid && billTotal && billPaid >= billTotal && (billTotal - billPaid) === 0) {
-    // Sum quantities from all matching items
+    // Sum quantities from all matching items that actually exist
     let totalQty = 0;
     for (const itemId of allItemIds) {
       for (const order of orders) {
@@ -101,28 +102,58 @@ function calculateAggregatedPaidQuantity(
     return totalQty;
   }
 
-  // Calculate paid quantity from itemPayments using all matching itemIds
+  // Calculate paid quantity from itemPayments using only valid itemIds
   if (!itemPayments || itemPayments.length === 0) {
     return 0;
   }
 
+  // First, validate which itemIds actually exist in current orders
+  const validItemIds = new Set<string>();
+  const currentOrderItems = new Map<string, { quantity: number; price: number }>();
+  
+  orders.forEach(order => {
+    if (!order.items || !Array.isArray(order.items)) return;
+    order.items.forEach((item, index) => {
+      const itemId = `${order._id}-${index}`;
+      validItemIds.add(itemId);
+      currentOrderItems.set(itemId, {
+        quantity: item.quantity,
+        price: item.price
+      });
+    });
+  });
+
   let paidQty = 0;
   
   itemPayments.forEach(payment => {
-    // Check if this payment belongs to any of our matching items
-    if (allItemIds.includes(payment.itemId)) {
+    // Only count payments for items that:
+    // 1. Match our target itemIds AND
+    // 2. Actually exist in current orders (not deleted/modified)
+    if (allItemIds.includes(payment.itemId) && validItemIds.has(payment.itemId)) {
+      const currentItem = currentOrderItems.get(payment.itemId);
+      
       // Use paidQuantity if available (new system)
       if (payment.paidQuantity !== undefined && payment.paidQuantity !== null) {
-        paidQty += payment.paidQuantity;
+        // Ensure paid quantity doesn't exceed current item quantity
+        const actualPaidQty = currentItem 
+          ? Math.min(payment.paidQuantity, currentItem.quantity)
+          : payment.paidQuantity;
+        paidQty += actualPaidQty;
       } 
       // Smart fallback: calculate from paidAmount and pricePerUnit if paidQuantity is not available
       else if (payment.paidAmount !== undefined && payment.pricePerUnit && payment.pricePerUnit > 0) {
         const calculatedQuantity = Math.round(payment.paidAmount / payment.pricePerUnit);
-        paidQty += calculatedQuantity;
+        const actualPaidQty = currentItem 
+          ? Math.min(calculatedQuantity, currentItem.quantity)
+          : calculatedQuantity;
+        paidQty += actualPaidQty;
       }
       // Fallback to isPaid for backward compatibility (old system)
       else if (payment.isPaid) {
-        paidQty += payment.quantity;
+        const actualPaidQty = currentItem 
+          ? Math.min(payment.quantity, currentItem.quantity)
+          : payment.quantity;
+        paidQty += actualPaidQty;
       }
     }
   });
@@ -221,6 +252,7 @@ export function aggregateItemsWithPayments(
 
 /**
  * Gets all itemIds that belong to a specific aggregated item
+ * Only returns itemIds that actually exist in current orders
  * Used by PartialPaymentModal to know which individual items to pay for
  */
 export function getItemIdsForAggregatedItem(
@@ -231,10 +263,23 @@ export function getItemIdsForAggregatedItem(
     return [aggregatedItemId]; // Fallback to single item
   }
 
+  // First, create a set of all valid itemIds in current orders
+  const validItemIds = new Set<string>();
+  orders.forEach(order => {
+    if (!order.items || !Array.isArray(order.items)) return;
+    order.items.forEach((item, index) => {
+      const itemId = `${order._id}-${index}`;
+      validItemIds.add(itemId);
+    });
+  });
+
+  // Check if the provided aggregatedItemId is valid
+  if (!validItemIds.has(aggregatedItemId)) {
+    return []; // Item doesn't exist in current orders
+  }
+
   // Find the original item to get its details
   let targetItem: OrderItem | null = null;
-  let targetOrderId = '';
-  let targetItemIndex = -1;
 
   for (const order of orders) {
     if (!order.items || !Array.isArray(order.items)) continue;
@@ -243,8 +288,6 @@ export function getItemIdsForAggregatedItem(
       const currentItemId = `${order._id}-${i}`;
       if (currentItemId === aggregatedItemId) {
         targetItem = order.items[i];
-        targetOrderId = order._id;
-        targetItemIndex = i;
         break;
       }
     }
@@ -252,10 +295,10 @@ export function getItemIdsForAggregatedItem(
   }
 
   if (!targetItem) {
-    return [aggregatedItemId]; // Fallback
+    return []; // Item not found
   }
 
-  // Find all items with same name+price+addons
+  // Find all items with same name+price+addons that actually exist in current orders
   const targetKey = createItemKey(targetItem.name, targetItem.price, targetItem.addons);
   const matchingItemIds: string[] = [];
 
@@ -266,7 +309,10 @@ export function getItemIdsForAggregatedItem(
       const itemKey = createItemKey(item.name, item.price, item.addons);
       if (itemKey === targetKey) {
         const itemId = `${order._id}-${itemIndex}`;
-        matchingItemIds.push(itemId);
+        // Only include if it's a valid itemId (exists in current orders)
+        if (validItemIds.has(itemId)) {
+          matchingItemIds.push(itemId);
+        }
       }
     });
   });

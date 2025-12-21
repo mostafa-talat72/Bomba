@@ -710,35 +710,37 @@ const sessionController = {
                 try {
                     updatedBill = await Bill.findById(updatedSession.bill);
                     if (updatedBill) {
-                        // تحديد اسم العميل بنفس منطق البداية
-                        let customerNameForBill = "";
-                        const deviceType = updatedSession.deviceType;
-                        const deviceNumber = updatedSession.deviceNumber;
-                        const custName = updatedSession.customerName;
-                        if (deviceType === "playstation") {
-                            if (!custName || custName.trim() === "") {
-                                customerNameForBill = `عميل بلايستيشن PS${deviceNumber}`;
+                        // تحديد اسم العميل فقط إذا لم تكن الفاتورة مرتبطة بطاولة
+                        if (!updatedBill.table) {
+                            let customerNameForBill = "";
+                            const deviceType = updatedSession.deviceType;
+                            const deviceNumber = updatedSession.deviceNumber;
+                            const custName = updatedSession.customerName;
+                            if (deviceType === "playstation") {
+                                if (!custName || custName.trim() === "") {
+                                    customerNameForBill = `عميل بلايستيشن PS${deviceNumber}`;
+                                } else {
+                                    customerNameForBill = `${custName.trim()} PS${deviceNumber}`;
+                                }
+                            } else if (deviceType === "computer") {
+                                if (!custName || custName.trim() === "") {
+                                    customerNameForBill = `عميل كمبيوتر PC${deviceNumber}`;
+                                } else {
+                                    customerNameForBill = `${custName.trim()} PC${deviceNumber}`;
+                                }
                             } else {
-                                customerNameForBill = `${custName.trim()} PS${deviceNumber}`;
+                                if (!custName || custName.trim() === "") {
+                                    customerNameForBill = "عميل";
+                                } else {
+                                    customerNameForBill = custName.trim();
+                                }
                             }
-                        } else if (deviceType === "computer") {
-                            if (!custName || custName.trim() === "") {
-                                customerNameForBill = `عميل كمبيوتر PC${deviceNumber}`;
-                            } else {
-                                customerNameForBill = `${custName.trim()} PC${deviceNumber}`;
-                            }
+                            
+                            Logger.info(`✓ Updating bill customer name (not linked to table): ${customerNameForBill}`);
+                            updatedBill.customerName = customerNameForBill;
                         } else {
-                            if (!custName || custName.trim() === "") {
-                                customerNameForBill = "عميل";
-                            } else {
-                                customerNameForBill = custName.trim();
-                            }
+                            Logger.info(`✓ Bill is linked to table ${updatedBill.table}, keeping existing customer name: ${updatedBill.customerName}`);
                         }
-                        
-                        Logger.info(`✓ Updating bill with customer name: ${customerNameForBill}`);
-                        
-                        // Update bill with final session cost and customer name
-                        updatedBill.customerName = customerNameForBill;
                         updatedBill.subtotal = updatedSession.finalCost || 0;
                         updatedBill.total = updatedSession.finalCost || 0;
                         updatedBill.discount = updatedSession.discount || 0;
@@ -768,7 +770,7 @@ const sessionController = {
                 );
                 
                 try {
-                    // تحديد اسم العميل
+                    // تحديد اسم العميل (هذا الجزء للفواتير الجديدة فقط - غير مرتبطة بطاولة)
                     let customerNameForBill = "";
                     const deviceType = updatedSession.deviceType;
                     const deviceNumber = updatedSession.deviceNumber;
@@ -794,7 +796,7 @@ const sessionController = {
                         }
                     }
 
-                    Logger.info(`✓ Creating new bill with customer name: ${customerNameForBill}`);
+                    Logger.info(`✓ Creating new bill (not linked to table) with customer name: ${customerNameForBill}`);
 
                     // إنشاء الفاتورة
                     const billData = {

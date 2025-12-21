@@ -770,6 +770,206 @@ export const updateOrder = async (req, res) => {
 
         await order.save();
 
+        // Clean up invalid itemPayments and recalculate payments for this order's bill (if exists)
+        if (order.bill) {
+            setImmediate(async () => {
+                try {
+                    const Bill = (await import('../models/Bill.js')).default;
+                    const billDoc = await Bill.findById(order.bill);
+                    if (billDoc) {
+                        Logger.info(`🔄 [updateOrder] Recalculating payments for bill ${billDoc.billNumber} after order update`);
+                        
+                        // Populate orders to get current items
+                        await billDoc.populate('orders');
+                        
+                        if (billDoc.itemPayments && billDoc.itemPayments.length > 0) {
+                            // Get all valid itemIds from current orders
+                            const validItemIds = new Set();
+                            const currentOrderItems = new Map(); // Map itemId -> item details
+                            const itemsByType = new Map(); // Map itemKey -> array of itemIds
+                            
+                            billDoc.orders.forEach(orderDoc => {
+                                if (orderDoc.items && Array.isArray(orderDoc.items)) {
+                                    orderDoc.items.forEach((item, index) => {
+                                        const itemId = `${orderDoc._id}-${index}`;
+                                        validItemIds.add(itemId);
+                                        
+                                        const itemDetails = {
+                                            name: item.name,
+                                            price: item.price,
+                                            quantity: item.quantity,
+                                            orderId: orderDoc._id
+                                        };
+                                        currentOrderItems.set(itemId, itemDetails);
+                                        
+                                        // Group items by type (name + price)
+                                        const itemKey = `${item.name}|${item.price}`;
+                                        if (!itemsByType.has(itemKey)) {
+                                            itemsByType.set(itemKey, []);
+                                        }
+                                        itemsByType.get(itemKey).push(itemId);
+                                    });
+                                }
+                            });
+
+                            // Track removed payments and payments to redistribute
+                            const removedPayments = [];
+                            const adjustedPayments = [];
+                            const paymentsToRedistribute = new Map(); // Map itemKey -> total paid amount
+                            let totalRemovedAmount = 0;
+                            let totalAdjustedAmount = 0;
+
+                            // Filter out invalid itemPayments and adjust quantities for modified items
+                            billDoc.itemPayments = billDoc.itemPayments.filter(payment => {
+                                if (!validItemIds.has(payment.itemId)) {
+                                    // Item was deleted - collect payment for redistribution
+                                    const itemKey = `${payment.itemName}|${payment.pricePerUnit}`;
+                                    const paidAmount = payment.paidAmount || 0;
+                                    
+                                    if (paidAmount > 0) {
+                                        if (!paymentsToRedistribute.has(itemKey)) {
+                                            paymentsToRedistribute.set(itemKey, 0);
+                                        }
+                                        paymentsToRedistribute.set(itemKey, paymentsToRedistribute.get(itemKey) + paidAmount);
+                                    }
+                                    
+                                    removedPayments.push({
+                                        itemName: payment.itemName,
+                                        itemId: payment.itemId,
+                                        paidAmount: paidAmount,
+                                        paidQuantity: payment.paidQuantity || 0
+                                    });
+                                    totalRemovedAmount += paidAmount;
+                                    Logger.info(`🗑️ [updateOrder] Collecting payment from deleted item: ${payment.itemName} (${payment.itemId}), amount: ${paidAmount}`);
+                                    return false; // Remove this payment
+                                }
+
+                                // Item still exists - check if quantity changed
+                                const currentItem = currentOrderItems.get(payment.itemId);
+                                if (currentItem && currentItem.quantity !== payment.quantity) {
+                                    const oldPaidAmount = payment.paidAmount || 0;
+                                    const oldPaidQuantity = payment.paidQuantity || 0;
+                                    
+                                    // Update item details
+                                    payment.itemName = currentItem.name;
+                                    payment.pricePerUnit = currentItem.price;
+                                    payment.quantity = currentItem.quantity;
+                                    payment.totalPrice = currentItem.price * currentItem.quantity;
+                                    
+                                    // Adjust paid quantity if it exceeds new total quantity
+                                    if (payment.paidQuantity > currentItem.quantity) {
+                                        payment.paidQuantity = currentItem.quantity;
+                                        payment.paidAmount = currentItem.price * currentItem.quantity;
+                                        payment.isPaid = true;
+                                        
+                                        const adjustedAmount = oldPaidAmount - payment.paidAmount;
+                                        totalAdjustedAmount += adjustedAmount;
+                                        
+                                        adjustedPayments.push({
+                                            itemName: payment.itemName,
+                                            itemId: payment.itemId,
+                                            oldQuantity: oldPaidQuantity,
+                                            newQuantity: payment.paidQuantity,
+                                            adjustedAmount: adjustedAmount
+                                        });
+                                        
+                                        Logger.info(`📉 [updateOrder] Adjusted payment for modified item: ${payment.itemName} (${payment.itemId})`, {
+                                            oldPaidQuantity: oldPaidQuantity,
+                                            newPaidQuantity: payment.paidQuantity,
+                                            oldPaidAmount: oldPaidAmount,
+                                            newPaidAmount: payment.paidAmount,
+                                            adjustedAmount: adjustedAmount
+                                        });
+                                    } else {
+                                        // Recalculate paid amount based on current price
+                                        payment.paidAmount = payment.paidQuantity * currentItem.price;
+                                        payment.isPaid = payment.paidQuantity >= payment.quantity;
+                                    }
+                                }
+                                
+                                return true; // Keep this payment
+                            });
+
+                            // Redistribute payments to remaining items of the same type
+                            for (const [itemKey, totalPaidAmount] of paymentsToRedistribute) {
+                                if (totalPaidAmount <= 0) continue;
+                                
+                                const remainingItemIds = itemsByType.get(itemKey) || [];
+                                if (remainingItemIds.length === 0) continue;
+                                
+                                Logger.info(`🔄 [updateOrder] Redistributing ${totalPaidAmount} EGP for item type: ${itemKey} to ${remainingItemIds.length} remaining items`);
+                                
+                                // Calculate how much to distribute per unit
+                                const [itemName, priceStr] = itemKey.split('|');
+                                const unitPrice = parseFloat(priceStr);
+                                const totalQuantityPaid = Math.round(totalPaidAmount / unitPrice);
+                                
+                                let remainingQuantityToDistribute = totalQuantityPaid;
+                                
+                                // Distribute payments to remaining items
+                                for (const itemId of remainingItemIds) {
+                                    if (remainingQuantityToDistribute <= 0) break;
+                                    
+                                    const existingPayment = billDoc.itemPayments.find(ip => ip.itemId === itemId);
+                                    if (!existingPayment) continue;
+                                    
+                                    const availableQuantity = existingPayment.quantity - (existingPayment.paidQuantity || 0);
+                                    if (availableQuantity <= 0) continue;
+                                    
+                                    const quantityToAdd = Math.min(remainingQuantityToDistribute, availableQuantity);
+                                    const amountToAdd = quantityToAdd * unitPrice;
+                                    
+                                    existingPayment.paidQuantity = (existingPayment.paidQuantity || 0) + quantityToAdd;
+                                    existingPayment.paidAmount = (existingPayment.paidAmount || 0) + amountToAdd;
+                                    existingPayment.isPaid = existingPayment.paidQuantity >= existingPayment.quantity;
+                                    existingPayment.paidAt = new Date();
+                                    
+                                    // Add to payment history
+                                    if (!existingPayment.paymentHistory) {
+                                        existingPayment.paymentHistory = [];
+                                    }
+                                    existingPayment.paymentHistory.push({
+                                        quantity: quantityToAdd,
+                                        amount: amountToAdd,
+                                        paidAt: new Date(),
+                                        method: 'redistribution',
+                                        note: 'Redistributed from deleted items'
+                                    });
+                                    
+                                    remainingQuantityToDistribute -= quantityToAdd;
+                                    
+                                    Logger.info(`✅ [updateOrder] Redistributed ${quantityToAdd} units (${amountToAdd} EGP) to item: ${existingPayment.itemName} (${itemId})`);
+                                }
+                                
+                                if (remainingQuantityToDistribute > 0) {
+                                    Logger.warn(`⚠️ [updateOrder] Could not redistribute ${remainingQuantityToDistribute} units for item type: ${itemKey}`);
+                                }
+                            }
+
+                            // Log summary of changes
+                            if (removedPayments.length > 0 || adjustedPayments.length > 0) {
+                                Logger.info(`💰 [updateOrder] Payment adjustments summary for bill ${billDoc.billNumber}:`, {
+                                    removedPayments: removedPayments.length,
+                                    adjustedPayments: adjustedPayments.length,
+                                    totalRemovedAmount,
+                                    totalAdjustedAmount,
+                                    redistributedTypes: paymentsToRedistribute.size,
+                                    netAdjustment: totalRemovedAmount + totalAdjustedAmount
+                                });
+                            }
+                        }
+
+                        // Recalculate bill totals and save
+                        await billDoc.calculateSubtotal();
+                        await billDoc.save();
+                        
+                        Logger.info(`✅ [updateOrder] Bill ${billDoc.billNumber} payments recalculated successfully`);
+                    }
+                } catch (cleanupError) {
+                    Logger.error('Error recalculating bill payments after order update:', cleanupError);
+                }
+            });
+        }
         // Populate only essential fields for response
         const updatedOrder = await Order.findById(order._id)
             .populate("table", "number name")

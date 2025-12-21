@@ -99,10 +99,18 @@ export const printBill = (bill: Bill, organizationName?: string) => {
         sp.sessionId === session._id || sp.sessionId === session.id
       );
       const paidAmount = sessionPayment?.paidAmount || 0;
-      const remainingAmount = sessionPayment?.remainingAmount || finalCost;
+      
+      // Calculate remaining amount correctly
+      let remainingAmount: number;
+      if (sessionPayment && sessionPayment.remainingAmount !== undefined) {
+        remainingAmount = sessionPayment.remainingAmount;
+      } else {
+        // If no session payment record, calculate manually
+        remainingAmount = Math.max(0, finalCost - paidAmount);
+      }
       
       // Status icon based on payment
-      const isPaidFully = remainingAmount === 0;
+      const isPaidFully = remainingAmount === 0 && finalCost > 0;
       const statusIcon = isPaidFully ? '✓' : paidAmount > 0 ? '◐' : '○';
       
       return `

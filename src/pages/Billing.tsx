@@ -10,6 +10,7 @@ import { io, Socket } from 'socket.io-client';
 import { aggregateItemsWithPayments, getItemIdsForAggregatedItem } from '../utils/billAggregation';
 import '../styles/billing-animations.css';
 import PartialPaymentModal from '../components/PartialPaymentModal';
+import { useBillAggregation } from '../hooks/useBillAggregation';
 import React from 'react';
 
 // Type for interval
@@ -275,6 +276,21 @@ const Billing = () => {
   const [showPaidAmount, setShowPaidAmount] = useState(false);
   const [showRemainingAmount, setShowRemainingAmount] = useState(false);
   const navigate = useNavigate();
+
+  // استخدام Backend aggregation بدلاً من Frontend
+  const { 
+    aggregatedItems: backendAggregatedItems, 
+    loading: aggregationLoading, 
+    error: aggregationError,
+    refetch: refetchAggregatedItems 
+  } = useBillAggregation(selectedBill?.id || selectedBill?._id || null);
+
+  // إعادة جلب العناصر المجمعة عند تغيير الفاتورة أو بعد الدفع
+  useEffect(() => {
+    if (selectedBill && (selectedBill.id || selectedBill._id)) {
+      refetchAggregatedItems();
+    }
+  }, [selectedBill?.id, selectedBill?._id, selectedBill?.paid, selectedBill?.remaining]);
 
   useEffect(() => {
     // تحميل البيانات الأولية
@@ -833,61 +849,9 @@ const Billing = () => {
     try {
       setIsProcessingPartialPayment(true);
       
-      // تحويل العناصر إلى تنسيق addPartialPayment (حل مؤقت)
-      const aggregatedItems = aggregateItemsWithPayments(
-        selectedBill.orders || [],
-        selectedBill.itemPayments || [],
-        selectedBill.status,
-        selectedBill.paid,
-        selectedBill.total
-      );
-
-      // تحويل العناصر المختارة إلى itemIds مع توسيع الأصناف المجمعة
-      const allItemsToPayFor: Array<{ itemId: string; quantity: number }> = [];
-      
-      items.forEach(item => {
-        const aggregatedItem = aggregatedItems.find(aggItem => aggItem.id === item.itemId);
-        if (aggregatedItem) {
-          // الحصول على جميع itemIds للصنف المجمع
-          const matchingItemIds = getItemIdsForAggregatedItem(item.itemId, selectedBill.orders || []);
-          
-          // توزيع الكمية المطلوبة على جميع العناصر المطابقة
-          let remainingQuantity = item.quantity;
-          
-          for (const matchingItemId of matchingItemIds) {
-            if (remainingQuantity <= 0) break;
-            
-            // العثور على العنصر الأصلي لمعرفة كميته المتاحة
-            let itemQuantityAvailable = 0;
-            for (const order of selectedBill.orders || []) {
-              const [orderIdFromItem, itemIndexStr] = matchingItemId.split('-');
-              const itemIndex = parseInt(itemIndexStr);
-              if (order._id === orderIdFromItem && order.items[itemIndex]) {
-                itemQuantityAvailable = order.items[itemIndex].quantity;
-                break;
-              }
-            }
-            
-            // حساب الكمية المدفوعة مسبقاً لهذا العنصر المحدد
-            const existingPayment = (selectedBill.itemPayments || []).find(ip => ip.itemId === matchingItemId);
-            const alreadyPaid = existingPayment?.paidQuantity || 0;
-            const availableForPayment = Math.max(0, itemQuantityAvailable - alreadyPaid);
-            
-            if (availableForPayment > 0) {
-              const quantityToPay = Math.min(remainingQuantity, availableForPayment);
-              allItemsToPayFor.push({
-                itemId: matchingItemId,
-                quantity: quantityToPay
-              });
-              remainingQuantity -= quantityToPay;
-            }
-          }
-        }
-      });
-
-      // إرسال طلب دفع جزئي واحد لجميع العناصر
-      const response = await api.addPartialPayment(selectedBill.id || selectedBill._id, {
-        items: allItemsToPayFor,
+      // استخدام Backend aggregation بدلاً من Frontend logic
+      const response = await api.addPartialPaymentAggregated(selectedBill.id || selectedBill._id, {
+        items,
         paymentMethod
       });
 
@@ -895,7 +859,7 @@ const Billing = () => {
       if (response.success) {
         // حساب المبلغ المدفوع
         const totalPaid = items.reduce((sum, item) => {
-          const aggregatedItem = aggregatedItems.find(aggItem => aggItem.id === item.itemId);
+          const aggregatedItem = backendAggregatedItems.find(aggItem => aggItem.id === item.itemId);
           return sum + (aggregatedItem ? aggregatedItem.price * item.quantity : 0);
         }, 0);
         

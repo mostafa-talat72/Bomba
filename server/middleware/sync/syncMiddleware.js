@@ -44,6 +44,37 @@ function shouldSync(collectionName) {
 }
 
 /**
+ * Validate document before syncing
+ * @param {Object} doc - Document to validate
+ * @param {string} collectionName - Collection name
+ * @returns {boolean} - True if valid, false otherwise
+ */
+function validateDocumentForSync(doc, collectionName) {
+    // Special validation for devices collection
+    if (collectionName === 'devices') {
+        // Check required fields for devices
+        if (!doc.name || (typeof doc.name === 'string' && doc.name.trim() === '')) {
+            Logger.warn(`🚫 Sync blocked: Device without name`, { docId: doc._id });
+            return false;
+        }
+        
+        if (!doc.organization) {
+            Logger.warn(`🚫 Sync blocked: Device without organization`, { docId: doc._id });
+            return false;
+        }
+        
+        if (!doc.number || (typeof doc.number === 'string' && doc.number.trim() === '')) {
+            Logger.warn(`🚫 Sync blocked: Device without number`, { docId: doc._id });
+            return false;
+        }
+    }
+    
+    // Add validation for other collections as needed
+    
+    return true;
+}
+
+/**
  * Post-save hook for insert operations
  * Triggered after a document is saved to local database
  */
@@ -52,6 +83,13 @@ function postSaveHook(doc, next) {
         const collectionName = this.collection.name;
 
         if (!shouldSync(collectionName)) {
+            return next();
+        }
+
+        // Validate document before syncing
+        const docData = doc.toObject ? doc.toObject() : doc;
+        if (!validateDocumentForSync(docData, collectionName)) {
+            Logger.warn(`🚫 Skipping sync for invalid ${collectionName} document`, { docId: doc._id });
             return next();
         }
 
@@ -64,7 +102,7 @@ function postSaveHook(doc, next) {
         const operation = {
             type: "insert",
             collection: collectionName,
-            data: doc.toObject ? doc.toObject() : doc,
+            data: docData,
             timestamp: new Date(),
             origin: 'local',
             instanceId: tracker.instanceId,
@@ -98,6 +136,19 @@ function postUpdateHook(result, next) {
         
         // Get the update data
         const update = this.getUpdate();
+
+        // Validate update data for devices collection
+        if (collectionName === 'devices' && update.$set) {
+            // Check if the update would create invalid data
+            if (update.$set.name === '' || update.$set.name === null) {
+                Logger.warn(`🚫 Sync blocked: Update would clear device name`, { filter });
+                return next();
+            }
+            if (update.$set.organization === null) {
+                Logger.warn(`🚫 Sync blocked: Update would clear device organization`, { filter });
+                return next();
+            }
+        }
 
         // Mark this change as originating from Local (if we have _id in filter)
         if (filter._id) {

@@ -429,7 +429,7 @@ billSchema.pre("save", async function (next) {
         this.isModified("orders") ||
         this.isModified("sessions")
     ) {
-        // تنظيف itemPayments من الأصناف المحذوفة
+        // تنظيف itemPayments من الأصناف المحذوفة وإعادة توزيع المدفوعات
         if (this.itemPayments && this.itemPayments.length > 0 && this.orders && this.orders.length > 0) {
             try {
                 // Populate orders if not already populated
@@ -437,23 +437,151 @@ billSchema.pre("save", async function (next) {
                     await this.populate("orders");
                 }
 
-                // جمع جميع itemIds الموجودة فعلياً في الطلبات
+                // جمع جميع itemIds الموجودة فعلياً في الطلبات مع تفاصيل الأصناف
                 const validItemIds = new Set();
+                const currentOrderItems = new Map(); // Map itemId -> item details
+                const itemsByType = new Map(); // Map itemKey -> array of itemIds
+                
                 this.orders.forEach((order) => {
                     if (order.items && order.items.length > 0) {
                         order.items.forEach((item, index) => {
-                            validItemIds.add(`${order._id}-${index}`);
+                            const itemId = `${order._id}-${index}`;
+                            validItemIds.add(itemId);
+                            
+                            const itemDetails = {
+                                name: item.name,
+                                price: item.price,
+                                quantity: item.quantity,
+                                orderId: order._id
+                            };
+                            currentOrderItems.set(itemId, itemDetails);
+                            
+                            // Group items by type (name + price)
+                            const itemKey = `${item.name}|${item.price}`;
+                            if (!itemsByType.has(itemKey)) {
+                                itemsByType.set(itemKey, []);
+                            }
+                            itemsByType.get(itemKey).push(itemId);
                         });
                     }
                 });
 
-                // إزالة itemPayments للأصناف المحذوفة
-                const originalItemPaymentsCount = this.itemPayments.length;
+                // Track payments to redistribute
+                const paymentsToRedistribute = new Map(); // Map itemKey -> total paid amount
+                const removedPayments = [];
+                let totalRemovedAmount = 0;
+                let totalAdjustedAmount = 0;
+                
+                // First pass: collect payments from deleted items and track adjustments
                 this.itemPayments = this.itemPayments.filter(ip => {
                     const isValid = validItemIds.has(ip.itemId);
                     
-                    return isValid;
+                    if (!isValid) {
+                        // Item was deleted - collect payment for redistribution
+                        const itemKey = `${ip.itemName}|${ip.pricePerUnit}`;
+                        const paidAmount = ip.paidAmount || 0;
+                        
+                        if (paidAmount > 0) {
+                            if (!paymentsToRedistribute.has(itemKey)) {
+                                paymentsToRedistribute.set(itemKey, 0);
+                            }
+                            paymentsToRedistribute.set(itemKey, paymentsToRedistribute.get(itemKey) + paidAmount);
+                        }
+                        
+                        removedPayments.push({
+                            itemName: ip.itemName,
+                            itemId: ip.itemId,
+                            paidAmount: paidAmount,
+                            paidQuantity: ip.paidQuantity || 0
+                        });
+                        totalRemovedAmount += paidAmount;
+                        
+                        return false;
+                    }
+                    
+                    // Item still exists - check if quantity changed
+                    const currentItem = currentOrderItems.get(ip.itemId);
+                    if (currentItem && currentItem.quantity !== ip.quantity) {
+                        const oldPaidAmount = ip.paidAmount || 0;
+                        
+                        // Update item details
+                        ip.itemName = currentItem.name;
+                        ip.pricePerUnit = currentItem.price;
+                        ip.quantity = currentItem.quantity;
+                        ip.totalPrice = currentItem.price * currentItem.quantity;
+                        
+                        // Adjust paid quantity if it exceeds new total quantity
+                        if (ip.paidQuantity > currentItem.quantity) {
+                            ip.paidQuantity = currentItem.quantity;
+                            ip.paidAmount = currentItem.price * currentItem.quantity;
+                            ip.isPaid = true;
+                            
+                            const adjustedAmount = oldPaidAmount - ip.paidAmount;
+                            totalAdjustedAmount += adjustedAmount;
+                            
+                           
+                        } else {
+                            // Recalculate paid amount based on current price
+                            ip.paidAmount = ip.paidQuantity * currentItem.price;
+                            ip.isPaid = ip.paidQuantity >= ip.quantity;
+                        }
+                    }
+                    
+                    return true;
                 });
+
+                // Second pass: redistribute payments to remaining items of the same type
+                for (const [itemKey, totalPaidAmount] of paymentsToRedistribute) {
+                    if (totalPaidAmount <= 0) continue;
+                    
+                    const remainingItemIds = itemsByType.get(itemKey) || [];
+                    if (remainingItemIds.length === 0) continue;
+                                        
+                    // Calculate how much to distribute per unit
+                    const [itemName, priceStr] = itemKey.split('|');
+                    const unitPrice = parseFloat(priceStr);
+                    const totalQuantityPaid = Math.round(totalPaidAmount / unitPrice);
+                    
+                    let remainingQuantityToDistribute = totalQuantityPaid;
+                    
+                    // Distribute payments to remaining items
+                    for (const itemId of remainingItemIds) {
+                        if (remainingQuantityToDistribute <= 0) break;
+                        
+                        const existingPayment = this.itemPayments.find(ip => ip.itemId === itemId);
+                        if (!existingPayment) continue;
+                        
+                        const availableQuantity = existingPayment.quantity - (existingPayment.paidQuantity || 0);
+                        if (availableQuantity <= 0) continue;
+                        
+                        const quantityToAdd = Math.min(remainingQuantityToDistribute, availableQuantity);
+                        const amountToAdd = quantityToAdd * unitPrice;
+                        
+                        existingPayment.paidQuantity = (existingPayment.paidQuantity || 0) + quantityToAdd;
+                        existingPayment.paidAmount = (existingPayment.paidAmount || 0) + amountToAdd;
+                        existingPayment.isPaid = existingPayment.paidQuantity >= existingPayment.quantity;
+                        existingPayment.paidAt = new Date();
+                        
+                        // Add to payment history
+                        if (!existingPayment.paymentHistory) {
+                            existingPayment.paymentHistory = [];
+                        }
+                        existingPayment.paymentHistory.push({
+                            quantity: quantityToAdd,
+                            amount: amountToAdd,
+                            paidAt: new Date(),
+                            method: 'redistribution',
+                            note: 'Redistributed from deleted items'
+                        });
+                        
+                        remainingQuantityToDistribute -= quantityToAdd;
+                        
+                    }
+                    
+                    if (remainingQuantityToDistribute > 0) {
+                        console.warn(`⚠️ [Pre-save] Could not redistribute ${remainingQuantityToDistribute} units for item type: ${itemKey}`);
+                    }
+                }
 
                
             } catch (error) {
@@ -1311,6 +1439,28 @@ billSchema.methods.calculateSubtotal = async function () {
         // If this is a new bill or being recalculated, set paid to 0 if not set
         if (this.isNew && this.paid === undefined) {
             this.paid = 0;
+        }
+
+        // إعادة حساب المبلغ المدفوع من itemPayments و sessionPayments
+        if (!this.isNew && (this.itemPayments?.length > 0 || this.sessionPayments?.length > 0)) {
+            let calculatedPaid = 0;
+            
+            // حساب المدفوع من itemPayments
+            if (this.itemPayments && this.itemPayments.length > 0) {
+                calculatedPaid += this.itemPayments.reduce((sum, payment) => {
+                    return sum + (payment.paidAmount || 0);
+                }, 0);
+            }
+            
+            // حساب المدفوع من sessionPayments
+            if (this.sessionPayments && this.sessionPayments.length > 0) {
+                calculatedPaid += this.sessionPayments.reduce((sum, payment) => {
+                    return sum + (payment.paidAmount || 0);
+                }, 0);
+            }
+            
+            // تحديث المبلغ المدفوع المحسوب
+            this.paid = calculatedPaid;
         }
 
         // Calculate remaining amount (can't be negative)
