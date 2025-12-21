@@ -941,9 +941,9 @@ const Billing = () => {
         let hourlyRate = 20;
         if (controllers >= 4) hourlyRate = 30;
         else if (controllers >= 3) hourlyRate = 25;
-        totalCost = Math.ceil(hours * hourlyRate);
+        totalCost = Math.round(hours * hourlyRate);
       } else if (selectedSession.deviceType === 'computer') {
-        totalCost = Math.ceil(hours * 15);
+        totalCost = Math.round(hours * 15);
       }
     }
     
@@ -2718,9 +2718,9 @@ const Billing = () => {
                       let hourlyRate = 20; // السعر الافتراضي
                       if (controllers >= 4) hourlyRate = 30;
                       else if (controllers >= 3) hourlyRate = 25;
-                      totalCost = Math.ceil(hours * hourlyRate);
+                      totalCost = Math.round(hours * hourlyRate);
                     } else if (session.deviceType === 'computer') {
-                      totalCost = Math.ceil(hours * 15); // 15 جنيه للساعة
+                      totalCost = Math.round(hours * 15); // 15 جنيه للساعة
                     }
                   }
                   const paidAmount = sessionPayment?.paidAmount || 0;

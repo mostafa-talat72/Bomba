@@ -195,16 +195,22 @@ const BillView = () => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [showOrdersModal, setShowOrdersModal] = useState(false);
-	const [showPaymentModal, setShowPaymentModal] = useState(false);
-	const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>({});
-	const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
-	const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
-	const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-	const [paymentError, setPaymentError] = useState<string | null>(null);
+	const [realtimeUpdate, setRealtimeUpdate] = useState(0); // للتحديث اللحظي
 
 	// دالة لجلب سعر الساعة من الجلسة مباشرة
-	function getHourlyRateFromDevice(session: Session, _controllers: number) {
-		// استخدام hourlyRate من الجلسة نفسها
+	function getHourlyRateFromDevice(session: Session, controllers: number) {
+		// للبلايستيشن: استخدام الأسعار المخصصة حسب عدد الدراعات
+		if (session.deviceType === 'playstation') {
+			// استخدام الأسعار الافتراضية إذا لم تكن متوفرة في الجلسة
+			if (controllers >= 4) return 30;
+			else if (controllers >= 3) return 25;
+			else return 20; // للدراع الواحد أو الدرعين
+		}
+		// للكمبيوتر: سعر ثابت
+		else if (session.deviceType === 'computer') {
+			return 15;
+		}
+		// استخدام hourlyRate من الجلسة كاحتياطي
 		return session.hourlyRate || 0;
 	}
 
@@ -260,6 +266,19 @@ const BillView = () => {
 			if (interval) window.clearInterval(interval);
 		};
 		// نراقب bill.sessions حتى إذا تغيرت حالة الجلسة يعاد ضبط الـ interval
+	}, [bill && bill.sessions && bill.sessions.some(session => session.status === 'active')]);
+
+	// تحديث لحظي للتكلفة كل ثانية للجلسات النشطة
+	useEffect(() => {
+		const hasActiveSessions = bill && bill.sessions && bill.sessions.some(session => session.status === 'active');
+		
+		if (hasActiveSessions) {
+			const interval = setInterval(() => {
+				setRealtimeUpdate(prev => prev + 1);
+			}, 1000);
+			
+			return () => clearInterval(interval);
+		}
 	}, [bill && bill.sessions && bill.sessions.some(session => session.status === 'active')]);
 
 	// إضافة تأثير لمراقبة التغييرات في البيانات والدفعات الجزئية
@@ -362,88 +381,6 @@ const BillView = () => {
 		);
 	}
 
-	// دالة لمعالجة الدفع الجزئي
-	const handlePaymentSubmit = async () => {
-		if (!bill) return;
-
-		setIsProcessingPayment(true);
-		setPaymentError(null);
-
-		try {
-			// تجميع العناصر المحددة مع الكميات
-			const itemsToPayFor = aggregateItemsWithPayments(
-				bill.orders || [],
-				bill.itemPayments || [],
-				bill.status,
-				bill.paid,
-				bill.total
-			)
-				.filter(item => {
-					const addonsKey = (item.addons || [])
-						.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-						.sort()
-						.join('|');
-					const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-					return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
-				})
-				.map(item => {
-					const addonsKey = (item.addons || [])
-						.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-						.sort()
-						.join('|');
-					const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-					
-					// البحث عن itemId من الطلبات باستخدام التنسيق الصحيح
-					let itemId = '';
-					for (let orderIndex = 0; orderIndex < bill.orders.length; orderIndex++) {
-						const order = bill.orders[orderIndex];
-						const foundItemIndex = order.items.findIndex(
-							orderItem => orderItem.name === item.name && orderItem.price === item.price
-						);
-						if (foundItemIndex !== -1) {
-							// استخدام التنسيق الصحيح: orderId-itemIndex
-							itemId = `${order._id || order.id}-${foundItemIndex}`;
-							break;
-						}
-					}
-
-					return {
-						itemId: itemId,
-						quantity: itemQuantities[itemKey] || 0
-					};
-				});
-
-			if (itemsToPayFor.length === 0) {
-				setPaymentError('الرجاء اختيار عناصر للدفع');
-				setIsProcessingPayment(false);
-				return;
-			}
-
-			const response = await api.payForItems(bill._id, {
-				items: itemsToPayFor,
-				paymentMethod: paymentMethod
-			});
-
-			if (response.success) {
-				// تحديث الفاتورة
-				await fetchBill(false);
-				
-				// إعادة تعيين الحالة
-				setShowPaymentModal(false);
-				setSelectedItems({});
-				setItemQuantities({});
-				setPaymentMethod('cash');
-				setPaymentError(null);
-			} else {
-				setPaymentError(response.message || 'حدث خطأ أثناء معالجة الدفع');
-			}
-		} catch (err) {
-			setPaymentError('حدث خطأ أثناء معالجة الدفع');
-		} finally {
-			setIsProcessingPayment(false);
-		}
-	};
-
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -482,15 +419,6 @@ const BillView = () => {
 							<span className={`px-3 py-1 rounded-full text-sm font-medium ${bill.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
 								{bill.status === 'paid' ? 'مدفوع' : 'غير مدفوع'}
 							</span>
-							{/* زر الدفع الجزئي */}
-							{bill.status !== 'paid' && bill.orders && bill.orders.length > 0 && (
-								<button
-									className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs"
-									onClick={() => setShowPaymentModal(true)}
-								>
-									دفع أصناف محددة
-								</button>
-							)}
 							{/* زر عرض الطلبات */}
 							{bill.orders && bill.orders.length > 0 && (
 								<button
@@ -631,7 +559,7 @@ const BillView = () => {
 																<td className="py-1 px-2">{formatDecimal(period.controllers)}</td>
 																<td className="py-1 px-2">{(period.hours > 0 ? `${formatDecimal(period.hours)} ساعة` : '') + (period.minutes > 0 ? ` ${formatDecimal(period.minutes)} دقيقة` : '')}</td>
 																<td className="py-1 px-2">{formatCurrency(period.hourlyRate)}</td>
-																<td className="py-1 px-2">{formatCurrency(period.cost)}</td>
+																<td className="py-1 px-2">{formatCurrency(Math.round(period.cost))}</td>
 															</tr>
 														))}
 													</tbody>
@@ -693,7 +621,7 @@ const BillView = () => {
 																	<td className="py-3 px-3 text-right">
 																		<span className="font-bold text-green-600 animate-pulse">
 																			{(() => {
-																				// حساب تكلفة الفترة الحالية فقط
+																				// حساب تكلفة الفترة الحالية فقط (يتحدث لحظياً)
 																				const now = new Date();
 																				let periodStart = new Date(session.startTime);
 
@@ -711,7 +639,7 @@ const BillView = () => {
 																				const minuteRate = hourlyRate / 60;
 																				const currentPeriodCost = minutes * minuteRate;
 
-																				return formatCurrency(currentPeriodCost);
+																				return formatCurrency(Math.round(currentPeriodCost));
 																			})()}
 																		</span>
 																	</td>
@@ -757,7 +685,7 @@ const BillView = () => {
 																			)}
 																			<td className="py-2 px-3 text-right text-gray-700">{duration}</td>
 																			<td className="py-2 px-3 text-right text-gray-700">{formatCurrency(hourlyRate)}</td>
-																			<td className="py-2 px-3 text-right text-gray-700">{formatCurrency(cost)}</td>
+																			<td className="py-2 px-3 text-right text-gray-700">{formatCurrency(Math.round(cost))}</td>
 																		</tr>
 																	);
 																})}
@@ -768,7 +696,9 @@ const BillView = () => {
 										) : null}
 										{/* إجمالي تكلفة الجلسة - يظهر دائماً للجلسات النشطة والمنتهية */}
 										{(() => {
-											// حساب التكلفة الإجمالية
+											// حساب التكلفة الإجمالية (يتحدث لحظياً)
+											// استخدام realtimeUpdate لإجبار إعادة الحساب كل ثانية
+											const _ = realtimeUpdate; // لتجنب تحذير TypeScript
 											let totalCost = 0;
 											const isActive = session.status === 'active';
 
@@ -829,18 +759,8 @@ const BillView = () => {
 												}
 											}
 
-											// تطبيق التقريب: إذا >= 0.5 يقرب لأعلى، وإلا يبقى كما هو
-											const hourlyRate = getHourlyRateFromDevice(session, session.controllers || 1);
-											if (hourlyRate > 0) {
-												const hours = totalCost / hourlyRate;
-												const fractionalPart = hours - Math.floor(hours);
-												
-												if (fractionalPart >= 0.5) {
-													totalCost = Math.ceil(totalCost);
-												} else {
-													totalCost = Math.round(totalCost);
-												}
-											}
+											// تطبيق التقريب: إذا >= 0.5 يقرب لأعلى، وإلا يقرب لأسفل
+											totalCost = Math.round(totalCost);
 
 											return (
 												<div className={`flex justify-between items-center mt-3 p-3 rounded-lg border ${
@@ -992,304 +912,6 @@ const BillView = () => {
 				</div>
 			)}
 
-			{/* نافذة الدفع الجزئي */}
-			{showPaymentModal && bill && (
-				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-					<div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-						<div className="p-6 border-b border-gray-200">
-							<h3 className="text-lg font-semibold text-gray-900">دفع أصناف محددة - فاتورة #{bill.billNumber}</h3>
-							<p className="text-sm text-gray-600 mt-1">اختر الأصناف والكميات المطلوب دفعها</p>
-						</div>
-
-						<div className="p-6">
-							{/* عرض رسالة الخطأ */}
-							{paymentError && (
-								<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-									{paymentError}
-								</div>
-							)}
-
-							<div className="mb-6">
-								<h4 className="font-medium text-gray-900 mb-4">اختر الأصناف والكميات</h4>
-
-								{(() => {
-									const itemsWithRemaining = aggregateItemsWithPayments(
-										bill.orders || [],
-										bill.itemPayments || [],
-										bill.status,
-										bill.paid,
-										bill.total
-									).filter(item => item.remainingQuantity > 0);
-
-									if (itemsWithRemaining.length === 0) {
-										return (
-											<div className="text-center py-8 bg-green-50 rounded-lg border border-green-200">
-												<div className="text-4xl mb-4">✅</div>
-												<h5 className="font-medium text-green-900 mb-2">جميع الأصناف مدفوعة بالكامل!</h5>
-												<p className="text-green-700">لا توجد أصناف متبقية للدفع في هذه الفاتورة</p>
-											</div>
-										);
-									}
-
-									return itemsWithRemaining.map((item) => {
-										const addonsKey = (item.addons || [])
-											.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-											.sort()
-											.join('|');
-										const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-
-										return (
-											<div key={itemKey} className="bg-gray-50 rounded-lg p-4 border border-gray-200 mb-3">
-												<div className="flex items-center justify-between mb-2">
-													<div className="flex items-center gap-2 font-bold text-orange-700">
-														{item.name}
-														{/* زر - */}
-														<button
-															type="button"
-															className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100 text-gray-700"
-															onClick={() => {
-																const newQty = Math.max(0, (itemQuantities[itemKey] || 0) - 1);
-																setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
-																setSelectedItems(prev => {
-																	const updated = { ...prev };
-																	if (newQty > 0) updated[itemKey] = true;
-																	else delete updated[itemKey];
-																	return updated;
-																});
-															}}
-															disabled={(itemQuantities[itemKey] || 0) <= 0}
-														>
-															-
-														</button>
-														<span className="mx-2 w-6 text-center select-none font-bold text-orange-700">
-															{formatDecimal(itemQuantities[itemKey] || 0)}
-														</span>
-														{/* زر + */}
-														<button
-															type="button"
-															className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-lg font-bold bg-white hover:bg-gray-100 text-gray-700"
-															onClick={() => {
-																const newQty = Math.min(item.remainingQuantity, (itemQuantities[itemKey] || 0) + 1);
-																setItemQuantities({ ...itemQuantities, [itemKey]: newQty });
-																setSelectedItems(prev => ({ ...prev, [itemKey]: newQty > 0 }));
-															}}
-															disabled={(itemQuantities[itemKey] || 0) >= item.remainingQuantity}
-														>
-															+
-														</button>
-														{/* زر دفع الكمية بالكامل */}
-														<button
-															type="button"
-															className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs hover:bg-orange-200"
-															onClick={() => {
-																setItemQuantities({ ...itemQuantities, [itemKey]: item.remainingQuantity });
-																setSelectedItems(prev => ({ ...prev, [itemKey]: true }));
-															}}
-															disabled={(itemQuantities[itemKey] || 0) === item.remainingQuantity}
-														>
-															دفع الكمية بالكامل
-														</button>
-													</div>
-													<div className="text-xs text-gray-500">{formatCurrency(item.price)}</div>
-												</div>
-												<div className="flex gap-4 text-sm text-gray-600">
-													<div>الكمية: <span className="font-bold text-gray-900">{formatDecimal(item.totalQuantity)}</span></div>
-													<div>المدفوع: <span className="text-green-700 font-bold">{formatDecimal(item.paidQuantity)}</span></div>
-													<div>المتبقي: <span className="text-yellow-700 font-bold">{formatDecimal(item.remainingQuantity)}</span></div>
-												</div>
-												{/* عرض الإضافات */}
-												{item.addons && item.addons.length > 0 && (
-													<div className="mt-2 pl-4 border-r-2 border-yellow-200">
-														{item.addons.map((addon, addonIdx) => (
-															<div key={addonIdx} className="flex items-center gap-2 text-sm text-yellow-800">
-																<span>↳ إضافة: {addon.name}</span>
-																<span>({formatCurrency(addon.price)})</span>
-															</div>
-														))}
-													</div>
-												)}
-											</div>
-										);
-									});
-								})()}
-							</div>
-
-							{/* طريقة الدفع */}
-							{aggregateItemsWithPayments(
-								bill.orders || [],
-								bill.itemPayments || [],
-								bill.status,
-								bill.paid,
-								bill.total
-							).filter(item => item.remainingQuantity > 0).length > 0 && (
-								<div className="mb-6">
-									<h4 className="font-medium text-gray-900 mb-4">طريقة الدفع</h4>
-									<div className="grid grid-cols-3 gap-3">
-										<button
-											onClick={() => setPaymentMethod('cash')}
-											className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-												paymentMethod === 'cash'
-													? 'border-orange-500 bg-orange-50 text-orange-700'
-													: 'border-gray-200 hover:border-gray-300 bg-white text-gray-700'
-											}`}
-										>
-											<div className="text-2xl mb-1">💵</div>
-											<div className="text-sm font-medium">نقداً</div>
-										</button>
-										<button
-											onClick={() => setPaymentMethod('card')}
-											className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-												paymentMethod === 'card'
-													? 'border-orange-500 bg-orange-50 text-orange-700'
-													: 'border-gray-200 hover:border-gray-300 bg-white text-gray-700'
-											}`}
-										>
-											<div className="text-2xl mb-1">💳</div>
-											<div className="text-sm font-medium">بطاقة</div>
-										</button>
-										<button
-											onClick={() => setPaymentMethod('transfer')}
-											className={`p-3 border-2 rounded-lg text-center transition-colors duration-200 ${
-												paymentMethod === 'transfer'
-													? 'border-orange-500 bg-orange-50 text-orange-700'
-													: 'border-gray-200 hover:border-gray-300 bg-white text-gray-700'
-											}`}
-										>
-											<div className="text-2xl mb-1">📱</div>
-											<div className="text-sm font-medium">تحويل</div>
-										</button>
-									</div>
-								</div>
-							)}
-
-							{/* ملخص الدفع */}
-							{Object.keys(selectedItems).some(id => selectedItems[id]) && (
-								<div className="mb-6 bg-orange-50 p-4 rounded-lg border border-orange-200">
-									<h4 className="font-medium text-orange-900 mb-2">ملخص الدفع</h4>
-									<div className="space-y-2">
-										{aggregateItemsWithPayments(
-											bill.orders || [],
-											bill.itemPayments || [],
-											bill.status,
-											bill.paid,
-											bill.total
-										)
-											.filter(item => {
-												const addonsKey = (item.addons || [])
-													.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-													.sort()
-													.join('|');
-												const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-												return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
-											})
-											.map((item, index) => {
-												const addonsKey = (item.addons || [])
-													.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-													.sort()
-													.join('|');
-												const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-												const quantity = itemQuantities[itemKey] || 0;
-												return (
-													<div key={index} className="flex flex-col text-sm mb-3 p-2 bg-orange-100 rounded border border-orange-200">
-														<span className="text-orange-800 font-medium">
-															{item.name}
-															{item.addons && item.addons.length > 0 && (
-																<span className="ml-2 text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded-full">
-																	إضافات
-																</span>
-															)}
-															{' '}× {formatDecimal(quantity)}
-														</span>
-														<span className="font-bold text-orange-900 mt-1">
-															المجموع: {formatCurrency(item.price * quantity)}
-														</span>
-													</div>
-												);
-											})}
-										<div className="border-t border-orange-200 pt-2 mt-2">
-											<div className="flex justify-between font-medium text-orange-900">
-												<span>المجموع:</span>
-												<span>
-													{formatCurrency(
-														aggregateItemsWithPayments(
-															bill.orders || [],
-															bill.itemPayments || [],
-															bill.status,
-															bill.paid,
-															bill.total
-														)
-															.filter(item => {
-																const addonsKey = (item.addons || [])
-																	.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-																	.sort()
-																	.join('|');
-																const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-																return selectedItems[itemKey] && itemQuantities[itemKey] > 0;
-															})
-															.reduce((sum, item) => {
-																const addonsKey = (item.addons || [])
-																	.map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-																	.sort()
-																	.join('|');
-																const itemKey = `${item.name}|${item.price}|${addonsKey}`;
-																const quantity = itemQuantities[itemKey] || 0;
-																return sum + item.price * quantity;
-															}, 0)
-													)}
-												</span>
-											</div>
-										</div>
-									</div>
-								</div>
-							)}
-						</div>
-
-						<div className="p-6 border-t border-gray-200 flex justify-between">
-							<button
-								onClick={() => {
-									setShowPaymentModal(false);
-									setSelectedItems({});
-									setItemQuantities({});
-									setPaymentError(null);
-								}}
-								className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
-							>
-								إلغاء
-							</button>
-
-							<button
-								onClick={handlePaymentSubmit}
-								disabled={
-									isProcessingPayment ||
-									!Object.keys(selectedItems).some(id => selectedItems[id] && (itemQuantities[id] || 0) > 0)
-								}
-								className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
-							>
-								{isProcessingPayment ? (
-									<>
-										<svg
-											className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline"
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-										>
-											<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-											<path
-												className="opacity-75"
-												fill="currentColor"
-												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-											></path>
-										</svg>
-										جاري الدفع...
-									</>
-								) : (
-									'تأكيد الدفع'
-								)}
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
 		</div>
 	);
 };
