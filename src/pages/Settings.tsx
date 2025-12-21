@@ -87,15 +87,28 @@ const Settings: FC = () => {
   });
 
   // Notification settings state
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
-    sessionNotifications: true,
-    orderNotifications: true,
-    inventoryNotifications: true,
-    billingNotifications: true,
-    soundEnabled: true,
-    emailNotifications: false,
-    showNotificationCount: true,
-    autoMarkAsRead: false,
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
+    // تحميل الإعدادات من localStorage إذا كانت موجودة
+    try {
+      const savedSettings = localStorage.getItem('notificationSettings');
+      if (savedSettings) {
+        return JSON.parse(savedSettings);
+      }
+    } catch (error) {
+      console.error('خطأ في تحميل إعدادات الإشعارات:', error);
+    }
+    
+    // الإعدادات الافتراضية
+    return {
+      sessionNotifications: true,
+      orderNotifications: true,
+      inventoryNotifications: true,
+      billingNotifications: true,
+      soundEnabled: true,
+      emailNotifications: false,
+      showNotificationCount: true,
+      autoMarkAsRead: false,
+    };
   });
 
   // General settings state

@@ -247,9 +247,6 @@ syncQueueManager.enqueue({
   data: { ... }
 });
 
-// التحقق
-console.log(syncQueueManager.size());  // 1
-console.log(syncQueueManager.getStats());
 ```
 
 ## 🐛 Troubleshooting

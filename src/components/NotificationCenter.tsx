@@ -46,6 +46,14 @@ const NotificationCenter: React.FC = () => {
   const [playSound, setPlaySound] = useState(false);
   const [soundType, setSoundType] = useState<'default' | 'success' | 'warning' | 'error' | 'urgent'>('default');
   const [prevUnreadCount, setPrevUnreadCount] = useState(0);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try {
+      const settings = JSON.parse(localStorage.getItem('notificationSettings') || '{"soundEnabled": true}');
+      return settings.soundEnabled;
+    } catch {
+      return true;
+    }
+  });
   const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
 
   // احسب unreadCount دائماً من notifications في context
@@ -53,7 +61,7 @@ const NotificationCenter: React.FC = () => {
 
   // عند تحديث notifications من context، شغل الصوت فقط إذا زاد العدد
   useEffect(() => {
-    if (!isOpen && unreadCount > prevUnreadCount) {
+    if (!isOpen && unreadCount > prevUnreadCount && prevUnreadCount > 0) { // تأكد من أن هذا ليس التحميل الأولي
       // تحديد نوع الصوت حسب أولوية الإشعارات الجديدة
       const newNotifications = notifications.filter(n => !n.readBy.some((read: NotificationRead) => read.user === user?.id));
       const urgentNotification = newNotifications.find(n => n.priority === 'urgent');
@@ -140,8 +148,8 @@ const NotificationCenter: React.FC = () => {
       const previousCount = unreadCount;
       const newCount = data.filter(notification => isUnread(notification)).length;
 
-      // إذا كان هناك إشعارات جديدة، شغل الصوت
-      if (newCount > previousCount && !isOpen) {
+      // إذا كان هناك إشعارات جديدة، شغل الصوت (فقط إذا لم يكن هذا التحميل الأولي)
+      if (newCount > previousCount && !isOpen && previousCount > 0) {
         // تحديد نوع الصوت حسب أولوية الإشعارات الجديدة
         const newNotifications = data.filter(notification => isUnread(notification));
         const urgentNotification = newNotifications.find(n => n.priority === 'urgent');
@@ -348,6 +356,29 @@ const NotificationCenter: React.FC = () => {
           <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">الإشعارات</h3>
             <div className="flex items-center space-x-2 space-x-reverse">
+              {/* زر تحكم سريع في الصوت */}
+              <button
+                onClick={() => {
+                  const currentSettings = JSON.parse(localStorage.getItem('notificationSettings') || '{"soundEnabled": true}');
+                  const newSettings = { ...currentSettings, soundEnabled: !currentSettings.soundEnabled };
+                  localStorage.setItem('notificationSettings', JSON.stringify(newSettings));
+                  setSoundEnabled(newSettings.soundEnabled);
+                }}
+                className="p-1.5 sm:p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                title={soundEnabled ? 'إيقاف الصوت' : 'تشغيل الصوت'}
+              >
+                {soundEnabled ? (
+                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 12H5a1 1 0 01-1-1V9a1 1 0 011-1h4l5-5v16l-5-5z" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                )}
+              </button>
+              
               <button
                 onClick={handleMarkAllAsRead}
                 className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300"

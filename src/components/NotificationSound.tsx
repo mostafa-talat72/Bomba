@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface NotificationSoundProps {
   playSound: boolean;
@@ -14,6 +14,24 @@ const getAudioContext = () => {
     audioContext = new (window.AudioContext || win.webkitAudioContext)();
   }
   return audioContext;
+};
+
+// متغير عالمي لمنع تكرار الصوت
+let lastSoundTime = 0;
+const SOUND_COOLDOWN = 1000; // مللي ثانية (ثانية واحدة)
+
+// دالة للتحقق من إعدادات الصوت
+const isSoundEnabled = (): boolean => {
+  try {
+    const settings = localStorage.getItem('notificationSettings');
+    if (settings) {
+      const parsed = JSON.parse(settings);
+      return parsed.soundEnabled !== false; // افتراضياً مفعل
+    }
+    return true; // افتراضياً مفعل إذا لم توجد إعدادات
+  } catch {
+    return true; // افتراضياً مفعل في حالة الخطأ
+  }
 };
 
 // دالة مساعدة لتشغيل الصوت بعد تفاعل المستخدم إذا لزم الأمر
@@ -37,9 +55,33 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
   soundType = 'default',
   onSoundPlayed
 }) => {
+  const isPlayingRef = useRef(false);
+
   // تشغيل الصوت
   const playNotificationSound = async () => {
+    // التحقق من تمكين الصوت
+    if (!isSoundEnabled()) {
+      onSoundPlayed?.();
+      return;
+    }
+
+    // منع تكرار الصوت خلال فترة قصيرة
+    const now = Date.now();
+    if (now - lastSoundTime < SOUND_COOLDOWN) {
+      onSoundPlayed?.();
+      return;
+    }
+
+    // منع تشغيل أكثر من صوت في نفس الوقت
+    if (isPlayingRef.current) {
+      onSoundPlayed?.();
+      return;
+    }
+
     try {
+      isPlayingRef.current = true;
+      lastSoundTime = now;
+
       await resumeAudioContextIfNeeded();
       const ctx = getAudioContext();
       const oscillator = ctx.createOscillator();
@@ -68,21 +110,25 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
         case 'urgent':
           frequency = 800;
           duration = 0.5;
-          // نغمة متكررة للعاجل
-          for (let i = 0; i < 3; i++) {
+          // نغمة متكررة للعاجل (مع تحكم في التكرار)
+          for (let i = 0; i < 2; i++) { // تقليل التكرار من 3 إلى 2
             setTimeout(() => {
+              if (!isSoundEnabled()) return; // تحقق إضافي
               const urgentOscillator = ctx.createOscillator();
               const urgentGainNode = ctx.createGain();
               urgentOscillator.connect(urgentGainNode);
               urgentGainNode.connect(ctx.destination);
               urgentOscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
-              urgentGainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+              urgentGainNode.gain.setValueAtTime(0.15, ctx.currentTime); // تقليل الصوت
               urgentGainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
               urgentOscillator.start(ctx.currentTime);
               urgentOscillator.stop(ctx.currentTime + 0.1);
-            }, i * 150);
+            }, i * 200); // زيادة الفترة بين النغمات
           }
-          onSoundPlayed?.();
+          setTimeout(() => {
+            isPlayingRef.current = false;
+            onSoundPlayed?.();
+          }, duration * 1000);
           return;
         default:
           frequency = 800;
@@ -91,7 +137,7 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
       }
 
       oscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.setValueAtTime(0.2, ctx.currentTime); // تقليل مستوى الصوت
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
 
       oscillator.start(ctx.currentTime);
@@ -99,10 +145,12 @@ const NotificationSound: React.FC<NotificationSoundProps> = ({
 
       // تنظيف بعد التشغيل
       setTimeout(() => {
+        isPlayingRef.current = false;
         onSoundPlayed?.();
       }, duration * 1000);
 
     } catch (error) {
+      isPlayingRef.current = false;
       onSoundPlayed?.();
     }
   };

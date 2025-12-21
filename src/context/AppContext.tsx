@@ -1952,6 +1952,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateNotificationSettings = async (settings: any): Promise<boolean> => {
     try {
+      // حفظ الإعدادات في localStorage أولاً
+      localStorage.setItem('notificationSettings', JSON.stringify(settings));
+      
       const response = await api.updateNotificationSettings(settings);
       if (response.success) {
         showNotification('تم حفظ إعدادات الإشعارات بنجاح', 'success');
@@ -1961,8 +1964,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return false;
       }
     } catch (error) {
-      showNotification('فشل في حفظ إعدادات الإشعارات', 'error');
-      return false;
+      // حتى لو فشل الحفظ في الخادم، الإعدادات محفوظة محلياً
+      showNotification('تم حفظ إعدادات الإشعارات محلياً', 'warning');
+      return true; // نعتبرها نجحت لأن الإعدادات محفوظة محلياً
     }
   };
 
