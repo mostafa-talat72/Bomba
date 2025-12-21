@@ -398,6 +398,12 @@ const Billing = () => {
         // Update with fresh data from server
         setSelectedBill({ ...data.bill });
         
+        // إذا كانت نافذة الدفع مفتوحة، نحدث مبلغ الدفع أيضاً
+        if (showPaymentModal) {
+          setPaymentAmount(data.bill.remaining?.toString() || '0');
+          setOriginalAmount(data.bill.remaining?.toString() || '0');
+        }
+        
         // Force re-render of components that depend on bill data
         setTimeout(() => {
           setSelectedBill(prev => prev ? { ...prev } : null);
@@ -416,6 +422,12 @@ const Billing = () => {
       if (selectedBill && data.bill && (data.bill._id === selectedBill._id || data.bill.id === selectedBill.id)) {
         // Update with fresh data including itemPayments
         setSelectedBill({ ...data.bill });
+        
+        // إذا كانت نافذة الدفع مفتوحة، نحدث مبلغ الدفع أيضاً
+        if (showPaymentModal) {
+          setPaymentAmount(data.bill.remaining?.toString() || '0');
+          setOriginalAmount(data.bill.remaining?.toString() || '0');
+        }
       }
     });
 
@@ -491,6 +503,15 @@ const Billing = () => {
     }
   }, [bills, selectedBill, showPaymentModal, showPartialPaymentModal, showSessionPaymentModal]);
 
+  // تحديث مبلغ الدفع تلقائياً عند تغيير الفاتورة المحددة
+  useEffect(() => {
+    if (selectedBill && showPaymentModal && selectedBill.remaining !== undefined) {
+      // تحديث مبلغ الدفع ليكون المبلغ المتبقي
+      setPaymentAmount(selectedBill.remaining.toString());
+      setOriginalAmount(selectedBill.remaining.toString());
+    }
+  }, [selectedBill?.remaining, selectedBill?.paid, selectedBill?.total, showPaymentModal]);
+
   // تحديث تلقائي لمبالغ الجلسات والفواتير كل دقيقة إذا كان هناك جلسة نشطة
   useEffect(() => {
     let interval: Interval | null = null;
@@ -498,6 +519,7 @@ const Billing = () => {
     const updateActiveSessionsAndBills = async () => {
       const activeSessionBills = bills.filter(bill => hasActiveSession(bill));
       if (activeSessionBills.length === 0) return;
+      
       await Promise.all(
         activeSessionBills.flatMap(bill =>
           bill.sessions
@@ -514,6 +536,20 @@ const Billing = () => {
                 const billRes = await api.getBill(bill._id || bill.id);
                 if (billRes.success && billRes.data) {
                   setSelectedBill(billRes.data);
+                }
+              }
+              // إذا كانت نافذة الدفع مفتوحة، نحدث الفاتورة المحددة مع تحديث مبلغ الدفع
+              else if (selectedBill && 
+                       (selectedBill._id === bill._id || selectedBill.id === bill.id) &&
+                       showPaymentModal) {
+                const billRes = await api.getBill(bill._id || bill.id);
+                if (billRes.success && billRes.data) {
+                  setSelectedBill(billRes.data);
+                  // تحديث مبلغ الدفع إذا لم يكن المستخدم قد عدله يدوياً
+                  if (paymentAmount === originalAmount) {
+                    setPaymentAmount(billRes.data.remaining?.toString() || '0');
+                    setOriginalAmount(billRes.data.remaining?.toString() || '0');
+                  }
                 }
               }
             })
@@ -533,7 +569,7 @@ const Billing = () => {
       if (interval) clearInterval(interval);
     };
     // الاعتماد فقط على وجود جلسة نشطة وحالة النوافذ
-  }, [bills.length, bills.map(b => (b.sessions || []).map(s => s.status).join(',')).join(','), showPaymentModal, showPartialPaymentModal, showSessionPaymentModal]);
+  }, [bills.length, bills.map(b => (b.sessions || []).map(s => s.status).join(',')).join(','), showPaymentModal, showPartialPaymentModal, showSessionPaymentModal, selectedBill?._id, selectedBill?.id, paymentAmount, originalAmount]);
 
   // تحديث تلقائي للجلسات النشطة في نافذة الدفع الجزئي
   useEffect(() => {
@@ -600,6 +636,7 @@ const Billing = () => {
     setShowPaymentModal(false);
     setSelectedBill(null);
     setPaymentAmount('');
+    setOriginalAmount('');
     setPaymentMethod('cash');
     setPaymentReference('');
     setDiscountPercentage('');
@@ -654,6 +691,8 @@ const Billing = () => {
     }
     
     setDiscountPercentage('');
+    setPaymentMethod('cash');
+    setPaymentReference('');
     setShowPaymentModal(true);
 
     // لا حاجة لتحديث حالة الفاتورة هنا - سيتم تحديثها بعد الدفع
@@ -2200,19 +2239,24 @@ const Billing = () => {
                             onClick={() => {
                               if (selectedBill?.remaining && selectedBill.remaining > 0) {
                                 setPaymentAmount(selectedBill.remaining.toString());
+                                setOriginalAmount(selectedBill.remaining.toString());
+                                setDiscountPercentage('');
+                                setPaymentMethod('cash');
+                                setPaymentReference('');
                               }
-                              setPaymentMethod('cash');
                             }}
                             disabled={selectedBill ? hasActiveSession(selectedBill) : false}
-                            className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 ${
+                            className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 cursor-pointer ${
                               selectedBill && hasActiveSession(selectedBill)
                                 ? 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                                : 'border-orange-200 dark:border-orange-600 hover:border-orange-300 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20'
                             }`}
                           >
                             <div className="text-2xl mb-2">💰</div>
                             <div className="font-medium dark:text-gray-100">دفع الفاتورة بالكامل</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">دفع المبلغ المتبقي بالكامل</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-300">
+                              {selectedBill?.remaining ? `دفع ${formatCurrency(selectedBill.remaining)}` : 'دفع المبلغ المتبقي بالكامل'}
+                            </div>
                             {selectedBill && hasActiveSession(selectedBill) && (
                               <div className="text-xs text-red-500 dark:text-red-400 mt-1">غير متاح - جلسة نشطة</div>
                             )}
