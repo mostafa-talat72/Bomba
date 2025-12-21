@@ -716,18 +716,26 @@ const Billing = () => {
     try {
       setIsProcessingPayment(true);
       
+      // حساب الإجمالي بعد الخصم إذا وُجد
+      let effectiveTotal = selectedBill.total || 0;
+      let discountAmount = 0;
+      
+      if (discountPercentage && parseFloat(discountPercentage) > 0) {
+        discountAmount = (selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100);
+        effectiveTotal = (selectedBill.total || 0) - discountAmount;
+      }
+      
       // Calculate the new paid amount (previous paid + current payment)
       const newPaidAmount = (selectedBill.paid || 0) + parseFloat(paymentAmount);
-      const billTotal = selectedBill.total || 0;
       
-      // Calculate remaining amount
-      const newRemaining = Math.max(0, billTotal - newPaidAmount);
+      // Calculate remaining amount based on effective total (after discount)
+      const newRemaining = Math.max(0, effectiveTotal - newPaidAmount);
       
       // Determine the new status based on the payment
       let newStatus = selectedBill.status || 'draft';
       
-      // إذا كان المتبقي = 0 أو المدفوع >= الإجمالي، الفاتورة مدفوعة
-      if (newRemaining === 0 || newPaidAmount >= billTotal) {
+      // إذا كان المتبقي = 0 أو المدفوع >= الإجمالي الفعلي (بعد الخصم)، الفاتورة مدفوعة
+      if (newRemaining === 0 || newPaidAmount >= effectiveTotal) {
         // التحقق من عدم وجود جلسات نشطة
         if (!hasActiveSession(selectedBill)) {
           newStatus = 'paid';
@@ -745,15 +753,14 @@ const Billing = () => {
         paymentAmount: parseFloat(paymentAmount),
         method: paymentMethod,
         reference: paymentReference,
-        // Include the total to ensure backend calculates correctly
-        total: billTotal
+        // Include the original total and effective total
+        total: selectedBill.total || 0,
+        effectiveTotal: effectiveTotal
       };
 
       // Add discount percentage if provided
-      if (discountPercentage) {
+      if (discountPercentage && parseFloat(discountPercentage) > 0) {
         paymentData.discountPercentage = parseFloat(discountPercentage);
-        // Calculate the discount amount for display
-        const discountAmount = (selectedBill.subtotal || 0) * (parseFloat(discountPercentage) / 100);
         paymentData.discount = discountAmount;
       }
 
@@ -2339,26 +2346,93 @@ const Billing = () => {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المبلغ المتبقي بعد الدفع</label>
                             <input
                               type="text"
-                              value={formatCurrency(Math.max(0, (selectedBill?.remaining || 0) - parseFloat(paymentAmount)))}
+                              value={(() => {
+                                if (!selectedBill || !paymentAmount) return formatCurrency(0);
+                                
+                                // حساب الإجمالي بعد الخصم
+                                let effectiveTotal = selectedBill.total || 0;
+                                if (discountPercentage && parseFloat(discountPercentage) > 0) {
+                                  const discountAmount = (selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100);
+                                  effectiveTotal = (selectedBill.total || 0) - discountAmount;
+                                }
+                                
+                                // حساب المبلغ المدفوع الجديد
+                                const newPaidAmount = (selectedBill.paid || 0) + parseFloat(paymentAmount);
+                                
+                                // حساب المتبقي بناءً على الإجمالي الفعلي
+                                const remaining = Math.max(0, effectiveTotal - newPaidAmount);
+                                
+                                return formatCurrency(remaining);
+                              })()}
                               className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                               disabled
                             />
                           </div>
 
                           {/* مؤشر حالة الدفع */}
-                          <div className="p-3 rounded-lg border bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700">
-                            <div className="flex items-center">
-                              <span className="text-lg mr-2 text-green-600 dark:text-green-400">✅</span>
-                              <div>
-                                <p className="font-medium text-green-800 dark:text-green-200">
-                                  ستصبح الفاتورة مدفوعة بالكامل!
-                                </p>
-                                <p className="text-sm text-green-600 dark:text-green-300">
-                                  المبلغ المتبقي سيكون صفر
-                                </p>
+                          {(() => {
+                            if (!selectedBill || !paymentAmount) return null;
+                            
+                            // حساب الإجمالي بعد الخصم
+                            let effectiveTotal = selectedBill.total || 0;
+                            if (discountPercentage && parseFloat(discountPercentage) > 0) {
+                              const discountAmount = (selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100);
+                              effectiveTotal = (selectedBill.total || 0) - discountAmount;
+                            }
+                            
+                            // حساب المبلغ المدفوع الجديد
+                            const newPaidAmount = (selectedBill.paid || 0) + parseFloat(paymentAmount);
+                            
+                            // حساب المتبقي بناءً على الإجمالي الفعلي
+                            const remaining = Math.max(0, effectiveTotal - newPaidAmount);
+                            
+                            const willBePaidInFull = remaining === 0 || newPaidAmount >= effectiveTotal;
+                            
+                            return (
+                              <div className={`p-3 rounded-lg border ${
+                                willBePaidInFull 
+                                  ? 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700'
+                                  : 'bg-yellow-50 dark:bg-yellow-900 border-yellow-200 dark:border-yellow-700'
+                              }`}>
+                                <div className="flex items-center">
+                                  <span className={`text-lg mr-2 ${
+                                    willBePaidInFull 
+                                      ? 'text-green-600 dark:text-green-400'
+                                      : 'text-yellow-600 dark:text-yellow-400'
+                                  }`}>
+                                    {willBePaidInFull ? '✅' : '💰'}
+                                  </span>
+                                  <div>
+                                    <p className={`font-medium ${
+                                      willBePaidInFull 
+                                        ? 'text-green-800 dark:text-green-200'
+                                        : 'text-yellow-800 dark:text-yellow-200'
+                                    }`}>
+                                      {willBePaidInFull 
+                                        ? 'ستصبح الفاتورة مدفوعة بالكامل!'
+                                        : 'ستصبح الفاتورة مدفوعة جزئياً'
+                                      }
+                                    </p>
+                                    <p className={`text-sm ${
+                                      willBePaidInFull 
+                                        ? 'text-green-600 dark:text-green-300'
+                                        : 'text-yellow-600 dark:text-yellow-300'
+                                    }`}>
+                                      {willBePaidInFull 
+                                        ? 'المبلغ المتبقي سيكون صفر'
+                                        : `المبلغ المتبقي سيكون ${formatCurrency(remaining)}`
+                                      }
+                                    </p>
+                                    {discountPercentage && parseFloat(discountPercentage) > 0 && (
+                                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                        تم تطبيق خصم {discountPercentage}% - وفرت {formatCurrency((selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100))}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
+                            );
+                          })()}
                         </div>
                       )}
 
