@@ -1,7 +1,31 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
 
-export const printBill = (bill: Bill, organizationName?: string) => {
+export const printBill = async (bill: Bill, fallbackOrganizationName?: string) => {
+  // جلب اسم المنشأة من بيانات الفاتورة أو استخدام الاحتياطي
+  let organizationName = fallbackOrganizationName || 'نظام إدارة المقاهي';
+  
+  // إذا كانت المنشأة موجودة في بيانات الفاتورة
+  if (bill.organization) {
+    if (typeof bill.organization === 'object' && bill.organization.name) {
+      // إذا كانت المنشأة populated object
+      organizationName = bill.organization.name;
+    } else if (typeof bill.organization === 'string') {
+      // إذا كانت المنشأة string ID فقط، نحاول جلب البيانات
+      try {
+        const response = await fetch(`/api/organizations/${bill.organization}`);
+        if (response.ok) {
+          const orgData = await response.json();
+          if (orgData.success && orgData.data?.name) {
+            organizationName = orgData.data.name;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch organization name:', error);
+        // استخدام الاسم الاحتياطي في حالة الفشل
+      }
+    }
+  }
   // Format date in Arabic
   const formatDate = (dateString: string | Date) => {
     const date = new Date(dateString);
@@ -353,7 +377,7 @@ export const printBill = (bill: Bill, organizationName?: string) => {
     </head>
     <body>
       <div class="header">
-        ${organizationName ? `<div class="org-name">${organizationName}</div>` : ''}
+        ${organizationName ? `<div class="org-name">${organizationName}</div>` : '<div class="org-name">نظام إدارة المقاهي</div>'}
         <div class="title">فاتورة ${bill.billNumber || ''}</div>
         <div class="info">${formatDate(bill.createdAt || new Date())}</div>
         ${bill.customerName ? `<div class="info">العميل: ${bill.customerName}</div>` : ''}
@@ -393,7 +417,7 @@ export const printBill = (bill: Bill, organizationName?: string) => {
       <div class="thank-you">شكراً لزيارتكم</div>
       
       <div class="footer">
-        <div><strong style="font-weight: 900; font-size: 14px;">العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
+        <div><strong style="font-weight: 900; font-size: 14px;">تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
         <div><strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong></div>
       </div>
 
@@ -418,33 +442,77 @@ export const printBill = (bill: Bill, organizationName?: string) => {
     </html>
   `;
 
-  // Open print window
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.open();
-    printWindow.document.write(receiptHTML);
-    printWindow.document.close();
-
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.onbeforeunload = null;
-        printWindow.onafterprint = () => {
-          setTimeout(() => {
-            printWindow.close();
-          }, 100);
-        };
+  // Create a hidden iframe for printing
+  const printFrame = document.createElement('iframe');
+  printFrame.style.position = 'absolute';
+  printFrame.style.top = '-1000px';
+  printFrame.style.left = '-1000px';
+  printFrame.style.width = '0';
+  printFrame.style.height = '0';
+  printFrame.style.border = 'none';
+  
+  document.body.appendChild(printFrame);
+  
+  const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+  if (frameDoc) {
+    frameDoc.open();
+    frameDoc.write(receiptHTML);
+    frameDoc.close();
+    
+    // Wait for content to load then print
+    setTimeout(() => {
+      try {
+        printFrame.contentWindow?.focus();
+        printFrame.contentWindow?.print();
         
-        printWindow.print();
-        
+        // Clean up after printing
         setTimeout(() => {
-          if (!printWindow.closed) {
-            printWindow.close();
-          }
-        }, 5000);
-      }, 500);
-    };
+          document.body.removeChild(printFrame);
+        }, 1000);
+      } catch (error) {
+        console.error('Print error:', error);
+        // Fallback to opening in new window if iframe printing fails
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.open();
+          printWindow.document.write(receiptHTML);
+          printWindow.document.close();
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.print();
+              setTimeout(() => {
+                if (!printWindow.closed) {
+                  printWindow.close();
+                }
+              }, 1000);
+            }, 500);
+          };
+        }
+        // Clean up iframe
+        document.body.removeChild(printFrame);
+      }
+    }, 500);
   } else {
-    alert('الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة');
+    // Fallback to original method if iframe fails
+    document.body.removeChild(printFrame);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(receiptHTML);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          setTimeout(() => {
+            if (!printWindow.closed) {
+              printWindow.close();
+            }
+          }, 1000);
+        }, 500);
+      };
+    } else {
+      alert('الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة');
+    }
   }
 };
 

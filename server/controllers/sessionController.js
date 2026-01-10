@@ -408,7 +408,7 @@ const sessionController = {
 
             // Check if device is already in use
             const existingSession = await Session.findOne({
-                deviceNumber,
+                deviceId: deviceId,
                 status: "active",
             });
 
@@ -1316,7 +1316,7 @@ const sessionController = {
 
             // Check if device is already in use
             const existingSession = await Session.findOne({
-                deviceNumber,
+                deviceId: deviceId,
                 status: "active",
             });
 

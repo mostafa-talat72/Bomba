@@ -54,17 +54,72 @@ function validateDocumentForSync(doc, collectionName) {
     if (collectionName === 'devices') {
         // Check required fields for devices
         if (!doc.name || (typeof doc.name === 'string' && doc.name.trim() === '')) {
-            Logger.warn(`🚫 Sync blocked: Device without name`, { docId: doc._id });
+            Logger.error(`🚫 Sync blocked: Device without name`, { docId: doc._id, doc });
             return false;
         }
         
         if (!doc.organization) {
-            Logger.warn(`🚫 Sync blocked: Device without organization`, { docId: doc._id });
+            Logger.error(`🚫 Sync blocked: Device without organization`, { docId: doc._id, doc });
             return false;
         }
         
         if (!doc.number || (typeof doc.number === 'string' && doc.number.trim() === '')) {
-            Logger.warn(`🚫 Sync blocked: Device without number`, { docId: doc._id });
+            Logger.error(`🚫 Sync blocked: Device without number`, { docId: doc._id, doc });
+            return false;
+        }
+
+        if (!doc.status) {
+            Logger.error(`🚫 Sync blocked: Device without status`, { docId: doc._id, doc });
+            return false;
+        }
+
+        // Check type-specific required fields
+        if (doc.type === 'computer' && (!doc.hourlyRate || doc.hourlyRate <= 0)) {
+            Logger.error(`🚫 Sync blocked: Computer device without valid hourlyRate`, { docId: doc._id, doc });
+            return false;
+        }
+
+        if ((doc.type === 'playstation' || !doc.type) && (!doc.playstationRates || typeof doc.playstationRates !== 'object' || Object.keys(doc.playstationRates).length === 0)) {
+            Logger.error(`🚫 Sync blocked: PlayStation device without valid playstationRates`, { docId: doc._id, doc });
+            return false;
+        }
+    }
+    
+    // Special validation for bills collection
+    if (collectionName === 'bills') {
+        // Check required fields for bills
+        if (!doc.organization) {
+            Logger.error(`🚫 Sync blocked: Bill without organization`, { docId: doc._id, doc });
+            return false;
+        }
+        
+        if (!doc.createdBy) {
+            Logger.error(`🚫 Sync blocked: Bill without createdBy`, { docId: doc._id, doc });
+            return false;
+        }
+
+        // Check valid status
+        const validStatuses = ['draft', 'partial', 'paid', 'cancelled', 'overdue'];
+        if (doc.status && !validStatuses.includes(doc.status)) {
+            Logger.error(`🚫 Sync blocked: Bill with invalid status`, { docId: doc._id, status: doc.status, doc });
+            return false;
+        }
+
+        // Check valid type
+        const validTypes = ['cafe', 'playstation', 'computer'];
+        if (doc.type && !validTypes.includes(doc.type)) {
+            Logger.error(`🚫 Sync blocked: Bill with invalid type`, { docId: doc._id, type: doc.type, doc });
+            return false;
+        }
+
+        // Check numeric fields
+        if (doc.subtotal !== undefined && (typeof doc.subtotal !== 'number' || doc.subtotal < 0)) {
+            Logger.error(`🚫 Sync blocked: Bill with invalid subtotal`, { docId: doc._id, subtotal: doc.subtotal, doc });
+            return false;
+        }
+
+        if (doc.total !== undefined && (typeof doc.total !== 'number' || doc.total < 0)) {
+            Logger.error(`🚫 Sync blocked: Bill with invalid total`, { docId: doc._id, total: doc.total, doc });
             return false;
         }
     }

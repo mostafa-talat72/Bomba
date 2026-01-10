@@ -241,32 +241,12 @@ const Device = mongoose.model("Device", deviceSchema);
 
 // Auto-fix devices on startup (non-blocking)
 setImmediate(() => {
-    Device.fixMissingFields().catch(err => {
-        console.error('Failed to auto-fix devices on startup:', err);
-    });
-});
-
-// Clean up broken devices every 30 seconds (temporary solution)
-const cleanupInterval = setInterval(async () => {
-    try {
-        const result = await Device.deleteMany({
-            $or: [
-                { name: { $exists: false } },
-                { name: null },
-                { name: '' },
-                { organization: { $exists: false } },
-                { organization: null }
-            ]
+    // Only run if mongoose is connected
+    if (mongoose.connection.readyState === 1) {
+        Device.fixMissingFields().catch(err => {
+            console.error('Failed to auto-fix devices on startup:', err);
         });
-        
-    } catch (error) {
-        console.error('Error in device cleanup:', error);
     }
-}, 30000); // كل 30 ثانية
-
-// Clear interval after 10 minutes to avoid permanent cleanup
-setTimeout(() => {
-    clearInterval(cleanupInterval);
-}, 600000); // 10 دقائق
+});
 
 export default Device;

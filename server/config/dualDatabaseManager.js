@@ -90,11 +90,13 @@ class DualDatabaseManager {
 
             const options = {
                 maxPoolSize: 5, // Smaller pool for backup connection
-                serverSelectionTimeoutMS: 10000,
-                socketTimeoutMS: 45000,
+                serverSelectionTimeoutMS: 30000, // Increased from 10s to 30s
+                socketTimeoutMS: 45000, // Increased timeout
                 family: 4,
                 retryWrites: true,
                 w: "majority",
+                minPoolSize: 1,
+                maxIdleTimeMS: 30000
             };
 
             // Create separate connection for Atlas
@@ -104,7 +106,7 @@ class DualDatabaseManager {
             await new Promise((resolve, reject) => {
                 this.atlasConnection.once('open', resolve);
                 this.atlasConnection.once('error', reject);
-                setTimeout(() => reject(new Error('Atlas connection timeout after 15 seconds')), 15000);
+                setTimeout(() => reject(new Error('Atlas connection timeout after 35 seconds')), 35000);
             });
             
             this.isAtlasConnected = true;

@@ -218,7 +218,10 @@ export interface Bill {
   qrCodeUrl?: string;
   notes?: string;
   dueDate?: Date;
-  organization?: string; // إضافة حقل المنظمة
+  organization?: {
+    _id: string;
+    name: string;
+  } | string; // يمكن أن يكون object مع populate أو string فقط
   createdBy: User;
   createdAt: Date;
 }

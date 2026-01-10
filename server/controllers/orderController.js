@@ -71,9 +71,10 @@ export const getOrders = async (req, res) => {
 
         // Selective field projection - only essential fields + bill status + items
         const orders = await Order.find(query)
-            .select('orderNumber table status total createdAt bill items')
+            .select('orderNumber table status total createdAt bill items organization')
             .populate('table', 'number name')
             .populate('bill', 'status') // إضافة populate للفاتورة لمعرفة حالتها
+            .populate('organization', 'name') // إضافة populate للمنشأة
             .sort({ createdAt: -1 })
             .lean(); // Convert to plain JS objects for better performance - جلب جميع الطلبات بدون حد
 
@@ -463,6 +464,7 @@ export const createOrder = async (req, res) => {
         // Populate only essential fields for response
         const populatedOrder = await Order.findById(order._id)
             .populate("table", "number name")
+            .populate("organization", "name")
             .lean();
 
         // إرسال الاستجابة فوراً قبل العمليات الإضافية
@@ -973,6 +975,7 @@ export const updateOrder = async (req, res) => {
         // Populate only essential fields for response
         const updatedOrder = await Order.findById(order._id)
             .populate("table", "number name")
+            .populate("organization", "name")
             .lean();
 
         // Update bill totals in background (non-blocking)

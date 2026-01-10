@@ -249,6 +249,7 @@ export const getBill = async (req, res) => {
                         },
                     ],
                 })
+                .populate("organization", "name") // إضافة populate للمنشأة
                 .populate("createdBy", "name")
                 .populate("updatedBy", "name")
                 .populate("payments.user", "name")
@@ -337,6 +338,7 @@ export const getBill = async (req, res) => {
                     },
                 ],
             })
+            .populate("organization", "name") // إضافة populate للمنشأة
             .populate("createdBy", "name")
             .populate("updatedBy", "name")
             .populate("payments.user", "name")
@@ -350,30 +352,44 @@ export const getBill = async (req, res) => {
             });
         }
 
-        // Generate QR code if it doesn't exist
-        if (!bill.qrCode) {
-            Logger.info(`🔧 [getBill] Generating QR code for bill: ${bill.billNumber}`);
-            await bill.generateQRCode();
-            Logger.info(`✅ [getBill] QR code generated:`, {
-                hasQrCode: !!bill.qrCode,
-                qrCodeLength: bill.qrCode?.length,
-                qrCodeUrl: bill.qrCodeUrl
-            });
-            // Save the QR code
-            await Bill.updateOne(
-                { _id: bill._id },
-                {
-                    $set: {
-                        qrCode: bill.qrCode,
-                        qrCodeUrl: bill.qrCodeUrl,
-                    }
-                },
-                { timestamps: false }
-            );
-            Logger.info(`💾 [getBill] QR code saved to database`);
-        } else {
-            Logger.info(`✓ [getBill] QR code already exists for bill: ${bill.billNumber}`);
+        // Generate QR code if it doesn't exist or regenerate with current domain
+        Logger.info(`🔧 [getBill] Generating QR code for bill: ${bill.billNumber}`);
+        
+        // استخراج الدومين من الـ request وتحويله للفرونت إند
+        const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+        const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
+        
+        // تحويل port الباك إند للفرونت إند
+        let frontendHost = host;
+        if (host.includes(':5000')) {
+            frontendHost = host.replace(':5000', ':3000');
+        } else if (host.includes('5000')) {
+            // للحالات اللي فيها port في subdomain أو path
+            frontendHost = host.replace('5000', '3000');
         }
+        
+        const baseUrl = process.env.FRONTEND_URL || `${protocol}://${frontendHost}`;
+        
+        // إعادة إنشاء QR code دائماً بناءً على الدومين الحالي
+        await bill.generateQRCode(baseUrl, true);
+        Logger.info(`✅ [getBill] QR code generated:`, {
+            hasQrCode: !!bill.qrCode,
+            qrCodeLength: bill.qrCode?.length,
+            qrCodeUrl: bill.qrCodeUrl,
+            baseUrl: baseUrl
+        });
+        // Save the QR code
+        await Bill.updateOne(
+            { _id: bill._id },
+            {
+                $set: {
+                    qrCode: bill.qrCode,
+                    qrCodeUrl: bill.qrCodeUrl,
+                }
+            },
+            { timestamps: false }
+        );
+        Logger.info(`💾 [getBill] QR code saved to database`);
 
         // إصلاح sessionPayments وحساب السعر الحالي للجلسات النشطة
         if (bill.sessions && bill.sessions.length > 0 && bill.sessionPayments && bill.sessionPayments.length > 0) {
@@ -1092,30 +1108,44 @@ export const addPayment = async (req, res) => {
             }
         }
 
-        // Generate QR code if it doesn't exist
-        if (!bill.qrCode) {
-            Logger.info(`🔧 [addPayment] Generating QR code for bill: ${bill.billNumber}`);
-            await bill.generateQRCode();
-            Logger.info(`✅ [addPayment] QR code generated:`, {
-                hasQrCode: !!bill.qrCode,
-                qrCodeLength: bill.qrCode?.length,
-                qrCodeUrl: bill.qrCodeUrl
-            });
-            // Save the QR code
-            await Bill.updateOne(
-                { _id: bill._id },
-                {
-                    $set: {
-                        qrCode: bill.qrCode,
-                        qrCodeUrl: bill.qrCodeUrl,
-                    }
-                },
-                { timestamps: false }
-            );
-            Logger.info(`💾 [addPayment] QR code saved to database`);
-        } else {
-            Logger.info(`✓ [addPayment] QR code already exists for bill: ${bill.billNumber}`);
+        // Generate QR code if it doesn't exist or regenerate with current domain
+        Logger.info(`🔧 [addPayment] Generating QR code for bill: ${bill.billNumber}`);
+        
+        // استخراج الدومين من الـ request وتحويله للفرونت إند
+        const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+        const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
+        
+        // تحويل port الباك إند للفرونت إند
+        let frontendHost = host;
+        if (host.includes(':5000')) {
+            frontendHost = host.replace(':5000', ':3000');
+        } else if (host.includes('5000')) {
+            // للحالات اللي فيها port في subdomain أو path
+            frontendHost = host.replace('5000', '3000');
         }
+        
+        const baseUrl = process.env.FRONTEND_URL || `${protocol}://${frontendHost}`;
+        
+        // إعادة إنشاء QR code دائماً بناءً على الدومين الحالي
+        await bill.generateQRCode(baseUrl, true);
+        Logger.info(`✅ [addPayment] QR code generated:`, {
+            hasQrCode: !!bill.qrCode,
+            qrCodeLength: bill.qrCode?.length,
+            qrCodeUrl: bill.qrCodeUrl,
+            baseUrl: baseUrl
+        });
+        // Save the QR code
+        await Bill.updateOne(
+            { _id: bill._id },
+            {
+                $set: {
+                    qrCode: bill.qrCode,
+                    qrCodeUrl: bill.qrCodeUrl,
+                }
+            },
+            { timestamps: false }
+        );
+        Logger.info(`💾 [addPayment] QR code saved to database`);
 
         // Populate only essential fields for response
         await bill.populate([

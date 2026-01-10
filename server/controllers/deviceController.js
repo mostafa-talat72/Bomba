@@ -1,5 +1,6 @@
 import Device from "../models/Device.js";
 import Session from "../models/Session.js";
+import DeviceValidator from "../services/validation/deviceValidator.js";
 
 const deviceController = {
     // Get all devices with filtering and pagination
@@ -203,7 +204,7 @@ const deviceController = {
                 }
             }
 
-            // Create new device
+            // Validate device data using the validation service
             const deviceData = {
                 name: name.trim(),
                 number: numericNumber,
@@ -212,6 +213,7 @@ const deviceController = {
                 controllers: controllers || 2,
                 organization: req.user.organization,
             };
+            
             if ((type === "computer") && hourlyRate !== undefined) {
                 deviceData.hourlyRate = hourlyRate;
             }
@@ -224,7 +226,26 @@ const deviceController = {
                 deviceData.playstationRates = convertedRates;
             }
 
-            const device = new Device(deviceData);
+            // Use the validation service
+            const validation = DeviceValidator.validateDevice(deviceData, 'insert');
+            if (!validation.success) {
+                return res.status(400).json({
+                    success: false,
+                    message: "بيانات الجهاز غير صحيحة",
+                    error: validation.errors.join(", "),
+                    validationErrors: validation.errors
+                });
+            }
+
+            // Log warnings if any
+            if (validation.warnings.length > 0) {
+                console.warn('Device validation warnings:', validation.warnings);
+            }
+
+            // Sanitize the device data
+            const sanitizedData = DeviceValidator.sanitizeDevice(deviceData);
+
+            const device = new Device(sanitizedData);
             await device.save();
 
             res.status(201).json({
@@ -509,7 +530,7 @@ const deviceController = {
 
             // Check if device has any sessions (for data integrity)
             const sessionCount = await Session.countDocuments({
-                deviceNumber: device.number,
+                deviceId: device._id,
                 organization: req.user.organization,
             });
 

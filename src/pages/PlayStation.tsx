@@ -260,6 +260,16 @@ const PlayStation: React.FC = () => {
 
   // دوال التعديل والحذف
   const handleEditDevice = (device: any) => {
+    // التحقق من وجود جلسة نشطة على الجهاز
+    const activeSession = sessions.find(session => 
+      session.deviceId === device._id && session.status === 'active'
+    );
+    
+    if (activeSession) {
+      showNotification('لا يمكن تعديل الجهاز أثناء وجود جلسة نشطة عليه', 'error');
+      return;
+    }
+    
     setEditingDevice({
       ...device,
       number: typeof device.number === 'string' ? 
@@ -1536,7 +1546,13 @@ const PlayStation: React.FC = () => {
                 <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <button
                     onClick={() => handleEditDevice(device)}
-                    className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
+                    disabled={isActive}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2 ${
+                      isActive 
+                        ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                        : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white'
+                    }`}
+                    title={isActive ? 'لا يمكن تعديل جهاز نشط' : 'تعديل الجهاز'}
                   >
                     <Edit className="h-4 w-4" />
                     تعديل

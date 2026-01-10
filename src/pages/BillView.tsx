@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Printer } from 'lucide-react';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
+import { printBill } from '../utils/printBill';
+import { useApp } from '../context/AppContext';
 import { io } from 'socket.io-client';
 
 interface OrderItem {
@@ -191,6 +193,7 @@ const normalizeBillDates = (bill: Record<string, unknown>): BillDetails => ({
 
 const BillView = () => {
 	const { billId } = useParams<{ billId: string }>();
+	const { user } = useApp();
 	const [bill, setBill] = useState<BillDetails | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -419,15 +422,29 @@ const BillView = () => {
 							<span className={`px-3 py-1 rounded-full text-sm font-medium ${bill.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
 								{bill.status === 'paid' ? 'مدفوع' : 'غير مدفوع'}
 							</span>
-							{/* زر عرض الطلبات */}
-							{bill.orders && bill.orders.length > 0 && (
+							
+							{/* أزرار الإجراءات */}
+							<div className="flex items-center gap-2">
+								{/* زر الطباعة */}
 								<button
-									className="px-3 py-1 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded text-xs"
-									onClick={() => setShowOrdersModal(true)}
+									className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs flex items-center gap-1 transition-colors"
+									onClick={() => printBill(bill as any, user?.organizationName).catch(console.error)}
+									title="طباعة الفاتورة"
 								>
-									عرض جميع الطلبات
+									<Printer className="h-3 w-3" />
+									طباعة
 								</button>
-							)}
+								
+								{/* زر عرض الطلبات */}
+								{bill.orders && bill.orders.length > 0 && (
+									<button
+										className="px-3 py-1 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded text-xs transition-colors"
+										onClick={() => setShowOrdersModal(true)}
+									>
+										عرض جميع الطلبات
+									</button>
+								)}
+							</div>
 						</div>
 					</div>
 					{/* Table of items with paid info */}

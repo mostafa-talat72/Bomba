@@ -34,23 +34,51 @@ interface Order {
   customerName?: string;
   items: OrderItem[];
   totalAmount?: number;
+  finalAmount?: number;
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+  organization?: string | { _id: string; name: string };
 }
 
 interface MenuSection {
   _id: string;
+  id?: string;
   name: string;
 }
 
-// دالة لطباعة الطلب مقسم حسب أقسام المنيو (كل قسم على ورقة منفصلة)
-export const printOrderBySections = (
-  order: Order,
-  menuSections: MenuSection[],
-  menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }>,
-  establishmentName: string = 'اسم المنشأة'
+export const printOrder = async (
+  order: Order, 
+  menuSections: MenuSection[] = [],
+  menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }> = new Map(),
+  fallbackOrganizationName?: string
 ) => {
+  // جلب اسم المنشأة من بيانات الطلب أو استخدام الاحتياطي
+  let establishmentName = fallbackOrganizationName || 'نظام إدارة المقاهي';
+  
+  // إذا كانت المنشأة موجودة في بيانات الطلب
+  if ((order as any).organization) {
+    const org = (order as any).organization;
+    if (typeof org === 'object' && org.name) {
+      // إذا كانت المنشأة populated object
+      establishmentName = org.name;
+    } else if (typeof org === 'string') {
+      // إذا كانت المنشأة string ID فقط، نحاول جلب البيانات
+      try {
+        const response = await fetch(`/api/organizations/${org}`);
+        if (response.ok) {
+          const orgData = await response.json();
+          if (orgData.success && orgData.data?.name) {
+            establishmentName = orgData.data.name;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch organization name for order:', error);
+        // استخدام الاسم الاحتياطي في حالة الفشل
+      }
+    }
+  }
+
   // Check if order.items exists and is an array
   if (!order.items || !Array.isArray(order.items)) {
     console.error('Order items is undefined or not an array:', order);
@@ -157,19 +185,16 @@ export const printOrderBySections = (
     return { sectionId, sectionName, items };
   });
 
-  // طباعة جميع الأقسام في صفحة واحدة
+  // طباعة جميع الأقسام في صفحة واحدة باستخدام iframe
   printAllSectionsInOnePage(order, sectionsArray, establishmentName);
 };
 
-// دالة لطباعة جميع الأقسام في صفحة واحدة
+// دالة لطباعة جميع الأقسام في صفحة واحدة باستخدام iframe
 const printAllSectionsInOnePage = (
   order: Order,
   sections: Array<{ sectionId: string; sectionName: string; items: OrderItem[] }>,
   establishmentName: string
 ) => {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
-
   const now = new Date();
   const dateTimeString = now.toLocaleString('ar-EG', {
     year: 'numeric',
@@ -205,7 +230,7 @@ const printAllSectionsInOnePage = (
           ${isUpdatedOrder ? `
           <div class="update-banner">
             <span>🔄 تم تحديث الطلب</span>
-            <small>${new Date(order.updatedAt).toLocaleString('ar-EG')}</small>
+            <small>${new Date(order.updatedAt!).toLocaleString('ar-EG')}</small>
           </div>` : ''}
           <div style="font-size: 16px; font-weight: bold; margin: 5px 0;">فاتورة طلب</div>
         </div>
@@ -285,7 +310,7 @@ const printAllSectionsInOnePage = (
     `;
   }).join('');
 
-  let printContent = `
+  const printContent = `
     <!DOCTYPE html>
     <html dir="rtl">
     <head>
@@ -480,351 +505,82 @@ const printAllSectionsInOnePage = (
     </head>
     <body>
       ${sectionsContent}
-
-      <div class="no-print" style="margin-top: 20px; text-align: center;">
-        <button onclick="window.print()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
-          طباعة الفاتورة
-        </button>
-        <button onclick="window.close()" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
-          إغلاق
-        </button>
-      </div>
-
-      <script>
-        window.onload = function() {
-          setTimeout(function() {
-            window.print();
-          }, 500);
-          setTimeout(function() {
-            window.close();
-          }, 5000);
-        };
-      </script>
     </body>
     </html>
   `;
 
-  printWindow.document.open();
-  printWindow.document.write(printContent);
-  printWindow.document.close();
-};
-
-// دالة لطباعة قسم واحد من الطلب (محفوظة للاستخدام المستقبلي)
-const printSectionOrder = (
-  order: Order,
-  items: OrderItem[],
-  sectionName: string,
-  establishmentName: string
-) => {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
-
-  const now = new Date();
-  const dateTimeString = now.toLocaleString('ar-EG', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
-
-  const isUpdatedOrder = order.updatedAt && 
-    new Date(order.updatedAt).getTime() > new Date(order.createdAt).getTime();
-
-  let printContent = `
-    <!DOCTYPE html>
-    <html dir="rtl">
-    <head>
-      <meta charset="UTF-8">
-      <title>طباعة الطلب #${order.orderNumber} - ${sectionName}</title>
-      <style>
-        @page {
-          size: 80mm auto;
-          margin: 0;
-          padding: 0;
+  // Create a hidden iframe for printing
+  const printFrame = document.createElement('iframe');
+  printFrame.style.position = 'absolute';
+  printFrame.style.top = '-1000px';
+  printFrame.style.left = '-1000px';
+  printFrame.style.width = '0';
+  printFrame.style.height = '0';
+  printFrame.style.border = 'none';
+  
+  document.body.appendChild(printFrame);
+  
+  const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
+  if (frameDoc) {
+    frameDoc.open();
+    frameDoc.write(printContent);
+    frameDoc.close();
+    
+    // Wait for content to load then print
+    setTimeout(() => {
+      try {
+        printFrame.contentWindow?.focus();
+        printFrame.contentWindow?.print();
+        
+        // Clean up after printing
+        setTimeout(() => {
+          document.body.removeChild(printFrame);
+        }, 1000);
+      } catch (error) {
+        console.error('Print error:', error);
+        // Fallback to opening in new window if iframe printing fails
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.open();
+          printWindow.document.write(printContent);
+          printWindow.document.close();
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.print();
+              setTimeout(() => {
+                if (!printWindow.closed) {
+                  printWindow.close();
+                }
+              }, 1000);
+            }, 500);
+          };
         }
-        body {
-          direction: rtl;
-          font-family: 'Arial', sans-serif;
-          width: 72mm;
-          max-width: 72mm;
-          margin: 0 auto;
-          padding: 0 4mm;
-          background: white;
-          color: #000;
-          font-size: 15px;
-          line-height: 1.4;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          box-sizing: border-box;
-        }
-        .header {
-          text-align: center;
-          margin: 5px auto;
-          padding: 5px 0;
-          border-bottom: 1px dashed #000;
-          width: 100%;
-          max-width: 100%;
-          box-sizing: border-box;
-        }
-        .header h1 {
-          font-size: 18px;
-          margin: 0;
-          padding: 10px 0 5px;
-          text-align: center;
-          border-bottom: 1px dashed #ddd;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-        }
-        .section-name {
-          background-color: #f0f0f0;
-          padding: 8px;
-          text-align: center;
-          font-weight: bold;
-          font-size: 16px;
-          margin: 5px 0;
-          border-radius: 4px;
-        }
-        .update-banner {
-          background-color: #fff3cd;
-          color: #856404;
-          padding: 5px 0;
-          text-align: center;
-          font-weight: bold;
-          border-radius: 4px;
-          margin: 5px 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          border: 1px dashed #ffeeba;
-        }
-        .update-banner small {
-          font-size: 12px;
-          opacity: 0.8;
-          margin-top: 2px;
-        }
-        .order-info {
-          margin-bottom: 10px;
-          border-bottom: 1px dashed #000;
-          padding-bottom: 10px;
-          font-size: 16px;
-          text-align: center;
-          font-weight: bold;
-        }
-        .order-info p {
-          margin: 3px 0;
-          text-align: center;
-          justify-content: center;
-        }
-        .items {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 10px 0;
-          table-layout: fixed;
-          text-align: center;
-          direction: rtl;
-        }
-        .items th, .items td {
-          padding: 6px 0;
-          text-align: center;
-          border-bottom: 1px dashed #eee;
-          font-size: 15px;
-          word-break: break-word;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .item-name {
-          text-align: right;
-          padding: 4px 8px 4px 4px;
-          width: 50%;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          direction: rtl;
-          unicode-bidi: embed;
-        }
-        .item-qty {
-          text-align: center;
-          width: 30px;
-          direction: rtl;
-          unicode-bidi: embed;
-        }
-        .item-price {
-          text-align: left;
-          padding: 4px 4px 4px 8px;
-          width: 30%;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          direction: rtl;
-          unicode-bidi: embed;
-        }
-        .item-notes {
-          font-size: 8px;
-          color: #666;
-          padding: 0 5px;
-          font-style: italic;
-          max-width: 60mm;
-          word-break: break-word;
-          text-align: center;
-          margin: 0 auto;
-        }
-        .total {
-          margin: 15px auto 0;
-          text-align: center;
-          font-weight: bold;
-          font-size: 18px;
-          border-top: 2px dashed #000;
-          padding: 10px 0;
-          width: 100%;
-          background-color: #f9f9f9;
-          border-radius: 4px;
-        }
-        .notes {
-          margin: 5px auto 0;
-          font-size: 9px;
-          color: #666;
-          padding: 0 5px;
-          text-align: center;
-          width: 100%;
-        }
-        .footer {
-          margin: 5px auto 0;
-          text-align: center;
-          font-size: 12px;
-          color: #000;
-          border-top: 1px dashed #000;
-          padding-top: 8px;
-          width: 100%;
-          font-weight: bold;
-        }
-        @media print {
-          body {
-            padding: 0;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>${establishmentName}</h1>
-        ${isUpdatedOrder ? `
-        <div class="update-banner">
-          <span>🔄 تم تحديث الطلب</span>
-          <small>${new Date(order.updatedAt).toLocaleString('ar-EG')}</small>
-        </div>` : ''}
-        <div style="font-size: 16px; font-weight: bold; margin: 5px 0;">فاتورة طلب</div>
-      </div>
-
-      <div class="section-name">
-        قسم: ${sectionName}
-      </div>
-
-      <div class="order-info">
-        <div style="margin-bottom: 10px;">
-          <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${order.orderNumber}</strong></div>
-          <div style="font-size: 16px; color: #333; margin: 8px 0;">${dateTimeString}</div>
-          ${order.table?.number ? `
-            <div style="font-size: 16px; margin: 8px 0; text-align: center;">
-              طاولة: <strong>${order.table.number}</strong>
-            </div>
-          ` : ''}
-        </div>
-      </div>
-
-      <table class="items">
-        <thead>
-          <tr>
-            <th class="item-name">الصنف</th>
-            <th class="item-qty">الكمية</th>
-            <th class="item-price">المجموع</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map(item => `
-            <tr>
-              <td class="item-name">${item.name}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
-              <td class="item-qty"><strong>${item.quantity.toLocaleString('ar-EG')}</strong></td>
-              <td class="item-price"><strong>${(item.price * item.quantity).toLocaleString('ar-EG', {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2
-              })}</strong></td>
-            </tr>
-            ${item.addons && item.addons.length > 0 ?
-              item.addons.map(addon => `
-                <tr>
-                  <td class="item-name" style="padding-right: 15px;">+ ${addon.name}</td>
-                  <td class="item-qty"><strong>${addon.quantity.toLocaleString('ar-EG')}</strong></td>
-                  <td class="item-price"><strong>${(addon.price * addon.quantity).toLocaleString('ar-EG', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 2
-                  })}</strong></td>
-                </tr>
-              `).join('') : ''
+        // Clean up iframe
+        document.body.removeChild(printFrame);
+      }
+    }, 500);
+  } else {
+    // Fallback to original method if iframe fails
+    document.body.removeChild(printFrame);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          setTimeout(() => {
+            if (!printWindow.closed) {
+              printWindow.close();
             }
-          `).join('')}
-        </tbody>
-      </table>
-
-      ${(() => {
-        const total = items.reduce((sum, item) => {
-          const itemTotal = item.price * item.quantity;
-          const addonsTotal = item.addons?.reduce((addonSum, addon) =>
-            addonSum + (addon.price * addon.quantity), 0) || 0;
-          return sum + itemTotal + addonsTotal;
-        }, 0);
-
-        const formattedTotal = total.toLocaleString('ar-EG', {
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 2
-        });
-
-        return `
-          <div class="total">
-            إجمالي القسم: <strong>${formattedTotal}</strong> ج.م
-          </div>
-        `;
-      })()}
-
-      ${order.notes ? `
-        <div class="notes">
-          <strong>ملاحظات:</strong> ${order.notes}
-        </div>
-      ` : ''}
-
-      <div class="footer">
-        شكراً لزيارتكم<br>
-        <strong style="font-weight: 900; font-size: 14px;">تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه<br>
-        <strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong>
-      </div>
-
-      <div class="no-print" style="margin-top: 20px; text-align: center;">
-        <button onclick="window.print()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
-          طباعة الفاتورة
-        </button>
-        <button onclick="window.close()" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
-          إغلاق
-        </button>
-      </div>
-
-      <script>
-        window.onload = function() {
-          setTimeout(function() {
-            window.print();
-          }, 500);
-          setTimeout(function() {
-            window.close();
-          }, 5000);
-        };
-      </script>
-    </body>
-    </html>
-  `;
-
-  printWindow.document.open();
-  printWindow.document.write(printContent);
-  printWindow.document.close();
+          }, 1000);
+        }, 500);
+      };
+    } else {
+      alert('الرجاء السماح بالنوافذ المنبثقة لطباعة الطلب');
+    }
+  }
 };
 
+export default printOrder;

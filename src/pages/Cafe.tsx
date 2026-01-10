@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
 import { formatCurrency } from '../utils/formatters';
-import { printOrderBySections } from '../utils/printOrderBySection';
+import { printOrder } from '../utils/printOrder';
 import api from '../services/api';
 import { io, Socket } from 'socket.io-client';
 
@@ -41,9 +41,9 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
     <button
       onClick={() => onClick(table)}
       className={`
-        group relative p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-110 hover:shadow-2xl hover:-translate-y-1
+        group relative p-3 sm:p-6 rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 sm:hover:scale-110 hover:shadow-xl sm:hover:shadow-2xl hover:-translate-y-1
         ${isSelected 
-          ? 'border-orange-400 bg-gradient-to-br from-orange-50 via-yellow-50 to-orange-100 dark:from-orange-900/40 dark:via-yellow-900/30 dark:to-orange-800/30 shadow-xl ring-4 ring-orange-300 dark:ring-orange-700' 
+          ? 'border-orange-400 bg-gradient-to-br from-orange-50 via-yellow-50 to-orange-100 dark:from-orange-900/40 dark:via-yellow-900/30 dark:to-orange-800/30 shadow-lg sm:shadow-xl ring-2 sm:ring-4 ring-orange-300 dark:ring-orange-700' 
           : isOccupied
           ? 'border-red-400 bg-gradient-to-br from-red-50 via-orange-50 to-red-100 dark:from-red-900/40 dark:via-orange-900/30 dark:to-red-800/30 hover:border-red-500 hover:shadow-red-300 dark:hover:shadow-red-900/70'
           : 'border-green-400 bg-gradient-to-br from-green-50 via-emerald-50 to-green-100 dark:from-green-900/40 dark:via-emerald-900/30 dark:to-green-800/30 hover:border-green-500 hover:shadow-green-300 dark:hover:shadow-green-900/70'
@@ -51,38 +51,38 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
       `}
     >
       {/* Status Badge */}
-      <div className="absolute -top-2 -right-2">
+      <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2">
         {isSelected ? (
-          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
+          <span className="flex items-center justify-center w-12 h-6 sm:w-16 sm:h-16 bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
             مختارة
           </span>
         ) : isOccupied ? (
-          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
+          <span className="flex items-center justify-center w-12 h-6 sm:w-16 sm:h-16 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
             محجوزة
           </span>
         ) : (
-          <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
+          <span className="flex items-center justify-center w-12 h-6 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500 to-green-600 text-white text-xs font-bold rounded-full shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
             فارغة
           </span>
         )}
       </div>
 
       {/* Table Content */}
-      <div className="flex flex-col items-center justify-center pt-2">
+      <div className="flex flex-col items-center justify-center pt-1 sm:pt-2">
         <div className={`
-          w-16 h-16 rounded-2xl flex items-center justify-center mb-3 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6
+          w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-3 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6
           ${isSelected
-            ? 'bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-300 dark:shadow-orange-900/50'
+            ? 'bg-gradient-to-br from-orange-400 to-orange-600 shadow-md sm:shadow-lg shadow-orange-300 dark:shadow-orange-900/50'
             : isOccupied 
-            ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-lg shadow-red-300 dark:shadow-red-900/50' 
-            : 'bg-gradient-to-br from-green-400 to-green-600 shadow-lg shadow-green-300 dark:shadow-green-900/50'
+            ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-md sm:shadow-lg shadow-red-300 dark:shadow-red-900/50' 
+            : 'bg-gradient-to-br from-green-400 to-green-600 shadow-md sm:shadow-lg shadow-green-300 dark:shadow-green-900/50'
           }
         `}>
-          <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 sm:h-8 sm:w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </div>
-        <span className={`text-2xl font-bold transition-colors ${
+        <span className={`text-lg sm:text-2xl font-bold transition-colors ${
           isSelected 
             ? 'text-orange-700 dark:text-orange-300' 
             : isOccupied
@@ -91,14 +91,14 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
         }`}>
           {table.number}
         </span>
-        <span className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+        <span className="text-xs text-gray-600 dark:text-gray-400 mt-1 hidden sm:block">
           طاولة
         </span>
       </div>
 
       {/* Hover Effect Overlay */}
       <div className={`
-        absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
+        absolute inset-0 rounded-xl sm:rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
         ${isSelected
           ? 'bg-gradient-to-br from-orange-400/10 to-yellow-400/10'
           : isOccupied 
@@ -836,7 +836,7 @@ const Cafe: React.FC = () => {
         
         // Print order if requested or by default
         if (shouldPrint) {
-          setTimeout(() => {
+          setTimeout(async () => {
             const menuItemsMap = new Map();
             menuItems.forEach(item => {
               menuItemsMap.set(item.id, item);
@@ -857,7 +857,7 @@ const Cafe: React.FC = () => {
             };
             
             const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
-            printOrderBySections(printableOrder, menuSections, menuItemsMap, establishmentName);
+            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName);
           }, 0);
         }
         
@@ -943,7 +943,7 @@ const Cafe: React.FC = () => {
         
         // Print updated order if requested
         if (shouldPrint) {
-          setTimeout(() => {
+          setTimeout(async () => {
             const menuItemsMap = new Map();
             menuItems.forEach(item => {
               menuItemsMap.set(item.id, item);
@@ -964,7 +964,7 @@ const Cafe: React.FC = () => {
             };
             
             const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
-            printOrderBySections(printableOrder, menuSections, menuItemsMap, establishmentName);
+            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName);
           }, 0);
         }
         
@@ -1005,7 +1005,7 @@ const Cafe: React.FC = () => {
   };
 
   // Print order
-  const handlePrintOrder = (order: Order) => {
+  const handlePrintOrder = async (order: Order) => {
     // Check if order.items exists and is an array
     if (!order.items || !Array.isArray(order.items)) {
       showNotification('خطأ: الطلب لا يحتوي على عناصر', 'error');
@@ -1033,7 +1033,7 @@ const Cafe: React.FC = () => {
     // Get establishment name from user (already populated from backend)
     const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
     
-    printOrderBySections(printableOrder, menuSections, menuItemsMap, establishmentName);
+    await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName);
   };
 
   // Show confirm modal
@@ -1084,27 +1084,27 @@ const Cafe: React.FC = () => {
 
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-            <ShoppingCart className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
-            إدارة الطلبات والطاولات
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+            <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ml-2 flex-shrink-0" />
+            <span className="truncate">إدارة الطلبات والطاولات</span>
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">إدارة الطلبات والطاولات</p>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">إدارة الطلبات والطاولات</p>
         </div>
-        <div className="flex items-center space-x-3 space-x-reverse">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           <button
             onClick={() => setShowManagementModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center transition-colors duration-200 text-sm sm:text-base"
           >
-            <Settings className="h-5 w-5 ml-2" />
+            <Settings className="h-4 w-4 sm:h-5 sm:w-5 ml-1 sm:ml-2" />
             إدارة الطاولات
           </button>
           <button
             onClick={loadInitialData}
-            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg flex items-center transition-colors duration-200"
+            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 sm:px-4 py-2 rounded-lg flex items-center transition-colors duration-200 text-sm sm:text-base"
           >
             تحديث
           </button>
@@ -1112,86 +1112,86 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="group bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div className="group bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 dark:text-blue-200 text-sm font-medium mb-2">عدد الأقسام</p>
-              <p className="text-4xl font-bold">{tableStats.totalSections}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-blue-100 dark:text-blue-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">عدد الأقسام</p>
+              <p className="text-2xl sm:text-4xl font-bold">{tableStats.totalSections}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
-              <Settings className="h-8 w-8" />
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
+              <Settings className="h-5 w-5 sm:h-8 sm:w-8" />
             </div>
           </div>
         </div>
 
-        <div className="group bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
+        <div className="group bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-100 dark:text-green-200 text-sm font-medium mb-2">إجمالي الطاولات</p>
-              <p className="text-4xl font-bold">{tableStats.totalTables}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-green-100 dark:text-green-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">إجمالي الطاولات</p>
+              <p className="text-2xl sm:text-4xl font-bold">{tableStats.totalTables}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
-              <ShoppingCart className="h-8 w-8" />
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
+              <ShoppingCart className="h-5 w-5 sm:h-8 sm:w-8" />
             </div>
           </div>
         </div>
 
-        <div className="group bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
+        <div className="group bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-emerald-100 dark:text-emerald-200 text-sm font-medium mb-2">الطاولات الفارغة</p>
-              <p className="text-4xl font-bold">{tableStats.emptyTables}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-emerald-100 dark:text-emerald-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">الطاولات الفارغة</p>
+              <p className="text-2xl sm:text-4xl font-bold">{tableStats.emptyTables}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
-              <CheckCircle className="h-8 w-8" />
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
+              <CheckCircle className="h-5 w-5 sm:h-8 sm:w-8" />
             </div>
           </div>
         </div>
 
-        <div className="group bg-gradient-to-br from-red-500 to-red-600 dark:from-red-600 dark:to-red-700 rounded-xl shadow-lg hover:shadow-2xl p-6 text-white transition-all duration-300 hover:scale-105">
+        <div className="group bg-gradient-to-br from-red-500 to-red-600 dark:from-red-600 dark:to-red-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-red-100 dark:text-red-200 text-sm font-medium mb-2">الطاولات المحجوزة</p>
-              <p className="text-4xl font-bold">{tableStats.occupiedTables}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-red-100 dark:text-red-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">الطاولات المحجوزة</p>
+              <p className="text-2xl sm:text-4xl font-bold">{tableStats.occupiedTables}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
-              <AlertTriangle className="h-8 w-8" />
+            <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 sm:h-8 sm:w-8" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Table Sections and Tables */}
-      <div className="h-[calc(100vh-350px)]">
+      <div className="h-[calc(100vh-280px)] sm:h-[calc(100vh-320px)] md:h-[calc(100vh-350px)]">
         {/* Table Sections */}
         <div className="h-full">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col overflow-hidden">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
-                الأقسام والطاولات
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700 flex-shrink-0">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="w-1 h-6 sm:h-8 bg-blue-500 rounded-full flex-shrink-0"></div>
+                <span className="truncate">الأقسام والطاولات</span>
               </h2>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 sections-scroll">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6 sections-scroll">
               {loading && tableSections.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">جاري التحميل...</div>
               ) : tableSections.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">لا توجد أقسام</div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   {activeTableSections.map(section => {
                       const sectionTables = getTablesBySection[section.id] || [];
                       if (sectionTables.length === 0) return null;
 
                       return (
-                        <div key={section.id} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md hover:shadow-lg transition-shadow duration-300">
-                          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                            <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full"></div>
-                            {section.name}
+                        <div key={section.id} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl p-3 sm:p-5 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-md hover:shadow-lg transition-shadow duration-300">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center gap-2">
+                            <div className="w-1 h-5 sm:h-6 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full flex-shrink-0"></div>
+                            <span className="truncate">{section.name}</span>
                           </h3>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 auto-cols-fr">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 auto-cols-fr">
                             {sectionTables.map(table => {
                               const status = tableStatuses[table.number];
                               const isOccupied = status?.hasUnpaid || false;
@@ -1416,32 +1416,38 @@ const Cafe: React.FC = () => {
 
       {/* Confirm Modal */}
       {showConfirmModal && confirmModalData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
-                  <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[70] p-3 sm:p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Header */}
+            <div className="relative p-4 sm:p-5 bg-gradient-to-br from-yellow-500 to-orange-600">
+              <div className="absolute top-2 right-2 w-12 h-12 sm:w-16 sm:h-16 bg-white/10 rounded-full"></div>
+              <div className="relative flex items-center justify-between z-10">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-xl border border-white/30 flex-shrink-0">
+                    <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold text-white drop-shadow-lg truncate">
                     {confirmModalData.title}
                   </h3>
                 </div>
               </div>
             </div>
-            <div className="p-6">
-              <p className="text-gray-700 dark:text-gray-300">
+            
+            {/* Content */}
+            <div className="p-4 sm:p-5 bg-gray-50 dark:bg-gray-900">
+              <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed">
                 {confirmModalData.message}
               </p>
             </div>
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+            
+            {/* Footer */}
+            <div className="p-4 sm:p-5 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col sm:flex-row justify-end gap-3">
               <button
                 onClick={() => {
                   setShowConfirmModal(false);
                   setConfirmModalData(null);
                 }}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors"
+                className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl transition-colors text-sm sm:text-base font-medium"
               >
                 {confirmModalData.cancelText || 'إلغاء'}
               </button>
@@ -1449,7 +1455,7 @@ const Cafe: React.FC = () => {
                 onClick={() => {
                   confirmModalData.onConfirm();
                 }}
-                className={`px-4 py-2 text-white rounded-lg transition-colors ${confirmModalData.confirmColor || 'bg-red-600 hover:bg-red-700'}`}
+                className={`w-full sm:w-auto px-4 py-2.5 text-white rounded-xl transition-colors text-sm sm:text-base font-medium ${confirmModalData.confirmColor || 'bg-red-600 hover:bg-red-700'}`}
               >
                 {confirmModalData.confirmText || 'تأكيد'}
               </button>
@@ -1461,24 +1467,24 @@ const Cafe: React.FC = () => {
       {/* Table Orders Modal */}
       {showTableOrdersModal && selectedTable && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4 md:p-6 animate-fadeIn">
-          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-slideUp">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-2xl md:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-slideUp">
             {/* Header */}
-            <div className="relative p-4 sm:p-6 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex-shrink-0">
+            <div className="relative p-4 sm:p-5 md:p-6 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex-shrink-0">
               {/* Decorative circles - contained within header */}
-              <div className="absolute top-2 right-2 w-20 h-20 bg-white/10 rounded-full"></div>
-              <div className="absolute bottom-2 left-2 w-16 h-16 bg-white/10 rounded-full"></div>
+              <div className="absolute top-2 right-2 w-16 h-16 sm:w-20 sm:h-20 bg-white/10 rounded-full"></div>
+              <div className="absolute bottom-2 left-2 w-12 h-12 sm:w-16 sm:h-16 bg-white/10 rounded-full"></div>
               
               <div className="relative flex items-center justify-between z-10">
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/30">
-                    <ShoppingCart className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0 flex-1">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-white/20 backdrop-blur-sm rounded-xl sm:rounded-2xl flex items-center justify-center shadow-xl border border-white/30 flex-shrink-0">
+                    <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-white" />
                   </div>
-                  <div>
-                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg truncate">
                       طاولة {convertToArabicNumbers(selectedTable.number)}
                     </h2>
                     <div className="flex items-center gap-2 mt-1">
-                      <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
+                      <div className="px-2 sm:px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
                         <p className="text-xs sm:text-sm text-white font-medium">
                           {convertToArabicNumbers(filteredTableOrders.length)} {filteredTableOrders.length === 1 ? 'طلب' : 'طلبات'}
                         </p>
@@ -1491,7 +1497,7 @@ const Cafe: React.FC = () => {
                     setShowTableOrdersModal(false);
                     setSelectedTable(null);
                   }}
-                  className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110"
+                  className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110 flex-shrink-0"
                 >
                   <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                 </button>
@@ -1499,11 +1505,11 @@ const Cafe: React.FC = () => {
             </div>
 
             {/* Orders List */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6 bg-gray-50 dark:bg-gray-900">
               {filteredTableOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 sm:py-16">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                    <ShoppingCart className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                    <ShoppingCart className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 text-gray-400" />
                   </div>
                   <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg font-semibold">لا توجد طلبات</p>
                   <p className="text-gray-400 dark:text-gray-500 text-xs sm:text-sm mt-2 text-center px-4">اضغط على "طلب جديد" لإضافة طلب</p>
@@ -1513,11 +1519,11 @@ const Cafe: React.FC = () => {
                   {filteredTableOrders.map(order => (
                     <div
                       key={order.id}
-                      className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 sm:p-4 hover:shadow-xl hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-300 hover:scale-[1.02]"
+                      className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl sm:rounded-2xl p-3 sm:p-4 hover:shadow-xl hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-300 hover:scale-[1.02]"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 sm:w-12 sm:h-12 bg-gradient-to-br from-orange-400 via-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-gradient-to-br from-orange-400 via-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
                             <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                           </div>
                           <div className="min-w-0 flex-1">
@@ -1592,11 +1598,11 @@ const Cafe: React.FC = () => {
             </div>
 
             {/* Footer */}
-            <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div className="p-4 sm:p-5 md:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleAddOrder}
-                  className="flex-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
+                  className="flex-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
                 >
                   <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
                   طلب جديد
@@ -1611,7 +1617,7 @@ const Cafe: React.FC = () => {
                     return (
                       <button
                         onClick={() => handlePaymentManagement(selectedTable)}
-                        className="flex-1 sm:flex-none sm:min-w-[140px] bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
+                        className="flex-1 sm:flex-none sm:min-w-[140px] bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
                         title="إدارة الدفع"
                       >
                         <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -2091,52 +2097,53 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl max-w-sm sm:max-w-2xl md:max-w-4xl lg:max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
         {/* Header */}
-        <div className="relative p-4 sm:p-6 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
+        <div className="relative p-4 sm:p-5 md:p-6 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
           {/* Decorative circles */}
-          <div className="absolute top-2 right-2 w-20 h-20 bg-white/10 rounded-full"></div>
-          <div className="absolute bottom-2 left-2 w-16 h-16 bg-white/10 rounded-full"></div>
+          <div className="absolute top-2 right-2 w-16 h-16 sm:w-20 sm:h-20 bg-white/10 rounded-full"></div>
+          <div className="absolute bottom-2 left-2 w-12 h-12 sm:w-16 sm:h-16 bg-white/10 rounded-full"></div>
           
           <div className="relative flex items-center justify-between z-10">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/30">
-                <Settings className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0 flex-1">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-white/20 backdrop-blur-sm rounded-xl sm:rounded-2xl flex items-center justify-center shadow-xl border border-white/30 flex-shrink-0">
+                <Settings className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-white" />
               </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg truncate">
                   إدارة الأقسام والطاولات
                 </h2>
-                <p className="text-xs sm:text-sm text-white/80 mt-1">
+                <p className="text-xs sm:text-sm text-white/80 mt-1 truncate">
                   {convertToArabicNumbers(tableSections.length)} أقسام • {convertToArabicNumbers(tables.length)} طاولات
                 </p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110"
+              className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 hover:scale-110 flex-shrink-0"
             >
               <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900">
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <div className="w-1 h-6 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full"></div>
-                الأقسام
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6 bg-gray-50 dark:bg-gray-900">
+          <div className="mb-4 sm:mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
+              <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="w-1 h-5 sm:h-6 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full flex-shrink-0"></div>
+                <span className="truncate">الأقسام</span>
               </h3>
               <button
                 onClick={onAddSection}
-                className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center text-sm font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center text-sm font-bold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
               >
                 <Plus className="h-4 w-4 ml-1" />
                 إضافة قسم
               </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 sm:space-y-4">
               {tableSections
                 .sort((a, b) => a.sortOrder - b.sortOrder)
                 .map(section => {
@@ -2144,45 +2151,45 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                   return (
                     <div
                       key={section.id}
-                      className="bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-2xl p-4 sm:p-5 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all duration-300"
+                      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all duration-300"
                     >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">{section.name}</h4>
-                            <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-full">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                            <h4 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{section.name}</h4>
+                            <span className="w-fit px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-full">
                               {convertToArabicNumbers(sectionTables.length)} طاولة
                             </span>
                           </div>
                           {section.description && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400">{section.description}</p>
+                            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{section.description}</p>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <button
                             onClick={() => onEditSection(section)}
-                            className="p-2.5 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-orange-200 dark:hover:border-orange-700"
+                            className="p-2 sm:p-2.5 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-orange-200 dark:hover:border-orange-700"
                             title="تعديل"
                           >
-                            <Edit className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                            <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
                           </button>
                           <button
                             onClick={() => onDeleteSection(section.id)}
-                            className="p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-red-200 dark:hover:border-red-700"
+                            className="p-2 sm:p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-red-200 dark:hover:border-red-700"
                             title="حذف"
                           >
-                            <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
+                            <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" />
                           </button>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                         <div className="flex flex-wrap gap-2">
                           {sectionTables.map(table => (
                             <div
                               key={table.id}
-                              className="group flex items-center gap-2 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 hover:shadow-md transition-all duration-300"
+                              className="group flex items-center gap-2 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-gray-300 dark:border-gray-600 hover:shadow-md transition-all duration-300"
                             >
-                              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                              <span className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
                                 {table.number}
                               </span>
                               <div className="flex items-center gap-1">
@@ -2191,14 +2198,14 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                                   className="p-1 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all duration-300"
                                   title="تعديل"
                                 >
-                                  <Edit className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                                  <Edit className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-orange-600 dark:text-orange-400" />
                                 </button>
                                 <button
                                   onClick={() => onDeleteTable(table.id)}
                                   className="p-1 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-all duration-300"
                                   title="حذف"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                                  <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-600 dark:text-red-400" />
                                 </button>
                               </div>
                             </div>
@@ -2206,9 +2213,9 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                         </div>
                         <button
                           onClick={() => onAddTable(section.id)}
-                          className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-1 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105"
+                          className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105"
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                           إضافة طاولة
                         </button>
                       </div>
@@ -2219,10 +2226,11 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-end p-6 border-t border-gray-200 dark:border-gray-700">
+        {/* Footer */}
+        <div className="flex items-center justify-end p-4 sm:p-5 md:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+            className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl transition-colors text-sm sm:text-base font-medium"
           >
             إغلاق
           </button>
@@ -2260,30 +2268,31 @@ const SectionModal: React.FC<SectionModalProps> = ({
   }, []);
   
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Header */}
-        <div className="relative p-5 bg-gradient-to-br from-blue-500 to-indigo-600">
-          <div className="absolute top-2 right-2 w-16 h-16 bg-white/10 rounded-full"></div>
+        <div className="relative p-4 sm:p-5 bg-gradient-to-br from-blue-500 to-indigo-600">
+          <div className="absolute top-2 right-2 w-12 h-12 sm:w-16 sm:h-16 bg-white/10 rounded-full"></div>
           <div className="relative flex items-center justify-between z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
-                <Settings className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30 flex-shrink-0">
+                <Settings className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-white drop-shadow-lg">
+              <h2 className="text-lg sm:text-xl font-bold text-white drop-shadow-lg truncate">
                 {editingSection ? 'تعديل القسم' : 'إضافة قسم'}
               </h2>
             </div>
             <button 
               onClick={onClose} 
-              className="p-2 hover:bg-white/20 backdrop-blur-sm rounded-lg transition-all duration-300 border border-white/30"
+              className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 flex-shrink-0"
             >
-              <X className="h-5 w-5 text-white" />
+              <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </button>
           </div>
         </div>
 
-        <div className="p-6 space-y-5 bg-gray-50 dark:bg-gray-900">
+        {/* Content */}
+        <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 bg-gray-50 dark:bg-gray-900">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
               اسم القسم *
@@ -2294,46 +2303,47 @@ const SectionModal: React.FC<SectionModalProps> = ({
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               autoFocus
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               placeholder="اسم القسم"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               الوصف
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
               placeholder="وصف القسم"
               rows={3}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               ترتيب العرض
             </label>
             <input
               type="number"
               value={formData.sortOrder}
               onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               placeholder="0"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end space-x-3 space-x-reverse p-6 border-t border-gray-200 dark:border-gray-700">
+        {/* Footer */}
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 p-4 sm:p-5 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg"
+            className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
             إلغاء
           </button>
           <button
             onClick={onSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+            className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
             حفظ
           </button>
@@ -2373,30 +2383,31 @@ const TableModal: React.FC<TableModalProps> = ({
   }, []);
   
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Header */}
-        <div className="relative p-5 bg-gradient-to-br from-green-500 to-emerald-600">
-          <div className="absolute top-2 right-2 w-16 h-16 bg-white/10 rounded-full"></div>
+        <div className="relative p-4 sm:p-5 bg-gradient-to-br from-green-500 to-emerald-600">
+          <div className="absolute top-2 right-2 w-12 h-12 sm:w-16 sm:h-16 bg-white/10 rounded-full"></div>
           <div className="relative flex items-center justify-between z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
-                <Plus className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30 flex-shrink-0">
+                <Plus className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-white drop-shadow-lg">
+              <h2 className="text-lg sm:text-xl font-bold text-white drop-shadow-lg truncate">
                 {editingTable ? 'تعديل الطاولة' : 'إضافة طاولة'}
               </h2>
             </div>
             <button 
               onClick={onClose} 
-              className="p-2 hover:bg-white/20 backdrop-blur-sm rounded-lg transition-all duration-300 border border-white/30"
+              className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all duration-300 border border-white/30 flex-shrink-0"
             >
-              <X className="h-5 w-5 text-white" />
+              <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </button>
           </div>
         </div>
 
-        <div className="p-6 space-y-5 bg-gray-50 dark:bg-gray-900">
+        {/* Content */}
+        <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 bg-gray-50 dark:bg-gray-900">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
               رقم/اسم الطاولة *
@@ -2407,18 +2418,18 @@ const TableModal: React.FC<TableModalProps> = ({
               value={formData.number}
               onChange={(e) => setFormData({ ...formData, number: e.target.value })}
               autoFocus
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
               placeholder="مثال: 1، واحد، A1، VIP، شرفة 1"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               القسم *
             </label>
             <select
               value={formData.section}
               onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
             >
               <option value="">اختر القسم</option>
               {tableSections
@@ -2433,16 +2444,17 @@ const TableModal: React.FC<TableModalProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-end space-x-3 space-x-reverse p-6 border-t border-gray-200 dark:border-gray-700">
+        {/* Footer */}
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 p-4 sm:p-5 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg"
+            className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
             إلغاء
           </button>
           <button
             onClick={onSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+            className="w-full sm:w-auto px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
             حفظ
           </button>

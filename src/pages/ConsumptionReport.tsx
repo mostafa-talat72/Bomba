@@ -459,7 +459,7 @@ const ConsumptionReport = () => {
               </div>
               
               <div class="footer">
-                <div><strong>العبيلى</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
+                <div><strong>تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
               </div>
             </div>
           `;

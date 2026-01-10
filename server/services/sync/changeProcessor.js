@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import Logger from '../../middleware/logger.js';
 import syncConfig from '../../config/syncConfig.js';
+import DeviceValidator from '../validation/deviceValidator.js';
+import BillValidator from '../validation/billValidator.js';
 
 /**
  * Change Processor
@@ -499,6 +501,70 @@ class ChangeProcessor {
     }
 
     /**
+     * Validate device document specifically
+     * @param {Object} document - Device document to validate
+     * @returns {Object} - Validation result
+     */
+    validateDeviceDocument(document) {
+        const errors = [];
+
+        // Check required fields
+        if (!document.name || (typeof document.name === 'string' && document.name.trim() === '')) {
+            errors.push('Device name is required and cannot be empty');
+        }
+
+        if (!document.number || (typeof document.number === 'string' && document.number.trim() === '')) {
+            errors.push('Device number is required and cannot be empty');
+        }
+
+        if (!document.status) {
+            errors.push('Device status is required');
+        }
+
+        if (!document.organization) {
+            errors.push('Device organization is required');
+        }
+
+        // Check type-specific requirements
+        const deviceType = document.type || 'playstation';
+        
+        if (deviceType === 'computer') {
+            if (!document.hourlyRate || document.hourlyRate <= 0) {
+                errors.push('Computer devices require a valid hourlyRate > 0');
+            }
+        } else if (deviceType === 'playstation') {
+            if (!document.playstationRates || typeof document.playstationRates !== 'object') {
+                errors.push('PlayStation devices require playstationRates object');
+            } else {
+                // Check that all controller counts have valid rates
+                for (let i = 1; i <= 4; i++) {
+                    const rate = document.playstationRates[i];
+                    if (!rate || rate <= 0) {
+                        errors.push(`PlayStation devices require valid rate for ${i} controller(s)`);
+                    }
+                }
+            }
+        }
+
+        // Validate status enum
+        const validStatuses = ['available', 'active', 'maintenance'];
+        if (document.status && !validStatuses.includes(document.status)) {
+            errors.push(`Invalid device status: ${document.status}. Must be one of: ${validStatuses.join(', ')}`);
+        }
+
+        // Validate type enum
+        const validTypes = ['playstation', 'computer'];
+        if (document.type && !validTypes.includes(document.type)) {
+            errors.push(`Invalid device type: ${document.type}. Must be one of: ${validTypes.join(', ')}`);
+        }
+
+        return {
+            success: errors.length === 0,
+            errors
+        };
+    }
+
+    /**
      * Get nested value from object using dot notation
      * @param {Object} obj - Object to search
      * @param {string} path - Path with dot notation
@@ -567,11 +633,80 @@ class ChangeProcessor {
                     errors: validation.errors
                 });
                 
+                // For devices collection, completely reject invalid documents
+                if (collectionName === 'devices') {
+                    Logger.error(`[ChangeProcessor] Rejecting invalid device document from Atlas:`, {
+                        documentId: document._id,
+                        document: document,
+                        errors: validation.errors
+                    });
+                    
+                    return {
+                        success: false,
+                        reason: 'Device validation failed - document rejected',
+                        validationErrors: validation.errors
+                    };
+                }
+                
                 return {
                     success: false,
                     reason: 'Document validation failed',
                     validationErrors: validation.errors
                 };
+            }
+
+            // Additional validation for specific collections
+            if (collectionName === 'devices') {
+                const deviceValidation = DeviceValidator.validateDevice(document, 'insert');
+                if (!deviceValidation.success) {
+                    Logger.error(`[ChangeProcessor] Device validation failed for insert:`, {
+                        documentId: document._id,
+                        document: document,
+                        errors: deviceValidation.errors,
+                        warnings: deviceValidation.warnings
+                    });
+                    
+                    return {
+                        success: false,
+                        reason: 'Device validation failed - document rejected',
+                        validationErrors: deviceValidation.errors
+                    };
+                }
+
+                // Log warnings if any
+                if (deviceValidation.warnings.length > 0) {
+                    Logger.warn(`[ChangeProcessor] Device validation warnings for insert:`, {
+                        documentId: document._id,
+                        warnings: deviceValidation.warnings
+                    });
+                }
+            }
+
+            // Additional validation for bills collection
+            if (collectionName === 'bills') {
+                const billValidation = BillValidator.validateBill(document, 'insert');
+                if (!billValidation.success) {
+                    Logger.error(`[ChangeProcessor] Bill validation failed for insert:`, {
+                        documentId: document._id,
+                        document: document,
+                        errors: billValidation.errors,
+                        warnings: billValidation.warnings
+                    });
+                    
+                    return {
+                        success: false,
+                        reason: 'Bill validation failed - document rejected',
+                        validationErrors: billValidation.errors
+                    };
+                }
+
+                // Log warnings if any
+                if (billValidation.warnings.length > 0) {
+                    Logger.warn(`[ChangeProcessor] Bill validation warnings for insert:`, {
+                        documentId: document._id,
+                        warnings: billValidation.warnings
+                    });
+                }
             }
 
             // Bypass sync middleware when applying
@@ -766,11 +901,80 @@ class ChangeProcessor {
                     errors: validation.errors
                 });
                 
+                // For devices collection, completely reject invalid documents
+                if (collectionName === 'devices') {
+                    Logger.error(`[ChangeProcessor] Rejecting invalid device document replacement from Atlas:`, {
+                        documentId: documentId,
+                        document: document,
+                        errors: validation.errors
+                    });
+                    
+                    return {
+                        success: false,
+                        reason: 'Device validation failed - replacement rejected',
+                        validationErrors: validation.errors
+                    };
+                }
+                
                 return {
                     success: false,
                     reason: 'Document validation failed',
                     validationErrors: validation.errors
                 };
+            }
+
+            // Additional validation for specific collections
+            if (collectionName === 'devices') {
+                const deviceValidation = DeviceValidator.validateDevice(document, 'replace');
+                if (!deviceValidation.success) {
+                    Logger.error(`[ChangeProcessor] Device validation failed for replace:`, {
+                        documentId: documentId,
+                        document: document,
+                        errors: deviceValidation.errors,
+                        warnings: deviceValidation.warnings
+                    });
+                    
+                    return {
+                        success: false,
+                        reason: 'Device validation failed - replacement rejected',
+                        validationErrors: deviceValidation.errors
+                    };
+                }
+
+                // Log warnings if any
+                if (deviceValidation.warnings.length > 0) {
+                    Logger.warn(`[ChangeProcessor] Device validation warnings for replace:`, {
+                        documentId: documentId,
+                        warnings: deviceValidation.warnings
+                    });
+                }
+            }
+
+            // Additional validation for bills collection
+            if (collectionName === 'bills') {
+                const billValidation = BillValidator.validateBill(document, 'replace');
+                if (!billValidation.success) {
+                    Logger.error(`[ChangeProcessor] Bill validation failed for replace:`, {
+                        documentId: documentId,
+                        document: document,
+                        errors: billValidation.errors,
+                        warnings: billValidation.warnings
+                    });
+                    
+                    return {
+                        success: false,
+                        reason: 'Bill validation failed - replacement rejected',
+                        validationErrors: billValidation.errors
+                    };
+                }
+
+                // Log warnings if any
+                if (billValidation.warnings.length > 0) {
+                    Logger.warn(`[ChangeProcessor] Bill validation warnings for replace:`, {
+                        documentId: documentId,
+                        warnings: billValidation.warnings
+                    });
+                }
             }
 
             // Check for conflicts

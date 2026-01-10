@@ -887,23 +887,20 @@ billSchema.pre("save", function (next) {
 });
 
 // Method to generate QR code
-billSchema.methods.generateQRCode = async function () {
-    if (!this.qrCode && this._id) {
+billSchema.methods.generateQRCode = async function (baseUrl = null, forceRegenerate = false) {
+    if ((!this.qrCode || forceRegenerate) && this._id) {
         try {
-            const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-            const qrData = {
-                billId: this._id,
-                billNumber: this.billNumber,
-                total: this.total,
-                url: `${baseUrl}/bill/${this._id}`,
-            };
+            // استخدام الـ baseUrl المرسل أو الافتراضي من البيئة
+            const frontendUrl = baseUrl || process.env.FRONTEND_URL || "http://localhost:3000";
+            // إزالة الـ slash الزائد إذا كان موجود
+            const cleanUrl = frontendUrl.endsWith('/') ? frontendUrl.slice(0, -1) : frontendUrl;
+            const billUrl = `${cleanUrl}/bill/${this._id}`;
 
-            const qrCodeDataURL = await QRCode.toDataURL(
-                JSON.stringify(qrData)
-            );
+            // إنشاء QR code يحتوي على الرابط المباشر فقط
+            const qrCodeDataURL = await QRCode.toDataURL(billUrl);
 
             this.qrCode = qrCodeDataURL;
-            this.qrCodeUrl = qrData.url;
+            this.qrCodeUrl = billUrl;
         } catch (error) {}
     }
     return this;

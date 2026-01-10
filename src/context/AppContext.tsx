@@ -191,10 +191,22 @@ export type Filter = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // تحديد الـ initial loading state بناءً على الصفحة الحالية
+  const getInitialLoadingState = () => {
+    const currentPath = window.location.pathname;
+    const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
+    const isPublicPage = currentPath === '/login' || currentPath === '/register' || 
+                        currentPath.startsWith('/verify-email') || 
+                        currentPath.startsWith('/reset-password') ||
+                        currentPath.startsWith('/email-actions') ||
+                        isBillView;
+    return !isPublicPage; // false للصفحات العامة، true للصفحات المحمية
+  };
+
   // Auth state
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(getInitialLoadingState());
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<NotificationType | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -263,7 +275,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Check authentication on app load
   useEffect(() => {
-    checkAuth();
+    // تحقق من الصفحة الحالية قبل تنفيذ checkAuth
+    const currentPath = window.location.pathname;
+    const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
+    
+    // لا تنفذ checkAuth إذا كان المستخدم في صفحة الفاتورة
+    if (!isBillView) {
+      checkAuth();
+    } else {
+      // للصفحات العامة، تأكد من إيقاف loading
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -335,8 +357,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           api.clearToken();
           setUser(null);
           setIsAuthenticated(false);
-          showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
-          navigate('/login', { replace: true });
+          
+          // تحقق من الصفحة الحالية قبل عمل redirect
+          const currentPath = window.location.pathname;
+          const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
+          
+          if (!isBillView) {
+            showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
+            navigate('/login', { replace: true });
+          }
         } else {
           localStorage.removeItem('token');
           localStorage.removeItem('refreshToken');
@@ -355,8 +384,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       api.clearToken();
       setUser(null);
       setIsAuthenticated(false);
-      showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
-      navigate('/login', { replace: true });
+      
+      // تحقق من الصفحة الحالية قبل عمل redirect
+      const currentPath = window.location.pathname;
+      const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
+      
+      if (!isBillView) {
+        showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
+        navigate('/login', { replace: true });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -838,13 +874,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // Handle error response from backend
       if (response && !response.success) {
         // Handle detailed inventory insufficiency messages
-        if (response.data && Array.isArray(response.data.details) && response.data.details.length > 0) {
-          const detailsMessage = response.data.details
-            .map(d => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+        if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
+          const detailsMessage = (response.data as any).details
+            .map((d: any) => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
             .join('\n');
           showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
-        } else if (response.data && Array.isArray(response.data.errors) && response.data.errors.length > 0) {
-          showNotification(`المخزون غير كافي لتحديث الطلب:\n${response.data.errors.join('\n')}`, 'error');
+        } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
+          showNotification(`المخزون غير كافي لتحديث الطلب:\n${(response.data as any).errors.join('\n')}`, 'error');
         } else {
           showNotification(response.message || 'حدث خطأ أثناء تحديث الطلب', 'error');
         }
@@ -1176,7 +1212,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateDeviceStatus = async (id: string, status: string): Promise<Device | null> => {
     try {
-      const response = await api.updateDeviceStatus(id, status);
+      const response = await api.updateDeviceStatus(id, { status });
       if (response.success && response.data) {
         setDevices(prev => prev.map(device =>
           device.id === id ? response.data! : device
