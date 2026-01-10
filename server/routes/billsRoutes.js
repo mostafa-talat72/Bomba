@@ -19,9 +19,9 @@ import { protect, authorize } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Public routes for customer access
-router.get("/qr/:billId", getBillByQR);
-router.get("/public/:id", getBill); // Route للعملاء بدون authentication
+// Public routes for customer access - SECURED
+router.get("/qr/:billId", protect, getBillByQR); // Now requires authentication
+// REMOVED: router.get("/public/:id", getBill); // Removed for security
 
 // متاح للربط بجلسة بلايستيشن أو كمبيوتر
 router.get("/available-for-session", protect, getAvailableBillsForSession);

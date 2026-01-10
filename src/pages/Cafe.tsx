@@ -1725,27 +1725,52 @@ const OrderModal: React.FC<OrderModalProps> = ({
     };
   }, []);
   
-  // Scroll to section when clicked
+  // Scroll to section when clicked - only scroll within menu container
   const scrollToSection = (sectionId: string) => {
     const sectionElement = sectionRefs.current[sectionId];
-    if (sectionElement) {
-      sectionElement.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start',
-        inline: 'nearest'
+    const menuContainer = document.querySelector('.menu-scroll-container');
+    
+    if (sectionElement && menuContainer) {
+      const containerRect = menuContainer.getBoundingClientRect();
+      const sectionRect = sectionElement.getBoundingClientRect();
+      const scrollTop = menuContainer.scrollTop;
+      
+      // Calculate the position relative to the container
+      const targetScrollTop = scrollTop + (sectionRect.top - containerRect.top) - 20; // 20px offset
+      
+      menuContainer.scrollTo({
+        top: Math.max(0, targetScrollTop), // Ensure we don't scroll to negative values
+        behavior: 'smooth'
       });
     }
   };
+
+  // Auto scroll to section when expanding it
+  const handleSectionToggle = (sectionId: string) => {
+    toggleSection(sectionId);
+    // Only scroll if we're expanding the section
+    if (!expandedSections[sectionId]) {
+      setTimeout(() => scrollToSection(sectionId), 100);
+    }
+  };
   
-  // Scroll to order item after adding
+  // Scroll to order item after adding - only scroll within order container
   const scrollToOrderItem = (itemId: string) => {
     setTimeout(() => {
       const orderItemElement = orderItemRefs.current[itemId];
-      if (orderItemElement) {
-        orderItemElement.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center',
-          inline: 'nearest'
+      const orderContainer = document.querySelector('.order-scroll-container');
+      
+      if (orderItemElement && orderContainer) {
+        const containerRect = orderContainer.getBoundingClientRect();
+        const itemRect = orderItemElement.getBoundingClientRect();
+        const scrollTop = orderContainer.scrollTop;
+        
+        // Calculate the position relative to the container
+        const targetScrollTop = scrollTop + (itemRect.top - containerRect.top) - 20; // 20px offset
+        
+        orderContainer.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth'
         });
       }
     }, 100); // Small delay to ensure item is rendered
@@ -1820,9 +1845,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 overflow-y-auto">
+        <div className="flex-1 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 overflow-hidden min-h-0">
           {/* Left: Menu */}
-          <div className="flex flex-col space-y-4 h-full">
+          <div className="flex flex-col space-y-4 h-full min-h-0">
             <div className="flex items-center justify-between">
               <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full"></div>
@@ -1850,7 +1875,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 </button>
               )}
             </div>
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+            <div className="flex-1 space-y-3 pr-2 menu-scroll-container" style={{overflowY: 'scroll'}}>
               {searchQuery.trim() ? (
                 // Show all matching items when searching
                 <div className="space-y-2">
@@ -1889,10 +1914,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         className="border border-gray-200 dark:border-gray-700 rounded-lg"
                       >
                         <button
-                          onClick={() => {
-                            toggleSection(section.id);
-                            scrollToSection(section.id);
-                          }}
+                          onClick={() => handleSectionToggle(section.id)}
                           className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                         >
                           <span className="font-semibold text-gray-900 dark:text-gray-100">
@@ -1956,7 +1978,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </div>
 
           {/* Right: Order Items */}
-          <div className="flex flex-col space-y-4 h-full">
+          <div className="flex flex-col space-y-4 h-full min-h-0">
             <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 flex-shrink-0">
               <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full"></div>
               الطلبات
@@ -1966,7 +1988,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 </span>
               )}
             </h3>
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+            <div className="flex-1 space-y-3 pr-2 order-scroll-container" style={{overflowY: 'scroll'}}>
               {orderItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">لا توجد عناصر في الطلب</div>
               ) : (

@@ -18,6 +18,73 @@
 	border: 0;
 }
 
+/* Independent scroll containers for order modal */
+.menu-scroll-container {
+	overflow-y: scroll !important;
+	scrollbar-width: thin;
+	scrollbar-color: #d1d5db #f3f4f6;
+	max-height: 100%;
+	min-height: 200px;
+}
+
+.menu-scroll-container::-webkit-scrollbar {
+	width: 8px !important;
+	display: block !important;
+}
+
+.menu-scroll-container::-webkit-scrollbar-track {
+	background: #f3f4f6 !important;
+	border-radius: 4px;
+}
+
+.menu-scroll-container::-webkit-scrollbar-thumb {
+	background: #d1d5db !important;
+	border-radius: 4px;
+}
+
+.menu-scroll-container::-webkit-scrollbar-thumb:hover {
+	background: #9ca3af !important;
+}
+
+.order-scroll-container {
+	overflow-y: scroll !important;
+	scrollbar-width: thin;
+	scrollbar-color: #10b981 #ecfdf5;
+	max-height: 100%;
+	min-height: 200px;
+}
+
+.order-scroll-container::-webkit-scrollbar {
+	width: 8px !important;
+	display: block !important;
+}
+
+.order-scroll-container::-webkit-scrollbar-track {
+	background: #ecfdf5 !important;
+	border-radius: 4px;
+}
+
+.order-scroll-container::-webkit-scrollbar-thumb {
+	background: #10b981 !important;
+	border-radius: 4px;
+}
+
+.order-scroll-container::-webkit-scrollbar-thumb:hover {
+	background: #059669 !important;
+}
+
+/* Force scrollbars to always be visible */
+.menu-scroll-container,
+.order-scroll-container {
+	scrollbar-width: thin !important;
+}
+
+/* For WebKit browsers - force scrollbar visibility */
+.menu-scroll-container::-webkit-scrollbar,
+.order-scroll-container::-webkit-scrollbar {
+	-webkit-appearance: none !important;
+}
+
 /* Browser compatibility fixes */
 @supports (-webkit-appearance: none) {
 
