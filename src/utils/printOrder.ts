@@ -318,15 +318,15 @@ const printAllSectionsInOnePage = (
       <title>طباعة الطلب #${order.orderNumber}</title>
       <style>
         @page {
-          size: 80mm auto;
+          size:  auto;
           margin: 0;
           padding: 0;
         }
         body {
           direction: rtl;
           font-family: 'Arial', sans-serif;
-          width: 72mm;
-          max-width: 72mm;
+          width: auto;
+          max-width: auto;
           margin: 0 auto;
           padding: 0 4mm;
           background: white;
@@ -418,7 +418,7 @@ const printAllSectionsInOnePage = (
           text-overflow: ellipsis;
         }
         .item-name {
-          text-align: right;
+          text-align: center;
           padding: 4px 8px 4px 4px;
           width: 50%;
           word-wrap: break-word;
@@ -433,7 +433,7 @@ const printAllSectionsInOnePage = (
           unicode-bidi: embed;
         }
         .item-price {
-          text-align: left;
+          text-align: center;
           padding: 4px 4px 4px 8px;
           width: 30%;
           word-wrap: break-word;

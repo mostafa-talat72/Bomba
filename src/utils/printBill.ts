@@ -187,8 +187,8 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           font-size: 11px; 
           color: #000; 
           font-weight: 600;
-          width: 80mm;
-          max-width: 80mm;
+          width: auto;
+          max-width: auto;
           text-align: center;
         }
         .header { 
@@ -243,21 +243,21 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         }
         .items-table th {
           padding: 4px 3px;
-          text-align: right;
+          text-align: center;
           border: 1.5px solid #000;
           font-size: 0.9em;
           word-wrap: break-word;
         }
         .items-table td {
           padding: 3px 3px;
-          text-align: right;
+          text-align: center;
           border: 1px solid #000;
           font-weight: 600;
           word-wrap: break-word;
           overflow-wrap: break-word;
         }
         .items-table .item-name {
-          text-align: left;
+          text-align: center;
           font-weight: 700;
           padding-left: 5px;
           width: 50% !important;
@@ -285,7 +285,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           width: 20% !important;
         }
         .items-table th:first-child {
-          text-align: left;
+          text-align: center;
           padding-left: 5px;
         }
         .total-section { 
@@ -343,14 +343,14 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         
         @media print {
           @page { 
-            size: 80mm auto; 
+            size:  auto; 
             margin: 0; 
           }
           body { 
             margin: 0; 
             padding: 4px 6px; 
             font-weight: 600;
-            width: 80mm;
+            width: auto;
           }
           .no-print { display: none !important; }
           .items-table {
@@ -368,7 +368,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         
         @media screen {
           body {
-            max-width: 80mm;
+            max-width: auto;
             margin: 0 auto;
             background: #fff;
           }

@@ -486,8 +486,8 @@ const ConsumptionReport = () => {
               font-size: 11px; 
               color: #000; 
               font-weight: 600;
-              width: 80mm;
-              max-width: 80mm;
+              width: auto;
+              max-width: auto;
               text-align: center;
               direction: rtl;
             }
@@ -550,14 +550,14 @@ const ConsumptionReport = () => {
             }
             .items-table th {
               padding: 4px 3px;
-              text-align: right;
+              text-align: center;
               border: 1.5px solid #000;
               font-size: 0.9em;
               word-wrap: break-word;
             }
             .items-table td {
               padding: 3px 3px;
-              text-align: right;
+              text-align: center;
               border: 1px solid #000;
               font-weight: 600;
               word-wrap: break-word;
@@ -567,7 +567,7 @@ const ConsumptionReport = () => {
               width: 16.67% !important;
             }
             .items-table th:first-child {
-              text-align: left;
+              text-align: center;
               padding-left: 5px;
               width: 50% !important;
             }
@@ -575,7 +575,7 @@ const ConsumptionReport = () => {
               width: 16.67% !important;
             }
             .items-table .item-name {
-              text-align: left;
+              text-align: center;
               font-weight: 700;
               padding-left: 5px;
               width: 50% !important;
@@ -623,13 +623,13 @@ const ConsumptionReport = () => {
             
             @media print {
               @page { 
-                size: 80mm auto;
+                size: auto;
                 margin: 0; 
               }
               html, body { 
                 margin: 0; 
                 padding: 0;
-                width: 80mm;
+                width: auto;
               }
               body { 
                 padding: 4px 8px 4px 2px; 
@@ -668,7 +668,7 @@ const ConsumptionReport = () => {
             
             @media screen {
               body {
-                max-width: 80mm;
+                max-width: auto;
                 margin: 0 auto;
                 background: #fff;
               }

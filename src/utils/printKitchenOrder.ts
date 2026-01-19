@@ -56,20 +56,20 @@ export const printKitchenOrder = (order: Order, establishmentName: string = 'ا�
       <title>${isUpdatedOrder ? 'تعديل ' : ''}طباعة الطلب #${order.orderNumber}</title>
       <style>
         @page {
-          size: 80mm auto;
+          size: auto;
           margin: 0;
           padding: 0;
         }
         @page {
-          size: 80mm auto;
+          size:  auto;
           margin: 0;
           padding: 0;
         }
         body {
           direction: rtl;
           font-family: 'Arial', sans-serif;
-          width: 72mm; /* Slightly less than paper width */
-          max-width: 72mm;
+          width: auto; /* Slightly less than paper width */
+          max-width: auto;
           margin: 0 auto;
           padding: 0 4mm;
           background: white;
