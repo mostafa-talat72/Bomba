@@ -242,7 +242,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           font-weight: 800;
         }
         .items-table th {
-          padding: 4px 3px;
+          padding: 3px 3px;
           text-align: center;
           border: 1.5px solid #000;
           font-size: 0.9em;
@@ -343,12 +343,12 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         
         @media print {
           @page { 
-            size:  auto; 
+            size:auto; 
             margin: 0; 
           }
           body { 
             margin: 0; 
-            padding: 4px 6px; 
+            padding: 0; 
             font-weight: 600;
             width: auto;
           }
@@ -404,7 +404,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           </div>
         ` : ''}
         <div class="total-row grand-total">
-          الإجمالي الكلي: ${formatNumber(bill.total || 0)}
+          الإجمالي: ${formatNumber(bill.total || 0)}
         </div>
         <div class="total-row paid">
           المدفوع: ${formatNumber(bill.paid || 0)}
@@ -417,7 +417,8 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
       <div class="thank-you">شكراً لزيارتكم</div>
       
       <div class="footer">
-        <div><strong style="font-weight: 900; font-size: 14px;">تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
+        <div>
+        <strong style="font-weight: 900; font-size: 14px;">تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
         <div><strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong></div>
       </div>
 
@@ -468,7 +469,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         // Clean up after printing
         setTimeout(() => {
           document.body.removeChild(printFrame);
-        }, 1000);
+        }, 100);
       } catch (error) {
         console.error('Print error:', error);
         // Fallback to opening in new window if iframe printing fails
@@ -484,14 +485,14 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
                 if (!printWindow.closed) {
                   printWindow.close();
                 }
-              }, 1000);
-            }, 500);
+              }, 100);
+            }, 50);
           };
         }
         // Clean up iframe
         document.body.removeChild(printFrame);
       }
-    }, 500);
+    }, 50);
   } else {
     // Fallback to original method if iframe fails
     document.body.removeChild(printFrame);
@@ -507,8 +508,8 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
             if (!printWindow.closed) {
               printWindow.close();
             }
-          }, 1000);
-        }, 500);
+          }, 100);
+        }, 50);
       };
     } else {
       alert('الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة');

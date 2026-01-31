@@ -266,6 +266,10 @@ const billSchema = new mongoose.Schema(
                     type: Number,
                     required: true,
                     min: 0,
+                    set: function(value) {
+                        // Ensure remaining amount is never negative
+                        return Math.max(0, value || 0);
+                    }
                 },
                 payments: [
                     {

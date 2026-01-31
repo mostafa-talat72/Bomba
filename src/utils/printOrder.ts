@@ -223,7 +223,7 @@ const printAllSectionsInOnePage = (
     });
 
     return `
-      <div class="section-block" style="page-break-after: always; margin-bottom: 20px;">
+      <div class="section-block" style="page-break-after: always; margin-bottom: 2px;">
         <!-- Header لكل قسم -->
         <div class="header">
           <h1>${establishmentName}</h1>
@@ -232,16 +232,15 @@ const printAllSectionsInOnePage = (
             <span>🔄 تم تحديث الطلب</span>
             <small>${new Date(order.updatedAt!).toLocaleString('ar-EG')}</small>
           </div>` : ''}
-          <div style="font-size: 16px; font-weight: bold; margin: 5px 0;">فاتورة طلب</div>
         </div>
 
         <!-- معلومات الطلب لكل قسم -->
         <div class="order-info">
-          <div style="margin-bottom: 10px;">
-            <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${order.orderNumber}</strong></div>
-            <div style="font-size: 16px; color: #333; margin: 8px 0;">${dateTimeString}</div>
+          <div style="margin-bottom: 2px;">
+            <div style="font-size: 20px; font-weight: bold; margin: 2px 0;"><strong>${order.orderNumber}</strong></div>
+            <div style="font-size: 16px; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
-              <div style="font-size: 16px; margin: 8px 0; text-align: center;">
+              <div style="font-size: 16px; margin: 2px 0; text-align: center;">
                 طاولة: <strong>${order.table.number}</strong>
               </div>
             ` : ''}
@@ -311,203 +310,192 @@ const printAllSectionsInOnePage = (
   }).join('');
 
   const printContent = `
-    <!DOCTYPE html>
-    <html dir="rtl">
-    <head>
-      <meta charset="UTF-8">
-      <title>طباعة الطلب #${order.orderNumber}</title>
-      <style>
-        @page {
-          size:  auto;
-          margin: 0;
-          padding: 0;
-        }
-        body {
-          direction: rtl;
-          font-family: 'Arial', sans-serif;
-          width: auto;
-          max-width: auto;
-          margin: 0 auto;
-          padding: 0 4mm;
-          background: white;
-          color: #000;
-          font-size: 15px;
-          line-height: 1.4;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          box-sizing: border-box;
-        }
-        .header {
-          text-align: center;
-          margin: 5px auto;
-          padding: 5px 0;
-          border-bottom: 1px dashed #000;
-          width: 100%;
-          max-width: 100%;
-          box-sizing: border-box;
-        }
-        .header h1 {
-          font-size: 18px;
-          margin: 0;
-          padding: 10px 0 5px;
-          text-align: center;
-          border-bottom: 1px dashed #ddd;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-        }
-        .section-block {
-          margin-bottom: 15px;
-          border-bottom: 2px dashed #000;
-          padding-bottom: 15px;
-        }
-        .section-name {
-          background-color: #f0f0f0;
-          padding: 8px;
-          text-align: center;
-          font-weight: bold;
-          font-size: 16px;
-          margin: 10px 0 5px 0;
-          border-radius: 4px;
-        }
-        .update-banner {
-          background-color: #fff3cd;
-          color: #856404;
-          padding: 5px 0;
-          text-align: center;
-          font-weight: bold;
-          border-radius: 4px;
-          margin: 5px 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          border: 1px dashed #ffeeba;
-        }
-        .update-banner small {
-          font-size: 12px;
-          opacity: 0.8;
-          margin-top: 2px;
-        }
-        .order-info {
-          margin-bottom: 10px;
-          border-bottom: 1px dashed #000;
-          padding-bottom: 10px;
-          font-size: 16px;
-          text-align: center;
-          font-weight: bold;
-        }
-        .order-info p {
-          margin: 3px 0;
-          text-align: center;
-          justify-content: center;
-        }
-        .items {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 10px 0;
-          table-layout: fixed;
-          text-align: center;
-          direction: rtl;
-        }
-        .items th, .items td {
-          padding: 6px 0;
-          text-align: center;
-          border-bottom: 1px dashed #eee;
-          font-size: 15px;
-          word-break: break-word;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .item-name {
-          text-align: center;
-          padding: 4px 8px 4px 4px;
-          width: 50%;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          direction: rtl;
-          unicode-bidi: embed;
-        }
-        .item-qty {
-          text-align: center;
-          width: 30px;
-          direction: rtl;
-          unicode-bidi: embed;
-        }
-        .item-price {
-          text-align: center;
-          padding: 4px 4px 4px 8px;
-          width: 30%;
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          direction: rtl;
-          unicode-bidi: embed;
-        }
-        .item-notes {
-          font-size: 8px;
-          color: #666;
-          padding: 0 5px;
-          font-style: italic;
-          max-width: 60mm;
-          word-break: break-word;
-          text-align: center;
-          margin: 0 auto;
-        }
-        .total {
-          margin: 15px auto 0;
-          text-align: center;
-          font-weight: bold;
-          font-size: 18px;
-          border-top: 2px dashed #000;
-          padding: 10px 0;
-          width: 100%;
-          background-color: #f9f9f9;
-          border-radius: 4px;
-        }
-        .notes {
-          margin: 5px auto 0;
-          font-size: 9px;
-          color: #666;
-          padding: 0 5px;
-          text-align: center;
-          width: 100%;
-        }
-        .footer {
-          margin: 5px auto 0;
-          text-align: center;
-          font-size: 12px;
-          color: #000;
-          border-top: 1px dashed #000;
-          padding-top: 8px;
-          width: 100%;
-          font-weight: bold;
-        }
-        @media print {
-          body {
-            padding: 0;
-          }
-          .no-print {
-            display: none !important;
-          }
-          .section-block {
-            page-break-after: always !important;
-            -webkit-page-break-after: always !important;
-            break-after: page !important;
-            page-break-inside: avoid !important;
-            -webkit-page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-          .section-block:last-child {
-            page-break-after: auto !important;
-            -webkit-page-break-after: auto !important;
-            break-after: auto !important;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      ${sectionsContent}
-    </body>
-    </html>
-  `;
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>طباعة الطلب #${order.orderNumber}</title>
+
+<style>
+@page {
+  size: auto;
+  margin: 0;
+}
+
+/* ===== BODY ===== */
+body {
+  direction: rtl;
+  font-family: 'Arial', sans-serif;
+  margin: 0 auto;
+  padding: 0 4mm;
+  background: white;
+  color: #000;
+  font-size: 15px;
+  line-height: 1;
+  box-sizing: border-box;
+  word-wrap: break-word;
+}
+
+/* ===== HEADER ===== */
+.header {
+  text-align: center;
+  margin: 3px auto;
+  padding: 3px 0;
+}
+
+.header h1 {
+  font-size: 18px;
+  margin: 0;
+  padding: 6px 0 4px;
+}
+
+/* ===== SECTIONS ===== */
+.section-block {
+  margin-bottom: 2px;
+  padding-bottom: 2px;
+  border-bottom: 2px dashed #000;
+}
+
+.section-name {
+  background-color: #f0f0f0;
+  padding: 2px;
+  margin: 2px 0 2px;
+  font-size: 16px;
+  font-weight: bold;
+  text-align: center;
+  border-radius: 2px;
+}
+
+/* ===== UPDATE BANNER ===== */
+.update-banner {
+  padding: 4px 0;
+  margin: 4px 0;
+}
+
+.update-banner small {
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+/* ===== ORDER INFO ===== */
+.order-info {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  font-size: 16px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.order-info p {
+  margin: 2px 0;
+}
+
+/* ===== TABLE ===== */
+.items {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  table-layout: fixed;
+  text-align: center;
+  direction: rtl;
+  border: 1px solid #000;
+}
+
+.items th,
+.items td {
+  padding: 4px 2px;
+  font-size: 15px;
+  border: 1px solid #000;
+  text-align: center;
+  vertical-align: middle;
+  direction: rtl;
+  unicode-bidi: plaintext;
+}
+
+/* ===== TABLE CELLS ===== */
+.item-name {
+  width: 70%;
+  text-align: center;
+  padding: 3px;
+}
+
+.item-qty {
+  width: 30%;
+  text-align: center;
+  padding: 3px;
+}
+
+/* ===== HIDE PRICE COLUMN ONLY ===== */
+.item-price {
+  display: none !important;
+}
+
+/* ===== ITEM NOTES ===== */
+.item-notes {
+  font-size: 8px;
+  color: #666;
+  margin: 2px auto 0;
+  padding: 0 4px;
+  max-width: 60mm;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ===== TOTAL (مجموع القسم) ===== */
+.total {
+  margin: 1px auto 0;
+  padding: 1px 0;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+/* ===== NOTES ===== */
+.notes {
+  margin-top: 4px;
+  font-size: 9px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+/* ===== FOOTER ===== */
+.footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  font-size: 12px;
+  text-align: center;
+  font-weight: bold;
+  border-top: 1px dashed #000;
+}
+
+/* ===== PRINT ===== */
+@media print {
+  body { padding: 0; }
+  .no-print { display: none !important; }
+
+  .section-block {
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .section-block:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}
+</style>
+</head>
+
+<body>
+  ${sectionsContent}
+</body>
+</html>
+`;
+
 
   // Create a hidden iframe for printing
   const printFrame = document.createElement('iframe');
@@ -535,7 +523,7 @@ const printAllSectionsInOnePage = (
         // Clean up after printing
         setTimeout(() => {
           document.body.removeChild(printFrame);
-        }, 1000);
+        }, 100);
       } catch (error) {
         console.error('Print error:', error);
         // Fallback to opening in new window if iframe printing fails
@@ -551,14 +539,14 @@ const printAllSectionsInOnePage = (
                 if (!printWindow.closed) {
                   printWindow.close();
                 }
-              }, 1000);
-            }, 500);
+              }, 100);
+            }, 50);
           };
         }
         // Clean up iframe
         document.body.removeChild(printFrame);
       }
-    }, 500);
+    }, 50);
   } else {
     // Fallback to original method if iframe fails
     document.body.removeChild(printFrame);
@@ -574,8 +562,8 @@ const printAllSectionsInOnePage = (
             if (!printWindow.closed) {
               printWindow.close();
             }
-          }, 1000);
-        }, 500);
+          }, 100);
+        }, 50);
       };
     } else {
       alert('الرجاء السماح بالنوافذ المنبثقة لطباعة الطلب');

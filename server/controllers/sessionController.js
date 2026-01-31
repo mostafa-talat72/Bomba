@@ -6,6 +6,31 @@ import Table from "../models/Table.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 
+// Helper function to fix sessionPayment data before transfer to avoid validation errors
+const fixSessionPaymentData = (sessionPayment) => {
+    const fixed = {
+        ...sessionPayment.toObject ? sessionPayment.toObject() : sessionPayment
+    };
+    
+    // التأكد من أن remainingAmount لا يكون سالباً
+    if (fixed.remainingAmount < 0) {
+        Logger.warn(`⚠️ Fixing negative remainingAmount for session ${fixed.sessionId}: ${fixed.remainingAmount} -> 0`);
+        fixed.remainingAmount = 0;
+    }
+    
+    // التأكد من أن paidAmount لا يتجاوز sessionCost
+    if (fixed.paidAmount > fixed.sessionCost) {
+        Logger.warn(`⚠️ Fixing paidAmount exceeding sessionCost for session ${fixed.sessionId}: ${fixed.paidAmount} -> ${fixed.sessionCost}`);
+        fixed.paidAmount = fixed.sessionCost;
+        fixed.remainingAmount = 0;
+    }
+    
+    // إعادة حساب remainingAmount للتأكد من الصحة
+    fixed.remainingAmount = Math.max(0, fixed.sessionCost - fixed.paidAmount);
+    
+    return fixed;
+};
+
 // Helper function to perform cleanup - defined outside the controller object
 const performCleanupHelper = async (organizationId) => {
     Logger.info("🧹 Starting automatic cleanup of duplicate session references...");
@@ -1575,6 +1600,50 @@ const sessionController = {
                     organization: req.user.organization,
                 });
 
+                // نقل الدفعات الجزئية المرتبطة بهذه الجلسة إلى الفاتورة الجديدة
+                const sessionIdStr = session._id.toString();
+                
+                // نقل sessionPayments المرتبطة بهذه الجلسة
+                if (bill.sessionPayments && bill.sessionPayments.length > 0) {
+                    const sessionPaymentsToTransfer = bill.sessionPayments.filter(sp => 
+                        sp.sessionId.toString() === sessionIdStr
+                    );
+                    
+                    if (sessionPaymentsToTransfer.length > 0) {
+                        Logger.info(`🎮 Transferring ${sessionPaymentsToTransfer.length} session payments to new bill`);
+                        
+                        // إضافة الدفعات إلى الفاتورة الجديدة
+                        newBill.sessionPayments = sessionPaymentsToTransfer.map(sp => fixSessionPaymentData(sp));
+                        
+                        // إزالة الدفعات من الفاتورة القديمة
+                        bill.sessionPayments = bill.sessionPayments.filter(sp => 
+                            sp.sessionId.toString() !== sessionIdStr
+                        );
+                        
+                        // حساب المبلغ المدفوع من دفعات الجلسة
+                        const sessionPaidAmount = sessionPaymentsToTransfer.reduce((sum, sp) => 
+                            sum + (sp.paidAmount || 0), 0
+                        );
+                        
+                        if (sessionPaidAmount > 0) {
+                            newBill.paid = sessionPaidAmount;
+                            newBill.remaining = Math.max(0, newBill.total - sessionPaidAmount);
+                            
+                            // تحديث حالة الفاتورة الجديدة
+                            if (sessionPaidAmount >= newBill.total) {
+                                newBill.status = "paid";
+                            } else if (sessionPaidAmount > 0) {
+                                newBill.status = "partial";
+                            }
+                            
+                            Logger.info(`💰 Transferred session payments: ${sessionPaidAmount} EGP`);
+                        }
+                        
+                        // حفظ الفاتورة الجديدة مع الدفعات
+                        await newBill.save();
+                    }
+                }
+
                 // Remove session from old bill
                 bill.sessions = bill.sessions.filter(
                     (s) => s._id.toString() !== session._id.toString()
@@ -2095,6 +2164,45 @@ const sessionController = {
                     });
                 }
                 
+                // نقل الدفعات الجزئية المرتبطة بهذه الجلسة إلى الفاتورة الجديدة
+                if (currentBill.sessionPayments && currentBill.sessionPayments.length > 0) {
+                    const sessionPaymentsToTransfer = currentBill.sessionPayments.filter(sp => 
+                        sp.sessionId.toString() === sessionIdStr
+                    );
+                    
+                    if (sessionPaymentsToTransfer.length > 0) {
+                        Logger.info(`🎮 Transferring ${sessionPaymentsToTransfer.length} session payments to existing bill`);
+                        
+                        // إضافة الدفعات إلى الفاتورة الموجودة
+                        existingNewTableBill.sessionPayments = existingNewTableBill.sessionPayments || [];
+                        
+                        for (const sessionPayment of sessionPaymentsToTransfer) {
+                            // التحقق من عدم وجود دفعة مكررة لنفس الجلسة
+                            const existingPayment = existingNewTableBill.sessionPayments.find(sp => 
+                                sp.sessionId.toString() === sessionPayment.sessionId.toString()
+                            );
+                            
+                            if (!existingPayment) {
+                                // إصلاح البيانات قبل النقل
+                                const transferredPayment = fixSessionPaymentData(sessionPayment);
+                                existingNewTableBill.sessionPayments.push(transferredPayment);
+                            } else {
+                                Logger.warn(`⚠️ Session payment already exists for session: ${sessionPayment.sessionId}`);
+                            }
+                        }
+                        
+                        // حساب المبلغ المدفوع من دفعات الجلسة
+                        const sessionPaidAmount = sessionPaymentsToTransfer.reduce((sum, sp) => 
+                            sum + (sp.paidAmount || 0), 0
+                        );
+                        
+                        if (sessionPaidAmount > 0) {
+                            existingNewTableBill.paid = (existingNewTableBill.paid || 0) + sessionPaidAmount;
+                            Logger.info(`💰 Added session payments to existing bill: ${sessionPaidAmount} EGP`);
+                        }
+                    }
+                }
+                
                 await existingNewTableBill.calculateSubtotal();
                 await existingNewTableBill.save();
 
@@ -2107,6 +2215,32 @@ const sessionController = {
                     const sIdStr = s._id ? s._id.toString() : s.toString();
                     return sIdStr !== sessionIdStr;
                 });
+                
+                // إزالة الدفعات الجزئية المرتبطة بهذه الجلسة من الفاتورة القديمة
+                if (currentBill.sessionPayments && currentBill.sessionPayments.length > 0) {
+                    const removedSessionPayments = currentBill.sessionPayments.filter(sp => 
+                        sp.sessionId.toString() === sessionIdStr
+                    );
+                    
+                    if (removedSessionPayments.length > 0) {
+                        Logger.info(`🎮 Removing ${removedSessionPayments.length} session payments from old bill`);
+                        
+                        // إزالة الدفعات من الفاتورة القديمة
+                        currentBill.sessionPayments = currentBill.sessionPayments.filter(sp => 
+                            sp.sessionId.toString() !== sessionIdStr
+                        );
+                        
+                        // تقليل المبلغ المدفوع من الفاتورة القديمة
+                        const removedPaidAmount = removedSessionPayments.reduce((sum, sp) => 
+                            sum + (sp.paidAmount || 0), 0
+                        );
+                        
+                        if (removedPaidAmount > 0) {
+                            currentBill.paid = Math.max(0, (currentBill.paid || 0) - removedPaidAmount);
+                            Logger.info(`💰 Reduced old bill paid amount by: ${removedPaidAmount} EGP`);
+                        }
+                    }
+                }
                 
                 Logger.info(`✅ STEP 2: Removed session from old bill`, {
                     sessionId: sessionIdStr,
@@ -2144,6 +2278,42 @@ const sessionController = {
                 await newBill.calculateSubtotal();
                 await newBill.save();
                 
+                // نقل الدفعات الجزئية المرتبطة بهذه الجلسة إلى الفاتورة الجديدة
+                if (currentBill.sessionPayments && currentBill.sessionPayments.length > 0) {
+                    const sessionPaymentsToTransfer = currentBill.sessionPayments.filter(sp => 
+                        sp.sessionId.toString() === sessionIdStr
+                    );
+                    
+                    if (sessionPaymentsToTransfer.length > 0) {
+                        Logger.info(`🎮 Transferring ${sessionPaymentsToTransfer.length} session payments to new bill`);
+                        
+                        // إضافة الدفعات إلى الفاتورة الجديدة
+                        newBill.sessionPayments = sessionPaymentsToTransfer.map(sp => fixSessionPaymentData(sp));
+                        
+                        // حساب المبلغ المدفوع من دفعات الجلسة
+                        const sessionPaidAmount = sessionPaymentsToTransfer.reduce((sum, sp) => 
+                            sum + (sp.paidAmount || 0), 0
+                        );
+                        
+                        if (sessionPaidAmount > 0) {
+                            newBill.paid = sessionPaidAmount;
+                            newBill.remaining = Math.max(0, newBill.total - sessionPaidAmount);
+                            
+                            // تحديث حالة الفاتورة الجديدة
+                            if (sessionPaidAmount >= newBill.total) {
+                                newBill.status = "paid";
+                            } else if (sessionPaidAmount > 0) {
+                                newBill.status = "partial";
+                            }
+                            
+                            Logger.info(`💰 Transferred session payments to new bill: ${sessionPaidAmount} EGP`);
+                        }
+                        
+                        // حفظ الفاتورة الجديدة مع الدفعات
+                        await newBill.save();
+                    }
+                }
+                
                 Logger.info(`✅ STEP 1: Created new bill with session`, {
                     sessionId: sessionIdStr,
                     newBillId: newBill._id.toString(),
@@ -2159,6 +2329,32 @@ const sessionController = {
                     const sIdStr = s._id ? s._id.toString() : s.toString();
                     return sIdStr !== sessionIdStr;
                 });
+                
+                // إزالة الدفعات الجزئية المرتبطة بهذه الجلسة من الفاتورة القديمة
+                if (currentBill.sessionPayments && currentBill.sessionPayments.length > 0) {
+                    const removedSessionPayments = currentBill.sessionPayments.filter(sp => 
+                        sp.sessionId.toString() === sessionIdStr
+                    );
+                    
+                    if (removedSessionPayments.length > 0) {
+                        Logger.info(`🎮 Removing ${removedSessionPayments.length} session payments from old bill`);
+                        
+                        // إزالة الدفعات من الفاتورة القديمة
+                        currentBill.sessionPayments = currentBill.sessionPayments.filter(sp => 
+                            sp.sessionId.toString() !== sessionIdStr
+                        );
+                        
+                        // تقليل المبلغ المدفوع من الفاتورة القديمة
+                        const removedPaidAmount = removedSessionPayments.reduce((sum, sp) => 
+                            sum + (sp.paidAmount || 0), 0
+                        );
+                        
+                        if (removedPaidAmount > 0) {
+                            currentBill.paid = Math.max(0, (currentBill.paid || 0) - removedPaidAmount);
+                            Logger.info(`💰 Reduced old bill paid amount by: ${removedPaidAmount} EGP`);
+                        }
+                    }
+                }
                 
                 Logger.info(`✅ STEP 2: Removed session from old bill`, {
                     sessionId: sessionIdStr,
@@ -2211,6 +2407,100 @@ const sessionController = {
                     Logger.info(`💳 Transferring ${updatedCurrentBill.partialPayments.length} partial payments from empty bill`);
                     finalBill.partialPayments = finalBill.partialPayments || [];
                     finalBill.partialPayments.push(...updatedCurrentBill.partialPayments);
+                }
+                
+                // Copy itemPayments (الدفعات الجزئية للأصناف)
+                if (updatedCurrentBill.itemPayments && updatedCurrentBill.itemPayments.length > 0) {
+                    Logger.info(`📦 Transferring ${updatedCurrentBill.itemPayments.length} item payments from empty bill`);
+                    finalBill.itemPayments = finalBill.itemPayments || [];
+                    
+                    for (const oldItemPayment of updatedCurrentBill.itemPayments) {
+                        // البحث عن دفعة مماثلة في الفاتورة المستهدفة
+                        const existingItemPayment = finalBill.itemPayments.find(ip => 
+                            ip.itemName === oldItemPayment.itemName && 
+                            ip.pricePerUnit === oldItemPayment.pricePerUnit &&
+                            ip.orderId.toString() === oldItemPayment.orderId.toString()
+                        );
+                        
+                        if (existingItemPayment) {
+                            // دمج مع الدفعة الموجودة
+                            Logger.info(`🔗 Merging item payment: ${oldItemPayment.itemName}`);
+                            
+                            existingItemPayment.quantity += oldItemPayment.quantity;
+                            existingItemPayment.totalPrice += oldItemPayment.totalPrice;
+                            existingItemPayment.paidQuantity += (oldItemPayment.paidQuantity || 0);
+                            existingItemPayment.paidAmount += (oldItemPayment.paidAmount || 0);
+                            existingItemPayment.isPaid = existingItemPayment.paidQuantity >= existingItemPayment.quantity;
+                            
+                            // دمج تاريخ الدفعات
+                            if (oldItemPayment.paymentHistory && oldItemPayment.paymentHistory.length > 0) {
+                                existingItemPayment.paymentHistory = existingItemPayment.paymentHistory || [];
+                                existingItemPayment.paymentHistory.push(...oldItemPayment.paymentHistory);
+                            }
+                            
+                            // تحديث تاريخ آخر دفعة
+                            if (oldItemPayment.paidAt && (!existingItemPayment.paidAt || oldItemPayment.paidAt > existingItemPayment.paidAt)) {
+                                existingItemPayment.paidAt = oldItemPayment.paidAt;
+                                existingItemPayment.paidBy = oldItemPayment.paidBy;
+                            }
+                        } else {
+                            // إضافة دفعة جديدة
+                            Logger.info(`➕ Adding new item payment: ${oldItemPayment.itemName}`);
+                            finalBill.itemPayments.push({
+                                ...oldItemPayment.toObject ? oldItemPayment.toObject() : oldItemPayment
+                            });
+                        }
+                    }
+                    
+                    const totalItemPayments = updatedCurrentBill.itemPayments.reduce((sum, ip) => sum + (ip.paidAmount || 0), 0);
+                    if (totalItemPayments > 0) {
+                        mergeNotes += `\n[تم نقل دفعات أصناف بقيمة ${totalItemPayments} ج.م]`;
+                    }
+                }
+                
+                // Copy sessionPayments (الدفعات الجزئية للجلسات)
+                if (updatedCurrentBill.sessionPayments && updatedCurrentBill.sessionPayments.length > 0) {
+                    Logger.info(`🎮 Transferring ${updatedCurrentBill.sessionPayments.length} session payments from empty bill`);
+                    finalBill.sessionPayments = finalBill.sessionPayments || [];
+                    
+                    for (const oldSessionPayment of updatedCurrentBill.sessionPayments) {
+                        // البحث عن دفعة مماثلة في الفاتورة المستهدفة (نفس الجلسة)
+                        const existingSessionPayment = finalBill.sessionPayments.find(sp => 
+                            sp.sessionId.toString() === oldSessionPayment.sessionId.toString()
+                        );
+                        
+                        if (existingSessionPayment) {
+                            // دمج مع الدفعة الموجودة (نادر الحدوث)
+                            Logger.warn(`⚠️ Found duplicate session payment for session: ${oldSessionPayment.sessionId}`);
+                            
+                            existingSessionPayment.paidAmount += (oldSessionPayment.paidAmount || 0);
+                            existingSessionPayment.remainingAmount = existingSessionPayment.sessionCost - existingSessionPayment.paidAmount;
+                            
+                            // دمج تاريخ الدفعات
+                            if (oldSessionPayment.payments && oldSessionPayment.payments.length > 0) {
+                                existingSessionPayment.payments = existingSessionPayment.payments || [];
+                                existingSessionPayment.payments.push(...oldSessionPayment.payments);
+                            }
+                        } else {
+                            // إضافة دفعة جديدة
+                            Logger.info(`➕ Adding new session payment for session: ${oldSessionPayment.sessionId}`);
+                            finalBill.sessionPayments.push({
+                                ...oldSessionPayment.toObject ? oldSessionPayment.toObject() : oldSessionPayment
+                            });
+                        }
+                    }
+                    
+                    const totalSessionPayments = updatedCurrentBill.sessionPayments.reduce((sum, sp) => sum + (sp.paidAmount || 0), 0);
+                    if (totalSessionPayments > 0) {
+                        mergeNotes += `\n[تم نقل دفعات جلسات بقيمة ${totalSessionPayments} ج.م]`;
+                    }
+                }
+                
+                // Copy paymentHistory (تاريخ الدفعات)
+                if (updatedCurrentBill.paymentHistory && updatedCurrentBill.paymentHistory.length > 0) {
+                    Logger.info(`📜 Transferring ${updatedCurrentBill.paymentHistory.length} payment history records`);
+                    finalBill.paymentHistory = finalBill.paymentHistory || [];
+                    finalBill.paymentHistory.push(...updatedCurrentBill.paymentHistory);
                 }
                 
                 // Add merge information to final bill notes

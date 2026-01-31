@@ -293,15 +293,15 @@ const printAllSectionsInOnePage = (
       <title>طباعة الطلب #${order.orderNumber}</title>
       <style>
         @page {
-          size: auto;
+          size: 80mm auto;
           margin: 0;
           padding: 0;
         }
         body {
           direction: rtl;
           font-family: 'Arial', sans-serif;
-          width: auto;
-          max-width: auto;
+          width: 72mm;
+          max-width: 72mm;
           margin: 0 auto;
           padding: 0 4mm;
           background: white;
@@ -393,7 +393,7 @@ const printAllSectionsInOnePage = (
           text-overflow: ellipsis;
         }
         .item-name {
-          text-align: center;
+          text-align: right;
           padding: 4px 8px 4px 4px;
           width: 50%;
           word-wrap: break-word;
@@ -540,15 +540,15 @@ const printSectionOrder = (
       <title>طباعة الطلب #${order.orderNumber} - ${sectionName}</title>
       <style>
         @page {
-          size:  auto;
+          size: 80mm auto;
           margin: 0;
           padding: 0;
         }
         body {
           direction: rtl;
           font-family: 'Arial', sans-serif;
-          width: auto;
-          max-width: auto;
+          width: 72mm;
+          max-width: 72mm;
           margin: 0 auto;
           padding: 0 4mm;
           background: white;
@@ -635,7 +635,7 @@ const printSectionOrder = (
           text-overflow: ellipsis;
         }
         .item-name {
-          text-align: center;
+          text-align: right;
           padding: 4px 8px 4px 4px;
           width: 50%;
           word-wrap: break-word;

@@ -694,6 +694,19 @@ export const updateBill = async (req, res) => {
                     const oldBillNumber = bill.billNumber;
                     const oldBillOrders = [...(bill.orders || [])];
                     const oldBillSessions = [...(bill.sessions || [])];
+                    const oldItemPayments = [...(bill.itemPayments || [])];
+                    const oldSessionPayments = [...(bill.sessionPayments || [])];
+                    const oldPayments = [...(bill.payments || [])];
+                    const oldPaymentHistory = [...(bill.paymentHistory || [])];
+                    
+                    Logger.info(`📊 الفاتورة القديمة تحتوي على:`, {
+                        orders: oldBillOrders.length,
+                        sessions: oldBillSessions.length,
+                        itemPayments: oldItemPayments.length,
+                        sessionPayments: oldSessionPayments.length,
+                        payments: oldPayments.length,
+                        totalPaid: bill.paid || 0
+                    });
                     
                     // STEP 1: إضافة الطلبات والجلسات إلى الفاتورة الموجودة في الطاولة الجديدة
                     if (oldBillOrders.length > 0) {
@@ -719,6 +732,109 @@ export const updateBill = async (req, res) => {
                         );
                         Logger.info(`✅ STEP 1b: تم إضافة ${oldBillSessions.length} جلسة إلى الفاتورة ${existingBillInNewTable.billNumber} والطاولة ${newTableId}`);
                     }
+                    
+                    // STEP 1.5: دمج الدفعات الجزئية (itemPayments و sessionPayments)
+                    Logger.info(`🔄 STEP 1.5: بدء دمج الدفعات الجزئية...`);
+                    
+                    // دمج itemPayments
+                    if (oldItemPayments.length > 0) {
+                        Logger.info(`📦 دمج ${oldItemPayments.length} دفعة جزئية للأصناف`);
+                        
+                        for (const oldItemPayment of oldItemPayments) {
+                            // البحث عن دفعة مماثلة في الفاتورة المستهدفة (نفس الصنف والسعر)
+                            const existingItemPayment = existingBillInNewTable.itemPayments.find(ip => 
+                                ip.itemName === oldItemPayment.itemName && 
+                                ip.pricePerUnit === oldItemPayment.pricePerUnit &&
+                                ip.orderId.toString() === oldItemPayment.orderId.toString()
+                            );
+                            
+                            if (existingItemPayment) {
+                                // دمج مع الدفعة الموجودة
+                                Logger.info(`🔗 دمج دفعة الصنف: ${oldItemPayment.itemName} (الكمية: ${oldItemPayment.paidQuantity})`);
+                                
+                                existingItemPayment.quantity += oldItemPayment.quantity;
+                                existingItemPayment.totalPrice += oldItemPayment.totalPrice;
+                                existingItemPayment.paidQuantity += (oldItemPayment.paidQuantity || 0);
+                                existingItemPayment.paidAmount += (oldItemPayment.paidAmount || 0);
+                                existingItemPayment.isPaid = existingItemPayment.paidQuantity >= existingItemPayment.quantity;
+                                
+                                // دمج تاريخ الدفعات
+                                if (oldItemPayment.paymentHistory && oldItemPayment.paymentHistory.length > 0) {
+                                    existingItemPayment.paymentHistory.push(...oldItemPayment.paymentHistory);
+                                }
+                                
+                                // تحديث تاريخ آخر دفعة إذا كانت الدفعة القديمة أحدث
+                                if (oldItemPayment.paidAt && (!existingItemPayment.paidAt || oldItemPayment.paidAt > existingItemPayment.paidAt)) {
+                                    existingItemPayment.paidAt = oldItemPayment.paidAt;
+                                    existingItemPayment.paidBy = oldItemPayment.paidBy;
+                                }
+                            } else {
+                                // إضافة دفعة جديدة
+                                Logger.info(`➕ إضافة دفعة جديدة للصنف: ${oldItemPayment.itemName}`);
+                                existingBillInNewTable.itemPayments.push({
+                                    ...oldItemPayment.toObject ? oldItemPayment.toObject() : oldItemPayment
+                                });
+                            }
+                        }
+                        
+                        Logger.info(`✅ تم دمج جميع دفعات الأصناف`);
+                    }
+                    
+                    // دمج sessionPayments
+                    if (oldSessionPayments.length > 0) {
+                        Logger.info(`🎮 دمج ${oldSessionPayments.length} دفعة جزئية للجلسات`);
+                        
+                        for (const oldSessionPayment of oldSessionPayments) {
+                            // البحث عن دفعة مماثلة في الفاتورة المستهدفة (نفس الجلسة)
+                            const existingSessionPayment = existingBillInNewTable.sessionPayments.find(sp => 
+                                sp.sessionId.toString() === oldSessionPayment.sessionId.toString()
+                            );
+                            
+                            if (existingSessionPayment) {
+                                // دمج مع الدفعة الموجودة (هذا لا يجب أن يحدث عادة لأن كل جلسة لها معرف فريد)
+                                Logger.warn(`⚠️ وجدت دفعة جلسة مكررة للجلسة: ${oldSessionPayment.sessionId}`);
+                                
+                                existingSessionPayment.paidAmount += (oldSessionPayment.paidAmount || 0);
+                                existingSessionPayment.remainingAmount = existingSessionPayment.sessionCost - existingSessionPayment.paidAmount;
+                                
+                                // دمج تاريخ الدفعات
+                                if (oldSessionPayment.payments && oldSessionPayment.payments.length > 0) {
+                                    existingSessionPayment.payments.push(...oldSessionPayment.payments);
+                                }
+                            } else {
+                                // إضافة دفعة جديدة
+                                Logger.info(`➕ إضافة دفعة جديدة للجلسة: ${oldSessionPayment.sessionId}`);
+                                existingBillInNewTable.sessionPayments.push({
+                                    ...oldSessionPayment.toObject ? oldSessionPayment.toObject() : oldSessionPayment
+                                });
+                            }
+                        }
+                        
+                        Logger.info(`✅ تم دمج جميع دفعات الجلسات`);
+                    }
+                    
+                    // دمج الدفعات العامة والتاريخ
+                    if (oldPayments.length > 0) {
+                        Logger.info(`💰 دمج ${oldPayments.length} دفعة عامة`);
+                        existingBillInNewTable.payments.push(...oldPayments);
+                        
+                        // تحديث المبلغ المدفوع الإجمالي
+                        const oldTotalPaid = bill.paid || 0;
+                        existingBillInNewTable.paid = (existingBillInNewTable.paid || 0) + oldTotalPaid;
+                        
+                        Logger.info(`💰 تم تحديث المبلغ المدفوع: ${existingBillInNewTable.paid}`);
+                    }
+                    
+                    if (oldPaymentHistory.length > 0) {
+                        Logger.info(`📜 دمج ${oldPaymentHistory.length} سجل دفعة`);
+                        existingBillInNewTable.paymentHistory.push(...oldPaymentHistory);
+                    }
+                    
+                    // إضافة ملاحظة عن الدمج
+                    const mergeNote = `\n[تم دمج فاتورة ${oldBillNumber} - المبلغ المدفوع: ${bill.paid || 0} جنيه]`;
+                    existingBillInNewTable.notes = (existingBillInNewTable.notes || '') + mergeNote;
+                    
+                    Logger.info(`📝 تمت إضافة ملاحظة الدمج`);
                     
                     // STEP 2: حفظ الفاتورة المدمجة وإعادة حساب المجاميع
                     await existingBillInNewTable.calculateSubtotal();
