@@ -1,6 +1,7 @@
 import express from "express";
 import {
     getOrganization,
+    getOrganizationById,
     updateOrganization,
     updateOrganizationPermissions,
     canEditOrganization,
@@ -17,6 +18,9 @@ router.use(protect);
 router.route("/")
     .get(getOrganization)
     .put(updateOrganization);
+
+// Get organization by ID (for printing bills from other organizations)
+router.get("/:id", getOrganizationById);
 
 router.put("/permissions", updateOrganizationPermissions);
 router.get("/can-edit", canEditOrganization);

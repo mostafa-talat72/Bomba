@@ -45,13 +45,48 @@ const OrganizationSchema = new mongoose.Schema({
     logo: { type: String, default: "" },
     websiteUrl: { type: String, default: "" },
     workingHours: {
-        monday: { open: String, close: String, closed: { type: Boolean, default: false } },
-        tuesday: { open: String, close: String, closed: { type: Boolean, default: false } },
-        wednesday: { open: String, close: String, closed: { type: Boolean, default: false } },
-        thursday: { open: String, close: String, closed: { type: Boolean, default: false } },
-        friday: { open: String, close: String, closed: { type: Boolean, default: false } },
-        saturday: { open: String, close: String, closed: { type: Boolean, default: false } },
-        sunday: { open: String, close: String, closed: { type: Boolean, default: false } }
+        monday: { 
+            open: String, 
+            close: String, 
+            closed: { type: Boolean, default: false },
+            is24Hours: { type: Boolean, default: false }
+        },
+        tuesday: { 
+            open: String, 
+            close: String, 
+            closed: { type: Boolean, default: false },
+            is24Hours: { type: Boolean, default: false }
+        },
+        wednesday: { 
+            open: String, 
+            close: String, 
+            closed: { type: Boolean, default: false },
+            is24Hours: { type: Boolean, default: false }
+        },
+        thursday: { 
+            open: String, 
+            close: String, 
+            closed: { type: Boolean, default: false },
+            is24Hours: { type: Boolean, default: false }
+        },
+        friday: { 
+            open: String, 
+            close: String, 
+            closed: { type: Boolean, default: false },
+            is24Hours: { type: Boolean, default: false }
+        },
+        saturday: { 
+            open: String, 
+            close: String, 
+            closed: { type: Boolean, default: false },
+            is24Hours: { type: Boolean, default: false }
+        },
+        sunday: { 
+            open: String, 
+            close: String, 
+            closed: { type: Boolean, default: false },
+            is24Hours: { type: Boolean, default: false }
+        }
     },
     
     createdAt: { type: Date, default: Date.now },

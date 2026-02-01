@@ -2,6 +2,37 @@ import Organization from "../models/Organization.js";
 import User from "../models/User.js";
 import organizationWebsiteService from "../services/organizationWebsiteService.js";
 
+// @desc    Get organization details by ID
+// @route   GET /api/organization/:id
+// @access  Private
+export const getOrganizationById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const organization = await Organization.findById(id)
+            .populate("owner", "name email")
+            .populate('permissions.authorizedManagers', 'name email');
+
+        if (!organization) {
+            return res.status(404).json({
+                success: false,
+                message: "المنشأة غير موجودة",
+            });
+        }
+
+        res.json({
+            success: true,
+            data: organization,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب بيانات المنشأة",
+            error: error.message,
+        });
+    }
+};
+
 // @desc    Get organization details
 // @route   GET /api/organization
 // @access  Private

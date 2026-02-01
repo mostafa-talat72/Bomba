@@ -2328,6 +2328,10 @@ class ApiClient {
     return this.request('/organization');
   }
 
+  async getOrganizationById(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/organization/${id}`);
+  }
+
   async updateOrganization(organizationData: {
     name?: string;
     description?: string;
