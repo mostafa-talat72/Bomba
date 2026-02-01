@@ -445,6 +445,11 @@ class ChangeProcessor {
         if (value instanceof mongoose.Types.ObjectId) return 'ObjectId';
         if (typeof value === 'object' && value._bsontype === 'ObjectId') return 'ObjectId';
         
+        // Handle populated ObjectId fields (objects with _id)
+        if (typeof value === 'object' && value !== null && value._id) {
+            return 'ObjectId'; // Treat populated objects as ObjectId
+        }
+        
         const type = typeof value;
         return type.charAt(0).toUpperCase() + type.slice(1);
     }
@@ -469,8 +474,22 @@ class ChangeProcessor {
 
         // ObjectId compatibility
         if (expectedType === 'ObjectId') {
-            return actualType === 'ObjectId' || 
-                   (actualType === 'String' && mongoose.Types.ObjectId.isValid(value));
+            // Direct ObjectId
+            if (actualType === 'ObjectId') {
+                return true;
+            }
+            
+            // String that can be converted to ObjectId
+            if (actualType === 'String' && mongoose.Types.ObjectId.isValid(value)) {
+                return true;
+            }
+            
+            // Populated object with _id field (common in sync operations)
+            if (actualType === 'Object' && value && value._id) {
+                return mongoose.Types.ObjectId.isValid(value._id);
+            }
+            
+            return false;
         }
 
         // Date compatibility
@@ -501,7 +520,77 @@ class ChangeProcessor {
     }
 
     /**
-     * Validate device document specifically
+     * Sanitize document for sync operations
+     * Converts populated objects back to ObjectIds
+     * @param {Object} document - Document to sanitize
+     * @returns {Object} - Sanitized document
+     */
+    sanitizeDocumentForSync(document) {
+        if (!document || typeof document !== 'object') {
+            return document;
+        }
+
+        const sanitized = { ...document };
+
+        // Convert populated ObjectId fields back to ObjectIds
+        const objectIdFields = ['createdBy', 'updatedBy', 'organization', 'table', 'user'];
+        
+        for (const field of objectIdFields) {
+            if (sanitized[field] && typeof sanitized[field] === 'object' && sanitized[field]._id) {
+                sanitized[field] = sanitized[field]._id;
+            }
+        }
+
+        // Handle nested arrays with ObjectId references
+        if (sanitized.orders && Array.isArray(sanitized.orders)) {
+            sanitized.orders = sanitized.orders.map(order => {
+                if (typeof order === 'object' && order._id) {
+                    return order._id;
+                }
+                return order;
+            });
+        }
+
+        if (sanitized.sessions && Array.isArray(sanitized.sessions)) {
+            sanitized.sessions = sanitized.sessions.map(session => {
+                if (typeof session === 'object' && session._id) {
+                    return session._id;
+                }
+                return session;
+            });
+        }
+
+        // Handle payments array
+        if (sanitized.payments && Array.isArray(sanitized.payments)) {
+            sanitized.payments = sanitized.payments.map(payment => {
+                if (payment.user && typeof payment.user === 'object' && payment.user._id) {
+                    payment.user = payment.user._id;
+                }
+                return payment;
+            });
+        }
+
+        // Handle itemPayments array
+        if (sanitized.itemPayments && Array.isArray(sanitized.itemPayments)) {
+            sanitized.itemPayments = sanitized.itemPayments.map(item => {
+                if (item.paidBy && typeof item.paidBy === 'object' && item.paidBy._id) {
+                    item.paidBy = item.paidBy._id;
+                }
+                if (item.orderId && typeof item.orderId === 'object' && item.orderId._id) {
+                    item.orderId = item.orderId._id;
+                }
+                if (item.menuItemId && typeof item.menuItemId === 'object' && item.menuItemId._id) {
+                    item.menuItemId = item.menuItemId._id;
+                }
+                return item;
+            });
+        }
+
+        return sanitized;
+    }
+
+    /**
+     * Validate device document
      * @param {Object} document - Device document to validate
      * @returns {Object} - Validation result
      */
@@ -626,7 +715,8 @@ class ChangeProcessor {
 
             // Validate document data before applying
             // Requirements: 9.1, 9.4, 9.5
-            const validation = this.validateDocumentData(document, collectionName, 'insert');
+            const sanitizedDocument = this.sanitizeDocumentForSync(document);
+            const validation = this.validateDocumentData(sanitizedDocument, collectionName, 'insert');
             if (!validation.success) {
                 Logger.error(`[ChangeProcessor] Document validation failed for insert in ${collectionName}:`, {
                     documentId: document._id,
@@ -637,7 +727,7 @@ class ChangeProcessor {
                 if (collectionName === 'devices') {
                     Logger.error(`[ChangeProcessor] Rejecting invalid device document from Atlas:`, {
                         documentId: document._id,
-                        document: document,
+                        document: sanitizedDocument,
                         errors: validation.errors
                     });
                     
@@ -657,11 +747,11 @@ class ChangeProcessor {
 
             // Additional validation for specific collections
             if (collectionName === 'devices') {
-                const deviceValidation = DeviceValidator.validateDevice(document, 'insert');
+                const deviceValidation = DeviceValidator.validateDevice(sanitizedDocument, 'insert');
                 if (!deviceValidation.success) {
                     Logger.error(`[ChangeProcessor] Device validation failed for insert:`, {
                         documentId: document._id,
-                        document: document,
+                        document: sanitizedDocument,
                         errors: deviceValidation.errors,
                         warnings: deviceValidation.warnings
                     });
@@ -684,11 +774,11 @@ class ChangeProcessor {
 
             // Additional validation for bills collection
             if (collectionName === 'bills') {
-                const billValidation = BillValidator.validateBill(document, 'insert');
+                const billValidation = BillValidator.validateBill(sanitizedDocument, 'insert');
                 if (!billValidation.success) {
                     Logger.error(`[ChangeProcessor] Bill validation failed for insert:`, {
                         documentId: document._id,
-                        document: document,
+                        document: sanitizedDocument,
                         errors: billValidation.errors,
                         warnings: billValidation.warnings
                     });
@@ -713,7 +803,7 @@ class ChangeProcessor {
             await this.bypassMiddleware(async () => {
                 // Use insertMany with ordered:false to handle duplicates gracefully
                 try {
-                    await Model.collection.insertOne(document);
+                    await Model.collection.insertOne(sanitizedDocument);
                 } catch (error) {
                     // If duplicate key error, it means document already exists
                     // This is okay - it might have been synced already
@@ -893,9 +983,12 @@ class ChangeProcessor {
                 };
             }
 
+            // Sanitize document for sync operations (convert populated objects to ObjectIds)
+            const sanitizedDocument = this.sanitizeDocumentForSync(document);
+
             // Validate document data before applying
             // Requirements: 9.1, 9.4, 9.5
-            const validation = this.validateDocumentData(document, collectionName, 'replace');
+            const validation = this.validateDocumentData(sanitizedDocument, collectionName, 'replace');
             if (!validation.success) {
                 Logger.error(`[ChangeProcessor] Document validation failed for replace in ${collectionName}:${documentId}:`, {
                     errors: validation.errors
@@ -905,7 +998,7 @@ class ChangeProcessor {
                 if (collectionName === 'devices') {
                     Logger.error(`[ChangeProcessor] Rejecting invalid device document replacement from Atlas:`, {
                         documentId: documentId,
-                        document: document,
+                        document: sanitizedDocument,
                         errors: validation.errors
                     });
                     
@@ -925,11 +1018,11 @@ class ChangeProcessor {
 
             // Additional validation for specific collections
             if (collectionName === 'devices') {
-                const deviceValidation = DeviceValidator.validateDevice(document, 'replace');
+                const deviceValidation = DeviceValidator.validateDevice(sanitizedDocument, 'replace');
                 if (!deviceValidation.success) {
                     Logger.error(`[ChangeProcessor] Device validation failed for replace:`, {
                         documentId: documentId,
-                        document: document,
+                        document: sanitizedDocument,
                         errors: deviceValidation.errors,
                         warnings: deviceValidation.warnings
                     });
@@ -952,11 +1045,11 @@ class ChangeProcessor {
 
             // Additional validation for bills collection
             if (collectionName === 'bills') {
-                const billValidation = BillValidator.validateBill(document, 'replace');
+                const billValidation = BillValidator.validateBill(sanitizedDocument, 'replace');
                 if (!billValidation.success) {
                     Logger.error(`[ChangeProcessor] Bill validation failed for replace:`, {
                         documentId: documentId,
-                        document: document,
+                        document: sanitizedDocument,
                         errors: billValidation.errors,
                         warnings: billValidation.warnings
                     });
@@ -999,7 +1092,7 @@ class ChangeProcessor {
             await this.bypassMiddleware(async () => {
                 await Model.collection.replaceOne(
                     { _id: documentId },
-                    document,
+                    sanitizedDocument,
                     { upsert: true }
                 );
             });

@@ -1,6 +1,50 @@
 import mongoose from "mongoose";
 import QRCode from "qrcode";
 
+// Helper function to get item redistribution key
+// Uses menuItem ID if available, falls back to name|price for backward compatibility
+function getItemRedistributionKey(item) {
+    if (item.menuItemId && mongoose.Types.ObjectId.isValid(item.menuItemId)) {
+        return item.menuItemId.toString();
+    }
+    // Fallback for backward compatibility
+    return `${item.name || item.itemName}|${item.price || item.pricePerUnit}`;
+}
+
+// Helper function to check if two items can share payments (same menuItem)
+function canSharePayments(item1, item2) {
+    // If both have menuItemId, compare them
+    if (item1.menuItemId && item2.menuItemId) {
+        return item1.menuItemId.toString() === item2.menuItemId.toString();
+    }
+    
+    // If one has menuItemId and other doesn't, try to match by name and price
+    if ((item1.menuItemId && !item2.menuItemId) || (!item1.menuItemId && item2.menuItemId)) {
+        const name1 = item1.name || item1.itemName;
+        const name2 = item2.name || item2.itemName;
+        const price1 = item1.price || item1.pricePerUnit;
+        const price2 = item2.price || item2.pricePerUnit;
+        
+        // Match by name and price (with small tolerance for price differences)
+        return name1 === name2 && Math.abs(price1 - price2) < 0.01;
+    }
+    
+    // If both have menuItem reference, compare them
+    if (item1.menuItem && item2.menuItem) {
+        const id1 = item1.menuItem._id || item1.menuItem;
+        const id2 = item2.menuItem._id || item2.menuItem;
+        return id1.toString() === id2.toString();
+    }
+    
+    // Fallback: compare name and price (less reliable)
+    const name1 = item1.name || item1.itemName;
+    const name2 = item2.name || item2.itemName;
+    const price1 = item1.price || item1.pricePerUnit;
+    const price2 = item2.price || item2.pricePerUnit;
+    
+    return name1 === name2 && Math.abs(price1 - price2) < 0.01;
+}
+
 const billSchema = new mongoose.Schema(
     {
         billNumber: {
@@ -173,6 +217,11 @@ const billSchema = new mongoose.Schema(
                 itemId: {
                     type: String,
                     required: true,
+                },
+                menuItemId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "MenuItem",
+                    required: false, // Optional for backward compatibility
                 },
                 itemName: {
                     type: String,
@@ -378,6 +427,28 @@ const billSchema = new mongoose.Schema(
             ref: "Organization",
             required: true,
         },
+        // تتبع ترقيات النظام التلقائية
+        upgradeHistory: [
+            {
+                type: {
+                    type: String,
+                    required: true,
+                },
+                upgradedAt: {
+                    type: Date,
+                    default: Date.now,
+                },
+                upgradedCount: {
+                    type: Number,
+                    default: 0,
+                },
+                failedCount: {
+                    type: Number,
+                    default: 0,
+                },
+                upgradeLog: [String],
+            },
+        ],
     },
     {
         timestamps: true,
@@ -460,8 +531,8 @@ billSchema.pre("save", async function (next) {
                             };
                             currentOrderItems.set(itemId, itemDetails);
                             
-                            // Group items by type (name + price)
-                            const itemKey = `${item.name}|${item.price}`;
+                            // Group items by menuItem ID (the correct way)
+                            const itemKey = getItemRedistributionKey(item);
                             if (!itemsByType.has(itemKey)) {
                                 itemsByType.set(itemKey, []);
                             }
@@ -482,7 +553,8 @@ billSchema.pre("save", async function (next) {
                     
                     if (!isValid) {
                         // Item was deleted - collect payment for redistribution
-                        const itemKey = `${ip.itemName}|${ip.pricePerUnit}`;
+                        // Use menuItem ID if available, fallback to name|price for backward compatibility
+                        const itemKey = getItemRedistributionKey(ip);
                         const paidAmount = ip.paidAmount || 0;
                         
                         if (paidAmount > 0) {
@@ -534,56 +606,86 @@ billSchema.pre("save", async function (next) {
                     return true;
                 });
 
-                // Second pass: redistribute payments to remaining items of the same type
+                // Second pass: redistribute payments using smart matching
                 for (const [itemKey, totalPaidAmount] of paymentsToRedistribute) {
                     if (totalPaidAmount <= 0) continue;
                     
-                    const remainingItemIds = itemsByType.get(itemKey) || [];
-                    if (remainingItemIds.length === 0) continue;
-                                        
-                    // Calculate how much to distribute per unit
-                    const [itemName, priceStr] = itemKey.split('|');
-                    const unitPrice = parseFloat(priceStr);
-                    const totalQuantityPaid = Math.round(totalPaidAmount / unitPrice);
+                    // Find all items that can receive this payment (using smart matching)
+                    const eligibleItems = [];
                     
-                    let remainingQuantityToDistribute = totalQuantityPaid;
+                    // Get a sample of the deleted item for comparison
+                    const deletedItemSample = removedPayments.find(rp => 
+                        getItemRedistributionKey(rp) === itemKey
+                    );
                     
-                    // Distribute payments to remaining items
-                    for (const itemId of remainingItemIds) {
+                    if (!deletedItemSample) continue;
+                    
+                    // Find all current items that can share payments with the deleted item
+                    this.itemPayments.forEach(ip => {
+                        if (canSharePayments(deletedItemSample, ip)) {
+                            const availableQuantity = (ip.quantity || 0) - (ip.paidQuantity || 0);
+                            if (availableQuantity > 0) {
+                                eligibleItems.push({
+                                    itemPayment: ip,
+                                    availableQuantity: availableQuantity
+                                });
+                            }
+                        }
+                    });
+                    
+                    if (eligibleItems.length === 0) {
+                        console.warn(`⚠️ [Pre-save] No eligible items found for redistribution: ${itemKey}`);
+                        continue;
+                    }
+                    
+                    // Calculate unit price from deleted item or eligible items
+                    let unitPrice = deletedItemSample.pricePerUnit || 0;
+                    if (unitPrice <= 0 && eligibleItems.length > 0) {
+                        unitPrice = eligibleItems[0].itemPayment.pricePerUnit || 0;
+                    }
+                    
+                    if (unitPrice <= 0) {
+                        console.warn(`⚠️ [Pre-save] Could not determine unit price for: ${itemKey}`);
+                        continue;
+                    }
+                    
+                    const totalQuantityToDistribute = Math.round(totalPaidAmount / unitPrice);
+                    let remainingQuantityToDistribute = totalQuantityToDistribute;
+                    
+                    // Distribute payments across eligible items
+                    for (const eligible of eligibleItems) {
                         if (remainingQuantityToDistribute <= 0) break;
                         
-                        const existingPayment = this.itemPayments.find(ip => ip.itemId === itemId);
-                        if (!existingPayment) continue;
-                        
-                        const availableQuantity = existingPayment.quantity - (existingPayment.paidQuantity || 0);
-                        if (availableQuantity <= 0) continue;
-                        
-                        const quantityToAdd = Math.min(remainingQuantityToDistribute, availableQuantity);
+                        const quantityToAdd = Math.min(remainingQuantityToDistribute, eligible.availableQuantity);
                         const amountToAdd = quantityToAdd * unitPrice;
                         
-                        existingPayment.paidQuantity = (existingPayment.paidQuantity || 0) + quantityToAdd;
-                        existingPayment.paidAmount = (existingPayment.paidAmount || 0) + amountToAdd;
-                        existingPayment.isPaid = existingPayment.paidQuantity >= existingPayment.quantity;
-                        existingPayment.paidAt = new Date();
+                        const ip = eligible.itemPayment;
+                        ip.paidQuantity = (ip.paidQuantity || 0) + quantityToAdd;
+                        ip.paidAmount = (ip.paidAmount || 0) + amountToAdd;
+                        ip.isPaid = ip.paidQuantity >= ip.quantity;
+                        ip.paidAt = new Date();
                         
-                        // Add to payment history
-                        if (!existingPayment.paymentHistory) {
-                            existingPayment.paymentHistory = [];
+                        // Add to payment history with more details
+                        if (!ip.paymentHistory) {
+                            ip.paymentHistory = [];
                         }
-                        existingPayment.paymentHistory.push({
+                        ip.paymentHistory.push({
                             quantity: quantityToAdd,
                             amount: amountToAdd,
                             paidAt: new Date(),
-                            method: 'redistribution',
-                            note: 'Redistributed from deleted items'
+                            method: 'smart_redistribution',
+                            note: `Smart redistribution from deleted item: ${deletedItemSample.itemName}`,
+                            originalItemKey: itemKey,
+                            redistributionMethod: deletedItemSample.menuItemId ? 'menuItemId' : 'name_price'
                         });
                         
                         remainingQuantityToDistribute -= quantityToAdd;
                         
+                        console.log(`✅ [Pre-save] Redistributed ${quantityToAdd} units (${amountToAdd} EGP) to ${ip.itemName}`);
                     }
                     
                     if (remainingQuantityToDistribute > 0) {
-                        console.warn(`⚠️ [Pre-save] Could not redistribute ${remainingQuantityToDistribute} units for item type: ${itemKey}`);
+                        console.warn(`⚠️ [Pre-save] Could not redistribute ${remainingQuantityToDistribute} units for: ${itemKey}`);
                     }
                 }
 
@@ -629,12 +731,14 @@ billSchema.pre("save", async function (next) {
                             const price = item.price || 0;
                             const quantity = item.quantity || 1;
                             const addons = item.addons || [];
+                            const menuItemId = item.menuItem?._id || item.menuItem || null;
 
                             // إضافة itemPayments لجميع الفواتير (حتى الجديدة) لضمان ظهور جميع الأصناف
                             
                             this.itemPayments.push({
                                 orderId: order._id,
                                 itemId: itemId,
+                                menuItemId: menuItemId,
                                 itemName,
                                 quantity,
                                 paidQuantity: 0,
@@ -1048,6 +1152,7 @@ billSchema.methods.addPartialPayment = function (
             this.itemPayments.push({
                 orderId: orderIdFromItem,
                 itemId: item.itemId, // Use the provided itemId directly
+                menuItemId: orderItem.menuItem?._id || orderItem.menuItem || null,
                 itemName: orderItem.name,
                 quantity: orderItem.quantity, // Total quantity of this item in the order
                 paidQuantity: item.quantity, // Quantity being paid for now
@@ -1100,11 +1205,186 @@ billSchema.methods.getPartialPaymentsSummary = function () {
     return summary;
 };
 
-// Method to clean up orphaned itemPayments
+// Method to automatically upgrade old itemPayments to new format
+billSchema.methods.upgradeItemPaymentsToNewFormat = async function() {
+    // Import config
+    const autoUpgradeConfig = (await import('../config/autoUpgradeConfig.js')).default;
+    
+    // Check if auto-upgrade is enabled
+    if (!autoUpgradeConfig.enabled || !autoUpgradeConfig.types.itemPayments.enabled) {
+        return { upgraded: false, reason: 'Auto-upgrade disabled' };
+    }
+
+    if (!this.itemPayments || this.itemPayments.length === 0) {
+        return { upgraded: false, reason: 'No itemPayments to upgrade' };
+    }
+
+    // Check if already upgraded (has menuItemId)
+    const needsUpgrade = this.itemPayments.some(ip => !ip.menuItemId);
+    if (!needsUpgrade) {
+        return { upgraded: false, reason: 'Already using new format' };
+    }
+
+    // Check if recently upgraded (performance optimization)
+    // BUT only skip if ALL items are already upgraded
+    if (autoUpgradeConfig.performance.skipIfRecentlyUpgraded && this.upgradeHistory) {
+        const recentUpgrade = this.upgradeHistory.find(uh => 
+            uh.type === 'itemPayments_menuItemId' && 
+            uh.upgradedAt > new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+        );
+        
+        // Only skip if recently upgraded AND all items are already upgraded
+        if (recentUpgrade && !needsUpgrade) {
+            return { upgraded: false, reason: 'Recently upgraded (within 24 hours) and all items are upgraded' };
+        }
+        
+        // If there are still items needing upgrade, continue with upgrade regardless of recent upgrade
+        if (recentUpgrade && needsUpgrade) {
+            console.log(`🔄 [Auto-Upgrade] Bill ${this.billNumber} was recently upgraded but still has ${this.itemPayments.filter(ip => !ip.menuItemId).length} items needing upgrade`);
+        }
+    }
+
+    console.log(`🔄 [Auto-Upgrade] Upgrading bill ${this.billNumber} to new format...`);
+    console.log(`📊 [Auto-Upgrade] Total itemPayments: ${this.itemPayments.length}, Need upgrade: ${this.itemPayments.filter(ip => !ip.menuItemId).length}`);
+
+    let upgradedCount = 0;
+    let failedCount = 0;
+    const upgradeLog = [];
+    const startTime = Date.now();
+
+    try {
+        // Populate orders if needed
+        if (!this.populated('orders')) {
+            await this.populate('orders');
+        }
+
+        // Process each itemPayment (with batch size limit)
+        const batchSize = autoUpgradeConfig.options.batchSize;
+        const itemsNeedingUpgrade = this.itemPayments.filter(ip => !ip.menuItemId);
+        
+        // If batchSize is -1, process all items. Otherwise, limit to batchSize
+        const itemsToProcess = batchSize === -1 ? itemsNeedingUpgrade : itemsNeedingUpgrade.slice(0, batchSize);
+
+        for (const itemPayment of itemsToProcess) {
+            try {
+                // Find the corresponding order and item
+                const [orderIdStr, itemIndexStr] = itemPayment.itemId.split('-');
+                const itemIndex = parseInt(itemIndexStr);
+
+                const order = this.orders.find(o => o._id.toString() === orderIdStr);
+                if (!order || !order.items[itemIndex]) {
+                    upgradeLog.push(`⚠️ Could not find order item for ${itemPayment.itemId}`);
+                    failedCount++;
+                    continue;
+                }
+
+                const orderItem = order.items[itemIndex];
+                
+                // Try to get menuItemId from order item
+                if (orderItem.menuItem) {
+                    // Already has menuItem reference
+                    itemPayment.menuItemId = orderItem.menuItem._id || orderItem.menuItem;
+                    upgradedCount++;
+                    upgradeLog.push(`✅ Linked ${itemPayment.itemName} to existing menuItem`);
+                } else {
+                    // Try to find menuItem by name (with timeout)
+                    const MenuItem = this.constructor.db.model('MenuItem');
+                    
+                    const findPromise = MenuItem.findOne({
+                        $or: [
+                            { name: itemPayment.itemName },
+                            { arabicName: itemPayment.itemName }
+                        ],
+                        organization: this.organization
+                    });
+
+                    // Add timeout to prevent hanging
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout')), autoUpgradeConfig.options.timeout)
+                    );
+
+                    const menuItem = await Promise.race([findPromise, timeoutPromise]);
+
+                    if (menuItem) {
+                        itemPayment.menuItemId = menuItem._id;
+                        upgradedCount++;
+                        upgradeLog.push(`✅ Found and linked ${itemPayment.itemName} to menuItem ${menuItem._id}`);
+                    } else {
+                        upgradeLog.push(`⚠️ Could not find menuItem for: ${itemPayment.itemName}`);
+                        failedCount++;
+                    }
+                }
+
+            } catch (error) {
+                failedCount++;
+                upgradeLog.push(`❌ Error upgrading ${itemPayment.itemName}: ${error.message}`);
+            }
+        }
+
+        // Save if any upgrades were made
+        if (upgradedCount > 0) {
+            // Add upgrade metadata
+            if (!this.upgradeHistory) {
+                this.upgradeHistory = [];
+            }
+            
+            this.upgradeHistory.push({
+                type: 'itemPayments_menuItemId',
+                upgradedAt: new Date(),
+                upgradedCount: upgradedCount,
+                failedCount: failedCount,
+                upgradeLog: upgradeLog,
+                executionTime: Date.now() - startTime,
+                batchSize: itemsToProcess.length
+            });
+
+            await this.save();
+            
+            const totalItems = this.itemPayments.length;
+            const remainingItems = this.itemPayments.filter(ip => !ip.menuItemId).length;
+            const isFullyUpgraded = remainingItems === 0;
+            
+            console.log(`✅ [Auto-Upgrade] Successfully upgraded ${upgradedCount} itemPayments in bill ${this.billNumber} (${Date.now() - startTime}ms)`);
+            console.log(`📊 [Auto-Upgrade] Status: ${totalItems - remainingItems}/${totalItems} items upgraded${isFullyUpgraded ? ' - FULLY UPGRADED! 🎉' : `, ${remainingItems} remaining`}`);
+        } else {
+            const totalItems = this.itemPayments.length;
+            const remainingItems = this.itemPayments.filter(ip => !ip.menuItemId).length;
+            console.log(`⚠️ [Auto-Upgrade] No items were upgraded in bill ${this.billNumber}. Status: ${totalItems - remainingItems}/${totalItems} items upgraded, ${remainingItems} remaining`);
+            if (failedCount > 0) {
+                console.log(`❌ [Auto-Upgrade] ${failedCount} items failed to upgrade. Check logs for details.`);
+            }
+        }
+
+        return {
+            upgraded: upgradedCount > 0,
+            upgradedCount,
+            failedCount,
+            upgradeLog,
+            executionTime: Date.now() - startTime
+        };
+
+    } catch (error) {
+        console.error(`❌ [Auto-Upgrade] Error upgrading bill ${this.billNumber}:`, error);
+        return {
+            upgraded: false,
+            error: error.message,
+            upgradedCount: 0,
+            failedCount: this.itemPayments.length,
+            executionTime: Date.now() - startTime
+        };
+    }
+};
 billSchema.methods.cleanupItemPayments = async function() {
     if (!this.itemPayments || this.itemPayments.length === 0) {
         return { cleaned: 0, remaining: 0 };
     }
+
+    // Import validator
+    const { validateItemPayments, fixItemPayments, logValidationResults } = await import('../utils/itemPaymentValidator.js');
+
+    // Validate current state
+    const validation = validateItemPayments(this);
+    logValidationResults(this._id, validation);
 
     // Populate orders if needed
     if (!this.populated('orders')) {
@@ -1133,18 +1413,24 @@ billSchema.methods.cleanupItemPayments = async function() {
             cleanedItems.push({
                 itemName: ip.itemName,
                 itemId: ip.itemId,
-                paidAmount: ip.paidAmount || 0
+                paidAmount: ip.paidAmount || 0,
+                menuItemId: ip.menuItemId
             });
         }
         return isValid;
     });
+
+    // Apply automatic fixes
+    const fixResult = fixItemPayments(this);
 
     const cleanedCount = originalCount - this.itemPayments.length;
 
     return {
         cleaned: cleanedCount,
         remaining: this.itemPayments.length,
-        cleanedItems: cleanedItems
+        cleanedItems: cleanedItems,
+        fixes: fixResult.fixes,
+        totalFixed: fixResult.totalFixed
     };
 };
 

@@ -459,7 +459,7 @@ const ConsumptionReport = () => {
               </div>
               
               <div class="footer">
-                <div><strong>تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
+                <div><strong>تم تصميم وتطوير هذا النظام بواسطة مصطفى طلعت للحلول البرمجية | 01116626164</strong></div>
               </div>
             </div>
           `;

@@ -80,7 +80,7 @@ class BillValidator {
         const alwaysRequired = ['organization', 'createdBy'];
         
         // Required for insert and replace operations
-        const insertRequired = ['subtotal', 'total', 'type'];
+        const insertRequired = ['subtotal', 'total', 'billType'];
 
         const requiredFields = operation === 'update' ? alwaysRequired : [...alwaysRequired, ...insertRequired];
 
@@ -124,14 +124,8 @@ class BillValidator {
 
         // Validate bill type
         const validTypes = ['cafe', 'playstation', 'computer'];
-        if (bill.type && !validTypes.includes(bill.type)) {
-            errors.push(`Invalid bill type: "${bill.type}". Must be one of: ${validTypes.join(', ')}`);
-        }
-
-        // Validate payment status
-        const validPaymentStatuses = ['unpaid', 'partial', 'paid', 'overpaid'];
-        if (bill.paymentStatus && !validPaymentStatuses.includes(bill.paymentStatus)) {
-            errors.push(`Invalid payment status: "${bill.paymentStatus}". Must be one of: ${validPaymentStatuses.join(', ')}`);
+        if (bill.billType && !validTypes.includes(bill.billType)) {
+            errors.push(`Invalid bill type: "${bill.billType}". Must be one of: ${validTypes.join(', ')}`);
         }
 
         // Validate payment method
@@ -155,7 +149,7 @@ class BillValidator {
         const errors = [];
 
         // Validate numeric fields
-        const numericFields = ['subtotal', 'tax', 'total', 'discount', 'amountPaid', 'remainingAmount'];
+        const numericFields = ['subtotal', 'tax', 'total', 'discount', 'paid', 'remaining'];
         
         for (const field of numericFields) {
             if (bill[field] !== undefined) {
@@ -211,12 +205,12 @@ class BillValidator {
         }
 
         // Validate payment consistency
-        if (bill.paymentStatus === 'paid' && bill.remainingAmount > 0) {
+        if (bill.status === 'paid' && bill.remaining > 0) {
             warnings.push('Bill marked as paid but has remaining amount');
         }
 
-        if (bill.paymentStatus === 'unpaid' && bill.amountPaid > 0) {
-            warnings.push('Bill marked as unpaid but has amount paid');
+        if (bill.status === 'draft' && bill.paid > 0) {
+            warnings.push('Bill marked as draft but has amount paid');
         }
 
         return {
@@ -244,12 +238,8 @@ class BillValidator {
             sanitized.status = 'draft';
         }
 
-        if (!sanitized.type) {
-            sanitized.type = 'cafe';
-        }
-
-        if (!sanitized.paymentStatus) {
-            sanitized.paymentStatus = 'unpaid';
+        if (!sanitized.billType) {
+            sanitized.billType = 'cafe';
         }
 
         if (!sanitized.paymentMethod) {
@@ -270,6 +260,14 @@ class BillValidator {
 
         if (sanitized.discount === undefined) {
             sanitized.discount = 0;
+        }
+
+        if (sanitized.paid === undefined) {
+            sanitized.paid = 0;
+        }
+
+        if (sanitized.remaining === undefined) {
+            sanitized.remaining = 0;
         }
 
         // Ensure arrays are initialized

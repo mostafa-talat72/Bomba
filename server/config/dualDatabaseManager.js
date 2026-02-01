@@ -90,8 +90,8 @@ class DualDatabaseManager {
 
             const options = {
                 maxPoolSize: 5, // Smaller pool for backup connection
-                serverSelectionTimeoutMS: 30000, // Increased from 10s to 30s
-                socketTimeoutMS: 45000, // Increased timeout
+                serverSelectionTimeoutMS: 10000, // Reduced from 30s to 10s
+                socketTimeoutMS: 15000, // Reduced timeout
                 family: 4,
                 retryWrites: true,
                 w: "majority",

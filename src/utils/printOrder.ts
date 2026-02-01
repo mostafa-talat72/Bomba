@@ -302,9 +302,7 @@ const printAllSectionsInOnePage = (
         <!-- Footer لكل قسم -->
         <div class="footer">
           شكراً لزيارتكم<br>
-          <strong style="font-weight: 900; font-size: 14px;">تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه<br>
-          <strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong>
-        </div>
+          <strong style="font-weight: 900; font-size: 14px;">تم تصميم وتطوير هذا النظام بواسطة مصطفى طلعت للحلول البرمجية | 01116626164</strong>        </div>
       </div>
     `;
   }).join('');

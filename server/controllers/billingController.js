@@ -352,6 +352,21 @@ export const getBill = async (req, res) => {
             });
         }
 
+        // Auto-upgrade old bills to new format when accessed (Lazy Migration)
+        try {
+            const upgradeResult = await bill.upgradeItemPaymentsToNewFormat();
+            if (upgradeResult.upgraded) {
+                Logger.info(`🔄 [Auto-Upgrade] Bill ${bill.billNumber} upgraded: ${upgradeResult.upgradedCount} items`, {
+                    billId: bill._id,
+                    upgradedCount: upgradeResult.upgradedCount,
+                    failedCount: upgradeResult.failedCount
+                });
+            }
+        } catch (upgradeError) {
+            // Don't fail the request if upgrade fails, just log it
+            Logger.warn(`⚠️ [Auto-Upgrade] Failed to upgrade bill ${bill.billNumber}:`, upgradeError);
+        }
+
         // Generate QR code if it doesn't exist or regenerate with current domain
         Logger.info(`🔧 [getBill] Generating QR code for bill: ${bill.billNumber}`);
         

@@ -825,7 +825,8 @@ export const updateOrder = async (req, res) => {
                             billDoc.itemPayments = billDoc.itemPayments.filter(payment => {
                                 if (!validItemIds.has(payment.itemId)) {
                                     // Item was deleted - collect payment for redistribution
-                                    const itemKey = `${payment.itemName}|${payment.pricePerUnit}`;
+                                    // Use menuItem ID if available, fallback to name|price for backward compatibility
+                                    const itemKey = payment.menuItemId ? payment.menuItemId.toString() : `${payment.itemName}|${payment.pricePerUnit}`;
                                     const paidAmount = payment.paidAmount || 0;
                                     
                                     if (paidAmount > 0) {

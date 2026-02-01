@@ -418,8 +418,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
       
       <div class="footer">
         <div>
-        <strong style="font-weight: 900; font-size: 14px;">تنفيذ مصطفى طلعت</strong> لإدارة الكافيهات والمطاعم والترفيه</div>
-        <div><strong style="font-weight: 900; font-size: 16px; color: #333;">01116626164</strong></div>
+        <strong style="font-weight: 900; font-size: 14px;">تم تصميم وتطوير هذا النظام بواسطة مصطفى طلعت للحلول البرمجية | 01116626164</strong> </div>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
