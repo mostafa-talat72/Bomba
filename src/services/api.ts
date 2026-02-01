@@ -692,14 +692,10 @@ class ApiClient {
   }
 
   async getMe(): Promise<ApiResponse<{ user: User }>> {
-    console.log('API: Calling getMe endpoint');
     const response = await this.request<{ user: User }>('/auth/me');
-    console.log('API: getMe response:', response);
     
     if (response.success && response.data?.user) {
-      console.log('API: User data from getMe:', response.data.user);
       response.data.user = this.normalizeData(response.data.user);
-      console.log('API: Normalized user data:', response.data.user);
     }
     return response;
   }
@@ -1749,12 +1745,10 @@ class ApiClient {
     phone?: string;
     address?: string;
   }): Promise<ApiResponse<User>> {
-    console.log('API: Sending profile update request:', profileData);
     const response = await this.request<User>('/settings/profile', {
       method: 'PUT',
       body: JSON.stringify(profileData),
     });
-    console.log('API: Profile update response:', response);
     
     // Normalize the user data if the request was successful
     if (response.success && response.data) {

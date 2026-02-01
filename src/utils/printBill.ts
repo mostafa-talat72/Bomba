@@ -74,38 +74,28 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
   let organizationData: any = null;
   let qrCodeDataURL = '';
   
-  console.log('=== QR Code Debug Info ===');
-  console.log('Bill organization:', bill.organization);
-  
   // إذا كانت المنشأة موجودة في بيانات الفاتورة
   if (bill.organization) {
     if (typeof bill.organization === 'object' && bill.organization.name && (bill.organization as any).socialLinks) {
       // إذا كانت المنشأة populated object بالكامل
       organizationName = bill.organization.name;
       organizationData = bill.organization;
-      console.log('Organization data from fully populated object:', organizationData);
-      console.log('Social links:', organizationData.socialLinks);
+    
     } else if (typeof bill.organization === 'object' && (bill.organization._id || bill.organization.name)) {
       // إذا كانت المنشأة object لكن غير محملة بالكامل
       const orgId = bill.organization._id;
       organizationName = bill.organization.name || organizationName;
       try {
-        console.log('Fetching organization data for partially loaded object ID:', orgId);
         const orgResponse = await api.getOrganizationById(orgId);
-        console.log('Organization API response for object ID:', orgResponse);
         if (orgResponse.success && orgResponse.data) {
           organizationName = orgResponse.data.name || organizationName;
           organizationData = orgResponse.data;
-          console.log('Organization data from API (object ID):', organizationData);
         } else {
-          console.log('Failed to fetch specific organization, trying current user organization');
           // إذا فشل جلب المنشأة المحددة، نجرب جلب منشأة المستخدم الحالي
           const fallbackOrgResponse = await api.getOrganization();
-          console.log('Fallback organization API response:', fallbackOrgResponse);
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
             organizationName = fallbackOrgResponse.data.name || organizationName;
             organizationData = fallbackOrgResponse.data;
-            console.log('Fallback organization data from API:', organizationData);
           }
         }
       } catch (error) {
@@ -116,7 +106,6 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
             organizationName = fallbackOrgResponse.data.name || organizationName;
             organizationData = fallbackOrgResponse.data;
-            console.log('Emergency fallback organization data:', organizationData);
           }
         } catch (fallbackError) {
           console.warn('All organization fetch attempts failed:', fallbackError);
@@ -125,23 +114,17 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     } else if (typeof bill.organization === 'string') {
       // إذا كانت المنشأة string ID فقط، نحاول جلب البيانات باستخدام ID المحدد
       try {
-        console.log('Fetching organization data for ID:', bill.organization);
         // استخدام endpoint مخصص للحصول على بيانات منشأة محددة
         const orgResponse = await api.getOrganizationById(bill.organization);
-        console.log('Organization API response:', orgResponse);
         if (orgResponse.success && orgResponse.data) {
           organizationName = orgResponse.data.name || organizationName;
           organizationData = orgResponse.data;
-          console.log('Organization data from API:', organizationData);
         } else {
-          console.log('Failed to fetch specific organization, trying current user organization');
           // إذا فشل جلب المنشأة المحددة، نجرب جلب منشأة المستخدم الحالي
           const fallbackOrgResponse = await api.getOrganization();
-          console.log('Fallback organization API response:', fallbackOrgResponse);
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
             organizationName = fallbackOrgResponse.data.name || organizationName;
             organizationData = fallbackOrgResponse.data;
-            console.log('Fallback organization data from API:', organizationData);
           }
         }
       } catch (error) {
@@ -152,7 +135,6 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
             organizationName = fallbackOrgResponse.data.name || organizationName;
             organizationData = fallbackOrgResponse.data;
-            console.log('Emergency fallback organization data:', organizationData);
           }
         } catch (fallbackError) {
           console.warn('All organization fetch attempts failed:', fallbackError);
@@ -160,16 +142,12 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
       }
     }
   } else {
-    console.log('No organization found in bill data');
     // محاولة جلب بيانات المنشأة من المستخدم الحالي
     try {
-      console.log('Trying to fetch current user organization');
       const orgResponse = await api.getOrganization();
-      console.log('Current organization API response:', orgResponse);
       if (orgResponse.success && orgResponse.data) {
         organizationName = orgResponse.data.name || organizationName;
         organizationData = orgResponse.data;
-        console.log('Current organization data from API:', organizationData);
       }
     } catch (error) {
       console.warn('Failed to fetch current organization data:', error);
@@ -179,22 +157,16 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
   // إنشاء QR Code إذا كانت بيانات المنشأة متوفرة
   let qrInfo: { link: string; platform: string } | null = null;
   if (organizationData && organizationData.socialLinks) {
-    console.log('Social links found:', organizationData.socialLinks);
     qrInfo = getSocialLinkForQR(organizationData.socialLinks);
-    console.log('QR Info:', qrInfo);
     if (qrInfo) {
       qrCodeDataURL = await generateQRCode(qrInfo.link);
-      console.log('QR Code generated, length:', qrCodeDataURL.length);
     } else {
-      console.log('No suitable social link found for QR code');
     }
   } else {
-    console.log('No organization data or social links found');
   }
   
   // إنشاء QR Code احتياطي إذا لم يتم العثور على روابط اجتماعية
   if (!qrCodeDataURL && organizationData) {
-    console.log('Creating fallback QR code with organization info');
     let fallbackText = organizationName;
     
     // إضافة معلومات إضافية إذا كانت متوفرة
@@ -210,19 +182,14 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     
     qrCodeDataURL = await generateQRCode(fallbackText);
     qrInfo = { link: fallbackText, platform: 'معلومات المنشأة' };
-    console.log('Fallback QR Code generated');
   }
   
   // إنشاء QR Code أساسي إذا لم يتم العثور على أي بيانات
   if (!qrCodeDataURL && organizationName && organizationName !== 'نظام إدارة المقاهي') {
-    console.log('Creating basic QR code with organization name only');
     qrCodeDataURL = await generateQRCode(organizationName);
     qrInfo = { link: organizationName, platform: 'اسم المنشأة' };
-    console.log('Basic QR Code generated');
   }
   
-  console.log('Final QR Code URL length:', qrCodeDataURL.length);
-  console.log('========================');
   // Format date in Arabic
   const formatDate = (dateString: string | Date) => {
     const date = new Date(dateString);

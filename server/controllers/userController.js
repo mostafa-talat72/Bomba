@@ -248,9 +248,7 @@ export const updateProfile = async (req, res) => {
     try {
         const { name, email, phone, address } = req.body;
 
-        console.log('Updating profile for user:', req.user._id);
-        console.log('Profile data received:', { name, email, phone, address });
-
+       
         const user = await User.findById(req.user._id);
 
         if (!user) {
@@ -282,7 +280,6 @@ export const updateProfile = async (req, res) => {
         if (phone !== undefined) updateData.phone = phone;
         if (address !== undefined) updateData.address = address;
 
-        console.log('Update data:', updateData);
 
         // Use findByIdAndUpdate to avoid password validation issues
         const updatedUser = await User.findByIdAndUpdate(
@@ -295,7 +292,6 @@ export const updateProfile = async (req, res) => {
             }
         );
 
-        console.log('Updated user:', updatedUser);
 
         res.json({
             success: true,

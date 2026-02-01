@@ -210,21 +210,12 @@ const Settings: FC = () => {
   // Update profile when user data is loaded or changed
   useEffect(() => {
     if (user) {
-      console.log('=== User data received in Settings ===');
-      console.log('Full user object:', user);
-      console.log('User name:', user.name);
-      console.log('User email:', user.email);
-      console.log('User phone:', user.phone);
-      console.log('User address:', user.address);
-      console.log('=====================================');
-      
       const newProfile = {
         name: user.name || '',
         email: user.email || '',
         phone: user.phone || '',
         address: user.address || '',
       };
-      console.log('New profile data to set:', newProfile);
       
       // Only update if the data has actually changed to avoid unnecessary re-renders
       setProfile(prev => {
@@ -235,17 +226,13 @@ const Settings: FC = () => {
           prev.address !== newProfile.address;
         
         if (hasChanged) {
-          console.log('Profile data changed, updating form fields');
-          console.log('Previous profile:', prev);
-          console.log('New profile:', newProfile);
+       
           return newProfile;
         }
         
-        console.log('Profile data unchanged, keeping current values');
         return prev;
       });
     } else {
-      console.log('No user data available');
     }
   }, [user]);
 
@@ -357,14 +344,11 @@ const Settings: FC = () => {
 
     setProfileSaving(true);
     try {
-      console.log('Updating profile with data:', profile);
       const success = await updateUserProfile(profile);
       if (success) {
-        console.log('Profile updated successfully');
         showAlertMessage('تم تحديث الملف الشخصي بنجاح');
         // The user state should be automatically updated by the updateUserProfile function
       } else {
-        console.log('Profile update failed');
         showAlertMessage('حدث خطأ أثناء تحديث الملف الشخصي', 'error');
       }
     } catch (error) {
@@ -414,7 +398,6 @@ const Settings: FC = () => {
   const handleNotificationSettingsUpdate = async () => {
     setNotificationsSaving(true);
     try {
-      console.log('Updating notification settings:', notificationSettings);
       const success = await updateNotificationSettings(notificationSettings);
       if (success) {
         showAlertMessage('تم حفظ إعدادات الإشعارات بنجاح');

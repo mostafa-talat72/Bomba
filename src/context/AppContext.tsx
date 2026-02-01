@@ -330,10 +330,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const token = localStorage.getItem('token');
       if (token) {
         let response = await api.getMe();
-        console.log('=== checkAuth getMe response ===');
-        console.log('Response:', response);
+      
         if (response.success && response.data?.user) {
-          console.log('User data from server:', response.data.user);
           setUser(response.data.user);
           setIsAuthenticated(true);
           await refreshData();
@@ -1968,22 +1966,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Settings methods
   const updateUserProfile = async (profileData: any): Promise<boolean> => {
     try {
-      console.log('AppContext: Sending profile update request:', profileData);
       const response = await api.updateUserProfile(profileData);
-      console.log('AppContext: Profile update response:', response);
       
       if (response.success) {
         // Update user state with the data returned from server
         if (response.data) {
-          console.log('AppContext: Updating user state with server data:', response.data);
           setUser(prev => {
             const newUser = prev ? { ...prev, ...response.data } : null;
-            console.log('AppContext: New user state:', newUser);
             return newUser;
           });
         } else {
           // Fallback: update with sent data if no data returned
-          console.log('AppContext: No data returned from server, using sent data');
           setUser(prev => prev ? { ...prev, ...profileData } : null);
         }
         
@@ -1991,7 +1984,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
           const userResponse = await api.getMe();
           if (userResponse.success && userResponse.data?.user) {
-            console.log('AppContext: Refreshed user data from server:', userResponse.data.user);
             setUser(userResponse.data.user);
           }
         } catch (refreshError) {
@@ -2001,7 +1993,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         showNotification('تم تحديث الملف الشخصي بنجاح', 'success');
         return true;
       } else {
-        console.log('AppContext: Profile update failed:', response.message);
         showNotification(response.message || 'فشل في تحديث الملف الشخصي', 'error');
         return false;
       }

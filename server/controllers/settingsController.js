@@ -66,7 +66,6 @@ export const updateNotificationSettings = async (req, res) => {
             }
         ).populate("updatedBy", "name");
 
-        console.log('Notification settings updated successfully:', updatedSettings);
 
         res.json({
             success: true,
@@ -144,7 +143,6 @@ export const updateGeneralSettings = async (req, res) => {
             }
         ).populate("updatedBy", "name");
 
-        console.log('General settings updated successfully:', updatedSettings);
 
         res.json({
             success: true,

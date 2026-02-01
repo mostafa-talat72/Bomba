@@ -681,7 +681,6 @@ billSchema.pre("save", async function (next) {
                         
                         remainingQuantityToDistribute -= quantityToAdd;
                         
-                        console.log(`✅ [Pre-save] Redistributed ${quantityToAdd} units (${amountToAdd} EGP) to ${ip.itemName}`);
                     }
                     
                     if (remainingQuantityToDistribute > 0) {
