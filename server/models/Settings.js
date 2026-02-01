@@ -5,7 +5,6 @@ const settingsSchema = new mongoose.Schema(
         category: {
             type: String,
             required: true,
-            unique: true,
         },
         settings: {
             type: mongoose.Schema.Types.Mixed,
@@ -26,6 +25,9 @@ const settingsSchema = new mongoose.Schema(
         timestamps: true,
     }
 );
+
+// Create compound index for category and organization
+settingsSchema.index({ category: 1, organization: 1 }, { unique: true });
 
 // Apply sync middleware
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";

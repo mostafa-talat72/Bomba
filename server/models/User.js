@@ -25,7 +25,9 @@ const userSchema = new mongoose.Schema(
         },
         password: {
             type: String,
-            required: [true, "كلمة المرور مطلوبة"],
+            required: function() {
+                return this.isNew; // فقط مطلوب عند إنشاء مستخدم جديد
+            },
             minlength: [6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"],
             select: false,
         },
@@ -104,10 +106,20 @@ const userSchema = new mongoose.Schema(
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
-    if (!this.isModified("password")) return next();
+    // Skip password hashing if password is not modified or not present
+    if (!this.isModified("password") || !this.password) return next();
 
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
+});
+
+// Pre-validate middleware to handle password requirement
+userSchema.pre("validate", function(next) {
+    // If this is an update operation and password is not being modified, skip password validation
+    if (!this.isNew && !this.isModified("password")) {
+        this.schema.path('password').required(false);
+    }
     next();
 });
 
@@ -193,6 +205,7 @@ userSchema.methods.getRoleDisplayName = function () {
         staff: "موظف",
         cashier: "كاشير",
         kitchen: "مطبخ",
+        owner: "مالك",
     };
     return roleNames[this.role] || this.role;
 };

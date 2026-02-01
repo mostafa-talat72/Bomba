@@ -259,6 +259,8 @@ export const login = async (req, res) => {
                     permissions: user.permissions,
                     lastLogin: user.lastLogin,
                     organization: user.organization,
+                    phone: user.phone,
+                    address: user.address,
                 },
                 token,
                 refreshToken,
@@ -397,6 +399,8 @@ export const getMe = async (req, res) => {
                     organization: user.organization,
                     organizationName: user.organization?.name,
                     status: user.status,
+                    phone: user.phone,
+                    address: user.address,
                 },
             },
         });

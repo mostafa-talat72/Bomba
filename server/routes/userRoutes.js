@@ -1,5 +1,14 @@
 import express from "express";
 import User from "../models/User.js";
+import {
+    getUsers,
+    getUser,
+    createUser,
+    updateUser,
+    deleteUser,
+    updateProfile,
+    changePassword,
+} from "../controllers/userController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import {
     validateUserRegistration,
@@ -8,263 +17,40 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication and users permission
+// Profile routes (no special permissions needed)
 router.use(protect);
+router.put("/profile", updateProfile);
+router.put("/change-password", changePassword);
+
+// User management routes (require users permission)
 router.use(authorize("users", "all"));
 
-// @desc    Get all users
-// @route   GET /api/users
-// @access  Private (Users permission)
-router.get("/", async (req, res) => {
-    try {
-        const { page = 1, limit = 10, role, status, search } = req.query;
+router.route("/")
+    .get(getUsers)
+    .post(validateUserRegistration, validateRequest, createUser);
 
-        const query = {};
-        if (role) query.role = role;
-        if (status) query.status = status;
-        if (search) {
-            query.$or = [
-                { name: { $regex: search, $options: "i" } },
-                { email: { $regex: search, $options: "i" } },
-            ];
-        }
-        // تصفية حسب المنشأة
-        if (req.user && req.user.organization) {
-            query.organization = req.user.organization;
-        }
-
-        const users = await User.find(query)
-            .select("-password -refreshToken")
-            .sort({ createdAt: -1 })
-            .limit(limit * 1)
-            .skip((page - 1) * limit);
-
-        const total = await User.countDocuments(query);
-
-        res.json({
-            success: true,
-            count: users.length,
-            total,
-            data: users,
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: "خطأ في جلب المستخدمين",
-            error: error.message,
-        });
-    }
-});
-
-// @desc    Create new user
-// @route   POST /api/users
-// @access  Private (Users permission)
-router.post(
-    "/",
-    validateUserRegistration,
-    validateRequest,
-    async (req, res) => {
-        try {
-            const {
-                name,
-                email,
-                password,
-                role,
-                status,
-                phone,
-                address,
-                permissions,
-            } = req.body;
-
-            // Check if user already exists
-            const existingUser = await User.findOne({ email });
-            if (existingUser) {
-                return res.status(400).json({
-                    success: false,
-                    message: "البريد الإلكتروني مستخدم بالفعل",
-                });
-            }
-
-            // Create new user without username field to avoid index issues
-            const userData = {
-                name: name.trim(),
-                email: email.toLowerCase().trim(),
-                password,
-                role: role || "staff",
-                status: status || "active",
-                phone: phone || null,
-                address: address || null,
-                permissions: permissions || [],
-                organization: req.user.organization, // ربط المستخدم بنفس منشأة المدير
-            };
-
-            const user = new User(userData);
-
-            await user.save();
-
-            // Remove password from response
-            const userResponse = user.toObject();
-            delete userResponse.password;
-            delete userResponse.refreshToken;
-
-            res.status(201).json({
-                success: true,
-                message: "تم إنشاء المستخدم بنجاح",
-                data: userResponse,
-            });
-        } catch (error) {
-            // Handle specific database errors
-            if (error.code === 11000) {
-                if (error.keyPattern && error.keyPattern.email) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "البريد الإلكتروني مستخدم بالفعل",
-                    });
-                } else if (error.keyPattern && error.keyPattern.username) {
-                    return res.status(500).json({
-                        success: false,
-                        message:
-                            "خطأ في قاعدة البيانات - يرجى المحاولة مرة أخرى",
-                        error: "Username index conflict",
-                    });
-                }
-            }
-
-            res.status(500).json({
-                success: false,
-                message: "خطأ في إنشاء المستخدم",
-                error: error.message,
-            });
-        }
-    }
-);
-
-// @desc    Get single user
-// @route   GET /api/users/:id
-// @access  Private (Users permission)
-router.get("/:id", async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id).select(
-            "-password -refreshToken"
-        );
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "المستخدم غير موجود",
-            });
-        }
-
-        res.json({
-            success: true,
-            data: user,
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: "خطأ في جلب المستخدم",
-            error: error.message,
-        });
-    }
-});
-
-// @desc    Update user
-// @route   PUT /api/users/:id
-// @access  Private (Users permission)
-router.put("/:id", async (req, res) => {
-    try {
-        const { name, email, role, permissions, status, phone, address, password } =
-            req.body;
-
-        const user = await User.findById(req.params.id).select("+password");
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "المستخدم غير موجود",
-            });
-        }
-
-        // Update fields
-        if (name) user.name = name;
-        if (email) user.email = email;
-        if (role) user.role = role;
-        if (permissions) user.permissions = permissions;
-        if (status) user.status = status;
-        if (phone !== undefined) user.phone = phone;
-        if (address !== undefined) user.address = address;
-        
-        // Handle password update
-        if (password && password.trim() !== '') {
-            user.password = password;
-            user.markModified('password'); // تأكد من أن Mongoose يعرف أن كلمة المرور تغيرت
-        }
-
-        await user.save();
-
-        // Remove password from response
-        const userResponse = user.toObject();
-        delete userResponse.password;
-        delete userResponse.refreshToken;
-
-        res.json({
-            success: true,
-            message: "تم تحديث المستخدم بنجاح",
-            data: userResponse,
-        });
-    } catch (error) {
-        console.error('Error updating user:', error);
-        res.status(500).json({
-            success: false,
-            message: "خطأ في تحديث المستخدم",
-            error: error.message,
-        });
-    }
-});
-
-// @desc    Delete user
-// @route   DELETE /api/users/:id
-// @access  Private (Users permission)
-router.delete("/:id", async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "المستخدم غير موجود",
-            });
-        }
-
-        await User.findByIdAndDelete(req.params.id);
-
-        res.json({
-            success: true,
-            message: "تم حذف المستخدم بنجاح",
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: "خطأ في حذف المستخدم",
-            error: error.message,
-        });
-    }
-});
+router.route("/:id")
+    .get(getUser)
+    .put(updateUser)
+    .delete(deleteUser);
 
 // @desc    Get user statistics
-// @route   GET /api/users/stats
+// @route   GET /api/users/stats/overview
 // @access  Private (Admin)
 router.get("/stats/overview", async (req, res) => {
     try {
-        const totalUsers = await User.countDocuments();
-        const activeUsers = await User.countDocuments({ status: "active" });
-        const adminUsers = await User.countDocuments({ role: "admin" });
-        const staffUsers = await User.countDocuments({ role: "staff" });
+        const query = { organization: req.user.organization };
+        
+        const totalUsers = await User.countDocuments(query);
+        const activeUsers = await User.countDocuments({ ...query, status: "active" });
+        const adminUsers = await User.countDocuments({ ...query, role: "admin" });
+        const staffUsers = await User.countDocuments({ ...query, role: "staff" });
 
         // Recent logins (last 7 days)
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
         const recentLogins = await User.countDocuments({
+            ...query,
             lastLogin: { $gte: weekAgo },
         });
 

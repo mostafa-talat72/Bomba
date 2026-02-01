@@ -1,4 +1,165 @@
 import Settings from "../models/Settings.js";
+import User from "../models/User.js";
+
+// @desc    Get notification settings
+// @route   GET /api/settings/notifications
+// @access  Private
+export const getNotificationSettings = async (req, res) => {
+    try {
+        const settings = await Settings.findOne({
+            category: 'notifications',
+            organization: req.user.organization,
+        });
+
+        // Default notification settings if not found
+        const defaultSettings = {
+            sessionNotifications: true,
+            orderNotifications: true,
+            inventoryNotifications: true,
+            billingNotifications: true,
+            soundEnabled: true,
+            emailNotifications: false,
+            showNotificationCount: true,
+            autoMarkAsRead: false,
+        };
+
+        res.json({
+            success: true,
+            data: settings ? settings.settings : defaultSettings,
+        });
+    } catch (error) {
+        console.error('Error getting notification settings:', error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب إعدادات الإشعارات",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Update notification settings
+// @route   PUT /api/settings/notifications
+// @access  Private
+export const updateNotificationSettings = async (req, res) => {
+    try {
+        const { settings } = req.body;
+
+        if (!settings || typeof settings !== 'object') {
+            return res.status(400).json({
+                success: false,
+                message: "بيانات الإعدادات غير صحيحة",
+            });
+        }
+
+        const updatedSettings = await Settings.findOneAndUpdate(
+            { category: 'notifications', organization: req.user.organization },
+            {
+                category: 'notifications',
+                settings,
+                updatedBy: req.user._id,
+                organization: req.user.organization,
+            },
+            {
+                new: true,
+                upsert: true,
+                runValidators: true,
+            }
+        ).populate("updatedBy", "name");
+
+        console.log('Notification settings updated successfully:', updatedSettings);
+
+        res.json({
+            success: true,
+            message: "تم تحديث إعدادات الإشعارات بنجاح",
+            data: updatedSettings,
+        });
+    } catch (error) {
+        console.error('Error updating notification settings:', error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تحديث إعدادات الإشعارات",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Get general settings
+// @route   GET /api/settings/general
+// @access  Private
+export const getGeneralSettings = async (req, res) => {
+    try {
+        const settings = await Settings.findOne({
+            category: 'general',
+            organization: req.user.organization,
+        });
+
+        // Default general settings if not found
+        const defaultSettings = {
+            theme: 'light',
+            language: 'ar',
+            timezone: 'Africa/Cairo',
+            currency: 'EGP',
+        };
+
+        res.json({
+            success: true,
+            data: settings ? settings.settings : defaultSettings,
+        });
+    } catch (error) {
+        console.error('Error getting general settings:', error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب الإعدادات العامة",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Update general settings
+// @route   PUT /api/settings/general
+// @access  Private
+export const updateGeneralSettings = async (req, res) => {
+    try {
+        const { settings } = req.body;
+
+        if (!settings || typeof settings !== 'object') {
+            return res.status(400).json({
+                success: false,
+                message: "بيانات الإعدادات غير صحيحة",
+            });
+        }
+
+        const updatedSettings = await Settings.findOneAndUpdate(
+            { category: 'general', organization: req.user.organization },
+            {
+                category: 'general',
+                settings,
+                updatedBy: req.user._id,
+                organization: req.user.organization,
+            },
+            {
+                new: true,
+                upsert: true,
+                runValidators: true,
+            }
+        ).populate("updatedBy", "name");
+
+        console.log('General settings updated successfully:', updatedSettings);
+
+        res.json({
+            success: true,
+            message: "تم تحديث الإعدادات العامة بنجاح",
+            data: updatedSettings,
+        });
+    } catch (error) {
+        console.error('Error updating general settings:', error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تحديث الإعدادات العامة",
+            error: error.message,
+        });
+    }
+};
 
 // @desc    Get settings by category
 // @route   GET /api/settings/:category

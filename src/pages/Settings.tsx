@@ -1,5 +1,5 @@
 import { useState, useEffect, FC } from 'react';
-import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, LucideIcon } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Clock, Users, Check, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 // Type for alert messages
@@ -48,8 +48,53 @@ interface ProfileData {
   address: string;
 }
 
+interface OrganizationData {
+  name: string;
+  description: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  socialLinks: {
+    facebook: string;
+    instagram: string;
+    twitter: string;
+    linkedin: string;
+    youtube: string;
+    tiktok: string;
+    whatsapp: string;
+    telegram: string;
+  };
+  workingHours: {
+    [key: string]: {
+      open: string;
+      close: string;
+      closed: boolean;
+    };
+  };
+  logo: string;
+}
+
+interface OrganizationPermissions {
+  canEdit: boolean;
+  isOwner: boolean;
+  isAuthorizedAdmin: boolean;
+  allowManagersToEditOrganization: boolean;
+  authorizedManagers: Array<{
+    _id: string;
+    name: string;
+    email: string;
+  }>;
+}
+
+interface Manager {
+  _id: string;
+  name: string;
+  email: string;
+}
+
 const Settings: FC = () => {
-  const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings } = useApp();
+  const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers } = useApp();
   
   // UI State
   const [activeTab, setActiveTab] = useState('profile');
@@ -59,6 +104,8 @@ const Settings: FC = () => {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [generalSaving, setGeneralSaving] = useState(false);
+  const [organizationSaving, setOrganizationSaving] = useState(false);
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
   
   // Alert state
   const [showAlert, setShowAlert] = useState(false);
@@ -87,28 +134,15 @@ const Settings: FC = () => {
   });
 
   // Notification settings state
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
-    // تحميل الإعدادات من localStorage إذا كانت موجودة
-    try {
-      const savedSettings = localStorage.getItem('notificationSettings');
-      if (savedSettings) {
-        return JSON.parse(savedSettings);
-      }
-    } catch (error) {
-      console.error('خطأ في تحميل إعدادات الإشعارات:', error);
-    }
-    
-    // الإعدادات الافتراضية
-    return {
-      sessionNotifications: true,
-      orderNotifications: true,
-      inventoryNotifications: true,
-      billingNotifications: true,
-      soundEnabled: true,
-      emailNotifications: false,
-      showNotificationCount: true,
-      autoMarkAsRead: false,
-    };
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    sessionNotifications: true,
+    orderNotifications: true,
+    inventoryNotifications: true,
+    billingNotifications: true,
+    soundEnabled: true,
+    emailNotifications: false,
+    showNotificationCount: true,
+    autoMarkAsRead: false,
   });
 
   // General settings state
@@ -119,6 +153,47 @@ const Settings: FC = () => {
     currency: 'EGP',
   });
 
+  // Organization state
+  const [organization, setOrganization] = useState<OrganizationData>({
+    name: '',
+    description: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
+    socialLinks: {
+      facebook: '',
+      instagram: '',
+      twitter: '',
+      linkedin: '',
+      youtube: '',
+      tiktok: '',
+      whatsapp: '',
+      telegram: '',
+    },
+    workingHours: {
+      monday: { open: '09:00', close: '22:00', closed: false },
+      tuesday: { open: '09:00', close: '22:00', closed: false },
+      wednesday: { open: '09:00', close: '22:00', closed: false },
+      thursday: { open: '09:00', close: '22:00', closed: false },
+      friday: { open: '09:00', close: '22:00', closed: false },
+      saturday: { open: '09:00', close: '22:00', closed: false },
+      sunday: { open: '09:00', close: '22:00', closed: false },
+    },
+    logo: '',
+  });
+
+  const [organizationPermissions, setOrganizationPermissions] = useState<OrganizationPermissions>({
+    canEdit: false,
+    isOwner: false,
+    isAuthorizedAdmin: false,
+    allowManagersToEditOrganization: false,
+    authorizedManagers: [],
+  });
+
+  const [availableManagers, setAvailableManagers] = useState<Manager[]>([]);
+  const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
+
   // Show alert function
   const showAlertMessage = (message: string, type: AlertType = 'success') => {
     setAlertMessage(message);
@@ -127,18 +202,126 @@ const Settings: FC = () => {
     setTimeout(() => setShowAlert(false), 5000);
   };
 
-  // Update profile when user data is loaded
+  // Update profile when user data is loaded or changed
   useEffect(() => {
     if (user) {
-      setProfile(prev => ({
-        ...prev,
+      console.log('=== User data received in Settings ===');
+      console.log('Full user object:', user);
+      console.log('User name:', user.name);
+      console.log('User email:', user.email);
+      console.log('User phone:', user.phone);
+      console.log('User address:', user.address);
+      console.log('=====================================');
+      
+      const newProfile = {
         name: user.name || '',
         email: user.email || '',
         phone: user.phone || '',
         address: user.address || '',
-      }));
+      };
+      console.log('New profile data to set:', newProfile);
+      
+      // Only update if the data has actually changed to avoid unnecessary re-renders
+      setProfile(prev => {
+        const hasChanged = 
+          prev.name !== newProfile.name ||
+          prev.email !== newProfile.email ||
+          prev.phone !== newProfile.phone ||
+          prev.address !== newProfile.address;
+        
+        if (hasChanged) {
+          console.log('Profile data changed, updating form fields');
+          console.log('Previous profile:', prev);
+          console.log('New profile:', newProfile);
+          return newProfile;
+        }
+        
+        console.log('Profile data unchanged, keeping current values');
+        return prev;
+      });
+    } else {
+      console.log('No user data available');
     }
   }, [user]);
+
+  // Load settings from database
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (user) {
+        try {
+          // Load notification settings
+          const notifSettings = await getNotificationSettings();
+          if (notifSettings) {
+            setNotificationSettings(prev => ({
+              ...prev,
+              ...notifSettings
+            }));
+          }
+
+          // Load general settings
+          const genSettings = await getGeneralSettings();
+          if (genSettings) {
+            setGeneralSettings(prev => ({
+              ...prev,
+              ...genSettings
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading settings:', error);
+          showAlertMessage('حدث خطأ أثناء تحميل الإعدادات', 'warning');
+        }
+      }
+    };
+
+    loadSettings();
+  }, [user, getNotificationSettings, getGeneralSettings]);
+
+  // Load organization data and permissions
+  useEffect(() => {
+    const loadOrganizationData = async () => {
+      try {
+        // Load organization data
+        const orgData = await getOrganization();
+        if (orgData) {
+          setOrganization(prev => ({
+            ...prev,
+            ...orgData,
+            socialLinks: {
+              ...prev.socialLinks,
+              ...orgData.socialLinks,
+            },
+            workingHours: {
+              ...prev.workingHours,
+              ...orgData.workingHours,
+            },
+          }));
+        }
+
+        // Load permissions
+        const permissions = await canEditOrganization();
+        if (permissions) {
+          setOrganizationPermissions(permissions);
+          if (permissions.authorizedManagers) {
+            setSelectedManagers(permissions.authorizedManagers.map((m: any) => m._id));
+          }
+        }
+
+        // Load available managers if user is owner
+        if (permissions?.isOwner) {
+          const managers = await getAvailableManagers();
+          if (managers) {
+            setAvailableManagers(managers);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading organization data:', error);
+      }
+    };
+
+    if (user) {
+      loadOrganizationData();
+    }
+  }, [user, getOrganization, canEditOrganization, getAvailableManagers]);
 
   // Show loading state if user is not loaded yet
   if (!user) {
@@ -160,13 +343,18 @@ const Settings: FC = () => {
 
     setProfileSaving(true);
     try {
+      console.log('Updating profile with data:', profile);
       const success = await updateUserProfile(profile);
       if (success) {
+        console.log('Profile updated successfully');
         showAlertMessage('تم تحديث الملف الشخصي بنجاح');
+        // The user state should be automatically updated by the updateUserProfile function
       } else {
+        console.log('Profile update failed');
         showAlertMessage('حدث خطأ أثناء تحديث الملف الشخصي', 'error');
       }
     } catch (error) {
+      console.error('Profile update error:', error);
       showAlertMessage('حدث خطأ غير متوقع أثناء تحديث الملف الشخصي', 'error');
     } finally {
       setProfileSaving(false);
@@ -212,6 +400,7 @@ const Settings: FC = () => {
   const handleNotificationSettingsUpdate = async () => {
     setNotificationsSaving(true);
     try {
+      console.log('Updating notification settings:', notificationSettings);
       const success = await updateNotificationSettings(notificationSettings);
       if (success) {
         showAlertMessage('تم حفظ إعدادات الإشعارات بنجاح');
@@ -219,6 +408,7 @@ const Settings: FC = () => {
         showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
       }
     } catch (error) {
+      console.error('Error updating notification settings:', error);
       showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
     } finally {
       setNotificationsSaving(false);
@@ -241,11 +431,60 @@ const Settings: FC = () => {
     }
   };
 
+  const handleOrganizationUpdate = async () => {
+    setOrganizationSaving(true);
+    try {
+      const success = await updateOrganization(organization);
+      if (success) {
+        showAlertMessage('تم تحديث بيانات المنشأة بنجاح');
+      } else {
+        showAlertMessage('حدث خطأ أثناء تحديث بيانات المنشأة', 'error');
+      }
+    } catch (error) {
+      showAlertMessage('حدث خطأ أثناء تحديث بيانات المنشأة', 'error');
+    } finally {
+      setOrganizationSaving(false);
+    }
+  };
+
+  const handlePermissionsUpdate = async () => {
+    setPermissionsSaving(true);
+    try {
+      const success = await updateOrganizationPermissions({
+        allowManagersToEditOrganization: organizationPermissions.allowManagersToEditOrganization,
+        authorizedManagers: selectedManagers,
+      });
+      if (success) {
+        showAlertMessage('تم تحديث صلاحيات المنشأة بنجاح');
+        // Reload permissions to get updated data
+        const permissions = await canEditOrganization();
+        if (permissions) {
+          setOrganizationPermissions(permissions);
+        }
+      } else {
+        showAlertMessage('حدث خطأ أثناء تحديث صلاحيات المنشأة', 'error');
+      }
+    } catch (error) {
+      showAlertMessage('حدث خطأ أثناء تحديث صلاحيات المنشأة', 'error');
+    } finally {
+      setPermissionsSaving(false);
+    }
+  };
+
+  const handleManagerToggle = (managerId: string) => {
+    setSelectedManagers(prev => 
+      prev.includes(managerId) 
+        ? prev.filter(id => id !== managerId)
+        : [...prev, managerId]
+    );
+  };
+
   const tabs: TabType[] = [
     { id: 'profile', name: 'الملف الشخصي', icon: User },
     { id: 'password', name: 'كلمة المرور', icon: Lock },
     { id: 'notifications', name: 'الإشعارات', icon: Bell },
     { id: 'general', name: 'عام', icon: SettingsIcon },
+    ...(organizationPermissions.canEdit ? [{ id: 'organization', name: 'المنشأة', icon: Building2 }] : []),
   ];
 
   if (!user) {
@@ -728,6 +967,380 @@ const Settings: FC = () => {
                         )}
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Organization Tab */}
+            {activeTab === 'organization' && organizationPermissions.canEdit && (
+              <div className="space-y-6">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">بيانات المنشأة</h3>
+                    {organizationPermissions.isOwner && (
+                      <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-1 rounded-full">
+                        مالك المنشأة
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Basic Information */}
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                      <Building2 className="h-5 w-5 ml-2" />
+                      المعلومات الأساسية
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          اسم المنشأة
+                        </label>
+                        <input
+                          type="text"
+                          value={organization.name}
+                          onChange={(e) => setOrganization({ ...organization, name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="أدخل اسم المنشأة"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Phone className="h-4 w-4 inline ml-1" />
+                          رقم الهاتف
+                        </label>
+                        <input
+                          type="tel"
+                          value={organization.phone}
+                          onChange={(e) => setOrganization({ ...organization, phone: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="أدخل رقم الهاتف"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Mail className="h-4 w-4 inline ml-1" />
+                          البريد الإلكتروني
+                        </label>
+                        <input
+                          type="email"
+                          value={organization.email}
+                          onChange={(e) => setOrganization({ ...organization, email: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="أدخل البريد الإلكتروني"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Globe className="h-4 w-4 inline ml-1" />
+                          الموقع الإلكتروني
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.website}
+                          onChange={(e) => setOrganization({ ...organization, website: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://example.com"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <MapPin className="h-4 w-4 inline ml-1" />
+                          العنوان
+                        </label>
+                        <input
+                          type="text"
+                          value={organization.address}
+                          onChange={(e) => setOrganization({ ...organization, address: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="أدخل عنوان المنشأة"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          وصف المنشأة
+                        </label>
+                        <textarea
+                          value={organization.description}
+                          onChange={(e) => setOrganization({ ...organization, description: e.target.value })}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="أدخل وصف مختصر للمنشأة"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Social Links */}
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
+                      الروابط الاجتماعية
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Facebook className="h-4 w-4 inline ml-1 text-blue-600" />
+                          فيسبوك
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.facebook}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, facebook: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://facebook.com/yourpage"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Instagram className="h-4 w-4 inline ml-1 text-pink-600" />
+                          إنستغرام
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.instagram}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, instagram: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://instagram.com/yourpage"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Twitter className="h-4 w-4 inline ml-1 text-blue-400" />
+                          تويتر
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.twitter}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, twitter: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://twitter.com/yourpage"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Linkedin className="h-4 w-4 inline ml-1 text-blue-700" />
+                          لينكد إن
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.linkedin}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, linkedin: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://linkedin.com/company/yourpage"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Youtube className="h-4 w-4 inline ml-1 text-red-600" />
+                          يوتيوب
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.youtube}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, youtube: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://youtube.com/channel/yourchannel"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          تيك توك
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.tiktok}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, tiktok: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://tiktok.com/@yourpage"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <MessageCircle className="h-4 w-4 inline ml-1 text-green-600" />
+                          واتساب
+                        </label>
+                        <input
+                          type="tel"
+                          value={organization.socialLinks.whatsapp}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, whatsapp: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="+201234567890"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <Send className="h-4 w-4 inline ml-1 text-blue-500" />
+                          تليجرام
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.telegram}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, telegram: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://t.me/yourchannel"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Permissions Section - Only for Owner */}
+                  {organizationPermissions.isOwner && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg mb-6">
+                      <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                        <Users className="h-5 w-5 ml-2" />
+                        صلاحيات المنشأة
+                      </h4>
+                      
+                      {/* Enable/Disable Permission */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h5 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            السماح للمديرين بتعديل بيانات المنشأة
+                          </h5>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            عند التفعيل، سيتمكن المديرون المحددون من تعديل بيانات المنشأة والروابط الاجتماعية
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organizationPermissions.allowManagersToEditOrganization}
+                            onChange={(e) => setOrganizationPermissions({ 
+                              ...organizationPermissions, 
+                              allowManagersToEditOrganization: e.target.checked 
+                            })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {/* Managers Selection */}
+                      {organizationPermissions.allowManagersToEditOrganization && availableManagers.length > 0 && (
+                        <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+                          <h6 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                            اختر المديرين المخولين:
+                          </h6>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {availableManagers.map((manager) => (
+                              <div key={manager._id} className="flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded">
+                                <div className="flex items-center">
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                      {manager.name}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {manager.email}
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleManagerToggle(manager._id)}
+                                  className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
+                                    selectedManagers.includes(manager._id)
+                                      ? 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400'
+                                      : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                  }`}
+                                >
+                                  {selectedManagers.includes(manager._id) ? (
+                                    <Check className="h-4 w-4" />
+                                  ) : (
+                                    <X className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          {selectedManagers.length > 0 && (
+                            <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                              <p className="text-xs text-blue-600 dark:text-blue-400">
+                                تم اختيار {selectedManagers.length} من المديرين
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {organizationPermissions.allowManagersToEditOrganization && availableManagers.length === 0 && (
+                        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                            لا يوجد مديرين متاحين في المنشأة
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="mt-4">
+                        <button
+                          onClick={handlePermissionsUpdate}
+                          disabled={permissionsSaving}
+                          className="flex items-center space-x-2 bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-32 justify-center"
+                        >
+                          {permissionsSaving ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              <span>جاري الحفظ...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              <span>حفظ الصلاحيات</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Save Button */}
+                  <div className="mt-6">
+                    <button
+                      onClick={handleOrganizationUpdate}
+                      disabled={organizationSaving}
+                      className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-48 justify-center"
+                    >
+                      {organizationSaving ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>جاري الحفظ...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          <span>حفظ بيانات المنشأة</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>

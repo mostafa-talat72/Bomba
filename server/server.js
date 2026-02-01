@@ -52,6 +52,7 @@ import upgradeRoutes from "./routes/upgradeRoutes.js";
 import tableRoutes from "./routes/tableRoutes.js";
 import performanceRoutes from "./routes/performanceRoutes.js";
 import syncRoutes from "./routes/syncRoutes.js";
+import organizationRoutes from "./routes/organizationRoutes.js";
 
 // Load environment variables
 dotenv.config();
@@ -517,6 +518,7 @@ app.use("/api/upgrades", upgradeRoutes);
 app.use("/api/tables", tableRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/sync", syncRoutes);
+app.use("/api/organization", organizationRoutes);
 
 // REMOVED: Public bill viewing route for security reasons
 // Bills should only be accessible through authenticated routes

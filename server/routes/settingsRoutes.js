@@ -6,7 +6,15 @@ import {
     resetSettings,
     exportSettings,
     importSettings,
+    getNotificationSettings,
+    updateNotificationSettings,
+    getGeneralSettings,
+    updateGeneralSettings,
 } from "../controllers/settingsController.js";
+import {
+    updateProfile,
+    changePassword,
+} from "../controllers/userController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -14,6 +22,19 @@ const router = express.Router();
 // All routes require authentication
 router.use(protect);
 
+// Profile routes (no special permissions needed)
+router.put("/profile", updateProfile);
+router.put("/change-password", changePassword);
+
+// Notification settings routes
+router.get("/notifications", getNotificationSettings);
+router.put("/notifications", updateNotificationSettings);
+
+// General settings routes
+router.get("/general", getGeneralSettings);
+router.put("/general", updateGeneralSettings);
+
+// Settings routes (require settings permission)
 router.get("/", authorize("settings", "all"), getAllSettings);
 router.get("/export", authorize("settings", "all"), exportSettings);
 router.post("/import", authorize("settings", "all"), importSettings);

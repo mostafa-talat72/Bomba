@@ -178,6 +178,15 @@ interface AppContextType {
   changePassword: (passwordData: any) => Promise<boolean>;
   updateNotificationSettings: (settings: any) => Promise<boolean>;
   updateGeneralSettings: (settings: any) => Promise<boolean>;
+  getNotificationSettings: () => Promise<any>;
+  getGeneralSettings: () => Promise<any>;
+
+  // Organization methods
+  getOrganization: () => Promise<any>;
+  updateOrganization: (organizationData: any) => Promise<boolean>;
+  updateOrganizationPermissions: (permissions: any) => Promise<boolean>;
+  canEditOrganization: () => Promise<any>;
+  getAvailableManagers: () => Promise<any>;
 }
 
 export type Filter = {
@@ -321,7 +330,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const token = localStorage.getItem('token');
       if (token) {
         let response = await api.getMe();
+        console.log('=== checkAuth getMe response ===');
+        console.log('Response:', response);
         if (response.success && response.data?.user) {
+          console.log('User data from server:', response.data.user);
           setUser(response.data.user);
           setIsAuthenticated(true);
           await refreshData();
@@ -1956,15 +1968,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Settings methods
   const updateUserProfile = async (profileData: any): Promise<boolean> => {
     try {
+      console.log('AppContext: Sending profile update request:', profileData);
       const response = await api.updateUserProfile(profileData);
+      console.log('AppContext: Profile update response:', response);
+      
       if (response.success) {
+        // Update user state with the data returned from server
+        if (response.data) {
+          console.log('AppContext: Updating user state with server data:', response.data);
+          setUser(prev => {
+            const newUser = prev ? { ...prev, ...response.data } : null;
+            console.log('AppContext: New user state:', newUser);
+            return newUser;
+          });
+        } else {
+          // Fallback: update with sent data if no data returned
+          console.log('AppContext: No data returned from server, using sent data');
+          setUser(prev => prev ? { ...prev, ...profileData } : null);
+        }
+        
+        // Also refresh user data from server to ensure consistency
+        try {
+          const userResponse = await api.getMe();
+          if (userResponse.success && userResponse.data?.user) {
+            console.log('AppContext: Refreshed user data from server:', userResponse.data.user);
+            setUser(userResponse.data.user);
+          }
+        } catch (refreshError) {
+          console.warn('AppContext: Failed to refresh user data:', refreshError);
+        }
+        
         showNotification('تم تحديث الملف الشخصي بنجاح', 'success');
         return true;
       } else {
+        console.log('AppContext: Profile update failed:', response.message);
         showNotification(response.message || 'فشل في تحديث الملف الشخصي', 'error');
         return false;
       }
     } catch (error) {
+      console.error('AppContext: Error updating user profile:', error);
       showNotification('فشل في تحديث الملف الشخصي', 'error');
       return false;
     }
@@ -2019,6 +2061,144 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (error) {
       showNotification('فشل في حفظ الإعدادات العامة', 'error');
       return false;
+    }
+  };
+
+  const getNotificationSettings = async (): Promise<any> => {
+    try {
+      const response = await api.getNotificationSettings();
+      if (response.success) {
+        return response.data;
+      } else {
+        console.warn('Failed to get notification settings from server, using defaults');
+        // Return default settings if server fails
+        return {
+          sessionNotifications: true,
+          orderNotifications: true,
+          inventoryNotifications: true,
+          billingNotifications: true,
+          soundEnabled: true,
+          emailNotifications: false,
+          showNotificationCount: true,
+          autoMarkAsRead: false,
+        };
+      }
+    } catch (error) {
+      console.warn('Error getting notification settings:', error);
+      // Return default settings if request fails
+      return {
+        sessionNotifications: true,
+        orderNotifications: true,
+        inventoryNotifications: true,
+        billingNotifications: true,
+        soundEnabled: true,
+        emailNotifications: false,
+        showNotificationCount: true,
+        autoMarkAsRead: false,
+      };
+    }
+  };
+
+  const getGeneralSettings = async (): Promise<any> => {
+    try {
+      const response = await api.getGeneralSettings();
+      if (response.success) {
+        return response.data;
+      } else {
+        console.warn('Failed to get general settings from server, using defaults');
+        // Return default settings if server fails
+        return {
+          theme: 'light',
+          language: 'ar',
+          timezone: 'Africa/Cairo',
+          currency: 'EGP',
+        };
+      }
+    } catch (error) {
+      console.warn('Error getting general settings:', error);
+      // Return default settings if request fails
+      return {
+        theme: 'light',
+        language: 'ar',
+        timezone: 'Africa/Cairo',
+        currency: 'EGP',
+      };
+    }
+  };
+
+  // Organization methods
+  const getOrganization = async (): Promise<any> => {
+    try {
+      const response = await api.getOrganization();
+      if (response.success) {
+        return response.data;
+      } else {
+        showNotification(response.message || 'فشل في جلب بيانات المنشأة', 'error');
+        return null;
+      }
+    } catch (error) {
+      showNotification('فشل في جلب بيانات المنشأة', 'error');
+      return null;
+    }
+  };
+
+  const updateOrganization = async (organizationData: any): Promise<boolean> => {
+    try {
+      const response = await api.updateOrganization(organizationData);
+      if (response.success) {
+        showNotification('تم تحديث بيانات المنشأة بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في تحديث بيانات المنشأة', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في تحديث بيانات المنشأة', 'error');
+      return false;
+    }
+  };
+
+  const updateOrganizationPermissions = async (permissions: any): Promise<boolean> => {
+    try {
+      const response = await api.updateOrganizationPermissions(permissions);
+      if (response.success) {
+        showNotification('تم تحديث صلاحيات المنشأة بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في تحديث صلاحيات المنشأة', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في تحديث صلاحيات المنشأة', 'error');
+      return false;
+    }
+  };
+
+  const canEditOrganization = async (): Promise<any> => {
+    try {
+      const response = await api.canEditOrganization();
+      if (response.success) {
+        return response.data;
+      } else {
+        return { canEdit: false, isOwner: false, isAuthorizedAdmin: false };
+      }
+    } catch (error) {
+      return { canEdit: false, isOwner: false, isAuthorizedAdmin: false };
+    }
+  };
+
+  const getAvailableManagers = async (): Promise<any> => {
+    try {
+      const response = await api.getAvailableManagers();
+      if (response.success) {
+        return response.data;
+      } else {
+        showNotification(response.message || 'فشل في جلب قائمة المديرين', 'error');
+        return [];
+      }
+    } catch (error) {
+      showNotification('فشل في جلب قائمة المديرين', 'error');
+      return [];
     }
   };
 
@@ -2155,6 +2335,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     changePassword,
     updateNotificationSettings,
     updateGeneralSettings,
+    getNotificationSettings,
+    getGeneralSettings,
+
+    // Organization methods
+    getOrganization,
+    updateOrganization,
+    updateOrganizationPermissions,
+    canEditOrganization,
+    getAvailableManagers,
   };
 
   return (
