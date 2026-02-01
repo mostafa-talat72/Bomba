@@ -28,7 +28,8 @@ const OrganizationSchema = new mongoose.Schema({
         youtube: { type: String, default: "" },
         tiktok: { type: String, default: "" },
         whatsapp: { type: String, default: "" },
-        telegram: { type: String, default: "" }
+        telegram: { type: String, default: "" },
+        location: { type: String, default: "" }
     },
     
     // إعدادات الصلاحيات
@@ -42,6 +43,7 @@ const OrganizationSchema = new mongoose.Schema({
     
     // معلومات إضافية
     logo: { type: String, default: "" },
+    websiteUrl: { type: String, default: "" },
     workingHours: {
         monday: { open: String, close: String, closed: { type: Boolean, default: false } },
         tuesday: { open: String, close: String, closed: { type: Boolean, default: false } },

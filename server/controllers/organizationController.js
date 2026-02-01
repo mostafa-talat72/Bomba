@@ -1,5 +1,6 @@
 import Organization from "../models/Organization.js";
 import User from "../models/User.js";
+import organizationWebsiteService from "../services/organizationWebsiteService.js";
 
 // @desc    Get organization details
 // @route   GET /api/organization
@@ -96,6 +97,16 @@ export const updateOrganization = async (req, res) => {
         }
 
         await organization.save();
+
+        // Generate website after saving organization data
+        try {
+            const websiteUrl = await organizationWebsiteService.generateWebsite(organization);
+            organization.websiteUrl = websiteUrl;
+            await organization.save();
+        } catch (websiteError) {
+            console.error('Error generating website:', websiteError);
+            // Don't fail the entire operation if website generation fails
+        }
 
         const updatedOrganization = await Organization.findById(organization._id)
             .populate("owner", "name email")

@@ -53,6 +53,7 @@ import tableRoutes from "./routes/tableRoutes.js";
 import performanceRoutes from "./routes/performanceRoutes.js";
 import syncRoutes from "./routes/syncRoutes.js";
 import organizationRoutes from "./routes/organizationRoutes.js";
+import publicRoutes from "./routes/publicRoutes.js";
 
 // Load environment variables
 dotenv.config();
@@ -470,6 +471,9 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Static files
 app.use("/uploads", express.static("uploads"));
+app.use("/temp", express.static("temp"));
+app.use("/public", express.static("public"));
+app.use("/organizations", express.static("public/organizations"));
 
 // Socket.IO setup
 setupSocketIO(io);
@@ -519,6 +523,7 @@ app.use("/api/tables", tableRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/organization", organizationRoutes);
+app.use("/public", publicRoutes);
 
 // REMOVED: Public bill viewing route for security reasons
 // Bills should only be accessible through authenticated routes

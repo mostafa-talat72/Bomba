@@ -1,5 +1,5 @@
 import { useState, useEffect, FC } from 'react';
-import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Clock, Users, Check, X } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 // Type for alert messages
@@ -55,6 +55,7 @@ interface OrganizationData {
   phone: string;
   email: string;
   website: string;
+  websiteUrl: string;
   socialLinks: {
     facebook: string;
     instagram: string;
@@ -64,12 +65,14 @@ interface OrganizationData {
     tiktok: string;
     whatsapp: string;
     telegram: string;
+    location: string;
   };
   workingHours: {
     [key: string]: {
       open: string;
       close: string;
       closed: boolean;
+      is24Hours: boolean;
     };
   };
   logo: string;
@@ -161,6 +164,7 @@ const Settings: FC = () => {
     phone: '',
     email: '',
     website: '',
+    websiteUrl: '',
     socialLinks: {
       facebook: '',
       instagram: '',
@@ -170,15 +174,16 @@ const Settings: FC = () => {
       tiktok: '',
       whatsapp: '',
       telegram: '',
+      location: '',
     },
     workingHours: {
-      monday: { open: '09:00', close: '22:00', closed: false },
-      tuesday: { open: '09:00', close: '22:00', closed: false },
-      wednesday: { open: '09:00', close: '22:00', closed: false },
-      thursday: { open: '09:00', close: '22:00', closed: false },
-      friday: { open: '09:00', close: '22:00', closed: false },
-      saturday: { open: '09:00', close: '22:00', closed: false },
-      sunday: { open: '09:00', close: '22:00', closed: false },
+      monday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
+      tuesday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
+      wednesday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
+      thursday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
+      friday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
+      saturday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
+      sunday: { open: '09:00', close: '22:00', closed: false, is24Hours: false },
     },
     logo: '',
   });
@@ -292,7 +297,16 @@ const Settings: FC = () => {
             },
             workingHours: {
               ...prev.workingHours,
-              ...orgData.workingHours,
+              ...Object.keys(orgData.workingHours || {}).reduce((acc, day) => {
+                const dayData = orgData.workingHours[day];
+                acc[day] = {
+                  open: dayData.open || '09:00',
+                  close: dayData.close || '22:00',
+                  closed: dayData.closed || false,
+                  is24Hours: dayData.is24Hours || false
+                };
+                return acc;
+              }, {} as any)
             },
           }));
         }
@@ -1071,6 +1085,37 @@ const Settings: FC = () => {
                     </div>
                   </div>
 
+                  {/* Generated Website Section */}
+                  {organization.websiteUrl && (
+                    <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg mb-6">
+                      <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                        <Globe className="h-5 w-5 ml-2 text-green-600" />
+                        سجل المنشأه المُنشأ تلقائياً
+                      </h4>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                            تم إنشاء سجل في Bomba يحتوي على جميع بيانات المنشأة
+                          </p>
+                          <a
+                            href={organization.websiteUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
+                          >
+                            <Globe className="h-4 w-4 ml-2" />
+                            عرض سجل المنشأه
+                          </a>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            يتم تحديث السجل تلقائياً عند حفظ البيانات
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Social Links */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
                     <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
@@ -1203,6 +1248,204 @@ const Settings: FC = () => {
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                           placeholder="https://t.me/yourchannel"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <MapPin className="h-4 w-4 inline ml-1 text-red-600" />
+                          رابط الموقع
+                        </label>
+                        <input
+                          type="url"
+                          value={organization.socialLinks.location}
+                          onChange={(e) => setOrganization({ 
+                            ...organization, 
+                            socialLinks: { ...organization.socialLinks, location: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="https://maps.google.com/..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Working Hours */}
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                      <Clock className="h-5 w-5 ml-2" />
+                      مواقيت العمل
+                    </h4>
+                    <div className="space-y-4">
+                      {Object.entries(organization.workingHours).map(([day, hours]) => {
+                        const dayNames: { [key: string]: string } = {
+                          monday: 'الاثنين',
+                          tuesday: 'الثلاثاء',
+                          wednesday: 'الأربعاء',
+                          thursday: 'الخميس',
+                          friday: 'الجمعة',
+                          saturday: 'السبت',
+                          sunday: 'الأحد'
+                        };
+                        
+                        return (
+                          <div key={day} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+                            <div className="flex items-center space-x-4">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100 min-w-16">
+                                {dayNames[day]}
+                              </span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!hours.closed}
+                                  onChange={(e) => setOrganization({
+                                    ...organization,
+                                    workingHours: {
+                                      ...organization.workingHours,
+                                      [day]: { ...hours, closed: !e.target.checked, is24Hours: false }
+                                    }
+                                  })}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                              </label>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {hours.closed ? 'مغلق' : hours.is24Hours ? '24 ساعة' : 'مفتوح'}
+                              </span>
+                            </div>
+                            
+                            {!hours.closed && (
+                              <div className="flex items-center space-x-2">
+                                {/* 24 Hours Toggle */}
+                                <div className="flex items-center space-x-2">
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={hours.is24Hours}
+                                      onChange={(e) => setOrganization({
+                                        ...organization,
+                                        workingHours: {
+                                          ...organization.workingHours,
+                                          [day]: { 
+                                            ...hours, 
+                                            is24Hours: e.target.checked,
+                                            open: e.target.checked ? '00:00' : hours.open,
+                                            close: e.target.checked ? '23:59' : hours.close
+                                          }
+                                        }
+                                      })}
+                                      className="sr-only peer"
+                                    />
+                                    <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                  </label>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                    24 ساعة
+                                  </span>
+                                </div>
+                                
+                                {/* Time Inputs - Hidden when 24 hours is enabled */}
+                                {!hours.is24Hours && (
+                                  <>
+                                    <div className="flex items-center space-x-2">
+                                      <label className="text-xs text-gray-500 dark:text-gray-400">من:</label>
+                                      <input
+                                        type="time"
+                                        value={hours.open}
+                                        onChange={(e) => setOrganization({
+                                          ...organization,
+                                          workingHours: {
+                                            ...organization.workingHours,
+                                            [day]: { ...hours, open: e.target.value }
+                                          }
+                                        })}
+                                        className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                      />
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <label className="text-xs text-gray-500 dark:text-gray-400">إلى:</label>
+                                      <input
+                                        type="time"
+                                        value={hours.close}
+                                        onChange={(e) => setOrganization({
+                                          ...organization,
+                                          workingHours: {
+                                            ...organization.workingHours,
+                                            [day]: { ...hours, close: e.target.value }
+                                          }
+                                        })}
+                                        className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                      />
+                                    </div>
+                                  </>
+                                )}
+                                
+                                {/* Display 24 hours indicator */}
+                                {hours.is24Hours && (
+                                  <div className="flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">
+                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                      مفتوح طوال اليوم
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Quick Actions */}
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newWorkingHours = { ...organization.workingHours };
+                            Object.keys(newWorkingHours).forEach(day => {
+                              newWorkingHours[day] = { open: '09:00', close: '22:00', closed: false, is24Hours: false };
+                            });
+                            setOrganization({ ...organization, workingHours: newWorkingHours });
+                          }}
+                          className="px-3 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+                        >
+                          فتح جميع الأيام (9 ص - 10 م)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newWorkingHours = { ...organization.workingHours };
+                            ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday'].forEach(day => {
+                              newWorkingHours[day] = { open: '09:00', close: '22:00', closed: false, is24Hours: false };
+                            });
+                            newWorkingHours.friday = { open: '14:00', close: '22:00', closed: false, is24Hours: false };
+                            setOrganization({ ...organization, workingHours: newWorkingHours });
+                          }}
+                          className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                        >
+                          مواعيد عادية (الجمعة من 2 ظ)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newWorkingHours = { ...organization.workingHours };
+                            Object.keys(newWorkingHours).forEach(day => {
+                              newWorkingHours[day] = { open: '00:00', close: '23:59', closed: false, is24Hours: true };
+                            });
+                            setOrganization({ ...organization, workingHours: newWorkingHours });
+                          }}
+                          className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors"
+                        >
+                          فتح 24 ساعة جميع الأيام
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newWorkingHours = { ...organization.workingHours };
+                            Object.keys(newWorkingHours).forEach(day => {
+                              newWorkingHours[day] = { ...newWorkingHours[day], closed: true, is24Hours: false };
+                            });
+                            setOrganization({ ...organization, workingHours: newWorkingHours });
+                          }}
+                          className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-full hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                        >
+                          إغلاق جميع الأيام
+                        </button>
                       </div>
                     </div>
                   </div>
