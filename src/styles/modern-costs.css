@@ -1011,3 +1011,299 @@
     transition-duration: 0.01ms !important;
   }
 }
+/* Collapsible sections */
+.collapsible-header {
+  transition: all 0.2s ease-in-out;
+}
+
+.collapsible-header:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 0.75rem;
+}
+
+.dark .collapsible-header:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Modern scrollbar */
+.modern-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.modern-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.modern-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
+
+.dark .modern-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.5);
+}
+
+.dark .modern-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 85, 99, 0.8);
+}
+
+/* Collapse animation */
+.collapse-enter {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+}
+
+.collapse-enter-active {
+  opacity: 1;
+  max-height: 500px;
+  transition: opacity 300ms ease-in-out, max-height 300ms ease-in-out;
+}
+
+.collapse-exit {
+  opacity: 1;
+  max-height: 500px;
+}
+
+.collapse-exit-active {
+  opacity: 0;
+  max-height: 0;
+  transition: opacity 300ms ease-in-out, max-height 300ms ease-in-out;
+  overflow: hidden;
+}
+
+/* Enhanced breakdown cards */
+.breakdown-card {
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.breakdown-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -8px rgba(0, 0, 0, 0.1);
+}
+
+.dark .breakdown-card:hover {
+  box-shadow: 0 8px 25px -8px rgba(0, 0, 0, 0.3);
+}
+
+/* Filter section enhancements */
+.filter-section-header {
+  padding: 0.75rem;
+  margin: -0.75rem;
+  border-radius: 0.75rem;
+  transition: background-color 0.2s ease;
+}
+
+.filter-section-header:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.dark .filter-section-header:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Status indicator for collapsed sections */
+.section-status {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: rgb(59, 130, 246);
+  font-weight: 500;
+}
+
+.dark .section-status {
+  background: rgba(59, 130, 246, 0.2);
+  color: rgb(147, 197, 253);
+}
+
+/* Enhanced category buttons in collapsed state */
+.category-filter-collapsed .modern-category-btn {
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Smooth transitions for all interactive elements */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced active filter badges */
+.active-filter-badge {
+  animation: slideInFromTop 0.3s ease-out;
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Improved breakdown section spacing */
+.breakdown-section {
+  border: 1px solid rgba(229, 231, 235, 0.5);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(249, 250, 251, 0.8) 100%);
+}
+
+.dark .breakdown-section {
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  background: linear-gradient(135deg, rgba(31, 41, 55, 0.8) 0%, rgba(17, 24, 39, 0.8) 100%);
+}
+/* Enhanced breakdown cards with better hover effects */
+.breakdown-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.breakdown-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.breakdown-card:hover::before {
+  left: 100%;
+}
+
+/* Improved section headers */
+.section-header-enhanced {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark .section-header-enhanced {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.05) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Animated collapse indicators */
+.collapse-indicator {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapse-indicator.collapsed {
+  transform: rotate(180deg);
+}
+
+/* Enhanced filter badges */
+.filter-badge {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  backdrop-filter: blur(4px);
+}
+
+.dark .filter-badge {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* Smooth section transitions */
+.section-content {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: top;
+}
+
+.section-content.collapsed {
+  opacity: 0;
+  transform: scaleY(0);
+  max-height: 0;
+  overflow: hidden;
+}
+
+.section-content.expanded {
+  opacity: 1;
+  transform: scaleY(1);
+  max-height: none;
+}
+
+/* Enhanced quick action buttons */
+.quick-action-btn {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--btn-color, #3b82f6) 0%, var(--btn-color-dark, #1d4ed8) 100%);
+  transition: all 0.2s ease;
+}
+
+.quick-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.quick-action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.quick-action-btn:hover::before {
+  left: 100%;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .breakdown-section {
+    margin-bottom: 1rem;
+  }
+  
+  .filter-section-header {
+    padding: 0.5rem;
+  }
+  
+  .breakdown-card {
+    padding: 0.75rem;
+  }
+  
+  .modern-scrollbar {
+    max-height: 200px;
+  }
+}
+
+/* Loading states for sections */
+.section-loading {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+.dark .section-loading {
+  background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+  background-size: 200% 100%;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

@@ -628,6 +628,41 @@ class ApiClient {
     return data.map(item => this.normalizeData(item));
   }
 
+  // Generic HTTP methods
+  async get<T = any>(endpoint: string, options?: { params?: any }): Promise<ApiResponse<T>> {
+    let url = endpoint;
+    if (options?.params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(options.params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      url += `?${searchParams.toString()}`;
+    }
+    return this.request<T>(url);
+  }
+
+  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'DELETE',
+    });
+  }
+
   // Auth endpoints
   async login(email: string, password: string): Promise<ApiResponse<{ user: User; token: string; refreshToken: string }>> {
     const response = await this.request<{ user: User; token: string; refreshToken: string }>('/auth/login', {
@@ -2295,26 +2330,6 @@ class ApiClient {
       }
     }
     return this.request<T>(url);
-  }
-
-  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  }
-
-  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
-      method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  }
-
-  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
-      method: 'DELETE',
-    });
   }
 
   // Organization methods

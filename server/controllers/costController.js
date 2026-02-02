@@ -9,7 +9,7 @@ export const getCosts = async (req, res) => {
             category,
             status,
             page = 1,
-            limit = 10,
+            limit = 50,
             startDate,
             endDate,
             vendor,
@@ -42,44 +42,50 @@ export const getCosts = async (req, res) => {
             ];
         }
 
-        // Advanced date range filter
-        // Includes: cost date, payment dates, and amount increase dates
+        // Enhanced date range filter - only filter by cost date for better performance
         if (startDate || endDate) {
-            const dateQuery = [];
             const dateFilter = {};
             
-            if (startDate) dateFilter.$gte = new Date(startDate);
+            if (startDate) {
+                const start = new Date(startDate);
+                start.setHours(0, 0, 0, 0);
+                dateFilter.$gte = start;
+            }
+            
             if (endDate) {
-                const endOfDay = new Date(endDate);
-                endOfDay.setHours(23, 59, 59, 999);
-                dateFilter.$lte = endOfDay;
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                dateFilter.$lte = end;
             }
 
-            // Match by cost date
-            dateQuery.push({ date: dateFilter });
-            
-            // Match by payment history dates
-            dateQuery.push({ 
-                "paymentHistory.paidAt": dateFilter 
-            });
-            
-            // Match by amount history dates
-            dateQuery.push({ 
-                "amountHistory.addedAt": dateFilter 
-            });
-
-            query.$or = query.$or ? 
-                [...query.$or, ...dateQuery] : 
-                dateQuery;
+            query.date = dateFilter;
         }
 
+        // Fix organization query for aggregation - convert to ObjectId if needed
+        const aggregationQuery = { ...query };
+        if (typeof aggregationQuery.organization === 'object' && aggregationQuery.organization._id) {
+            aggregationQuery.organization = aggregationQuery.organization._id;
+        }
+
+        // Also ensure category is properly handled for aggregation
+        if (aggregationQuery.category && typeof aggregationQuery.category === 'string') {
+            // Convert category string to ObjectId for aggregation
+            const mongoose = await import('mongoose');
+            try {
+                aggregationQuery.category = new mongoose.default.Types.ObjectId(aggregationQuery.category);
+            } catch (error) {
+                // If conversion fails, keep original value
+            }
+        }
+
+        // Get costs with pagination
         const costs = await Cost.find(query)
             .populate("category", "name icon color")
             .populate("createdBy", "name")
             .populate("approvedBy", "name")
             .populate("amountHistory.addedBy", "name")
             .populate("paymentHistory.paidBy", "name")
-            .sort({ date: -1 })
+            .sort({ date: -1, createdAt: -1 })
             .limit(limit * 1)
             .skip((page - 1) * limit);
 
@@ -87,21 +93,72 @@ export const getCosts = async (req, res) => {
 
         // Calculate comprehensive statistics for all matching costs (not just paginated)
         const totalStats = await Cost.aggregate([
-            { $match: query },
+            { $match: aggregationQuery },
+            {
+                $addFields: {
+                    // Ensure numeric fields are treated as numbers
+                    numericAmount: { $toDouble: { $ifNull: ["$amount", 0] } },
+                    numericPaidAmount: { $toDouble: { $ifNull: ["$paidAmount", 0] } },
+                    numericRemainingAmount: { $toDouble: { $ifNull: ["$remainingAmount", 0] } }
+                }
+            },
             { 
                 $group: { 
                     _id: null, 
-                    total: { $sum: "$amount" },
-                    paid: { $sum: "$paidAmount" },
-                    remaining: { $sum: "$remainingAmount" },
-                    count: { $sum: 1 }
+                    total: { $sum: "$numericAmount" },
+                    paid: { $sum: "$numericPaidAmount" },
+                    remaining: { $sum: "$numericRemainingAmount" },
+                    count: { $sum: 1 },
+                    // Add debug fields
+                    avgAmount: { $avg: "$numericAmount" },
+                    maxAmount: { $max: "$numericAmount" },
+                    minAmount: { $min: "$numericAmount" }
                 } 
             },
         ]);
 
         const stats = totalStats[0] || { total: 0, paid: 0, remaining: 0, count: 0 };
-        
 
+        // Get category breakdown for filtered results
+        const categoryBreakdown = await Cost.aggregate([
+            { $match: aggregationQuery },
+            {
+                $lookup: {
+                    from: 'costcategories',
+                    localField: 'category',
+                    foreignField: '_id',
+                    as: 'categoryInfo'
+                }
+            },
+            { $unwind: { path: '$categoryInfo', preserveNullAndEmptyArrays: true } },
+            {
+                $group: {
+                    _id: '$category',
+                    categoryName: { $first: '$categoryInfo.name' },
+                    categoryColor: { $first: '$categoryInfo.color' },
+                    categoryIcon: { $first: '$categoryInfo.icon' },
+                    total: { $sum: '$amount' },
+                    paid: { $sum: '$paidAmount' },
+                    remaining: { $sum: '$remainingAmount' },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { total: -1 } }
+        ]);
+
+        // Get status breakdown for filtered results
+        const statusBreakdown = await Cost.aggregate([
+            { $match: aggregationQuery },
+            {
+                $group: {
+                    _id: '$status',
+                    total: { $sum: '$amount' },
+                    paid: { $sum: '$paidAmount' },
+                    remaining: { $sum: '$remainingAmount' },
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
 
         res.json({
             success: true,
@@ -111,9 +168,27 @@ export const getCosts = async (req, res) => {
             totalStats: {
                 total: stats.total,
                 paid: stats.paid,
-                remaining: stats.remaining
+                remaining: stats.remaining,
+                count: stats.count
             },
+            categoryBreakdown,
+            statusBreakdown,
             data: costs,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / limit),
+                hasNext: page * limit < total,
+                hasPrev: page > 1
+            },
+            filters: {
+                category,
+                status,
+                startDate,
+                endDate,
+                vendor,
+                search
+            }
         });
     } catch (error) {
         res.status(500).json({
