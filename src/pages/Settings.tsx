@@ -198,6 +198,7 @@ const Settings: FC = () => {
 
   const [availableManagers, setAvailableManagers] = useState<Manager[]>([]);
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
+  const [organizationLoading, setOrganizationLoading] = useState(true);
 
   // Show alert function
   const showAlertMessage = (message: string, type: AlertType = 'success') => {
@@ -271,6 +272,7 @@ const Settings: FC = () => {
   // Load organization data and permissions
   useEffect(() => {
     const loadOrganizationData = async () => {
+      setOrganizationLoading(true);
       try {
         // Load organization data
         const orgData = await getOrganization();
@@ -286,12 +288,14 @@ const Settings: FC = () => {
               ...prev.workingHours,
               ...Object.keys(orgData.workingHours || {}).reduce((acc, day) => {
                 const dayData = orgData.workingHours[day];
-                acc[day] = {
-                  open: dayData.open || '09:00',
-                  close: dayData.close || '22:00',
-                  closed: dayData.closed || false,
-                  is24Hours: dayData.is24Hours || false
-                };
+                if (dayData) {
+                  acc[day] = {
+                    open: dayData.open || '09:00',
+                    close: dayData.close || '22:00',
+                    closed: dayData.closed || false,
+                    is24Hours: dayData.is24Hours || false
+                  };
+                }
                 return acc;
               }, {} as any)
             },
@@ -302,7 +306,7 @@ const Settings: FC = () => {
         const permissions = await canEditOrganization();
         if (permissions) {
           setOrganizationPermissions(permissions);
-          if (permissions.authorizedManagers) {
+          if (permissions.authorizedManagers && Array.isArray(permissions.authorizedManagers)) {
             setSelectedManagers(permissions.authorizedManagers.map((m: any) => m._id));
           }
         }
@@ -310,12 +314,15 @@ const Settings: FC = () => {
         // Load available managers if user is owner
         if (permissions?.isOwner) {
           const managers = await getAvailableManagers();
-          if (managers) {
+          if (managers && Array.isArray(managers)) {
             setAvailableManagers(managers);
           }
         }
       } catch (error) {
         console.error('Error loading organization data:', error);
+        showAlertMessage('حدث خطأ أثناء تحميل بيانات المنشأة', 'error');
+      } finally {
+        setOrganizationLoading(false);
       }
     };
 
@@ -429,6 +436,12 @@ const Settings: FC = () => {
   };
 
   const handleOrganizationUpdate = async () => {
+    // التحقق من البيانات المطلوبة
+    if (!organization.name.trim()) {
+      showAlertMessage('اسم المنشأة مطلوب', 'error');
+      return;
+    }
+
     setOrganizationSaving(true);
     try {
       const success = await updateOrganization(organization);
@@ -438,7 +451,8 @@ const Settings: FC = () => {
         showAlertMessage('حدث خطأ أثناء تحديث بيانات المنشأة', 'error');
       }
     } catch (error) {
-      showAlertMessage('حدث خطأ أثناء تحديث بيانات المنشأة', 'error');
+      console.error('Organization update error:', error);
+      showAlertMessage('حدث خطأ غير متوقع أثناء تحديث بيانات المنشأة', 'error');
     } finally {
       setOrganizationSaving(false);
     }
@@ -454,15 +468,20 @@ const Settings: FC = () => {
       if (success) {
         showAlertMessage('تم تحديث صلاحيات المنشأة بنجاح');
         // Reload permissions to get updated data
-        const permissions = await canEditOrganization();
-        if (permissions) {
-          setOrganizationPermissions(permissions);
+        try {
+          const permissions = await canEditOrganization();
+          if (permissions) {
+            setOrganizationPermissions(permissions);
+          }
+        } catch (reloadError) {
+          console.error('Error reloading permissions:', reloadError);
         }
       } else {
         showAlertMessage('حدث خطأ أثناء تحديث صلاحيات المنشأة', 'error');
       }
     } catch (error) {
-      showAlertMessage('حدث خطأ أثناء تحديث صلاحيات المنشأة', 'error');
+      console.error('Permissions update error:', error);
+      showAlertMessage('حدث خطأ غير متوقع أثناء تحديث صلاحيات المنشأة', 'error');
     } finally {
       setPermissionsSaving(false);
     }
@@ -481,7 +500,7 @@ const Settings: FC = () => {
     { id: 'password', name: 'كلمة المرور', icon: Lock },
     { id: 'notifications', name: 'الإشعارات', icon: Bell },
     { id: 'general', name: 'عام', icon: SettingsIcon },
-    ...(organizationPermissions.canEdit ? [{ id: 'organization', name: 'المنشأة', icon: Building2 }] : []),
+    { id: 'organization', name: 'المنشأة', icon: Building2 },
   ];
 
   if (!user) {
@@ -981,6 +1000,19 @@ const Settings: FC = () => {
                       </span>
                     )}
                   </div>
+
+                  {/* Loading state */}
+                  {organizationSaving && (
+                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-blue-600 dark:text-blue-400">جاري حفظ بيانات المنشأة...</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Basic Information */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
@@ -1568,6 +1600,33 @@ const Settings: FC = () => {
                       )}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Organization Tab - Show message if no permissions */}
+            {activeTab === 'organization' && !organizationPermissions.canEdit && !organizationLoading && (
+              <div className="space-y-6">
+                <div className="text-center py-12">
+                  <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900">
+                    <Building2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  </div>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                    ليس لديك صلاحية لتعديل بيانات المنشأة
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    يجب أن تكون مالك المنشأة أو مدير مخول لتعديل هذه البيانات
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Organization Tab - Loading state */}
+            {activeTab === 'organization' && organizationLoading && (
+              <div className="space-y-6">
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
+                  <p className="text-gray-600 dark:text-gray-400">جاري تحميل بيانات المنشأة...</p>
                 </div>
               </div>
             )}

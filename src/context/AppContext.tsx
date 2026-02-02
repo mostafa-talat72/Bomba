@@ -2121,13 +2121,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const getOrganization = async (): Promise<any> => {
     try {
       const response = await api.getOrganization();
+      
       if (response.success) {
         return response.data;
       } else {
+        console.warn('Failed to fetch organization:', response.message);
         showNotification(response.message || 'فشل في جلب بيانات المنشأة', 'error');
         return null;
       }
     } catch (error) {
+      console.error('Error fetching organization:', error);
       showNotification('فشل في جلب بيانات المنشأة', 'error');
       return null;
     }
@@ -2168,13 +2171,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const canEditOrganization = async (): Promise<any> => {
     try {
       const response = await api.canEditOrganization();
+      
       if (response.success) {
         return response.data;
       } else {
-        return { canEdit: false, isOwner: false, isAuthorizedAdmin: false };
+        console.warn('Permission check failed:', response.message);
+        return { 
+          canEdit: false, 
+          isOwner: false, 
+          isAuthorizedAdmin: false,
+          allowManagersToEditOrganization: false,
+          authorizedManagers: []
+        };
       }
     } catch (error) {
-      return { canEdit: false, isOwner: false, isAuthorizedAdmin: false };
+      console.error('Error checking organization permissions:', error);
+      return { 
+        canEdit: false, 
+        isOwner: false, 
+        isAuthorizedAdmin: false,
+        allowManagersToEditOrganization: false,
+        authorizedManagers: []
+      };
     }
   };
 

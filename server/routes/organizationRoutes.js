@@ -11,6 +11,11 @@ import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
+// Add logging for all organization routes
+router.use((req, res, next) => {
+    next();
+});
+
 // Apply auth middleware to all routes
 router.use(protect);
 
@@ -19,11 +24,13 @@ router.route("/")
     .get(getOrganization)
     .put(updateOrganization);
 
-// Get organization by ID (for printing bills from other organizations)
-router.get("/:id", getOrganizationById);
-
+// Specific routes must come before parameterized routes
 router.put("/permissions", updateOrganizationPermissions);
 router.get("/can-edit", canEditOrganization);
 router.get("/available-managers", getAvailableManagers);
+
+// Get organization by ID (for printing bills from other organizations)
+// This must come AFTER specific routes to avoid conflicts
+router.get("/:id", getOrganizationById);
 
 export default router;

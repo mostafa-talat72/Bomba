@@ -38,9 +38,23 @@ export const getOrganizationById = async (req, res) => {
 // @access  Private
 export const getOrganization = async (req, res) => {
     try {
-        const organization = await Organization.findById(req.user.organization)
+       
+
+        // Extract organization ID if it's an object
+        const organizationId = req.user.organization?._id || req.user.organization;
+
+        if (!organizationId) {
+            return res.status(400).json({
+                success: false,
+                message: "المستخدم غير مرتبط بأي منشأة",
+            });
+        }
+
+
+        const organization = await Organization.findById(organizationId)
             .populate("owner", "name email")
             .populate('permissions.authorizedManagers', 'name email');
+
 
         if (!organization) {
             return res.status(404).json({
@@ -49,11 +63,13 @@ export const getOrganization = async (req, res) => {
             });
         }
 
+    
         res.json({
             success: true,
             data: organization,
         });
     } catch (error) {
+        console.error('Error in getOrganization:', error);
         res.status(500).json({
             success: false,
             message: "خطأ في جلب بيانات المنشأة",
@@ -67,7 +83,10 @@ export const getOrganization = async (req, res) => {
 // @access  Private (Owner or Authorized Admin)
 export const updateOrganization = async (req, res) => {
     try {
-        const organization = await Organization.findById(req.user.organization)
+        // Extract organization ID if it's an object
+        const organizationId = req.user.organization?._id || req.user.organization;
+        
+        const organization = await Organization.findById(organizationId)
             .populate('permissions.authorizedManagers', 'name email');
 
         if (!organization) {
@@ -162,7 +181,10 @@ export const updateOrganization = async (req, res) => {
 // @access  Private (Owner only)
 export const updateOrganizationPermissions = async (req, res) => {
     try {
-        const organization = await Organization.findById(req.user.organization)
+        // Extract organization ID if it's an object
+        const organizationId = req.user.organization?._id || req.user.organization;
+        
+        const organization = await Organization.findById(organizationId)
             .populate('permissions.authorizedManagers', 'name email');
 
         if (!organization) {
@@ -216,8 +238,21 @@ export const updateOrganizationPermissions = async (req, res) => {
 // @access  Private
 export const canEditOrganization = async (req, res) => {
     try {
-        const organization = await Organization.findById(req.user.organization)
+
+        // Extract organization ID if it's an object
+        const organizationId = req.user.organization?._id || req.user.organization;
+
+        if (!organizationId) {
+            return res.status(400).json({
+                success: false,
+                message: "المستخدم غير مرتبط بأي منشأة",
+            });
+        }
+
+
+        const organization = await Organization.findById(organizationId)
             .populate('permissions.authorizedManagers', 'name email');
+
 
         if (!organization) {
             return res.status(404).json({
@@ -234,7 +269,6 @@ export const canEditOrganization = async (req, res) => {
             );
 
         const canEdit = isOwner || isAuthorizedAdmin;
-
         res.json({
             success: true,
             data: {
@@ -246,6 +280,7 @@ export const canEditOrganization = async (req, res) => {
             },
         });
     } catch (error) {
+        console.error('Error in canEditOrganization:', error);
         res.status(500).json({
             success: false,
             message: "خطأ في التحقق من الصلاحيات",
@@ -259,7 +294,10 @@ export const canEditOrganization = async (req, res) => {
 // @access  Private (Owner only)
 export const getAvailableManagers = async (req, res) => {
     try {
-        const organization = await Organization.findById(req.user.organization);
+        // Extract organization ID if it's an object
+        const organizationId = req.user.organization?._id || req.user.organization;
+        
+        const organization = await Organization.findById(organizationId);
 
         if (!organization) {
             return res.status(404).json({
@@ -280,7 +318,7 @@ export const getAvailableManagers = async (req, res) => {
 
         // جلب جميع المديرين في المنشأة (ما عدا المالك)
         const managers = await User.find({
-            organization: req.user.organization,
+            organization: organizationId,
             role: 'admin',
             _id: { $ne: req.user._id }
         }).select('name email _id');
