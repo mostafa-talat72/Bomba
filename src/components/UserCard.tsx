@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, Eye, Edit, Trash2, Calendar, Shield, Crown, UserCheck, UserX } from 'lucide-react';
 import { User as UserType } from '../services/api';
+import { useApp } from '../context/AppContext';
 
 interface RoleInfo {
   id: string;
@@ -22,6 +23,8 @@ interface UserCardProps {
   onView: (user: UserType) => void;
   onEdit: (user: UserType) => void;
   onDelete: (userId: string) => void;
+  onManagePermissions?: (user: UserType) => void;
+  onChangeStatus?: (user: UserType) => void;
   getRoleInfo: (roleId: string) => RoleInfo;
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
@@ -33,11 +36,14 @@ const UserCard: React.FC<UserCardProps> = ({
   onView,
   onEdit,
   onDelete,
+  onManagePermissions,
+  onChangeStatus,
   getRoleInfo,
   getStatusColor,
   getStatusText,
   permissions
 }) => {
+  const { canDeleteUsers, canManageUsers, canEditUser, canDeleteUser } = useApp();
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
 
@@ -70,7 +76,7 @@ const UserCard: React.FC<UserCardProps> = ({
 
   return (
     <div
-      className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-lg border-2 border-gray-200 dark:border-gray-700 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group relative overflow-hidden animate-slideUp"
+      className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-lg border-2 border-gray-200 dark:border-gray-700 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group relative overflow-hidden animate-slideUp pb-16"
       onClick={() => onView(user)}
       tabIndex={0}
       role="button"
@@ -120,7 +126,7 @@ const UserCard: React.FC<UserCardProps> = ({
         </div>
 
         {/* Permissions */}
-        <div className="mb-4">
+        <div className="mb-2">
           <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
             <Crown className="w-4 h-4 text-purple-600" />
             الصلاحيات:
@@ -152,45 +158,65 @@ const UserCard: React.FC<UserCardProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons - Fixed at bottom */}
         <div
-          className="flex items-center justify-center gap-2 pt-4 border-t-2 border-gray-200 dark:border-gray-700"
+          className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-1 p-3 bg-gradient-to-t from-white via-white to-transparent dark:from-gray-800 dark:via-gray-800 dark:to-transparent border-t border-gray-200 dark:border-gray-700 rounded-b-2xl"
           onClick={e => e.stopPropagation()}
         >
           <button
             onClick={() => onView(user)}
-            className="group relative overflow-hidden flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
+            className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
             title="عرض التفاصيل"
           >
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
-            <div className="relative flex items-center justify-center gap-2">
-              <Eye className="h-4 w-4" />
-              <span>عرض</span>
-            </div>
+            <Eye className="h-4 w-4 relative" />
           </button>
           
           <button
             onClick={() => onEdit(user)}
-            className="group relative overflow-hidden flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
-            title="تعديل المستخدم"
+            className={`group relative overflow-hidden p-2.5 ${canEditUser(user) 
+              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white' 
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            } rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold`}
+            title={canEditUser(user) ? "تعديل المستخدم" : "لا يمكن تعديل هذا المستخدم"}
+            disabled={!canEditUser(user)}
           >
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
-            <div className="relative flex items-center justify-center gap-2">
-              <Edit className="h-4 w-4" />
-              <span>تعديل</span>
-            </div>
+            <Edit className="h-4 w-4 relative" />
           </button>
+
+          {onManagePermissions && canManageUsers() && canEditUser(user) && (
+            <button
+              onClick={() => onManagePermissions(user)}
+              className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
+              title="إدارة الصلاحيات"
+            >
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+              <Crown className="h-4 w-4 relative" />
+            </button>
+          )}
+
+          {onChangeStatus && canManageUsers() && canEditUser(user) && (
+            <button
+              onClick={() => onChangeStatus(user)}
+              className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
+              title="تغيير الحالة"
+            >
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+              <Shield className="h-4 w-4 relative" />
+            </button>
+          )}
           
-          <button
-            onClick={() => onDelete(user.id)}
-            className="group relative overflow-hidden px-4 py-3 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
-            title="حذف المستخدم"
-          >
-            <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
-            <div className="relative flex items-center justify-center">
-              <Trash2 className="h-4 w-4" />
-            </div>
-          </button>
+          {canDeleteUser(user) && (
+            <button
+              onClick={() => onDelete(user.id)}
+              className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
+              title="حذف المستخدم"
+            >
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+              <Trash2 className="h-4 w-4 relative" />
+            </button>
+          )}
         </div>
       </div>
 

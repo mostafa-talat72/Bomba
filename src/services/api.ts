@@ -21,7 +21,19 @@ export interface User {
   avatar?: string;
   phone?: string;
   address?: string;
+  department?: string;
+  position?: string;
+  hireDate?: Date;
+  salary?: number;
+  notes?: string;
+  isActive?: boolean;
+  profileImage?: string;
   organizationName?: string;
+  organization?: {
+    _id: string;
+    name: string;
+    owner: string;
+  };
   createdAt: Date;
 }
 
@@ -629,19 +641,6 @@ class ApiClient {
   }
 
   // Generic HTTP methods
-  async get<T = any>(endpoint: string, options?: { params?: any }): Promise<ApiResponse<T>> {
-    let url = endpoint;
-    if (options?.params) {
-      const searchParams = new URLSearchParams();
-      Object.entries(options.params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, value.toString());
-        }
-      });
-      url += `?${searchParams.toString()}`;
-    }
-    return this.request<T>(url);
-  }
 
   async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {

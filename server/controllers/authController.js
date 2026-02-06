@@ -223,9 +223,10 @@ export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
         const normalizedLoginEmail = normalizeEmail(email);
-        let user = await User.findOne({ email: normalizedLoginEmail }).select(
-            "+password"
-        );
+        let user = await User.findOne({ email: normalizedLoginEmail })
+            .select("+password")
+            .populate('organization', 'name owner');
+            
         if (!user) {
             const msg = { success: false, message: "بيانات الدخول غير صحيحة" };
             return res.status(401).json(msg);
@@ -252,6 +253,7 @@ export const login = async (req, res) => {
             message: "تم تسجيل الدخول بنجاح",
             data: {
                 user: {
+                    _id: user._id,
                     id: user._id,
                     name: user.name,
                     email: user.email,
@@ -259,6 +261,7 @@ export const login = async (req, res) => {
                     permissions: user.permissions,
                     lastLogin: user.lastLogin,
                     organization: user.organization,
+                    organizationName: user.organization?.name,
                     phone: user.phone,
                     address: user.address,
                 },
@@ -380,7 +383,7 @@ export const getMe = async (req, res) => {
                 message: "توكن غير صالح أو منتهي الصلاحية",
             });
         }
-        const user = await User.findById(decoded.id).populate('organization', 'name');
+        const user = await User.findById(decoded.id).populate('organization', 'name owner');
         if (!user) {
             return res
                 .status(401)
@@ -390,6 +393,7 @@ export const getMe = async (req, res) => {
             success: true,
             data: {
                 user: {
+                    _id: user._id,
                     id: user._id,
                     name: user.name,
                     email: user.email,

@@ -47,6 +47,7 @@ const userSchema = new mongoose.Schema(
                     "menu",
                     "billing",
                     "reports",
+                    "consumption",
                     "inventory",
                     "costs",
                     "users",
@@ -96,6 +97,35 @@ const userSchema = new mongoose.Schema(
         },
         resetPasswordExpire: {
             type: Date,
+            default: null,
+        },
+        // إضافة حقول جديدة لتحسين إدارة المستخدمين
+        department: {
+            type: String,
+            default: null,
+        },
+        position: {
+            type: String,
+            default: null,
+        },
+        hireDate: {
+            type: Date,
+            default: null,
+        },
+        salary: {
+            type: Number,
+            default: null,
+        },
+        notes: {
+            type: String,
+            default: null,
+        },
+        isActive: {
+            type: Boolean,
+            default: true,
+        },
+        profileImage: {
+            type: String,
             default: null,
         },
     },
@@ -168,6 +198,7 @@ userSchema.methods.getAccessiblePages = function () {
         menu: ["menu"],
         billing: ["billing"],
         reports: ["reports"],
+        consumption: ["consumption"],
         inventory: ["inventory"],
         costs: ["costs"],
         users: ["users"],
@@ -180,6 +211,7 @@ userSchema.methods.getAccessiblePages = function () {
             "menu",
             "billing",
             "reports",
+            "consumption",
             "inventory",
             "costs",
             "users",
@@ -220,6 +252,7 @@ userSchema.methods.canAccessPage = function (page) {
         menu: ["menu"],
         billing: ["billing"],
         reports: ["reports"],
+        consumption: ["consumption"],
         inventory: ["inventory"],
         costs: ["costs"],
         users: ["users"],
@@ -232,6 +265,7 @@ userSchema.methods.canAccessPage = function (page) {
             "menu",
             "billing",
             "reports",
+            "consumption",
             "inventory",
             "costs",
             "users",

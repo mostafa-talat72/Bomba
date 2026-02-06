@@ -35,6 +35,7 @@ export const authenticateToken = async (req, res, next) => {
       });
     }
 
+    
     req.user = user;
     next();
   } catch (error) {
@@ -74,6 +75,8 @@ export const authorize = (...permissions) => {
       });
     }
 
+    // تسجيل مؤقت لتشخيص المشكلة
+
     const hasPermission = permissions.some(permission =>
       req.user.hasPermission(permission)
     );
@@ -81,7 +84,7 @@ export const authorize = (...permissions) => {
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
-        message: 'ليس لديك صلاحية للوصول لهذا المورد'
+        message: `ليس لديك صلاحية لحذف هذا المستخدم. الصلاحيات المطلوبة: ${permissions.join(' أو ')}. صلاحياتك الحالية: ${req.user.permissions.join(', ')}`
       });
     }
 

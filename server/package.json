@@ -42,7 +42,8 @@
     "fix:bills-data": "node scripts/fix-atlas-bills-data.js",
     "test:live-sync": "node scripts/test-live-sync.js",
     "emergency:fix": "node scripts/emergency-fix-timeout.js",
-    "diagnose:bills": "node scripts/diagnose-bills-specific.js"
+    "diagnose:bills": "node scripts/diagnose-bills-specific.js",
+    "fix:admin-permissions": "node scripts/fix-admin-permissions.js"
   },
   "dependencies": {
     "@notionhq/client": "^5.9.0",

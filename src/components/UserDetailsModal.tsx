@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, User, Mail, Phone, MapPin, Calendar, RefreshCw, Crown, Shield, Edit } from 'lucide-react';
 import { User as UserType } from '../services/api';
+import { useApp } from '../context/AppContext';
 
 interface Role {
   id: string;
@@ -42,9 +43,12 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
   getAccessiblePages,
   getPageDisplayName,
 }) => {
+  const { canEditUser } = useApp();
+  
   if (!isOpen || !user) return null;
 
   const roleInfo = getRoleInfo(user.role);
+  const canEdit = canEditUser(user);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -176,6 +180,88 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
               </div>
             </div>
 
+            {/* Professional Information */}
+            {(user.department || user.position || user.hireDate || user.salary) && (
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-green-600" />
+                  المعلومات المهنية
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {user.department && (
+                    <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 rounded-xl border-2 border-gray-200 dark:border-gray-600">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
+                          <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">القسم</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">{user.department}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {user.position && (
+                    <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 rounded-xl border-2 border-gray-200 dark:border-gray-600">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900/30">
+                          <Crown className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">المنصب</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">{user.position}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {user.hireDate && (
+                    <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 rounded-xl border-2 border-gray-200 dark:border-gray-600">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-cyan-100 dark:bg-cyan-900/30">
+                          <Calendar className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">تاريخ التوظيف</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">
+                            {new Date(user.hireDate).toLocaleDateString('ar-EG')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {user.salary && (
+                    <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 rounded-xl border-2 border-gray-200 dark:border-gray-600">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
+                          <Shield className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">الراتب</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">{user.salary.toLocaleString()} جنيه</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {user.notes && (
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-amber-600" />
+                  ملاحظات
+                </h3>
+                <div className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-2 border-amber-200 dark:border-amber-800 rounded-xl">
+                  <p className="text-sm text-amber-900 dark:text-amber-200 leading-relaxed">{user.notes}</p>
+                </div>
+              </div>
+            )}
+
             {/* Permissions */}
             <div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -262,22 +348,24 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
         {/* Footer */}
         <div className="p-6 border-t-2 border-gray-200 dark:border-gray-700 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 flex-shrink-0">
           <div className="flex gap-3">
-            <button
-              onClick={() => {
-                onEdit(user);
-                onClose();
-              }}
-              className="flex-1 group relative overflow-hidden px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
-            >
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
-              <div className="relative flex items-center justify-center gap-2">
-                <Edit className="w-5 h-5" />
-                <span>تعديل المستخدم</span>
-              </div>
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => {
+                  onEdit(user);
+                  onClose();
+                }}
+                className="flex-1 group relative overflow-hidden px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-bold"
+              >
+                <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                <div className="relative flex items-center justify-center gap-2">
+                  <Edit className="w-5 h-5" />
+                  <span>تعديل المستخدم</span>
+                </div>
+              </button>
+            )}
             <button
               onClick={onClose}
-              className="px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 font-bold"
+              className={`${canEdit ? '' : 'flex-1'} px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 font-bold`}
             >
               إغلاق
             </button>

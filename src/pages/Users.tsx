@@ -6,7 +6,10 @@ import UserCard from '../components/UserCard';
 import UserFormModal from '../components/UserFormModal';
 import UserDetailsModal from '../components/UserDetailsModal';
 import UserDeleteModal from '../components/UserDeleteModal';
+import PermissionsManagerModal from '../components/PermissionsManagerModal';
+import UserStatusModal from '../components/UserStatusModal';
 import { formatDecimal } from '../utils/formatters';
+import '../styles/users-enhancements.css';
 
 const Users = () => {
   const { users, fetchUsers, createUser, updateUser, deleteUser, showNotification, user } = useApp();
@@ -34,12 +37,21 @@ const Users = () => {
     permissions: [] as string[],
     businessName: '', // اسم المنشأة
     businessType: '', // نوع المنشأة
+    department: '',
+    position: '',
+    hireDate: '',
+    salary: '',
+    notes: '',
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [permissionsUser, setPermissionsUser] = useState<UserType | null>(null);
+  const [statusUser, setStatusUser] = useState<UserType | null>(null);
 
   // إخفاء خيار 'مالك' من قائمة الأدوار في لوحة المدير
   const roles = [
@@ -59,6 +71,7 @@ const Users = () => {
     { id: 'menu', name: 'المنيو', description: 'التحكم الكامل في قائمة الطعام والمشروبات والأسعار' },
     { id: 'billing', name: 'الفواتير', description: 'التحكم الكامل في إنشاء وإدارة الفواتير والمدفوعات' },
     { id: 'reports', name: 'التقارير', description: 'التحكم الكامل في عرض وتصدير جميع التقارير' },
+    { id: 'consumption', name: 'تقرير الاستهلاك', description: 'عرض وتحليل تقارير استهلاك المواد والمنتجات' },
     { id: 'inventory', name: 'المخزون', description: 'التحكم الكامل في المخزون والأصناف والمشتريات' },
     { id: 'costs', name: 'التكاليف', description: 'التحكم الكامل في التكاليف والمصروفات والميزانية' },
     { id: 'users', name: 'المستخدمين', description: 'التحكم الكامل في المستخدمين والصلاحيات والأدوار' },
@@ -81,11 +94,12 @@ const Users = () => {
       menu: ['menu'],
       billing: ['billing'],
       reports: ['reports'],
+      consumption: ['consumption'],
       inventory: ['inventory'],
       costs: ['costs'],
       users: ['users'],
       settings: ['settings'],
-      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']
+      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'inventory', 'costs', 'users', 'settings']
     };
 
     const accessiblePages = [];
@@ -109,6 +123,7 @@ const Users = () => {
       menu: 'المنيو',
       billing: 'الفواتير',
       reports: 'التقارير',
+      consumption: 'تقرير الاستهلاك',
       inventory: 'المخزون',
       costs: 'التكاليف',
       users: 'المستخدمين',
@@ -255,6 +270,11 @@ const Users = () => {
       permissions: ['dashboard'], // صلاحية افتراضية للوحة التحكم
       businessName: '',
       businessType: '',
+      department: '',
+      position: '',
+      hireDate: '',
+      salary: '',
+      notes: '',
     });
   };
 
@@ -298,6 +318,11 @@ const Users = () => {
         password?: string;
         businessName?: string;
         businessType?: string;
+        department?: string;
+        position?: string;
+        hireDate?: string;
+        salary?: number;
+        notes?: string;
       } = {
         name: formData.name,
         email: formData.email,
@@ -305,7 +330,12 @@ const Users = () => {
         status: formData.status,
         phone: formData.phone,
         address: formData.address,
-        permissions: formData.permissions
+        permissions: formData.permissions,
+        department: formData.department,
+        position: formData.position,
+        hireDate: formData.hireDate,
+        salary: formData.salary ? parseFloat(formData.salary) : undefined,
+        notes: formData.notes,
       };
 
       if (showEditUser && selectedUser) {
@@ -365,6 +395,11 @@ const Users = () => {
       permissions: u.permissions || [],
       businessName: u.businessName || '',
       businessType: u.businessType || '',
+      department: u.department || '',
+      position: u.position || '',
+      hireDate: u.hireDate ? new Date(u.hireDate).toISOString().split('T')[0] : '',
+      salary: u.salary ? u.salary.toString() : '',
+      notes: u.notes || '',
     });
     setSelectedUser(user);
     setShowEditUser(true);
@@ -375,6 +410,66 @@ const Users = () => {
   const handleView = (user: UserType) => {
     setSelectedUser(user);
     setShowViewUser(true);
+  };
+
+  const handleManagePermissions = (user: UserType) => {
+    setPermissionsUser(user);
+    setShowPermissionsModal(true);
+  };
+
+  const handleChangeStatus = (user: UserType) => {
+    setStatusUser(user);
+    setShowStatusModal(true);
+  };
+
+  const updateUserPermissions = async (userId: string, permissions: string[]) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/${userId}/permissions`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ permissions })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        showNotification('تم تحديث صلاحيات المستخدم بنجاح', 'success');
+        await loadUsers();
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      showNotification('خطأ في تحديث صلاحيات المستخدم', 'error');
+      throw error;
+    }
+  };
+
+  const updateUserStatus = async (userId: string, status: string) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/${userId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ status })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        showNotification('تم تحديث حالة المستخدم بنجاح', 'success');
+        await loadUsers();
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      showNotification('خطأ في تحديث حالة المستخدم', 'error');
+      throw error;
+    }
   };
 
   const handleDelete = (userId: string) => {
@@ -481,6 +576,15 @@ const Users = () => {
               <RefreshCw className={`h-5 w-5 relative ${loading ? 'animate-spin' : ''}`} />
               <span className="relative">تحديث</span>
             </button>
+            
+            {/* Quick Actions */}
+            <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
+              <Crown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm font-bold text-blue-900 dark:text-blue-200">
+                إدارة متقدمة
+              </span>
+            </div>
+            
             <button
               onClick={() => {
                 resetForm();
@@ -497,7 +601,7 @@ const Users = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
         <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
           <div className="flex items-center">
             <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -555,6 +659,20 @@ const Users = () => {
               <p className="text-sm font-bold text-gray-600 dark:text-gray-300">المديرون</p>
               <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
                 {formatDecimal(stats.roleStats.find(r => r.id === 'admin')?.count || 0)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl hover:scale-105 transition-all duration-200">
+          <div className="flex items-center">
+            <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Crown className="h-7 w-7 text-white" />
+            </div>
+            <div className="mr-4">
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">صلاحيات كاملة</p>
+              <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
+                {formatDecimal(users?.filter(u => u.permissions?.includes('all')).length || 0)}
               </p>
             </div>
           </div>
@@ -672,6 +790,8 @@ const Users = () => {
               onView={handleView}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onManagePermissions={handleManagePermissions}
+              onChangeStatus={handleChangeStatus}
               getRoleInfo={getRoleInfo}
               getStatusColor={getStatusColor}
               getStatusText={getStatusText}
@@ -742,6 +862,29 @@ const Users = () => {
           loading={deleteLoading}
         />
       )}
+
+      {/* Permissions Manager Modal */}
+      <PermissionsManagerModal
+        isOpen={showPermissionsModal}
+        onClose={() => {
+          setShowPermissionsModal(false);
+          setPermissionsUser(null);
+        }}
+        user={permissionsUser}
+        permissions={permissions}
+        onUpdatePermissions={updateUserPermissions}
+      />
+
+      {/* User Status Modal */}
+      <UserStatusModal
+        isOpen={showStatusModal}
+        onClose={() => {
+          setShowStatusModal(false);
+          setStatusUser(null);
+        }}
+        user={statusUser}
+        onUpdateStatus={updateUserStatus}
+      />
 
 
 

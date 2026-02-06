@@ -143,6 +143,13 @@ interface AppContextType {
   updateUser: (id: string, updates: any) => Promise<User | null>;
   deleteUser: (id: string) => Promise<boolean>;
 
+  // Permission check methods
+  hasPermission: (permission: string) => boolean;
+  canDeleteUsers: () => boolean;
+  canManageUsers: () => boolean;
+  canEditUser: (targetUser: User) => boolean;
+  canDeleteUser: (targetUser: User) => boolean;
+
   // Utility methods
   showNotification: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 
@@ -1660,9 +1667,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       showNotification(response.message || 'فشل في حذف المستخدم', 'error');
       return false;
-    } catch (error: unknown) {
-      const err = error as { message?: string };
-      showNotification(err.message || 'فشل في حذف المستخدم', 'error');
+    } catch (error: any) {
+      console.error('Delete user error:', error);
+      
+      // تحسين رسالة الخطأ بناءً على نوع الخطأ
+      let errorMessage = 'فشل في حذف المستخدم';
+      
+      if (error.response?.status === 403) {
+        errorMessage = error.response?.data?.message || 'ليس لديك صلاحية لحذف هذا المستخدم. تحتاج لصلاحية إدارة المستخدمين أو دور مدير.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'انتهت صلاحية جلستك. يرجى تسجيل الدخول مرة أخرى.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'المستخدم غير موجود أو تم حذفه مسبقاً.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      showNotification(errorMessage, 'error');
       return false;
     }
   };
@@ -2211,6 +2234,74 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // دالة للتحقق من صلاحيات المستخدم الحالي
+  const hasPermission = (permission: string): boolean => {
+    if (!user) return false;
+    return user.permissions?.includes('all') || user.permissions?.includes(permission) || false;
+  };
+
+  // دالة للتحقق من إمكانية حذف المستخدمين
+  const canDeleteUsers = (): boolean => {
+    if (!user) return false;
+    return user.role === 'admin' || hasPermission('users') || hasPermission('all');
+  };
+
+  // دالة للتحقق من إمكانية إدارة المستخدمين
+  const canManageUsers = (): boolean => {
+    if (!user) return false;
+    return hasPermission('users') || hasPermission('all');
+  };
+
+  // دالة للتحقق من إمكانية تعديل مستخدم معين
+  const canEditUser = (targetUser: User): boolean => {
+    if (!user) return false;
+    
+    // التحقق من الصلاحيات الأساسية
+    const hasBasicPermission = user.role === 'admin' || hasPermission('users') || hasPermission('all');
+    if (!hasBasicPermission) return false;
+    
+    // إذا كان المستخدم المستهدف مدير، فقط مالك المنشأة أو المستخدم نفسه يمكنه التعديل
+    if (targetUser.role === 'admin') {
+      const currentUserId = (user._id || user.id)?.toString();
+      const targetUserId = (targetUser._id || targetUser.id)?.toString();
+      const ownerId = user.organization?.owner?.toString();
+      
+    
+      const isOwner = !!(ownerId && currentUserId === ownerId);
+      const isEditingSelf = currentUserId === targetUserId;
+      return isOwner || isEditingSelf;
+    }
+    
+    return true;
+  };
+
+  // دالة للتحقق من إمكانية حذف مستخدم معين
+  const canDeleteUser = (targetUser: User): boolean => {
+    if (!user) return false;
+    
+    // التحقق من الصلاحيات الأساسية
+    const hasBasicPermission = user.role === 'admin' || hasPermission('users') || hasPermission('all');
+    if (!hasBasicPermission) return false;
+    
+    const currentUserId = (user._id || user.id)?.toString();
+    const targetUserId = (targetUser._id || targetUser.id)?.toString();
+    
+    // لا يمكن حذف النفس
+    if (currentUserId === targetUserId) return false;
+    
+    // إذا كان المستخدم المستهدف مدير، فقط مالك المنشأة يمكنه الحذف
+    if (targetUser.role === 'admin') {
+      const ownerId = user.organization?.owner?.toString();
+      
+     
+      
+      const isOwner = !!(ownerId && currentUserId === ownerId);
+      return isOwner;
+    }
+    
+    return true;
+  };
+
   const value: AppContextType = {
     // Auth state
     user,
@@ -2310,6 +2401,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     createUser,
     updateUser,
     deleteUser,
+
+    // Permission check methods
+    hasPermission,
+    canDeleteUsers,
+    canManageUsers,
+    canEditUser,
+    canDeleteUser,
 
     // Utility methods
     showNotification,
