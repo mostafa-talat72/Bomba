@@ -319,6 +319,11 @@ const Cafe: React.FC = () => {
 
   // Socket.IO connection - initialize once on mount
   useEffect(() => {
+    // Prevent duplicate connections in React Strict Mode
+    if (socketRef.current) {
+      return;
+    }
+
     // Initialize Socket.IO connection
     // Remove /api suffix from VITE_API_URL for Socket.IO connection
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -441,17 +446,31 @@ const Cafe: React.FC = () => {
 
     // Cleanup on unmount
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('reconnect');
-      socket.off('reconnect_error');
-      socket.off('reconnect_failed');
-      socket.off('connect_error');
-      socket.off('error');
-      socket.off('order-update');
-      socket.off('bill-update');
-      socket.off('table-status-update');
-      socket.disconnect();
+      // Don't disconnect in development due to Strict Mode
+      if (import.meta.env.DEV) {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('reconnect');
+        socket.off('reconnect_error');
+        socket.off('reconnect_failed');
+        socket.off('connect_error');
+        socket.off('error');
+        socket.off('order-update');
+        socket.off('bill-update');
+        socket.off('table-status-update');
+      } else {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('reconnect');
+        socket.off('reconnect_error');
+        socket.off('reconnect_failed');
+        socket.off('connect_error');
+        socket.off('error');
+        socket.off('order-update');
+        socket.off('bill-update');
+        socket.off('table-status-update');
+        socket.disconnect();
+      }
     };
   }, []); // Empty dependency array - only run once on mount
 
@@ -462,6 +481,7 @@ const Cafe: React.FC = () => {
       await Promise.all([
         fetchTableSections(),
         fetchTables(),
+        fetchBills(), // Load bills first to show table statuses correctly
         fetchAvailableMenuItems(),
         fetchMenuSections(),
         fetchMenuCategories(),
@@ -470,14 +490,8 @@ const Cafe: React.FC = () => {
       // إخفاء شاشة التحميل فوراً
       setLoading(false);
       
-      // تحميل الفواتير والطلبات في الخلفية (غير متزامن)
-      Promise.all([
-        fetchBills(),
-        fetchOrders(),
-      ]).then(() => {
-        // Fetch table statuses after loading tables and bills
-        fetchAllTableStatuses();
-      }).catch(error => {
+      // تحميل الطلبات في الخلفية (غير متزامن)
+      fetchOrders().catch(error => {
         // Ignore errors in background loading
       });
     } catch (error) {

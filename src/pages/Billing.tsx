@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, memo } from 'react';
+import { useEffect, useState, useMemo, memo, useRef } from 'react';
 import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, CheckCircle, Table as TableIcon, Search, X, Eye, EyeOff, Gamepad2, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem, Session } from '../services/api';
@@ -227,6 +227,10 @@ const Billing = () => {
   const location = useLocation();
   const { bills, fetchBills, cancelBill, addPartialPayment, showNotification, user, tables, fetchTables, fetchTableSections, tableSections, getTableStatus } = useApp();
 
+  // Socket.IO reference
+  const socketRef = useRef<Socket | null>(null);
+  const selectedBillRef = useRef<Bill | null>(null);
+
   // دالة للتحقق من نوع المستخدم
   const checkUserRole = () => {
     // التحقق من الدور - admin هو المدير الوحيد في النظام
@@ -361,6 +365,16 @@ const Billing = () => {
 
   // Socket.IO listeners for real-time bill updates
   useEffect(() => {
+    // Update ref when selectedBill changes
+    selectedBillRef.current = selectedBill;
+  }, [selectedBill]);
+
+  useEffect(() => {
+    // Prevent duplicate connections in React Strict Mode
+    if (socketRef.current) {
+      return;
+    }
+
     // Initialize Socket.IO connection
     // Remove /api suffix from VITE_API_URL for Socket.IO connection
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -375,6 +389,8 @@ const Billing = () => {
       autoConnect: true,
       forceNew: false,
     });
+
+    socketRef.current = socket;
 
     // Connection event handlers
     socket.on('connect', () => {
@@ -416,7 +432,8 @@ const Billing = () => {
       fetchTables();
       
       // If the updated bill is currently selected, refresh it immediately
-      if (selectedBill && data.bill && (data.bill._id === selectedBill._id || data.bill.id === selectedBill.id)) {
+      const currentBill = selectedBillRef.current;
+      if (currentBill && data.bill && (data.bill._id === currentBill._id || data.bill.id === currentBill.id)) {
         // Update with fresh data from server
         setSelectedBill({ ...data.bill });
         
@@ -441,7 +458,8 @@ const Billing = () => {
       fetchTables();
       
       // If the updated bill is currently selected, refresh it
-      if (selectedBill && data.bill && (data.bill._id === selectedBill._id || data.bill.id === selectedBill.id)) {
+      const currentBill = selectedBillRef.current;
+      if (currentBill && data.bill && (data.bill._id === currentBill._id || data.bill.id === currentBill.id)) {
         // Update with fresh data including itemPayments
         setSelectedBill({ ...data.bill });
         
@@ -471,18 +489,31 @@ const Billing = () => {
 
     // Cleanup on unmount
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('reconnect');
-      socket.off('connect_error');
-      socket.off('error');
-      socket.off('bill-update');
-      socket.off('payment-received');
-      socket.off('order-update');
-      socket.off('table-status-update');
-      socket.disconnect();
+      // Don't disconnect in development due to Strict Mode
+      if (import.meta.env.DEV) {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('reconnect');
+        socket.off('connect_error');
+        socket.off('error');
+        socket.off('bill-update');
+        socket.off('payment-received');
+        socket.off('order-update');
+        socket.off('table-status-update');
+      } else {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('reconnect');
+        socket.off('connect_error');
+        socket.off('error');
+        socket.off('bill-update');
+        socket.off('payment-received');
+        socket.off('order-update');
+        socket.off('table-status-update');
+        socket.disconnect();
+      }
     };
-  }, [selectedBill]);
+  }, []); // Empty dependency array - only run once on mount
 
   // تحديث map للطاولات والفواتير
   useEffect(() => {

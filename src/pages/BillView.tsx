@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, Printer } from 'lucide-react';
 import { api } from '../services/api';
@@ -199,6 +199,9 @@ const BillView = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [showOrdersModal, setShowOrdersModal] = useState(false);
 	const [realtimeUpdate, setRealtimeUpdate] = useState(0); // للتحديث اللحظي
+	
+	// Socket.IO reference
+	const socketRef = useRef<ReturnType<typeof io> | null>(null);
 
 	// دالة لجلب سعر الساعة من الجلسة مباشرة
 	function getHourlyRateFromDevice(session: Session, controllers: number) {
@@ -300,6 +303,11 @@ const BillView = () => {
 	useEffect(() => {
 		if (!billId) return;
 
+		// Prevent duplicate connections in React Strict Mode
+		if (socketRef.current) {
+			return;
+		}
+
 		// Initialize Socket.IO connection
 		const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 		const socketUrl = apiUrl.replace(/\/api\/?$/, '');
@@ -313,6 +321,8 @@ const BillView = () => {
 			autoConnect: true,
 			forceNew: false,
 		});
+
+		socketRef.current = socket;
 
 		// Listen for partial payment updates
 		socket.on('partial-payment-received', (data: any) => {
@@ -331,9 +341,15 @@ const BillView = () => {
 		});
 
 		return () => {
-			socket.off('partial-payment-received');
-			socket.off('payment-received');
-			socket.disconnect();
+			// Don't disconnect in development due to Strict Mode
+			if (import.meta.env.DEV) {
+				socket.off('partial-payment-received');
+				socket.off('payment-received');
+			} else {
+				socket.off('partial-payment-received');
+				socket.off('payment-received');
+				socket.disconnect();
+			}
 		};
 	}, [billId]);
 
