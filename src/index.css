@@ -509,3 +509,9 @@ body {
 .dark .orders-scroll::-webkit-scrollbar-thumb:hover {
 	background: #dc2626;
 }
+
+/* Hide scroll buttons when modals are open */
+body.hide-scroll-buttons button[title="الصعود للأعلى"],
+body.hide-scroll-buttons button[title="النزول للأسفل"] {
+	display: none !important;
+}

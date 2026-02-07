@@ -122,6 +122,15 @@ const Layout = () => {
 
   const isActive = (href: string) => location.pathname === href;
 
+  // Reset scroll position when route changes
+  useEffect(() => {
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTo(0, 0);
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [location.pathname]);
+
   // Filter navigation items based on user permissions
   const getFilteredNavigation = () => {
     if (!user) return [];

@@ -270,6 +270,25 @@ const Cafe: React.FC = () => {
     tablesRef.current = tables;
   }, [tables]);
 
+  // Hide scroll buttons when any modal is open
+  useEffect(() => {
+    const hasAnyModalOpen = showOrderModal || showEditOrderModal || showManagementModal || 
+                           showSectionModal || showTableModal || showConfirmModal || 
+                           showTableOrdersModal;
+    
+    // Add/remove class to hide scroll buttons
+    if (hasAnyModalOpen) {
+      document.body.classList.add('hide-scroll-buttons');
+    } else {
+      document.body.classList.remove('hide-scroll-buttons');
+    }
+    
+    return () => {
+      document.body.classList.remove('hide-scroll-buttons');
+    };
+  }, [showOrderModal, showEditOrderModal, showManagementModal, showSectionModal, 
+      showTableModal, showConfirmModal, showTableOrdersModal]);
+
   // Handle navigation from Billing page to open table modal
   useEffect(() => {
     const state = location.state as any;
@@ -1177,18 +1196,18 @@ const Cafe: React.FC = () => {
       </div>
 
       {/* Table Sections and Tables */}
-      <div className="h-[calc(100vh-280px)] sm:h-[calc(100vh-320px)] md:h-[calc(100vh-350px)]">
+      <div>
         {/* Table Sections */}
-        <div className="h-full">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col overflow-hidden">
-            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700 flex-shrink-0">
+        <div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700">
               <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <div className="w-1 h-6 sm:h-8 bg-blue-500 rounded-full flex-shrink-0"></div>
                 <span className="truncate">الأقسام والطاولات</span>
               </h2>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-3 sm:p-6 sections-scroll">
+            <div className="p-3 sm:p-6">
               {loading && tableSections.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">جاري التحميل...</div>
               ) : tableSections.length === 0 ? (
