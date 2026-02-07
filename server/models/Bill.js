@@ -1066,12 +1066,12 @@ billSchema.methods.addPayment = function (
             type: 'full', // تحديد نوع الدفع كامل
         });
 
-        // Update paid amount (add to existing paid amount)
-        this.paid = (this.paid || 0) + amount;
+        // Don't update this.paid here - let calculateRemainingAmount handle it
+        // to avoid double counting with itemPayments/sessionPayments
     }
 
-    // Calculate remaining amount (can't be negative)
-    this.remaining = Math.max(0, this.total - this.paid);
+    // Recalculate paid and remaining using the unified calculation method
+    this.calculateRemainingAmount();
 
     // Update status based on payment
     if (this.paid >= this.total) {
@@ -1439,42 +1439,42 @@ billSchema.methods.calculateRemainingAmount = function () {
     let totalPaidFromSessions = 0;
     let totalPaidFromFullPayments = 0;
 
-    // 1. حساب المدفوع من الأصناف (itemPayments) - الأصناف المدفوعة بالكامل فقط
-    if (this.itemPayments && this.itemPayments.length > 0) {
-        
-        this.itemPayments.forEach((item) => {
-            const paidAmount = item.paidAmount || 0;
-            const isPaidFully = (item.paidQuantity || 0) >= (item.quantity || 0);
-          
-            // نحسب كل المدفوع من الأصناف (سواء مدفوعة بالكامل أو جزئياً)
-            totalPaidFromItems += paidAmount;
-        });
-        
-    }
+    // Check if we're using the new itemPayments/sessionPayments system
+    const hasItemPayments = this.itemPayments && this.itemPayments.length > 0;
+    const hasSessionPayments = this.sessionPayments && this.sessionPayments.length > 0;
+    const usingNewSystem = hasItemPayments || hasSessionPayments;
 
-    // 2. حساب المدفوع من الجلسات (sessionPayments)
-    if (this.sessionPayments && this.sessionPayments.length > 0) {
+    if (usingNewSystem) {
+        // Use new system: itemPayments + sessionPayments
         
-        this.sessionPayments.forEach((session) => {
-            const paidAmount = session.paidAmount || 0;
-            totalPaidFromSessions += paidAmount;
-        });
-        
-    }
+        // 1. حساب المدفوع من الأصناف (itemPayments)
+        if (hasItemPayments) {
+            this.itemPayments.forEach((item) => {
+                const paidAmount = item.paidAmount || 0;
+                totalPaidFromItems += paidAmount;
+            });
+        }
 
-    // 3. حساب المدفوع من الدفعات الكاملة (payments array - فقط الدفعات الكاملة)
-    if (this.payments && this.payments.length > 0) {
+        // 2. حساب المدفوع من الجلسات (sessionPayments)
+        if (hasSessionPayments) {
+            this.sessionPayments.forEach((session) => {
+                const paidAmount = session.paidAmount || 0;
+                totalPaidFromSessions += paidAmount;
+            });
+        }
         
-        this.payments.forEach((payment) => {
-            const isFullPayment = payment.type === 'full' || (!payment.type && !payment.items);
-            const amount = payment.amount || 0;
-            
-            
-            if (isFullPayment) {
+        // Don't count payments array when using new system to avoid double counting
+        
+    } else {
+        // Use old system: payments array only
+        
+        // 3. حساب المدفوع من الدفعات الكاملة (payments array)
+        if (this.payments && this.payments.length > 0) {
+            this.payments.forEach((payment) => {
+                const amount = payment.amount || 0;
                 totalPaidFromFullPayments += amount;
-            }
-        });
-        
+            });
+        }
     }
 
     // 4. جمع جميع المدفوعات

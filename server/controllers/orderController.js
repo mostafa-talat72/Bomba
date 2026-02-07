@@ -1107,6 +1107,8 @@ export const deleteOrder = async (req, res) => {
         // Remove order from bill.orders if linked to a bill BEFORE deleting the order
         let billIdToCheck = null;
         let tableIdToUpdate = null;
+        let refundedAmount = 0;
+        
         if (order.bill) {
             const Bill = (await import("../models/Bill.js")).default;
             const Session = (await import("../models/Session.js")).default;
@@ -1118,6 +1120,28 @@ export const deleteOrder = async (req, res) => {
                 // Save bill ID and table ID before removing reference
                 const billId = billDoc._id;
                 tableIdToUpdate = billDoc.table;
+                
+                // التحقق من وجود دفعات جزئية لهذا الطلب
+                if (billDoc.itemPayments && billDoc.itemPayments.length > 0) {
+                    const orderItemPayments = billDoc.itemPayments.filter(
+                        ip => ip.orderId.toString() === orderIdStr && ip.paidAmount > 0
+                    );
+                    
+                    if (orderItemPayments.length > 0) {
+                        // حساب المبلغ المدفوع للطلب
+                        refundedAmount = orderItemPayments.reduce((sum, ip) => sum + ip.paidAmount, 0);
+                        
+                        // إزالة الدفعات الجزئية لهذا الطلب
+                        billDoc.itemPayments = billDoc.itemPayments.filter(
+                            ip => ip.orderId.toString() !== orderIdStr
+                        );
+                        
+                        // تحديث المبلغ المدفوع في الفاتورة (استرداد المبلغ)
+                        billDoc.paid = Math.max(0, billDoc.paid - refundedAmount);
+                        
+                        Logger.info(`✓ تم استرداد ${refundedAmount} ج.م من الدفعات الجزئية للطلب ${order.orderNumber}`);
+                    }
+                }
                 
                 // Remove order from bill
                 billDoc.orders = billDoc.orders.filter(
@@ -1225,10 +1249,18 @@ export const deleteOrder = async (req, res) => {
             }
         }
 
-        res.json({
+        // إرجاع الاستجابة مع معلومات الاسترداد
+        const response = {
             success: true,
             message: "تم حذف الطلب بنجاح",
-        });
+        };
+
+        if (refundedAmount > 0) {
+            response.message = `تم حذف الطلب بنجاح واسترداد ${refundedAmount} ج.م من الدفعات الجزئية`;
+            response.refundedAmount = refundedAmount;
+        }
+
+        res.json(response);
     } catch (error) {
         Logger.error("خطأ في حذف الطلب", error);
         res.status(500).json({

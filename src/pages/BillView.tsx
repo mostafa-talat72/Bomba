@@ -621,7 +621,16 @@ const BillView = () => {
 																<tr className="bg-green-50 border-b border-green-200">
 																	{session.deviceType === 'playstation' && (
 																		<td className="py-3 px-3 text-right">
-																			<span className="font-bold text-green-700">{formatDecimal(session.controllers || 1)}</span>
+																			<span className="font-bold text-green-700">
+																				{(() => {
+																					// عرض عدد الدراعات من آخر فترة في controllersHistory
+																					if (session.controllersHistory && session.controllersHistory.length > 0) {
+																						const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
+																						return formatDecimal(lastPeriod.controllers || session.controllers || 1);
+																					}
+																					return formatDecimal(session.controllers || 1);
+																				})()}
+																			</span>
 																		</td>
 																	)}
 																	<td className="py-3 px-3 text-right">
@@ -648,7 +657,14 @@ const BillView = () => {
 																	</td>
 																	<td className="py-3 px-3 text-right">
 																		<span className="font-medium text-green-700">
-																			{formatCurrency(getHourlyRateFromDevice(session, session.controllers || 1))}
+																			{(() => {
+																				// عرض سعر الساعة بناءً على عدد الدراعات في آخر فترة
+																				if (session.controllersHistory && session.controllersHistory.length > 0) {
+																					const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
+																					return formatCurrency(getHourlyRateFromDevice(session, lastPeriod.controllers || session.controllers || 1));
+																				}
+																				return formatCurrency(getHourlyRateFromDevice(session, session.controllers || 1));
+																			})()}
 																		</span>
 																	</td>
 																	<td className="py-3 px-3 text-right">
@@ -657,18 +673,20 @@ const BillView = () => {
 																				// حساب تكلفة الفترة الحالية فقط (يتحدث لحظياً)
 																				const now = new Date();
 																				let periodStart = new Date(session.startTime);
+																				let controllers = session.controllers || 1;
 
-																				// إذا كان هناك controllersHistory، استخدم وقت بداية آخر فترة
+																				// إذا كان هناك controllersHistory، استخدم وقت بداية وعدد دراعات آخر فترة
 																				if (session.controllersHistory && session.controllersHistory.length > 0) {
 																					const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
 																					if (lastPeriod.from) {
 																						periodStart = new Date(lastPeriod.from);
 																					}
+																					controllers = lastPeriod.controllers || session.controllers || 1;
 																				}
 
 																				const diffMs = now.getTime() - periodStart.getTime();
 																				const minutes = diffMs / (1000 * 60);
-																				const hourlyRate = getHourlyRateFromDevice(session, session.controllers || 1);
+																				const hourlyRate = getHourlyRateFromDevice(session, controllers);
 																				const minuteRate = hourlyRate / 60;
 																				const currentPeriodCost = minutes * minuteRate;
 
@@ -735,61 +753,22 @@ const BillView = () => {
 											let totalCost = 0;
 											const isActive = session.status === 'active';
 
-											if (isActive) {
-												// للجلسات النشطة: حساب التكلفة الحالية
+											// استخدام controllersHistoryBreakdown من الـ backend مباشرة
+											// لأنه يحتوي على جميع الفترات (المكتملة + النشطة)
+											if (session.controllersHistoryBreakdown && session.controllersHistoryBreakdown.length > 0) {
+												totalCost = session.controllersHistoryBreakdown.reduce((sum, period) => sum + period.cost, 0);
+											} else if (isActive) {
+												// Fallback: حساب يدوي إذا لم يكن هناك breakdown
 												const now = new Date();
-												
-												// إضافة تكلفة الفترات المكتملة
-												if (session.controllersHistory && session.controllersHistory.length > 0) {
-													totalCost = session.controllersHistory.reduce((sum, period) => {
-														if (period.from && period.to) {
-															const from = new Date(period.from);
-															const to = new Date(period.to);
-															const diffMs = to.getTime() - from.getTime();
-															const minutes = diffMs / (1000 * 60);
-															const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
-															const minuteRate = hourlyRate / 60;
-															return sum + (minutes * minuteRate);
-														}
-														return sum;
-													}, 0);
-												}
-
-												// إضافة تكلفة الفترة الحالية
-												let periodStart = new Date(session.startTime);
-												if (session.controllersHistory && session.controllersHistory.length > 0) {
-													const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
-													if (lastPeriod.from) {
-														periodStart = new Date(lastPeriod.from);
-													}
-												}
-
-												const diffMs = now.getTime() - periodStart.getTime();
+												const startTime = new Date(session.startTime);
+												const diffMs = now.getTime() - startTime.getTime();
 												const minutes = diffMs / (1000 * 60);
 												const hourlyRate = getHourlyRateFromDevice(session, session.controllers || 1);
 												const minuteRate = hourlyRate / 60;
-												const currentPeriodCost = minutes * minuteRate;
-												totalCost += currentPeriodCost;
+												totalCost = minutes * minuteRate;
 											} else {
-												// للجلسات المنتهية: حساب التكلفة النهائية
-												if (Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0) {
-													totalCost = session.controllersHistoryBreakdown.reduce((sum, period) => sum + period.cost, 0);
-												} else if (session.controllersHistory && session.controllersHistory.length > 0) {
-													totalCost = session.controllersHistory.reduce((sum, period) => {
-														if (period.from && period.to) {
-															const from = new Date(period.from);
-															const to = new Date(period.to);
-															const diffMs = to.getTime() - from.getTime();
-															const minutes = diffMs / (1000 * 60);
-															const hourlyRate = getHourlyRateFromDevice(session, period.controllers);
-															const minuteRate = hourlyRate / 60;
-															return sum + (minutes * minuteRate);
-														}
-														return sum;
-													}, 0);
-												} else {
-													totalCost = session.finalCost || 0;
-												}
+												// للجلسات المنتهية: استخدام finalCost
+												totalCost = session.finalCost || 0;
 											}
 
 											// تطبيق التقريب: إذا >= 0.5 يقرب لأعلى، وإلا يقرب لأسفل

@@ -945,6 +945,149 @@ const Cafe: React.FC = () => {
       return;
     }
 
+    
+    // التحقق من وجود دفعات جزئية وتحليل التغييرات
+    const orderId = selectedOrder._id || selectedOrder.id;
+    
+    const orderBill = bills.find((bill: any) => {
+      return bill.orders?.some((o: any) => {
+        const billOrderId = o._id || o.id || o;
+        return billOrderId === orderId;
+      });
+    });
+
+
+    let hasPartialPayments = false;
+    let warningMessage = '';
+    let affectedItems: any[] = [];
+    
+    if (orderBill && orderBill.itemPayments) {
+      
+      // البحث عن دفعات جزئية لهذا الطلب
+      const orderItemPayments = orderBill.itemPayments.filter((ip: any) => {
+        const matches = ip.orderId === orderId && ip.paidAmount > 0;
+        return matches;
+      });
+      
+      
+      if (orderItemPayments.length > 0) {
+        
+        // تحليل التغييرات
+        const originalItems = selectedOrder.items || [];
+        
+        orderItemPayments.forEach((payment: any) => {
+          
+          // استخراج الـ index من itemId (format: orderId-index)
+          const itemIdParts = payment.itemId.split('-');
+          const itemIndex = itemIdParts.length > 1 ? parseInt(itemIdParts[itemIdParts.length - 1]) : -1;
+          
+          
+          // البحث عن الصنف في الطلب الأصلي باستخدام الـ index
+          const originalItem = itemIndex >= 0 && itemIndex < originalItems.length 
+            ? originalItems[itemIndex] 
+            : originalItems.find((item: any) => {
+                const itemId = item._id || item.id;
+                return itemId === payment.itemId;
+              });
+          
+          
+          // البحث عن الصنف في الطلب الجديد
+          const newItem = currentOrderItems.find(item => {
+            // مقارنة بالاسم والسعر
+            const matches = item.name === payment.itemName && item.price === payment.pricePerUnit;
+            return matches;
+          });
+          
+          if (!newItem) {
+            // الصنف تم حذفه
+            hasPartialPayments = true;
+            affectedItems.push({
+              type: 'deleted',
+              name: payment.itemName,
+              paidQuantity: payment.paidQuantity,
+              paidAmount: payment.paidAmount,
+              originalQuantity: payment.quantity
+            });
+          } else if (originalItem && newItem.quantity < originalItem.quantity) {
+            // الكمية تم تقليلها
+            if (payment.paidQuantity > newItem.quantity) {
+              hasPartialPayments = true;
+              affectedItems.push({
+                type: 'reduced',
+                name: payment.itemName,
+                paidQuantity: payment.paidQuantity,
+                paidAmount: payment.paidAmount,
+                originalQuantity: originalItem.quantity,
+                newQuantity: newItem.quantity,
+                refundAmount: (payment.paidQuantity - newItem.quantity) * payment.pricePerUnit
+              });
+            }
+          } else if (originalItem && newItem.quantity === originalItem.quantity && payment.paidQuantity > 0) {
+            // الكمية لم تتغير لكن هناك دفعة جزئية
+          }
+        });
+        
+  
+        if (hasPartialPayments) {
+          const deletedItems = affectedItems.filter(i => i.type === 'deleted');
+          const reducedItems = affectedItems.filter(i => i.type === 'reduced');
+          
+          let details = '';
+          
+          if (deletedItems.length > 0) {
+            details += '\n\n🗑️ أصناف محذوفة مدفوعة:\n';
+            deletedItems.forEach(item => {
+              details += `• ${item.name}: ${convertToArabicNumbers(item.paidQuantity)} من ${convertToArabicNumbers(item.originalQuantity)} (${formatCurrencyArabic(item.paidAmount)})\n`;
+            });
+          }
+          
+          if (reducedItems.length > 0) {
+            details += '\n\n📉 أصناف مقللة مدفوعة جزئياً:\n';
+            reducedItems.forEach(item => {
+              details += `• ${item.name}: من ${convertToArabicNumbers(item.originalQuantity)} إلى ${convertToArabicNumbers(item.newQuantity)}\n`;
+              details += `  المدفوع: ${convertToArabicNumbers(item.paidQuantity)} (${formatCurrencyArabic(item.paidAmount)})\n`;
+              details += `  سيتم استرداد: ${formatCurrencyArabic(item.refundAmount)}\n`;
+            });
+          }
+          
+          const totalRefund = affectedItems.reduce((sum, item) => 
+            sum + (item.refundAmount || item.paidAmount), 0
+          );
+          
+          warningMessage = `⚠️ تحذير: هذا الطلب يحتوي على تغييرات تؤثر على الدفعات الجزئية:${details}\n\n💰 إجمالي المبلغ المسترد: ${formatCurrencyArabic(totalRefund)}\n\n✓ سيتم إعادة توزيع المبلغ تلقائياً على أصناف مشابهة في الفاتورة (إن وجدت)`;
+        }
+      } else {
+      }
+    } else {
+    }
+
+    // إذا كانت هناك دفعات جزئية، اعرض تأكيد
+    if (hasPartialPayments) {
+      showConfirm(
+        'تحديث طلب يحتوي على دفعات جزئية',
+        `هل أنت متأكد من تحديث الطلب ${selectedOrder.orderNumber}؟\n\n${warningMessage}`,
+        async () => {
+          setConfirmLoading(true);
+          await executeUpdateOrder(shouldPrint);
+          setConfirmLoading(false);
+          setShowConfirmModal(false);
+        },
+        'تأكيد التحديث',
+        'إلغاء',
+        'bg-orange-600 hover:bg-orange-700'
+      );
+    } else {
+      // لا توجد دفعات جزئية، نفذ التحديث مباشرة
+      await executeUpdateOrder(shouldPrint);
+    }
+  };
+
+  // دالة منفصلة لتنفيذ التحديث
+  const executeUpdateOrder = async (shouldPrint: boolean = false) => {
+    if (!selectedOrder || currentOrderItems.length === 0) {
+      return;
+    }
+
     // Store previous state for rollback on error
     const previousTableStatuses = { ...tableStatuses };
 
@@ -963,6 +1106,7 @@ const Cafe: React.FC = () => {
       // Close modal immediately for better UX
       setShowEditOrderModal(false);
       setSelectedTable(null);
+      const orderToUpdate = selectedOrder;
       setSelectedOrder(null);
       setCurrentOrderItems([]);
       setOrderNotes('');
@@ -970,7 +1114,7 @@ const Cafe: React.FC = () => {
       
       // Update order in background
       setSavingOrder(true);
-      const updatedOrder = await updateOrder(selectedOrder.id, orderData);
+      const updatedOrder = await updateOrder(orderToUpdate.id, orderData);
       
       if (updatedOrder) {
         showNotification('تم تحديث الطلب بنجاح', 'success');
@@ -1092,9 +1236,47 @@ const Cafe: React.FC = () => {
 
   // Delete order
   const handleDeleteOrder = (order: Order) => {
+    // التحقق من وجود دفعات جزئية للطلب
+    const orderId = order._id || order.id;
+    const orderBill = bills.find((bill: any) => {
+      return bill.orders?.some((o: any) => {
+        const billOrderId = o._id || o.id || o;
+        return billOrderId === orderId;
+      });
+    });
+
+    let hasPartialPayments = false;
+    let paidItemsInfo = '';
+    let totalPaid = 0;
+    
+    if (orderBill && orderBill.itemPayments) {
+      // البحث عن دفعات جزئية لهذا الطلب
+      const orderItemPayments = orderBill.itemPayments.filter((ip: any) => 
+        ip.orderId === orderId && ip.paidAmount > 0
+      );
+      
+      if (orderItemPayments.length > 0) {
+        hasPartialPayments = true;
+        totalPaid = orderItemPayments.reduce((sum: number, ip: any) => sum + ip.paidAmount, 0);
+        const paidItems = orderItemPayments.map((ip: any) => 
+          `• ${ip.itemName}: ${convertToArabicNumbers(ip.paidQuantity)} من ${convertToArabicNumbers(ip.quantity)} (${formatCurrencyArabic(ip.paidAmount)})`
+        ).join('\n');
+        
+        paidItemsInfo = `\n\n⚠️ تحذير: هذا الطلب يحتوي على أصناف مدفوعة جزئياً:\n\n${paidItems}\n\n💰 إجمالي المبلغ المدفوع: ${formatCurrencyArabic(totalPaid)}\n\n✓ سيتم استرداد المبلغ المدفوع تلقائياً إلى رصيد الفاتورة`;
+      }
+    }
+
+    const confirmMessage = hasPartialPayments
+      ? `هل أنت متأكد من حذف الطلب ${order.orderNumber}؟${paidItemsInfo}`
+      : `هل أنت متأكد من حذف الطلب ${order.orderNumber}؟`;
+
+    const confirmColor = hasPartialPayments 
+      ? 'bg-orange-600 hover:bg-orange-700' 
+      : 'bg-red-600 hover:bg-red-700';
+
     showConfirm(
       'حذف الطلب',
-      `هل أنت متأكد من حذف الطلب ${order.orderNumber}؟`,
+      confirmMessage,
       async () => {
         try {
           setConfirmLoading(true);
@@ -1106,7 +1288,11 @@ const Cafe: React.FC = () => {
           
           if (result === true) {
             // إظهار رسالة النجاح فوراً
-            showNotification('تم حذف الطلب بنجاح', 'success');
+            if (hasPartialPayments) {
+              showNotification(`تم حذف الطلب بنجاح واسترداد ${formatCurrencyArabic(totalPaid)}`, 'success');
+            } else {
+              showNotification('تم حذف الطلب بنجاح', 'success');
+            }
             
             // إعادة تحميل البيانات في الخلفية (بدون await)
             Promise.all([
@@ -1129,7 +1315,10 @@ const Cafe: React.FC = () => {
           setShowConfirmModal(false);
           showNotification('خطأ في حذف الطلب', 'error');
         }
-      }
+      },
+      'تأكيد الحذف',
+      'إلغاء',
+      confirmColor
     );
   };
 
