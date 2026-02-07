@@ -334,7 +334,35 @@ class ChangeProcessor {
     validateRequiredFields(document, schema, collectionName) {
         const errors = [];
 
-        // Get all required paths from schema
+        // Special handling for devices collection with conditional required fields
+        if (collectionName === 'devices') {
+            // For devices, hourlyRate is only required for computers
+            // playstationRates is only required for playstation
+            const deviceType = document.type || 'playstation';
+            
+            // Check required fields based on device type
+            if (deviceType === 'computer') {
+                if (!document.hourlyRate && document.hourlyRate !== 0) {
+                    errors.push('Required field missing: "hourlyRate"');
+                }
+            } else if (deviceType === 'playstation') {
+                if (!document.playstationRates) {
+                    errors.push('Required field missing: "playstationRates"');
+                }
+            }
+            
+            // Check other required fields for devices
+            const requiredDeviceFields = ['name', 'organization'];
+            for (const field of requiredDeviceFields) {
+                if (!document[field]) {
+                    errors.push(`Required field missing: "${field}"`);
+                }
+            }
+            
+            return errors;
+        }
+
+        // Get all required paths from schema for other collections
         schema.eachPath((pathname, schematype) => {
             // Skip internal fields
             if (pathname === '_id' || pathname === '__v' || pathname.startsWith('_')) {
@@ -774,6 +802,43 @@ class ChangeProcessor {
 
             // Additional validation for bills collection
             if (collectionName === 'bills') {
+                // Check if this bill was recently deleted locally
+                // If it was deleted within the last 5 minutes, don't re-insert it
+                const existingBill = await Model.findById(document._id).lean();
+                if (!existingBill) {
+                    // Bill doesn't exist locally - check if it was recently deleted
+                    // by checking if any of its sessions point to a different bill
+                    if (sanitizedDocument.sessions && sanitizedDocument.sessions.length > 0) {
+                        const Session = mongoose.model('Session');
+                        let hasSessionsInOtherBills = false;
+                        
+                        for (const sessionId of sanitizedDocument.sessions) {
+                            const session = await Session.findById(sessionId).lean();
+                            if (session && session.bill) {
+                                const sessionBillId = session.bill._id ? session.bill._id.toString() : session.bill.toString();
+                                const targetBillId = document._id.toString();
+                                
+                                if (sessionBillId !== targetBillId) {
+                                    hasSessionsInOtherBills = true;
+                                    Logger.warn(`[ChangeProcessor] 🚫 BLOCKED insert - bill was deleted and sessions moved to other bills:`, {
+                                        billId: document._id,
+                                        sessionId: sessionId,
+                                        currentBill: sessionBillId
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (hasSessionsInOtherBills) {
+                            return {
+                                success: false,
+                                reason: 'Bill was deleted locally and sessions belong to other bills - preventing re-insertion'
+                            };
+                        }
+                    }
+                }
+                
                 const billValidation = BillValidator.validateBill(sanitizedDocument, 'insert');
                 if (!billValidation.success) {
                     Logger.error(`[ChangeProcessor] Bill validation failed for insert:`, {
@@ -796,6 +861,27 @@ class ChangeProcessor {
                         documentId: document._id,
                         warnings: billValidation.warnings
                     });
+                }
+
+                // Special validation for bills collection - prevent session duplication in insert operations
+                if (sanitizedDocument.sessions && sanitizedDocument.sessions.length > 0) {
+                    const sessionValidation = await this.validateBillSessions(
+                        document._id,
+                        sanitizedDocument.sessions
+                    );
+                    
+                    if (!sessionValidation.success) {
+                        Logger.warn(`[ChangeProcessor] 🚫 BLOCKED insert operation - sessions belong to different bills:`, {
+                            billId: document._id,
+                            errors: sessionValidation.errors
+                        });
+                        
+                        return {
+                            success: false,
+                            reason: 'Session validation failed - sessions belong to different bills',
+                            validationErrors: sessionValidation.errors
+                        };
+                    }
                 }
             }
 
@@ -868,6 +954,27 @@ class ChangeProcessor {
                         reason: 'Update validation failed',
                         validationErrors: validation.errors
                     };
+                }
+                
+                // Special validation for bills collection - prevent session duplication
+                if (collectionName === 'bills' && updateDescription.updatedFields.sessions) {
+                    const sessionValidation = await this.validateBillSessions(
+                        documentId,
+                        updateDescription.updatedFields.sessions
+                    );
+                    
+                    if (!sessionValidation.success) {
+                        Logger.error(`[ChangeProcessor] Bill session validation failed for ${documentId}:`, {
+                            errors: sessionValidation.errors,
+                            sessions: updateDescription.updatedFields.sessions
+                        });
+                        
+                        return {
+                            success: false,
+                            reason: 'Bill session validation failed - preventing duplication',
+                            validationErrors: sessionValidation.errors
+                        };
+                    }
                 }
             }
 
@@ -1067,6 +1174,27 @@ class ChangeProcessor {
                         documentId: documentId,
                         warnings: billValidation.warnings
                     });
+                }
+
+                // Special validation for bills collection - prevent session duplication in replace operations
+                if (sanitizedDocument.sessions && sanitizedDocument.sessions.length > 0) {
+                    const sessionValidation = await this.validateBillSessions(
+                        documentId,
+                        sanitizedDocument.sessions
+                    );
+                    
+                    if (!sessionValidation.success) {
+                        Logger.warn(`[ChangeProcessor] 🚫 BLOCKED replace operation - sessions belong to different bills:`, {
+                            billId: documentId,
+                            errors: sessionValidation.errors
+                        });
+                        
+                        return {
+                            success: false,
+                            reason: 'Session validation failed - sessions belong to different bills',
+                            validationErrors: sessionValidation.errors
+                        };
+                    }
                 }
             }
 
@@ -1306,6 +1434,77 @@ class ChangeProcessor {
      */
     getExcludedCollections() {
         return [...(syncConfig.bidirectionalSync?.excludedCollections || [])];
+    }
+
+    /**
+     * Validate bill sessions to prevent duplication
+     * Checks if sessions in the update belong to the correct bill
+     * @param {ObjectId} billId - Bill ID being updated
+     * @param {Array} sessions - Array of session IDs
+     * @returns {Promise<Object>} - Validation result
+     */
+    async validateBillSessions(billId, sessions) {
+        try {
+            // If no sessions or empty array, it's valid
+            if (!sessions || sessions.length === 0) {
+                return { success: true };
+            }
+
+            // Get Session model
+            const Session = mongoose.model('Session');
+            
+            const errors = [];
+            
+            // Check each session
+            for (const sessionId of sessions) {
+                try {
+                    // Get the session document
+                    const session = await Session.findById(sessionId).lean();
+                    
+                    if (!session) {
+                        // Session doesn't exist - skip validation
+                        continue;
+                    }
+                    
+                    // Check if session.bill matches the bill being updated
+                    const sessionBillId = session.bill?._id ? session.bill._id.toString() : session.bill?.toString();
+                    const targetBillId = billId.toString();
+                    
+                    if (sessionBillId && sessionBillId !== targetBillId) {
+                        // Session belongs to a different bill - REJECT
+                        errors.push({
+                            sessionId: sessionId.toString(),
+                            currentBill: sessionBillId,
+                            attemptedBill: targetBillId,
+                            message: `Session ${sessionId} belongs to bill ${sessionBillId}, cannot add to bill ${targetBillId}`
+                        });
+                        
+                        Logger.warn(`[ChangeProcessor] 🚫 BLOCKED: Attempt to add session ${sessionId} to wrong bill`, {
+                            sessionId: sessionId.toString(),
+                            sessionBill: sessionBillId,
+                            targetBill: targetBillId
+                        });
+                    }
+                } catch (sessionError) {
+                    Logger.error(`[ChangeProcessor] Error validating session ${sessionId}:`, sessionError);
+                    // Continue with other sessions
+                }
+            }
+            
+            if (errors.length > 0) {
+                return {
+                    success: false,
+                    errors: errors
+                };
+            }
+            
+            return { success: true };
+            
+        } catch (error) {
+            Logger.error('[ChangeProcessor] Error in validateBillSessions:', error);
+            // On error, allow the update to prevent blocking legitimate changes
+            return { success: true };
+        }
     }
 }
 

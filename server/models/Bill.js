@@ -1728,7 +1728,8 @@ billSchema.methods.calculateSubtotal = async function () {
         }
 
         // إعادة حساب المبلغ المدفوع من itemPayments و sessionPayments
-        if (!this.isNew && (this.itemPayments?.length > 0 || this.sessionPayments?.length > 0)) {
+        // لكن فقط إذا لم يتم تعديله يدوياً (للحفاظ على التعديلات اليدوية أثناء نقل الدفعات)
+        if (!this.isNew && !this._skipPaidRecalculation && (this.itemPayments?.length > 0 || this.sessionPayments?.length > 0)) {
             let calculatedPaid = 0;
             
             // حساب المدفوع من itemPayments

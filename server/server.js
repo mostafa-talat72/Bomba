@@ -454,6 +454,17 @@ app.use(
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set("trust proxy", 1);
 
+// Health check endpoint (before middleware for fast response)
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        status: "success",
+        message: "Server is running",
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || "development",
+    });
+});
+
 // Request logging
 app.use(requestLogger);
 
@@ -489,17 +500,6 @@ app.get("/", (req, res) => {
         status: "success",
         timestamp: new Date().toISOString(),
         version: "1.0.0",
-    });
-});
-
-// Health check
-app.get("/health", (req, res) => {
-    res.status(200).json({
-        status: "success",
-        message: "Server is running",
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        environment: process.env.NODE_ENV,
     });
 });
 

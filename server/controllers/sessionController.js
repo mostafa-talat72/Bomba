@@ -5,6 +5,43 @@ import Bill from "../models/Bill.js";
 import Table from "../models/Table.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
+
+/**
+ * حذف فاتورة من كلا القاعدتين (Local + Atlas)
+ * يمنع المزامنة من إعادة إدراج الفاتورة المحذوفة
+ */
+const deleteBillFromBothDatabases = async (billId) => {
+    try {
+        Logger.info(`🗑️ Deleting bill from both databases: ${billId}`);
+        
+        const atlasConnection = dualDatabaseManager.getAtlasConnection();
+        
+        // حذف من Local
+        const localResult = await Bill.deleteOne({ _id: billId });
+        Logger.info(`✓ Deleted from Local: ${localResult.deletedCount} bill(s)`);
+        
+        // حذف من Atlas مباشرة
+        if (atlasConnection) {
+            try {
+                const atlasBillsCollection = atlasConnection.collection('bills');
+                const atlasResult = await atlasBillsCollection.deleteOne({ 
+                    _id: new mongoose.Types.ObjectId(billId)
+                });
+                Logger.info(`✓ Deleted from Atlas: ${atlasResult.deletedCount} bill(s)`);
+            } catch (atlasError) {
+                Logger.error(`❌ Failed to delete bill from Atlas:`, atlasError);
+            }
+        } else {
+            Logger.warn(`⚠️ Atlas connection not available - bill will be synced for deletion later`);
+        }
+        
+        return { success: true };
+    } catch (error) {
+        Logger.error(`❌ Error deleting bill from both databases:`, error);
+        return { success: false, error };
+    }
+};
 
 // Helper function to fix sessionPayment data before transfer to avoid validation errors
 const fixSessionPaymentData = (sessionPayment) => {
@@ -33,14 +70,17 @@ const fixSessionPaymentData = (sessionPayment) => {
 
 // Helper function to perform cleanup - defined outside the controller object
 const performCleanupHelper = async (organizationId) => {
+    // Ensure organizationId is a string/ObjectId, not a populated object
+    const orgId = organizationId?._id ? organizationId._id : organizationId;
+    
     Logger.info("🧹 Starting automatic cleanup of duplicate session references...");
     
-    // Get all sessions for this organization
-    const sessions = await Session.find({ organization: organizationId });
+    // Get all sessions for this organization, sorted from newest to oldest
+    const sessions = await Session.find({ organization: orgId }).sort({ createdAt: -1 });
     let cleanedCount = 0;
     let deletedBillsCount = 0;
     
-    Logger.info(`📊 Found ${sessions.length} sessions to check`);
+    Logger.info(`📊 Found ${sessions.length} sessions to check (processing from newest to oldest)`);
     
     for (const session of sessions) {
         if (!session.bill) {
@@ -48,14 +88,15 @@ const performCleanupHelper = async (organizationId) => {
             continue;
         }
         
-        const correctBillId = session.bill.toString();
+        // Handle both populated bill object and ObjectId reference
+        const correctBillId = session.bill?._id ? session.bill._id.toString() : session.bill.toString();
         Logger.info(`🔍 Checking session ${session._id} (${session.status}) - should be in bill ${correctBillId}`);
         
         // Find ALL bills that contain this session in their sessions array
         // Use $in to match ObjectId properly
         const billsWithSession = await Bill.find({
             sessions: { $in: [session._id] },
-            organization: organizationId
+            organization: orgId
         });
         
         Logger.info(`📋 Session ${session._id} found in ${billsWithSession.length} bills: ${billsWithSession.map(b => b.billNumber).join(', ')}`);
@@ -170,6 +211,124 @@ const performCleanupHelper = async (organizationId) => {
     Logger.info(`🧹 Automatic cleanup completed. Fixed ${cleanedCount} duplicates, deleted ${deletedBillsCount} empty bills.`);
     
     return { cleanedCount, deletedBillsCount };
+};
+
+/**
+ * Selective cleanup - only cleans up specific sessions and their related bills
+ * Much faster than full cleanup for single operations
+ * @param {Array<String>} sessionIds - Array of session IDs to clean up
+ * @param {String} organizationId - Organization ID
+ * @returns {Object} - Cleanup results
+ */
+const performSelectiveCleanup = async (sessionIds, organizationId) => {
+    // Ensure organizationId is a string/ObjectId, not a populated object
+    const orgId = organizationId?._id ? organizationId._id : organizationId;
+    
+    // Ensure sessionIds is an array
+    const sessionIdsArray = Array.isArray(sessionIds) ? sessionIds : [sessionIds];
+    
+    Logger.info(`🎯 Starting selective cleanup for ${sessionIdsArray.length} session(s)...`);
+    
+    let cleanedCount = 0;
+    let deletedBillsCount = 0;
+    const affectedBillIds = new Set();
+    
+    for (const sessionId of sessionIdsArray) {
+        try {
+            // Get the session
+            const session = await Session.findById(sessionId);
+            
+            if (!session) {
+                Logger.warn(`⚠️ Session ${sessionId} not found, skipping`);
+                continue;
+            }
+            
+            if (!session.bill) {
+                Logger.info(`⚠️ Session ${sessionId} has no bill reference, skipping`);
+                continue;
+            }
+            
+            // Handle both populated bill object and ObjectId reference
+            const correctBillId = session.bill?._id ? session.bill._id.toString() : session.bill.toString();
+            Logger.info(`🔍 Cleaning session ${session._id} - should be in bill ${correctBillId}`);
+            
+            // Find ALL bills that contain this session
+            const billsWithSession = await Bill.find({
+                sessions: { $in: [session._id] },
+                organization: orgId
+            });
+            
+            Logger.info(`📋 Session ${session._id} found in ${billsWithSession.length} bill(s)`);
+            
+            // Track affected bills
+            billsWithSession.forEach(bill => affectedBillIds.add(bill._id.toString()));
+            
+            // Remove session from any bill that is NOT the correct bill
+            for (const bill of billsWithSession) {
+                if (bill._id.toString() !== correctBillId) {
+                    Logger.info(`❌ Removing session from incorrect bill ${bill.billNumber}`);
+                    
+                    const originalLength = bill.sessions.length;
+                    const sessionIdStr = session._id.toString();
+                    
+                    bill.sessions = bill.sessions.filter(s => {
+                        const sIdStr = s._id ? s._id.toString() : s.toString();
+                        return sIdStr !== sessionIdStr;
+                    });
+                    
+                    if (originalLength !== bill.sessions.length) {
+                        await bill.calculateSubtotal();
+                        await bill.save();
+                        cleanedCount++;
+                        
+                        // Check if bill is now empty
+                        if (bill.sessions.length === 0 && bill.orders.length === 0) {
+                            Logger.info(`🔄 Bill ${bill.billNumber} is now empty, deleting...`);
+                            
+                            try {
+                                await bill.deleteOne();
+                                deletedBillsCount++;
+                                affectedBillIds.delete(bill._id.toString());
+                                Logger.info(`✅ Deleted empty bill ${bill.billNumber}`);
+                            } catch (deleteError) {
+                                Logger.error(`❌ Failed to delete empty bill ${bill.billNumber}:`, deleteError);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Ensure session is in the correct bill
+            const correctBill = await Bill.findById(correctBillId);
+            if (correctBill) {
+                const sessionInCorrectBill = correctBill.sessions.some(s => {
+                    const sIdStr = s._id ? s._id.toString() : s.toString();
+                    return sIdStr === session._id.toString();
+                });
+                
+                if (!sessionInCorrectBill) {
+                    Logger.info(`🔧 Adding session to correct bill ${correctBill.billNumber}`);
+                    correctBill.sessions.push(session._id);
+                    await correctBill.calculateSubtotal();
+                    await correctBill.save();
+                    cleanedCount++;
+                }
+                
+                affectedBillIds.add(correctBill._id.toString());
+            }
+            
+        } catch (error) {
+            Logger.error(`❌ Error cleaning session ${sessionId}:`, error);
+        }
+    }
+    
+    Logger.info(`🎯 Selective cleanup completed. Fixed ${cleanedCount} issues, deleted ${deletedBillsCount} empty bills, affected ${affectedBillIds.size} bill(s).`);
+    
+    return { 
+        cleanedCount, 
+        deletedBillsCount,
+        affectedBillsCount: affectedBillIds.size
+    };
 };
 
 // دالة تحليل التداخلات وإعطاء خيارات للمستخدم
@@ -1612,18 +1771,13 @@ const sessionController = {
                     if (sessionPaymentsToTransfer.length > 0) {
                         Logger.info(`🎮 Transferring ${sessionPaymentsToTransfer.length} session payments to new bill`);
                         
-                        // إضافة الدفعات إلى الفاتورة الجديدة
-                        newBill.sessionPayments = sessionPaymentsToTransfer.map(sp => fixSessionPaymentData(sp));
-                        
-                        // إزالة الدفعات من الفاتورة القديمة
-                        bill.sessionPayments = bill.sessionPayments.filter(sp => 
-                            sp.sessionId.toString() !== sessionIdStr
-                        );
-                        
                         // حساب المبلغ المدفوع من دفعات الجلسة
                         const sessionPaidAmount = sessionPaymentsToTransfer.reduce((sum, sp) => 
                             sum + (sp.paidAmount || 0), 0
                         );
+                        
+                        // إضافة الدفعات إلى الفاتورة الجديدة
+                        newBill.sessionPayments = sessionPaymentsToTransfer.map(sp => fixSessionPaymentData(sp));
                         
                         if (sessionPaidAmount > 0) {
                             newBill.paid = sessionPaidAmount;
@@ -1636,27 +1790,95 @@ const sessionController = {
                                 newBill.status = "partial";
                             }
                             
-                            Logger.info(`💰 Transferred session payments: ${sessionPaidAmount} EGP`);
+                            Logger.info(`💰 Transferred session payments to new bill: ${sessionPaidAmount} EGP`);
                         }
                         
                         // حفظ الفاتورة الجديدة مع الدفعات
                         await newBill.save();
+                        
+                        // إزالة الدفعات من الفاتورة القديمة
+                        bill.sessionPayments = bill.sessionPayments.filter(sp => 
+                            sp.sessionId.toString() !== sessionIdStr
+                        );
+                        
+                        // طرح المبلغ المدفوع من الفاتورة القديمة
+                        if (sessionPaidAmount > 0) {
+                            bill.paid = Math.max(0, (bill.paid || 0) - sessionPaidAmount);
+                            bill.remaining = Math.max(0, bill.total - bill.paid);
+                            
+                            // تحديث حالة الفاتورة القديمة
+                            if (bill.paid === 0 && bill.total > 0) {
+                                bill.status = "draft";
+                            } else if (bill.paid > 0 && bill.paid < bill.total) {
+                                bill.status = "partial";
+                            } else if (bill.paid >= bill.total && bill.total > 0) {
+                                bill.status = "paid";
+                            }
+                            
+                            Logger.info(`💰 Deducted session payments from old bill: ${sessionPaidAmount} EGP (remaining paid: ${bill.paid} EGP)`);
+                        }
                     }
                 }
 
-                // Remove session from old bill
+                // STEP 1: Remove session from old bill
                 bill.sessions = bill.sessions.filter(
                     (s) => s._id.toString() !== session._id.toString()
                 );
                 
-                // Recalculate old bill subtotal
+                Logger.info(`✅ STEP 1: Removed session from old bill`, {
+                    oldBillId: bill._id,
+                    oldBillNumber: bill.billNumber,
+                    remainingSessions: bill.sessions.length,
+                    remainingOrders: bill.orders.length,
+                });
+                
+                // منع إعادة حساب المبلغ المدفوع تلقائياً (لأننا عدلناه يدوياً)
+                bill._skipPaidRecalculation = true;
                 await bill.calculateSubtotal();
+                delete bill._skipPaidRecalculation;
                 await bill.save();
+                
+                // Verify the session was actually removed from database (unlinkTableFromSession)
+                const verifyBill = await Bill.findById(bill._id).select('sessions billNumber');
+                const sessionStillInBill = verifyBill.sessions.some(s => s.toString() === session._id.toString());
+                if (sessionStillInBill) {
+                    Logger.error(`❌ CRITICAL (unlinkTableFromSession): Session ${session._id} still in bill ${verifyBill.billNumber} after removal!`);
+                } else {
+                    Logger.info(`✅ VERIFIED (unlinkTableFromSession): Session successfully removed from bill ${verifyBill.billNumber}`, {
+                        remainingSessions: verifyBill.sessions.length
+                    });
+                }
 
-                // Update session to point to new bill
+                // STEP 2: Update session to point to new bill BEFORE checking for deletion
                 session.bill = newBill._id;
                 session.updatedBy = req.user._id;
                 await session.save();
+                Logger.info(`✅ STEP 2: Updated session.bill reference to new bill`);
+
+                // STEP 3: Check if old bill is now empty and DELETE it
+                // Re-fetch to get latest state
+                const updatedOldBill = await Bill.findById(bill._id);
+                
+                if (!updatedOldBill) {
+                    Logger.warn(`⚠️ Old bill ${bill.billNumber} was already deleted`);
+                } else if (updatedOldBill.sessions.length === 0 && updatedOldBill.orders.length === 0) {
+                    Logger.info(`🗑️ STEP 3: Old bill ${updatedOldBill.billNumber} is now empty - DELETING FROM BOTH DATABASES`, {
+                        billId: updatedOldBill._id,
+                        billNumber: updatedOldBill.billNumber,
+                    });
+                    
+                    try {
+                        await deleteBillFromBothDatabases(updatedOldBill._id);
+                        Logger.info(`✅ Successfully DELETED empty bill ${updatedOldBill.billNumber} from both databases`);
+                    } catch (deleteError) {
+                        Logger.error(`❌ Failed to delete empty bill ${updatedOldBill.billNumber}:`, deleteError);
+                    }
+                } else {
+                    Logger.info(`ℹ️ Old bill ${updatedOldBill.billNumber} still has content, keeping it`, {
+                        sessionsCount: updatedOldBill.sessions.length,
+                        ordersCount: updatedOldBill.orders.length,
+                    });
+                }
 
                 Logger.info(`✓ Created new bill for unlinked session:`, {
                     sessionId: session._id,
@@ -1734,11 +1956,72 @@ const sessionController = {
                 );
             }
 
-            // Perform automatic cleanup after unlinking
-            try {
-                await performCleanupHelper(req.user.organization);
-            } catch (cleanupError) {
-                Logger.error("Auto cleanup failed after unlinking:", cleanupError);
+            // Automatic cleanup after unlinking (run in background)
+            // Don't wait for cleanup to complete - let it run asynchronously
+            Logger.info("🧹 Scheduling automatic cleanup in background after unlinking...");
+            
+            // Run cleanup in background without blocking the response
+            performCleanupHelper(req.user.organization)
+                .then(cleanupResult => {
+                    Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
+                })
+                .catch(cleanupError => {
+                    Logger.error("❌ Background cleanup failed:", cleanupError);
+                });
+
+            // FINAL VERIFICATION: Ensure session is not in multiple bills
+            // Wait a moment for all async operations to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            const allBillsWithSession = await Bill.find({
+                sessions: session._id,
+                organization: req.user.organization
+            }).select('_id billNumber sessions orders');
+            
+            if (allBillsWithSession.length > 1) {
+                Logger.error(`❌ CRITICAL: Session ${session._id} found in ${allBillsWithSession.length} bills after unlinking!`, {
+                    sessionId: session._id,
+                    bills: allBillsWithSession.map(b => ({ id: b._id, number: b.billNumber }))
+                });
+                
+                // Emergency cleanup: remove session from all bills except the correct one
+                for (const wrongBill of allBillsWithSession) {
+                    if (wrongBill._id.toString() !== newBill._id.toString()) {
+                        Logger.warn(`🔧 Emergency cleanup: Removing session from bill ${wrongBill.billNumber}`);
+                        
+                        // Use direct MongoDB update to bypass middleware
+                        await Bill.updateOne(
+                            { _id: wrongBill._id },
+                            { $pull: { sessions: session._id } }
+                        );
+                        
+                        Logger.info(`✅ Forcefully removed session from bill ${wrongBill.billNumber}`);
+                        
+                        // Re-fetch and check if bill is now empty
+                        const updatedWrongBill = await Bill.findById(wrongBill._id);
+                        if (updatedWrongBill) {
+                            const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
+                            if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
+                                await updatedWrongBill.deleteOne();
+                                Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
+                            }
+                        }
+                    }
+                }
+                
+                // Verify again after cleanup
+                const finalCheck = await Bill.find({
+                    sessions: session._id,
+                    organization: req.user.organization
+                }).select('_id billNumber');
+                
+                if (finalCheck.length > 1) {
+                    Logger.error(`❌ STILL DUPLICATED: Session ${session._id} still in ${finalCheck.length} bills after emergency cleanup!`);
+                } else {
+                    Logger.info(`✅ Emergency cleanup successful - session now in exactly 1 bill`);
+                }
+            } else {
+                Logger.info(`✅ VERIFIED: Session is in exactly 1 bill (${newBill.billNumber})`);
             }
 
             res.json({
@@ -1874,40 +2157,111 @@ const sessionController = {
                     });
                 }
                 
+                // نقل الدفعات الجزئية المرتبطة بهذه الجلسة إلى فاتورة الطاولة
+                if (sessionBill.sessionPayments && sessionBill.sessionPayments.length > 0) {
+                    const sessionPaymentsToTransfer = sessionBill.sessionPayments.filter(sp => 
+                        sp.sessionId.toString() === sessionIdStr
+                    );
+                    
+                    if (sessionPaymentsToTransfer.length > 0) {
+                        Logger.info(`🎮 Transferring ${sessionPaymentsToTransfer.length} session payments to table bill`);
+                        
+                        existingTableBill.sessionPayments = existingTableBill.sessionPayments || [];
+                        
+                        for (const sessionPayment of sessionPaymentsToTransfer) {
+                            const existingPayment = existingTableBill.sessionPayments.find(sp => 
+                                sp.sessionId.toString() === sessionPayment.sessionId.toString()
+                            );
+                            
+                            if (!existingPayment) {
+                                existingTableBill.sessionPayments.push(sessionPayment);
+                            }
+                        }
+                        
+                        const sessionPaidAmount = sessionPaymentsToTransfer.reduce((sum, sp) => 
+                            sum + (sp.paidAmount || 0), 0
+                        );
+                        
+                        if (sessionPaidAmount > 0) {
+                            existingTableBill.paid = (existingTableBill.paid || 0) + sessionPaidAmount;
+                            Logger.info(`💰 Added session payments to table bill: ${sessionPaidAmount} EGP`);
+                        }
+                    }
+                }
+                
                 await existingTableBill.calculateSubtotal();
                 await existingTableBill.save();
 
-                // Update session's bill reference
-                session.bill = existingTableBill._id;
-                await session.save();
-
-                // STEP 2: Remove session from old bill (same as changeSessionTable)
+                // STEP 2: Remove session from old bill BEFORE updating session.bill
                 sessionBill.sessions = sessionBill.sessions.filter(s => {
                     const sIdStr = s._id ? s._id.toString() : s.toString();
                     return sIdStr !== sessionIdStr;
                 });
                 
+                // إزالة الدفعات الجزئية المرتبطة بهذه الجلسة من الفاتورة القديمة
+                if (sessionBill.sessionPayments && sessionBill.sessionPayments.length > 0) {
+                    const removedSessionPayments = sessionBill.sessionPayments.filter(sp => 
+                        sp.sessionId.toString() === sessionIdStr
+                    );
+                    
+                    if (removedSessionPayments.length > 0) {
+                        Logger.info(`🎮 Removing ${removedSessionPayments.length} session payments from old bill`);
+                        
+                        sessionBill.sessionPayments = sessionBill.sessionPayments.filter(sp => 
+                            sp.sessionId.toString() !== sessionIdStr
+                        );
+                        
+                        const removedPaidAmount = removedSessionPayments.reduce((sum, sp) => 
+                            sum + (sp.paidAmount || 0), 0
+                        );
+                        
+                        if (removedPaidAmount > 0) {
+                            sessionBill.paid = Math.max(0, (sessionBill.paid || 0) - removedPaidAmount);
+                            Logger.info(`💰 Reduced old bill paid amount by: ${removedPaidAmount} EGP`);
+                        }
+                    }
+                }
+                
                 Logger.info(`✅ STEP 2: Removed session from old bill`, {
                     sessionId: sessionIdStr,
                     sessionBillId: sessionBill._id.toString(),
+                    sessionBillNumber: sessionBill.billNumber,
                     remainingSessions: sessionBill.sessions.length,
+                    remainingOrders: sessionBill.orders.length,
                 });
                 
+                // منع إعادة حساب المبلغ المدفوع تلقائياً (لأننا عدلناه يدوياً)
+                sessionBill._skipPaidRecalculation = true;
                 await sessionBill.calculateSubtotal();
+                delete sessionBill._skipPaidRecalculation;
                 await sessionBill.save();
+                
+                // Verify the session was actually removed from database (linkSessionToTable)
+                const verifyBill = await Bill.findById(sessionBill._id).select('sessions billNumber');
+                const sessionStillInBill = verifyBill.sessions.some(s => s.toString() === sessionIdStr);
+                if (sessionStillInBill) {
+                    Logger.error(`❌ CRITICAL (linkSessionToTable): Session ${sessionIdStr} still in bill ${verifyBill.billNumber} after removal!`);
+                } else {
+                    Logger.info(`✅ VERIFIED (linkSessionToTable): Session successfully removed from bill ${verifyBill.billNumber}`, {
+                        remainingSessions: verifyBill.sessions.length
+                    });
+                }
 
-                // STEP 3: Check if old bill is now empty and merge with destination bill (same as changeSessionTable)
+                // STEP 3: Check if old bill is now empty and DELETE it immediately
+                // Re-fetch to get latest state
                 const updatedSessionBill = await Bill.findById(sessionBill._id);
-                if (updatedSessionBill && 
-                    updatedSessionBill.sessions.length === 0 && 
-                    updatedSessionBill.orders.length === 0) {
-                    
-                    Logger.info(`🔄 STEP 3: Old bill ${updatedSessionBill.billNumber} is now empty, merging with table bill...`, {
+                
+                if (!updatedSessionBill) {
+                    Logger.warn(`⚠️ Old bill ${sessionBill.billNumber} was already deleted`);
+                } else if (updatedSessionBill.sessions.length === 0 && updatedSessionBill.orders.length === 0) {
+                    Logger.info(`🗑️ STEP 3: Old bill ${updatedSessionBill.billNumber} is now empty - DELETING immediately`, {
                         billId: updatedSessionBill._id,
-                        destinationBill: existingTableBill.billNumber,
+                        billNumber: updatedSessionBill.billNumber,
+                        sessionsCount: updatedSessionBill.sessions.length,
+                        ordersCount: updatedSessionBill.orders.length,
                     });
                     
-                    // Copy any useful information from empty bill to table bill
+                    // Copy any useful information from empty bill to table bill BEFORE deleting
                     let mergeNotes = '';
                     if (updatedSessionBill.notes && updatedSessionBill.notes.trim()) {
                         mergeNotes = `\n[مدمج من ${updatedSessionBill.billNumber}]: ${updatedSessionBill.notes}`;
@@ -1934,29 +2288,35 @@ const sessionController = {
                     }
                     
                     // Add merge information to table bill notes
-                    const currentNotes = existingTableBill.notes || '';
-                    existingTableBill.notes = currentNotes + `\n[تم دمج فاتورة فارغة ${updatedSessionBill.billNumber}]` + mergeNotes;
+                    if (mergeNotes) {
+                        const currentNotes = existingTableBill.notes || '';
+                        existingTableBill.notes = currentNotes + `\n[تم دمج فاتورة فارغة ${updatedSessionBill.billNumber}]` + mergeNotes;
+                        
+                        // Update table bill totals
+                        await existingTableBill.calculateSubtotal();
+                        existingTableBill.remaining = existingTableBill.total - (existingTableBill.paid || 0);
+                        await existingTableBill.save();
+                    }
                     
-                    // Update table bill totals
-                    await existingTableBill.calculateSubtotal();
-                    existingTableBill.remaining = existingTableBill.total - (existingTableBill.paid || 0);
-                    await existingTableBill.save();
+                    // DELETE the empty bill FROM BOTH DATABASES
+                    try {
+                        await deleteBillFromBothDatabases(updatedSessionBill._id);
+                        Logger.info(`✅ STEP 3: Successfully DELETED empty bill ${updatedSessionBill.billNumber} from both databases`);
+                    } catch (deleteError) {
+                        Logger.error(`❌ Failed to delete empty bill ${updatedSessionBill.billNumber}:`, deleteError);
+                    }
                     
-                    // Delete the empty bill
-                    await updatedSessionBill.deleteOne();
-                    
-                    Logger.info(`✅ STEP 3: Successfully merged empty bill ${updatedSessionBill.billNumber} with table bill ${existingTableBill.billNumber}`, {
-                        finalBillTotal: existingTableBill.total,
-                        finalBillPaid: existingTableBill.paid,
-                        finalBillRemaining: existingTableBill.remaining
-                    });
-                    
-                } else if (updatedSessionBill) {
+                } else {
                     Logger.info(`ℹ️ Old bill ${updatedSessionBill.billNumber} still has content, keeping it`, {
                         sessionsCount: updatedSessionBill.sessions.length,
                         ordersCount: updatedSessionBill.orders.length,
                     });
                 }
+                
+                // STEP 4: Update session's bill reference LAST to avoid race conditions
+                session.bill = existingTableBill._id;
+                await session.save();
+                Logger.info(`✅ STEP 4: Updated session.bill reference to new bill`);
                 
                 finalBill = existingTableBill;
 
@@ -2019,11 +2379,72 @@ const sessionController = {
                 );
             }
 
-            // Perform automatic cleanup after linking
-            try {
-                await performCleanupHelper(req.user.organization);
-            } catch (cleanupError) {
-                Logger.error("Auto cleanup failed after linking:", cleanupError);
+            // Automatic cleanup after linking (run in background)
+            // Don't wait for cleanup to complete - let it run asynchronously
+            Logger.info("🧹 Scheduling automatic cleanup in background after linking...");
+            
+            // Run cleanup in background without blocking the response
+            performCleanupHelper(req.user.organization)
+                .then(cleanupResult => {
+                    Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
+                })
+                .catch(cleanupError => {
+                    Logger.error("❌ Background cleanup failed:", cleanupError);
+                });
+
+            // FINAL VERIFICATION: Ensure session is not in multiple bills
+            // Wait a moment for all async operations to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            const allBillsWithSession = await Bill.find({
+                sessions: session._id,
+                organization: req.user.organization
+            }).select('_id billNumber sessions orders');
+            
+            if (allBillsWithSession.length > 1) {
+                Logger.error(`❌ CRITICAL: Session ${session._id} found in ${allBillsWithSession.length} bills after linking!`, {
+                    sessionId: session._id,
+                    bills: allBillsWithSession.map(b => ({ id: b._id, number: b.billNumber }))
+                });
+                
+                // Emergency cleanup: remove session from all bills except the correct one
+                for (const wrongBill of allBillsWithSession) {
+                    if (wrongBill._id.toString() !== finalBill._id.toString()) {
+                        Logger.warn(`🔧 Emergency cleanup: Removing session from bill ${wrongBill.billNumber}`);
+                        
+                        // Use direct MongoDB update to bypass middleware
+                        await Bill.updateOne(
+                            { _id: wrongBill._id },
+                            { $pull: { sessions: session._id } }
+                        );
+                        
+                        Logger.info(`✅ Forcefully removed session from bill ${wrongBill.billNumber}`);
+                        
+                        // Re-fetch and check if bill is now empty
+                        const updatedWrongBill = await Bill.findById(wrongBill._id);
+                        if (updatedWrongBill) {
+                            const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
+                            if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
+                                await updatedWrongBill.deleteOne();
+                                Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
+                            }
+                        }
+                    }
+                }
+                
+                // Verify again after cleanup
+                const finalCheck = await Bill.find({
+                    sessions: session._id,
+                    organization: req.user.organization
+                }).select('_id billNumber');
+                
+                if (finalCheck.length > 1) {
+                    Logger.error(`❌ STILL DUPLICATED: Session ${session._id} still in ${finalCheck.length} bills after emergency cleanup!`);
+                } else {
+                    Logger.info(`✅ Emergency cleanup successful - session now in exactly 1 bill`);
+                }
+            } else {
+                Logger.info(`✅ VERIFIED: Session is in exactly 1 bill (${finalBill.billNumber})`);
             }
 
             res.json({
@@ -2206,11 +2627,7 @@ const sessionController = {
                 await existingNewTableBill.calculateSubtotal();
                 await existingNewTableBill.save();
 
-                // Update session's bill reference
-                session.bill = existingNewTableBill._id;
-                await session.save();
-
-                // STEP 2: Remove session from old bill
+                // STEP 2: Remove session from old bill BEFORE updating session.bill
                 currentBill.sessions = currentBill.sessions.filter(s => {
                     const sIdStr = s._id ? s._id.toString() : s.toString();
                     return sIdStr !== sessionIdStr;
@@ -2245,11 +2662,32 @@ const sessionController = {
                 Logger.info(`✅ STEP 2: Removed session from old bill`, {
                     sessionId: sessionIdStr,
                     currentBillId: currentBill._id.toString(),
+                    currentBillNumber: currentBill.billNumber,
                     remainingSessions: currentBill.sessions.length,
+                    remainingOrders: currentBill.orders.length,
                 });
                 
+                // منع إعادة حساب المبلغ المدفوع تلقائياً (لأننا عدلناه يدوياً)
+                currentBill._skipPaidRecalculation = true;
                 await currentBill.calculateSubtotal();
+                delete currentBill._skipPaidRecalculation;
                 await currentBill.save();
+                
+                // Verify the session was actually removed from database (Case 1)
+                const verifyBill = await Bill.findById(currentBill._id).select('sessions billNumber');
+                const sessionStillInBill = verifyBill.sessions.some(s => s.toString() === sessionIdStr);
+                if (sessionStillInBill) {
+                    Logger.error(`❌ CRITICAL (Case 1): Session ${sessionIdStr} still in bill ${verifyBill.billNumber} after removal!`);
+                } else {
+                    Logger.info(`✅ VERIFIED (Case 1): Session successfully removed from bill ${verifyBill.billNumber}`, {
+                        remainingSessions: verifyBill.sessions.length
+                    });
+                }
+
+                // STEP 3: Update session's bill reference LAST
+                session.bill = existingNewTableBill._id;
+                await session.save();
+                Logger.info(`✅ STEP 3: Updated session.bill reference`);
 
                 finalBill = existingNewTableBill;
 
@@ -2320,11 +2758,7 @@ const sessionController = {
                     billNumber: newBill.billNumber,
                 });
 
-                // Update session's bill reference
-                session.bill = newBill._id;
-                await session.save();
-
-                // STEP 2: Remove session from old bill
+                // STEP 2: Remove session from old bill BEFORE updating session.bill
                 currentBill.sessions = currentBill.sessions.filter(s => {
                     const sIdStr = s._id ? s._id.toString() : s.toString();
                     return sIdStr !== sessionIdStr;
@@ -2359,184 +2793,236 @@ const sessionController = {
                 Logger.info(`✅ STEP 2: Removed session from old bill`, {
                     sessionId: sessionIdStr,
                     currentBillId: currentBill._id.toString(),
+                    currentBillNumber: currentBill.billNumber,
                     remainingSessions: currentBill.sessions.length,
+                    remainingOrders: currentBill.orders.length,
                 });
                 
+                // منع إعادة حساب المبلغ المدفوع تلقائياً (لأننا عدلناه يدوياً)
+                currentBill._skipPaidRecalculation = true;
                 await currentBill.calculateSubtotal();
+                delete currentBill._skipPaidRecalculation;
                 await currentBill.save();
+                
+                // Verify the session was actually removed from database (Case 2)
+                const verifyBill = await Bill.findById(currentBill._id).select('sessions billNumber');
+                const sessionStillInBill = verifyBill.sessions.some(s => s.toString() === sessionIdStr);
+                if (sessionStillInBill) {
+                    Logger.error(`❌ CRITICAL (Case 2): Session ${sessionIdStr} still in bill ${verifyBill.billNumber} after removal!`);
+                } else {
+                    Logger.info(`✅ VERIFIED (Case 2): Session successfully removed from bill ${verifyBill.billNumber}`, {
+                        remainingSessions: verifyBill.sessions.length
+                    });
+                }
+
+                // STEP 3: Update session's bill reference LAST
+                session.bill = newBill._id;
+                await session.save();
+                Logger.info(`✅ STEP 3: Updated session.bill reference`);
+
+                // STEP 4: Check if old bill is now empty and DELETE it
+                // Re-fetch to get latest state
+                const updatedCurrentBill = await Bill.findById(currentBill._id);
+                
+                if (!updatedCurrentBill) {
+                    Logger.warn(`⚠️ Old bill ${currentBill.billNumber} was already deleted`);
+                } else if (updatedCurrentBill.sessions.length === 0 && updatedCurrentBill.orders.length === 0) {
+                    Logger.info(`🗑️ STEP 4 (Case 2): Old bill ${updatedCurrentBill.billNumber} is now empty - DELETING FROM BOTH DATABASES`, {
+                        billId: updatedCurrentBill._id,
+                        billNumber: updatedCurrentBill.billNumber,
+                        sessionsCount: updatedCurrentBill.sessions.length,
+                        ordersCount: updatedCurrentBill.orders.length,
+                    });
+                    
+                    try {
+                        await deleteBillFromBothDatabases(updatedCurrentBill._id);
+                        Logger.info(`✅ Successfully DELETED empty bill ${updatedCurrentBill.billNumber} from both databases`);
+                    } catch (deleteError) {
+                        Logger.error(`❌ Failed to delete empty bill ${updatedCurrentBill.billNumber}:`, deleteError);
+                    }
+                } else {
+                    Logger.info(`ℹ️ Old bill ${updatedCurrentBill.billNumber} still has content, keeping it`, {
+                        sessionsCount: updatedCurrentBill.sessions.length,
+                        ordersCount: updatedCurrentBill.orders.length,
+                    });
+                }
 
                 finalBill = newBill;
             }
 
-            // STEP 3: Check if old bill is now empty and delete it properly if so
+            // STEP 3/4: Check if old bill is now empty and delete it properly (for Case 1 only)
             // This uses the same deletion mechanism as the delete button in billing management page
-            const updatedCurrentBill = await Bill.findById(currentBill._id);
-            if (updatedCurrentBill && 
-                updatedCurrentBill.sessions.length === 0 && 
-                updatedCurrentBill.orders.length === 0) {
-                
-                Logger.info(`🔄 STEP 3: Old bill ${updatedCurrentBill.billNumber} is now empty, merging with destination bill...`, {
-                    billId: updatedCurrentBill._id,
-                    destinationBill: finalBill.billNumber,
-                });
-                
-                // Merge the empty bill with the final bill (where the session moved to)
-                Logger.info(`🔗 Merging empty bill ${updatedCurrentBill.billNumber} with destination bill ${finalBill.billNumber}`);
-                
-                // Copy any useful information from empty bill to final bill
-                let mergeNotes = '';
-                if (updatedCurrentBill.notes && updatedCurrentBill.notes.trim()) {
-                    mergeNotes = `\n[مدمج من ${updatedCurrentBill.billNumber}]: ${updatedCurrentBill.notes}`;
-                }
-                
-                // Copy any payments from empty bill to final bill
-                if (updatedCurrentBill.payments && updatedCurrentBill.payments.length > 0) {
-                    Logger.info(`💰 Transferring ${updatedCurrentBill.payments.length} payments from empty bill to destination bill`);
-                    finalBill.payments = finalBill.payments || [];
-                    finalBill.payments.push(...updatedCurrentBill.payments);
+            // For Case 2, we already handled deletion above
+            if (existingNewTableBill) {
+                // Only run this for Case 1 (when we merged with existing table bill)
+                const updatedCurrentBill = await Bill.findById(currentBill._id);
+                if (updatedCurrentBill && 
+                    updatedCurrentBill.sessions.length === 0 && 
+                    updatedCurrentBill.orders.length === 0) {
                     
-                    // Update paid amount
-                    const transferredAmount = updatedCurrentBill.payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-                    finalBill.paid = (finalBill.paid || 0) + transferredAmount;
-                    
-                    mergeNotes += `\n[تم نقل مدفوعات بقيمة ${transferredAmount} ج.م]`;
-                }
-                
-                // Copy any partial payments
-                if (updatedCurrentBill.partialPayments && updatedCurrentBill.partialPayments.length > 0) {
-                    Logger.info(`💳 Transferring ${updatedCurrentBill.partialPayments.length} partial payments from empty bill`);
-                    finalBill.partialPayments = finalBill.partialPayments || [];
-                    finalBill.partialPayments.push(...updatedCurrentBill.partialPayments);
-                }
-                
-                // Copy itemPayments (الدفعات الجزئية للأصناف)
-                if (updatedCurrentBill.itemPayments && updatedCurrentBill.itemPayments.length > 0) {
-                    Logger.info(`📦 Transferring ${updatedCurrentBill.itemPayments.length} item payments from empty bill`);
-                    finalBill.itemPayments = finalBill.itemPayments || [];
-                    
-                    for (const oldItemPayment of updatedCurrentBill.itemPayments) {
-                        // البحث عن دفعة مماثلة في الفاتورة المستهدفة
-                        const existingItemPayment = finalBill.itemPayments.find(ip => 
-                            ip.itemName === oldItemPayment.itemName && 
-                            ip.pricePerUnit === oldItemPayment.pricePerUnit &&
-                            ip.orderId.toString() === oldItemPayment.orderId.toString()
-                        );
-                        
-                        if (existingItemPayment) {
-                            // دمج مع الدفعة الموجودة
-                            Logger.info(`🔗 Merging item payment: ${oldItemPayment.itemName}`);
-                            
-                            existingItemPayment.quantity += oldItemPayment.quantity;
-                            existingItemPayment.totalPrice += oldItemPayment.totalPrice;
-                            existingItemPayment.paidQuantity += (oldItemPayment.paidQuantity || 0);
-                            existingItemPayment.paidAmount += (oldItemPayment.paidAmount || 0);
-                            existingItemPayment.isPaid = existingItemPayment.paidQuantity >= existingItemPayment.quantity;
-                            
-                            // دمج تاريخ الدفعات
-                            if (oldItemPayment.paymentHistory && oldItemPayment.paymentHistory.length > 0) {
-                                existingItemPayment.paymentHistory = existingItemPayment.paymentHistory || [];
-                                existingItemPayment.paymentHistory.push(...oldItemPayment.paymentHistory);
-                            }
-                            
-                            // تحديث تاريخ آخر دفعة
-                            if (oldItemPayment.paidAt && (!existingItemPayment.paidAt || oldItemPayment.paidAt > existingItemPayment.paidAt)) {
-                                existingItemPayment.paidAt = oldItemPayment.paidAt;
-                                existingItemPayment.paidBy = oldItemPayment.paidBy;
-                            }
-                        } else {
-                            // إضافة دفعة جديدة
-                            Logger.info(`➕ Adding new item payment: ${oldItemPayment.itemName}`);
-                            finalBill.itemPayments.push({
-                                ...oldItemPayment.toObject ? oldItemPayment.toObject() : oldItemPayment
-                            });
-                        }
-                    }
-                    
-                    const totalItemPayments = updatedCurrentBill.itemPayments.reduce((sum, ip) => sum + (ip.paidAmount || 0), 0);
-                    if (totalItemPayments > 0) {
-                        mergeNotes += `\n[تم نقل دفعات أصناف بقيمة ${totalItemPayments} ج.م]`;
-                    }
-                }
-                
-                // Copy sessionPayments (الدفعات الجزئية للجلسات)
-                if (updatedCurrentBill.sessionPayments && updatedCurrentBill.sessionPayments.length > 0) {
-                    Logger.info(`🎮 Transferring ${updatedCurrentBill.sessionPayments.length} session payments from empty bill`);
-                    finalBill.sessionPayments = finalBill.sessionPayments || [];
-                    
-                    for (const oldSessionPayment of updatedCurrentBill.sessionPayments) {
-                        // البحث عن دفعة مماثلة في الفاتورة المستهدفة (نفس الجلسة)
-                        const existingSessionPayment = finalBill.sessionPayments.find(sp => 
-                            sp.sessionId.toString() === oldSessionPayment.sessionId.toString()
-                        );
-                        
-                        if (existingSessionPayment) {
-                            // دمج مع الدفعة الموجودة (نادر الحدوث)
-                            Logger.warn(`⚠️ Found duplicate session payment for session: ${oldSessionPayment.sessionId}`);
-                            
-                            existingSessionPayment.paidAmount += (oldSessionPayment.paidAmount || 0);
-                            existingSessionPayment.remainingAmount = existingSessionPayment.sessionCost - existingSessionPayment.paidAmount;
-                            
-                            // دمج تاريخ الدفعات
-                            if (oldSessionPayment.payments && oldSessionPayment.payments.length > 0) {
-                                existingSessionPayment.payments = existingSessionPayment.payments || [];
-                                existingSessionPayment.payments.push(...oldSessionPayment.payments);
-                            }
-                        } else {
-                            // إضافة دفعة جديدة
-                            Logger.info(`➕ Adding new session payment for session: ${oldSessionPayment.sessionId}`);
-                            finalBill.sessionPayments.push({
-                                ...oldSessionPayment.toObject ? oldSessionPayment.toObject() : oldSessionPayment
-                            });
-                        }
-                    }
-                    
-                    const totalSessionPayments = updatedCurrentBill.sessionPayments.reduce((sum, sp) => sum + (sp.paidAmount || 0), 0);
-                    if (totalSessionPayments > 0) {
-                        mergeNotes += `\n[تم نقل دفعات جلسات بقيمة ${totalSessionPayments} ج.م]`;
-                    }
-                }
-                
-                // Copy paymentHistory (تاريخ الدفعات)
-                if (updatedCurrentBill.paymentHistory && updatedCurrentBill.paymentHistory.length > 0) {
-                    Logger.info(`📜 Transferring ${updatedCurrentBill.paymentHistory.length} payment history records`);
-                    finalBill.paymentHistory = finalBill.paymentHistory || [];
-                    finalBill.paymentHistory.push(...updatedCurrentBill.paymentHistory);
-                }
-                
-                // Add merge information to final bill notes
-                const currentNotes = finalBill.notes || '';
-                finalBill.notes = currentNotes + `\n[تم دمج فاتورة فارغة ${updatedCurrentBill.billNumber}]` + mergeNotes;
-                
-                // Update final bill totals
-                await finalBill.calculateSubtotal();
-                finalBill.remaining = finalBill.total - (finalBill.paid || 0);
-                await finalBill.save();
-                
-                // Delete the empty bill
-                await updatedCurrentBill.deleteOne();
-                
-                Logger.info(`✅ STEP 3: Successfully merged empty bill ${updatedCurrentBill.billNumber} with destination bill ${finalBill.billNumber}`, {
-                    finalBillTotal: finalBill.total,
-                    finalBillPaid: finalBill.paid,
-                    finalBillRemaining: finalBill.remaining
-                });
-                
-                // Update table status if needed
-                if (updatedCurrentBill.table) {
-                    const unpaidBills = await Bill.find({
-                        table: updatedCurrentBill.table,
-                        status: { $in: ['draft', 'partial', 'overdue'] }
+                    Logger.info(`🔄 STEP 3 (Case 1): Old bill ${updatedCurrentBill.billNumber} is now empty, merging with destination bill...`, {
+                        billId: updatedCurrentBill._id,
+                        destinationBill: finalBill.billNumber,
                     });
                     
-                    const newTableStatus = unpaidBills.length > 0 ? 'occupied' : 'empty';
-                    await Table.findByIdAndUpdate(updatedCurrentBill.table, { status: newTableStatus });
-                    Logger.info(`✅ Updated table status to: ${newTableStatus}`);
+                    // Merge the empty bill with the final bill (where the session moved to)
+                    Logger.info(`🔗 Merging empty bill ${updatedCurrentBill.billNumber} with destination bill ${finalBill.billNumber}`);
+                    
+                    // Copy any useful information from empty bill to final bill
+                    let mergeNotes = '';
+                    if (updatedCurrentBill.notes && updatedCurrentBill.notes.trim()) {
+                        mergeNotes = `\n[مدمج من ${updatedCurrentBill.billNumber}]: ${updatedCurrentBill.notes}`;
+                    }
+                    
+                    // Copy any payments from empty bill to final bill
+                    if (updatedCurrentBill.payments && updatedCurrentBill.payments.length > 0) {
+                        Logger.info(`💰 Transferring ${updatedCurrentBill.payments.length} payments from empty bill to destination bill`);
+                        finalBill.payments = finalBill.payments || [];
+                        finalBill.payments.push(...updatedCurrentBill.payments);
+                        
+                        // Update paid amount
+                        const transferredAmount = updatedCurrentBill.payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                        finalBill.paid = (finalBill.paid || 0) + transferredAmount;
+                        
+                        mergeNotes += `\n[تم نقل مدفوعات بقيمة ${transferredAmount} ج.م]`;
+                    }
+                    
+                    // Copy any partial payments
+                    if (updatedCurrentBill.partialPayments && updatedCurrentBill.partialPayments.length > 0) {
+                        Logger.info(`💳 Transferring ${updatedCurrentBill.partialPayments.length} partial payments from empty bill`);
+                        finalBill.partialPayments = finalBill.partialPayments || [];
+                        finalBill.partialPayments.push(...updatedCurrentBill.partialPayments);
+                    }
+                    
+                    // Copy itemPayments (الدفعات الجزئية للأصناف)
+                    if (updatedCurrentBill.itemPayments && updatedCurrentBill.itemPayments.length > 0) {
+                        Logger.info(`📦 Transferring ${updatedCurrentBill.itemPayments.length} item payments from empty bill`);
+                        finalBill.itemPayments = finalBill.itemPayments || [];
+                        
+                        for (const oldItemPayment of updatedCurrentBill.itemPayments) {
+                            // البحث عن دفعة مماثلة في الفاتورة المستهدفة
+                            const existingItemPayment = finalBill.itemPayments.find(ip => 
+                                ip.itemName === oldItemPayment.itemName && 
+                                ip.pricePerUnit === oldItemPayment.pricePerUnit &&
+                                ip.orderId.toString() === oldItemPayment.orderId.toString()
+                            );
+                            
+                            if (existingItemPayment) {
+                                // دمج مع الدفعة الموجودة
+                                Logger.info(`🔗 Merging item payment: ${oldItemPayment.itemName}`);
+                                
+                                existingItemPayment.quantity += oldItemPayment.quantity;
+                                existingItemPayment.totalPrice += oldItemPayment.totalPrice;
+                                existingItemPayment.paidQuantity += (oldItemPayment.paidQuantity || 0);
+                                existingItemPayment.paidAmount += (oldItemPayment.paidAmount || 0);
+                                existingItemPayment.isPaid = existingItemPayment.paidQuantity >= existingItemPayment.quantity;
+                                
+                                // دمج تاريخ الدفعات
+                                if (oldItemPayment.paymentHistory && oldItemPayment.paymentHistory.length > 0) {
+                                    existingItemPayment.paymentHistory = existingItemPayment.paymentHistory || [];
+                                    existingItemPayment.paymentHistory.push(...oldItemPayment.paymentHistory);
+                                }
+                                
+                                // تحديث تاريخ آخر دفعة
+                                if (oldItemPayment.paidAt && (!existingItemPayment.paidAt || oldItemPayment.paidAt > existingItemPayment.paidAt)) {
+                                    existingItemPayment.paidAt = oldItemPayment.paidAt;
+                                    existingItemPayment.paidBy = oldItemPayment.paidBy;
+                                }
+                            } else {
+                                // إضافة دفعة جديدة
+                                Logger.info(`➕ Adding new item payment: ${oldItemPayment.itemName}`);
+                                finalBill.itemPayments.push({
+                                    ...oldItemPayment.toObject ? oldItemPayment.toObject() : oldItemPayment
+                                });
+                            }
+                        }
+                        
+                        const totalItemPayments = updatedCurrentBill.itemPayments.reduce((sum, ip) => sum + (ip.paidAmount || 0), 0);
+                        if (totalItemPayments > 0) {
+                            mergeNotes += `\n[تم نقل دفعات أصناف بقيمة ${totalItemPayments} ج.م]`;
+                        }
+                    }
+                    
+                    // Copy sessionPayments (الدفعات الجزئية للجلسات)
+                    if (updatedCurrentBill.sessionPayments && updatedCurrentBill.sessionPayments.length > 0) {
+                        Logger.info(`🎮 Transferring ${updatedCurrentBill.sessionPayments.length} session payments from empty bill`);
+                        finalBill.sessionPayments = finalBill.sessionPayments || [];
+                        
+                        for (const oldSessionPayment of updatedCurrentBill.sessionPayments) {
+                            // البحث عن دفعة مماثلة في الفاتورة المستهدفة (نفس الجلسة)
+                            const existingSessionPayment = finalBill.sessionPayments.find(sp => 
+                                sp.sessionId.toString() === oldSessionPayment.sessionId.toString()
+                            );
+                            
+                            if (existingSessionPayment) {
+                                // دمج مع الدفعة الموجودة (نادر الحدوث)
+                                Logger.warn(`⚠️ Found duplicate session payment for session: ${oldSessionPayment.sessionId}`);
+                                
+                                existingSessionPayment.paidAmount += (oldSessionPayment.paidAmount || 0);
+                                existingSessionPayment.remainingAmount = existingSessionPayment.sessionCost - existingSessionPayment.paidAmount;
+                                
+                                // دمج تاريخ الدفعات
+                                if (oldSessionPayment.payments && oldSessionPayment.payments.length > 0) {
+                                    existingSessionPayment.payments = existingSessionPayment.payments || [];
+                                    existingSessionPayment.payments.push(...oldSessionPayment.payments);
+                                }
+                            } else {
+                                // إضافة دفعة جديدة
+                                Logger.info(`➕ Adding new session payment for session: ${oldSessionPayment.sessionId}`);
+                                finalBill.sessionPayments.push({
+                                    ...oldSessionPayment.toObject ? oldSessionPayment.toObject() : oldSessionPayment
+                                });
+                            }
+                        }
+                        
+                        const totalSessionPayments = updatedCurrentBill.sessionPayments.reduce((sum, sp) => sum + (sp.paidAmount || 0), 0);
+                        if (totalSessionPayments > 0) {
+                            mergeNotes += `\n[تم نقل دفعات جلسات بقيمة ${totalSessionPayments} ج.م]`;
+                        }
+                    }
+                    
+                    // Copy paymentHistory (تاريخ الدفعات)
+                    if (updatedCurrentBill.paymentHistory && updatedCurrentBill.paymentHistory.length > 0) {
+                        Logger.info(`📜 Transferring ${updatedCurrentBill.paymentHistory.length} payment history records`);
+                        finalBill.paymentHistory = finalBill.paymentHistory || [];
+                        finalBill.paymentHistory.push(...updatedCurrentBill.paymentHistory);
+                    }
+                    
+                    // Add merge information to final bill notes
+                    const currentNotes = finalBill.notes || '';
+                    finalBill.notes = currentNotes + `\n[تم دمج فاتورة فارغة ${updatedCurrentBill.billNumber}]` + mergeNotes;
+                    
+                    // Update final bill totals
+                    await finalBill.calculateSubtotal();
+                    finalBill.remaining = finalBill.total - (finalBill.paid || 0);
+                    await finalBill.save();
+                    
+                    // Delete the empty bill FROM BOTH DATABASES
+                    await deleteBillFromBothDatabases(updatedCurrentBill._id);
+                    
+                    Logger.info(`✅ STEP 3 (Case 1): Successfully merged and deleted empty bill ${updatedCurrentBill.billNumber} from both databases`, {
+                        finalBillTotal: finalBill.total,
+                        finalBillPaid: finalBill.paid,
+                        finalBillRemaining: finalBill.remaining
+                    });
+                    
+                    // Update table status if needed
+                    if (updatedCurrentBill.table) {
+                        const unpaidBills = await Bill.find({
+                            table: updatedCurrentBill.table,
+                            status: { $in: ['draft', 'partial', 'overdue'] }
+                        });
+                        
+                        const newTableStatus = unpaidBills.length > 0 ? 'occupied' : 'empty';
+                        await Table.findByIdAndUpdate(updatedCurrentBill.table, { status: newTableStatus });
+                        Logger.info(`✅ Updated table status to: ${newTableStatus}`);
+                    }
+                } else if (updatedCurrentBill) {
+                    Logger.info(`ℹ️ Old bill ${updatedCurrentBill.billNumber} still has content, keeping it`, {
+                        sessionsCount: updatedCurrentBill.sessions.length,
+                        ordersCount: updatedCurrentBill.orders.length,
+                    });
                 }
-            } else if (updatedCurrentBill) {
-                Logger.info(`ℹ️ Old bill ${updatedCurrentBill.billNumber} still has content, keeping it`, {
-                    sessionsCount: updatedCurrentBill.sessions.length,
-                    ordersCount: updatedCurrentBill.orders.length,
-                });
             }
 
             // Wait a moment for all database operations to complete
@@ -2583,11 +3069,77 @@ const sessionController = {
                 updatedBy: req.user.name,
             });
 
-            // Skip automatic cleanup after changing table since we already handled it manually
-            // The manual process above (STEP 1, 2, 3) already ensures data consistency
-            Logger.info("✅ Manual cleanup completed during table change - skipping automatic cleanup");
+            // Automatic cleanup after changing table (run in background)
+            // Don't wait for cleanup to complete - let it run asynchronously
+            Logger.info("🧹 Scheduling automatic cleanup in background after table change...");
             
-            // Final verification that old bill is gone
+            // Run cleanup in background without blocking the response
+            performCleanupHelper(req.user.organization)
+                .then(cleanupResult => {
+                    Logger.info(`✅ Background cleanup completed: ${cleanupResult.cleanedCount} references cleaned, ${cleanupResult.deletedBillsCount} bills deleted`);
+                })
+                .catch(cleanupError => {
+                    Logger.error("❌ Background cleanup failed:", cleanupError);
+                });
+            
+            // FINAL VERIFICATION: Ensure session is not in multiple bills
+            // Wait a moment for all async operations to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            const allBillsWithSession = await Bill.find({
+                sessions: session._id,
+                organization: req.user.organization
+            }).select('_id billNumber sessions orders');
+            
+            if (allBillsWithSession.length > 1) {
+                Logger.error(`❌ CRITICAL: Session ${session._id} found in ${allBillsWithSession.length} bills after table change!`, {
+                    sessionId: session._id,
+                    bills: allBillsWithSession.map(b => ({ id: b._id, number: b.billNumber, sessionsCount: b.sessions.length }))
+                });
+                
+                // Emergency cleanup: remove session from all bills except the correct one
+                for (const wrongBill of allBillsWithSession) {
+                    if (wrongBill._id.toString() !== finalBill._id.toString()) {
+                        Logger.warn(`🔧 Emergency cleanup: Removing session from bill ${wrongBill.billNumber}`);
+                        
+                        // Use direct MongoDB update to bypass middleware
+                        await Bill.updateOne(
+                            { _id: wrongBill._id },
+                            { $pull: { sessions: session._id } }
+                        );
+                        
+                        Logger.info(`✅ Forcefully removed session from bill ${wrongBill.billNumber}`);
+                        
+                        // Re-fetch and check if bill is now empty
+                        const updatedWrongBill = await Bill.findById(wrongBill._id);
+                        if (updatedWrongBill) {
+                            const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
+                            if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
+                                await updatedWrongBill.deleteOne();
+                                Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
+                            }
+                        }
+                    }
+                }
+                
+                // Verify again after cleanup
+                const finalCheck = await Bill.find({
+                    sessions: session._id,
+                    organization: req.user.organization
+                }).select('_id billNumber');
+                
+                if (finalCheck.length > 1) {
+                    Logger.error(`❌ STILL DUPLICATED: Session ${session._id} still in ${finalCheck.length} bills after emergency cleanup!`);
+                } else {
+                    Logger.info(`✅ Emergency cleanup successful - session now in exactly 1 bill`);
+                }
+            } else if (allBillsWithSession.length === 1) {
+                Logger.info(`✅ VERIFIED: Session is in exactly 1 bill (${finalBill.billNumber})`);
+            } else {
+                Logger.error(`❌ CRITICAL: Session ${session._id} not found in any bill!`);
+            }
+            
+            // Also verify old bill is gone if it should be
             const finalBillCheck = await Bill.findById(currentBill._id);
             if (finalBillCheck) {
                 Logger.warn(`⚠️ WARNING: Old bill ${currentBill.billNumber} still exists after table change!`, {
@@ -2653,6 +3205,11 @@ const sessionController = {
     // Helper function to perform cleanup - can be called internally
     performCleanup: async (organizationId) => {
         return await performCleanupHelper(organizationId);
+    },
+    
+    // Helper function to perform selective cleanup - faster for single operations
+    performSelectiveCleanup: async (sessionIds, organizationId) => {
+        return await performSelectiveCleanup(sessionIds, organizationId);
     },
 
     // Update session start time

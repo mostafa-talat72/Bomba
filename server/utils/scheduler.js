@@ -848,9 +848,60 @@ export const initializeScheduler = () => {
         "✅ Subscription expiry notifications scheduled: every 24 hours"
     );
 
+    // Setup automatic session cleanup (every 30 seconds)
+    setupSessionCleanupScheduler();
+    Logger.info("✅ Session cleanup scheduled: every 30 seconds");
+
     // إضافة جدولة تنظيف الإشعارات القديمة
     setupNotificationCleanupScheduler();
     Logger.info("✅ Notification cleanup scheduler initialized");
 
     Logger.info("🎯 All scheduled tasks initialized successfully!");
 };
+
+
+/**
+ * تنظيف تلقائي لمراجع الجلسات المكررة
+ * يعمل كل 30 ثانية في الخلفية
+ */
+const setupSessionCleanupScheduler = async () => {
+    // استيراد الوظيفة من sessionController
+    const { default: sessionController } = await import('../controllers/sessionController.js');
+    
+    // Get all organizations
+    const organizations = await Organization.find({ isActive: true });
+    
+    // تشغيل كل 30 ثانية
+    cron.schedule('*/30 * * * * *', async () => {
+        try {
+            Logger.info("🧹 Running automatic session cleanup (every 30 seconds)...");
+            
+            let totalCleaned = 0;
+            let totalDeleted = 0;
+            
+            for (const organization of organizations) {
+                try {
+                    const result = await sessionController.performCleanup(organization._id);
+                    totalCleaned += result.cleanedCount || 0;
+                    totalDeleted += result.deletedBillsCount || 0;
+                } catch (orgError) {
+                    Logger.error(`Failed to cleanup for organization ${organization.name}:`, orgError.message);
+                }
+            }
+            
+            if (totalCleaned > 0 || totalDeleted > 0) {
+                Logger.info(`✅ Session cleanup completed: ${totalCleaned} references cleaned, ${totalDeleted} bills deleted`);
+            }
+        } catch (error) {
+            Logger.error("❌ Session cleanup error:", error.message);
+        }
+    }, {
+        scheduled: true,
+        timezone: "Africa/Cairo"
+    });
+
+    Logger.info("✅ Session cleanup scheduler initialized (every 30 seconds)");
+};
+
+// تصدير الوظيفة الجديدة
+export { setupSessionCleanupScheduler };

@@ -1,5 +1,8 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+// Health check URL (without /api prefix)
+export const HEALTH_CHECK_URL = API_BASE_URL;
+
 // Types
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -405,7 +408,7 @@ class ApiClient {
   private refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseURL: string) {
-    this.baseURL = baseURL;
+    this.baseURL = `${baseURL}/api`; // Add /api prefix to all API calls
     this.token = localStorage.getItem('token');
   }
 

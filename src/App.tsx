@@ -4,6 +4,8 @@ import { AppProvider, useApp } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
+import ConnectionStatus from './components/ConnectionStatus';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import EmailActions from './pages/EmailActions';
@@ -209,22 +211,25 @@ const RouteHandler = () => {
 
 const App = () => {
   return (
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
-      <AppProvider>
-        <ThemeProvider>
-          <ToastManager>
-            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
-              <RouteHandler />
-            </div>
-          </ToastManager>
-        </ThemeProvider>
-      </AppProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        <AppProvider>
+          <ThemeProvider>
+            <ToastManager>
+              <ConnectionStatus />
+              <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
+                <RouteHandler />
+              </div>
+            </ToastManager>
+          </ThemeProvider>
+        </AppProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 
