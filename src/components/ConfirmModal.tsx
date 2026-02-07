@@ -11,6 +11,7 @@ interface ConfirmModalProps {
   cancelText?: string;
   confirmColor?: string;
   loading?: boolean;
+  zIndex?: string;
 }
 
 const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -22,7 +23,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   confirmText = 'تأكيد',
   cancelText = 'إلغاء',
   confirmColor = 'bg-red-600 hover:bg-red-700',
-  loading = false
+  loading = false,
+  zIndex = 'z-[60]'
 }) => {
   return (
     <Modal
@@ -30,6 +32,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
       onClose={onClose}
       title={title}
       maxWidth="max-w-md"
+      zIndex={zIndex}
     >
       <div className="text-center">
         <p className="text-gray-700 dark:text-gray-300 mb-6 whitespace-pre-line">{message}</p>

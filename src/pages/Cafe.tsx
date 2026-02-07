@@ -242,6 +242,7 @@ const Cafe: React.FC = () => {
   // Confirm modal states
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showTableOrdersModal, setShowTableOrdersModal] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmModalData, setConfirmModalData] = useState<{
     title: string;
     message: string;
@@ -1096,20 +1097,37 @@ const Cafe: React.FC = () => {
       `هل أنت متأكد من حذف الطلب ${order.orderNumber}؟`,
       async () => {
         try {
-          setLoading(true);
+          setConfirmLoading(true);
           const result = await deleteOrder(order.id);
-          if (result) {
+          
+          // إيقاف التحميل وإغلاق النافذة فوراً
+          setConfirmLoading(false);
+          setShowConfirmModal(false);
+          
+          if (result === true) {
+            // إظهار رسالة النجاح فوراً
             showNotification('تم حذف الطلب بنجاح', 'success');
-            await fetchAllTableStatuses();
-            if (selectedTable) {
-              await handleTableClick(selectedTable);
-            }
+            
+            // إعادة تحميل البيانات في الخلفية (بدون await)
+            Promise.all([
+              fetchOrders(),
+              fetchBills()
+            ]).then(() => {
+              fetchAllTableStatuses();
+              if (selectedTable) {
+                handleTableClick(selectedTable);
+              }
+            }).catch(err => {
+              // تجاهل الأخطاء في التحديث الخلفي
+            });
+          } else {
+            // إظهار رسالة الخطأ
+            showNotification('خطأ في حذف الطلب', 'error');
           }
         } catch (error) {
-          showNotification('خطأ في حذف الطلب', 'error');
-        } finally {
-          setLoading(false);
+          setConfirmLoading(false);
           setShowConfirmModal(false);
+          showNotification('خطأ في حذف الطلب', 'error');
         }
       }
     );
@@ -1479,8 +1497,10 @@ const Cafe: React.FC = () => {
                 onClick={() => {
                   setShowConfirmModal(false);
                   setConfirmModalData(null);
+                  setConfirmLoading(false);
                 }}
-                className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl transition-colors text-sm sm:text-base font-medium"
+                disabled={confirmLoading}
+                className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl transition-colors text-sm sm:text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {confirmModalData.cancelText || 'إلغاء'}
               </button>
@@ -1488,9 +1508,20 @@ const Cafe: React.FC = () => {
                 onClick={() => {
                   confirmModalData.onConfirm();
                 }}
-                className={`w-full sm:w-auto px-4 py-2.5 text-white rounded-xl transition-colors text-sm sm:text-base font-medium ${confirmModalData.confirmColor || 'bg-red-600 hover:bg-red-700'}`}
+                disabled={confirmLoading}
+                className={`w-full sm:w-auto px-4 py-2.5 text-white rounded-xl transition-colors text-sm sm:text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${confirmModalData.confirmColor || 'bg-red-600 hover:bg-red-700'}`}
               >
-                {confirmModalData.confirmText || 'تأكيد'}
+                {confirmLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>جاري التنفيذ...</span>
+                  </>
+                ) : (
+                  confirmModalData.confirmText || 'تأكيد'
+                )}
               </button>
             </div>
           </div>

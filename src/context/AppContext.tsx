@@ -960,15 +960,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteOrder = async (id: string): Promise<boolean> => {
     try {
       const response = await api.deleteOrder(id);
-      if (response.success) {
+      
+      if (response && response.success === true) {
         setOrders(prev => prev.filter(order => order.id !== id));
-        showNotification('تم حذف الطلب بنجاح', 'success');
         return true;
       }
+      
       return false;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في حذف الطلب', 'error');
+      console.error('Error deleting order:', err);
       return false;
     }
   };

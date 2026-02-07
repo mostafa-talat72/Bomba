@@ -3,6 +3,7 @@ import { X, Receipt, CheckCircle, Plus, Minus } from 'lucide-react';
 import { Bill, Order, OrderItem } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
+import ConfirmModal from './ConfirmModal';
 
 interface PartialPaymentModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
 }) => {
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: number }>({});
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // إعادة تعيين العناصر المحددة عند فتح النافذة أو تغيير الفاتورة
   useEffect(() => {
@@ -89,7 +91,24 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
       return;
     }
 
+    // فتح نافذة التأكيد
+    setShowConfirmModal(true);
+  };
+
+  const confirmPayment = async () => {
+    const itemsToPay: Array<{ itemId: string; quantity: number }> = [];
+    
+    Object.entries(selectedItems).forEach(([itemId, quantity]) => {
+      if (quantity > 0) {
+        itemsToPay.push({
+          itemId: itemId,
+          quantity: quantity
+        });
+      }
+    });
+
     await onPaymentSubmit(itemsToPay, paymentMethod);
+    setShowConfirmModal(false);
   };
 
   const totalAmount = Object.entries(selectedItems).reduce((sum, [itemId, quantity]) => {
@@ -110,7 +129,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               <Receipt className="h-5 w-5 sm:h-8 sm:w-8 text-green-600 dark:text-green-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-lg sm:text-2xl font-bold text-white truncate">دفع مشروبات محددة</h3>
+              <h3 className="text-lg sm:text-2xl font-bold text-white truncate">دفع أصناف محددة</h3>
               <p className="text-xs sm:text-sm text-green-100 mt-1 truncate">فاتورة #{bill.billNumber}</p>
             </div>
           </div>
@@ -127,7 +146,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
           <div className="mb-4 sm:mb-6">
             <h4 className="font-bold text-lg sm:text-xl text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center gap-2">
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              اختر المشروبات المطلوب دفعها
+              اختر الأصناف المطلوب دفعها
             </h4>
 
             {availableItems.length === 0 ? (
@@ -350,6 +369,19 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* نافذة التأكيد */}
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => !isProcessing && setShowConfirmModal(false)}
+        onConfirm={confirmPayment}
+        title="تأكيد الدفع الجزئي"
+        message={`هل تريد دفع المشروبات المحددة؟\n\nعدد الأصناف: ${Object.values(selectedItems).filter(q => q > 0).length}\nالمبلغ الإجمالي: ${formatCurrency(totalAmount)}\nطريقة الدفع: ${paymentMethod === 'cash' ? 'نقدي' : paymentMethod === 'card' ? 'بطاقة' : 'تحويل'}`}
+        confirmText={isProcessing ? 'جاري الدفع...' : 'نعم، تأكيد الدفع'}
+        cancelText="تراجع"
+        confirmColor="bg-green-600 hover:bg-green-700"
+        loading={isProcessing}
+      />
     </div>
   );
 };

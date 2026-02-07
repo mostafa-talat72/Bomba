@@ -1051,13 +1051,8 @@ export const deleteOrder = async (req, res) => {
             });
         }
 
-        // Only allow deletion if order is pending
-        if (order.status !== "pending") {
-            return res.status(400).json({
-                success: false,
-                message: "لا يمكن حذف طلب تم البدء في تحضيره",
-            });
-        }
+        // السماح بحذف الطلب في أي حالة
+        // (تم إزالة التحقق من حالة pending فقط)
 
         // استرداد المخزون إذا كان الطلب يحتوي على عناصر مجهزة
         try {

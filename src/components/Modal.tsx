@@ -8,6 +8,7 @@ interface ModalProps {
   children: React.ReactNode;
   maxWidth?: string;
   showCloseButton?: boolean;
+  zIndex?: string;
 }
 
 const Modal: React.FC<ModalProps> = ({
@@ -16,7 +17,8 @@ const Modal: React.FC<ModalProps> = ({
   title,
   children,
   maxWidth = 'max-w-md',
-  showCloseButton = true
+  showCloseButton = true,
+  zIndex = 'z-50'
 }) => {
   // إضافة دعم مفتاح ESC
   useEffect(() => {
@@ -34,7 +36,7 @@ const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      className="modal-backdrop fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4"
+      className={`modal-backdrop fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center ${zIndex} p-2 sm:p-4`}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();

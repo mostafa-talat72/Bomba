@@ -114,6 +114,7 @@ const TableBillItem = memo(({
   onViewClick,
   onEditClick,
   onPrintClick,
+  onPayFullBill,
   getStatusColor, 
   getStatusText, 
   formatCurrency 
@@ -123,6 +124,7 @@ const TableBillItem = memo(({
   onViewClick: (bill: Bill) => void;
   onEditClick: (bill: Bill) => void;
   onPrintClick: (bill: Bill) => void;
+  onPayFullBill: (bill: Bill) => void;
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
@@ -206,6 +208,22 @@ const TableBillItem = memo(({
               <span>طباعة</span>
             </button>
           </div>
+          
+          {/* زر دفع الفاتورة بالكامل - يظهر فقط للفواتير غير المدفوعة بالكامل */}
+          {isUnpaid && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPayFullBill(bill);
+              }}
+              className="w-full px-2 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg transform hover:scale-105"
+              title="دفع الفاتورة بالكامل"
+            >
+              <DollarSign className="h-3.5 w-3.5" />
+              <span>دفع بالكامل</span>
+            </button>
+          )}
+          
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -281,6 +299,10 @@ const Billing = () => {
   const maxDate = '';
   const [paymentReference, setPaymentReference] = useState('');
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  const [showPayFullBillConfirmModal, setShowPayFullBillConfirmModal] = useState(false);
+  const [showSessionPaymentConfirmModal, setShowSessionPaymentConfirmModal] = useState(false);
+  const [billToPayFull, setBillToPayFull] = useState<Bill | null>(null);
+  const [sessionToPayData, setSessionToPayData] = useState<{ session: Session; amount: string; method: 'cash' | 'card' | 'transfer' } | null>(null);
   const [isCancelingBill, setIsCancelingBill] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isProcessingPartialPayment, setIsProcessingPartialPayment] = useState(false);
@@ -694,6 +716,10 @@ const Billing = () => {
     setPaymentReference('');
     setDiscountPercentage('');
     
+    // إغلاق نافذة التأكيد إذا كانت مفتوحة
+    setShowPayFullBillConfirmModal(false);
+    setBillToPayFull(null);
+    
     // مسح navigation state إذا كان موجود
     const currentState = location.state as any;
     if (currentState?.openPaymentModal) {
@@ -759,6 +785,24 @@ const Billing = () => {
       showNotification('لا يمكن الدفع - هذه الفاتورة تحتوي على جلسة نشطة. يرجى إنهاء الجلسة أولاً.');
       return;
     }
+
+    // التحقق إذا كان الدفع كامل (المبلغ المدفوع = المبلغ المتبقي)
+    const isFullPayment = parseFloat(paymentAmount) >= (selectedBill.remaining || 0);
+    
+    if (isFullPayment) {
+      // فتح نافذة التأكيد للدفع الكامل
+      setBillToPayFull(selectedBill);
+      setShowPayFullBillConfirmModal(true);
+      return;
+    }
+
+    // إذا لم يكن دفع كامل، متابعة الدفع مباشرة
+    await processPayment();
+  };
+
+  // دالة معالجة الدفع (مستخرجة من handlePaymentSubmit)
+  const processPayment = async () => {
+    if (!selectedBill) return;
 
     // Validate discount percentage if provided
     if (discountPercentage && (isNaN(parseFloat(discountPercentage)) || parseFloat(discountPercentage) < 0 || parseFloat(discountPercentage) > 100)) {
@@ -844,6 +888,92 @@ const Billing = () => {
     } catch (error) {
       showNotification('فشل في تسجيل الدفع');
     } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // دالة لدفع الفاتورة بالكامل مباشرة
+  const handlePayFullBill = async (bill: Bill) => {
+    // التحقق من وجود جلسات نشطة
+    if (bill && hasActiveSession(bill)) {
+      showNotification('لا يمكن الدفع - هذه الفاتورة تحتوي على جلسة نشطة. يرجى إنهاء الجلسة أولاً.', 'error');
+      return;
+    }
+
+    // التحقق من أن الفاتورة غير مدفوعة بالكامل
+    if (bill.status === 'paid') {
+      showNotification('هذه الفاتورة مدفوعة بالكامل بالفعل', 'info');
+      return;
+    }
+
+    // حساب المبلغ المتبقي
+    const remainingAmount = bill.remaining || 0;
+    
+    if (remainingAmount <= 0) {
+      showNotification('لا يوجد مبلغ متبقي للدفع', 'info');
+      return;
+    }
+
+    // فتح نافذة التأكيد
+    setBillToPayFull(bill);
+    setShowPayFullBillConfirmModal(true);
+  };
+
+  // دالة تنفيذ الدفع الكامل بعد التأكيد
+  const confirmPayFullBill = async () => {
+    if (!billToPayFull) return;
+
+    try {
+      setIsProcessingPayment(true);
+
+      // إذا كانت الفاتورة من نافذة إدارة الدفع (selectedBill موجودة ومطابقة)
+      if (selectedBill && (selectedBill.id === billToPayFull.id || selectedBill._id === billToPayFull._id)) {
+        // استخدام processPayment للدفع من نافذة إدارة الدفع
+        await processPayment();
+        
+        // إغلاق نافذة التأكيد
+        setShowPayFullBillConfirmModal(false);
+        setBillToPayFull(null);
+        return;
+      }
+
+      // إذا كانت الفاتورة من زر "دفع بالكامل" المباشر
+      const remainingAmount = billToPayFull.remaining || 0;
+
+      // إعداد بيانات الدفع الكامل
+      const newPaidAmount = (billToPayFull.paid || 0) + remainingAmount;
+      const newRemaining = 0;
+      
+      const paymentData: any = {
+        paid: newPaidAmount,
+        remaining: newRemaining,
+        status: 'paid',
+        paymentAmount: remainingAmount,
+        method: 'cash', // الطريقة الافتراضية
+        reference: '',
+        total: billToPayFull.total || 0,
+        effectiveTotal: billToPayFull.total || 0
+      };
+
+      const result = await api.updatePayment(billToPayFull.id || billToPayFull._id, paymentData);
+
+      if (result && result.data) {
+        // إغلاق نافذة التأكيد فوراً
+        setShowPayFullBillConfirmModal(false);
+        setBillToPayFull(null);
+        setIsProcessingPayment(false);
+
+        // إظهار رسالة نجاح فوراً
+        showNotification('تم دفع الفاتورة بالكامل بنجاح! ✅', 'success');
+
+        // إعادة تحميل البيانات في الخلفية
+        Promise.all([
+          fetchTables(),
+          fetchBills()
+        ]).catch(err => console.error('Error refreshing data:', err));
+      }
+    } catch (error) {
+      showNotification('فشل في دفع الفاتورة', 'error');
       setIsProcessingPayment(false);
     }
   };
@@ -962,54 +1092,46 @@ const Billing = () => {
           return sum + (aggregatedItem ? aggregatedItem.price * item.quantity : 0);
         }, 0);
         
-        // إعادة تحميل البيانات فوراً
-        await Promise.all([
+        // إظهار رسالة النجاح فوراً (بدون إغلاق النافذة)
+        setIsProcessingPartialPayment(false);
+        showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح!`, 'success');
+
+        // إعادة تحميل البيانات في الخلفية
+        Promise.all([
           fetchBills(),
           fetchTables()
-        ]);
-
-        // تحديث الفاتورة المحددة للحصول على أحدث البيانات
-        const refreshedBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
-        if (refreshedBillResponse.success && refreshedBillResponse.data) {
-          const updatedBill = refreshedBillResponse.data;
-          setSelectedBill(updatedBill);
-          
-          // التحقق من حالة الفاتورة المحدثة
-          const updatedAggregatedItems = aggregateItemsWithPayments(
-            updatedBill.orders || [],
-            updatedBill.itemPayments || [],
-            updatedBill.status,
-            updatedBill.paid,
-            updatedBill.total
-          );
-          
-          const billFullyPaid = updatedBill.remaining === 0 || updatedBill.paid >= updatedBill.total;
-          
-          if (updatedBill.status === 'paid' && billFullyPaid) {
-            setShowPartialPaymentModal(false);
-            showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح! الفاتورة مكتملة.`, 'success');
-          } else {
-            showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح!`, 'success');
+        ]).then(async () => {
+          // تحديث الفاتورة المحددة للحصول على أحدث البيانات
+          const refreshedBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
+          if (refreshedBillResponse.success && refreshedBillResponse.data) {
+            const updatedBill = refreshedBillResponse.data;
+            setSelectedBill(updatedBill);
+            
+            // إذا أصبحت الفاتورة مدفوعة بالكامل، إغلاق النافذة
+            if (updatedBill.status === 'paid' && (updatedBill.remaining === 0 || updatedBill.paid >= updatedBill.total)) {
+              setShowPartialPaymentModal(false);
+              showNotification('الفاتورة مكتملة! ✅', 'success');
+            }
           }
-        } else {
-          showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح!`, 'success');
-        }
+        }).catch(err => console.error('Error refreshing data:', err));
       } else {
         const errorMessage = response.message || 'فشل في تسجيل الدفع الجزئي';
         showNotification(errorMessage, 'error');
+        setIsProcessingPartialPayment(false);
       }
     } catch (error) {
       console.error('Error in partial payment:', error);
       showNotification('فشل في تسجيل الدفع الجزئي', 'error');
-    } finally {
       setIsProcessingPartialPayment(false);
     }
   };
 
   // دالة الدفع الجزئي للجلسة
-  const handlePaySessionPartial = async () => {
+  const handlePaySessionPartial = async (session?: Session) => {
+    // استخدام الجلسة الممررة أو الجلسة المحددة
+    const targetSession = session || selectedSession;
     
-    if (!selectedBill || !selectedSession) return;
+    if (!selectedBill || !targetSession) return;
 
     const amount = parseFloat(sessionPaymentAmount);
     
@@ -1019,29 +1141,29 @@ const Billing = () => {
     }
 
     // التحقق من أن المبلغ لا يتجاوز المبلغ المتبقي للجلسة
-    const sessionId = selectedSession._id || selectedSession.id;
+    const sessionId = targetSession._id || targetSession.id;
     const sessionPayment = selectedBill.sessionPayments?.find(
       sp => sp.sessionId === sessionId
     );
     
     // حساب المتبقي بنفس الطريقة المستخدمة في الـ UI
-    const isActive = selectedSession.status === 'active';
-    let totalCost = sessionPayment?.sessionCost || selectedSession.finalCost || selectedSession.totalCost || 0;
+    const isActive = targetSession.status === 'active';
+    let totalCost = sessionPayment?.sessionCost || targetSession.finalCost || targetSession.totalCost || 0;
     
     // إذا كانت الجلسة نشطة ولم يكن هناك سعر، نحسب السعر الحالي
-    if (isActive && totalCost === 0 && selectedSession.startTime) {
-      const startTime = new Date(selectedSession.startTime);
+    if (isActive && totalCost === 0 && targetSession.startTime) {
+      const startTime = new Date(targetSession.startTime);
       const now = new Date();
       const hours = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
       
       
-      if (selectedSession.deviceType === 'playstation') {
-        const controllers = selectedSession.controllers || 1;
+      if (targetSession.deviceType === 'playstation') {
+        const controllers = targetSession.controllers || 1;
         let hourlyRate = 20;
         if (controllers >= 4) hourlyRate = 30;
         else if (controllers >= 3) hourlyRate = 25;
         totalCost = Math.round(hours * hourlyRate);
-      } else if (selectedSession.deviceType === 'computer') {
+      } else if (targetSession.deviceType === 'computer') {
         totalCost = Math.round(hours * 15);
       }
     }
@@ -1060,47 +1182,65 @@ const Billing = () => {
       return;
     }
 
+    // حفظ الجلسة المحددة وفتح نافذة التأكيد
+    setSelectedSession(targetSession);
+    setSessionToPayData({
+      session: targetSession,
+      amount: sessionPaymentAmount,
+      method: sessionPaymentMethod
+    });
+    setShowSessionPaymentConfirmModal(true);
+  };
+
+  // دالة تنفيذ دفع الجلسة بعد التأكيد
+  const confirmSessionPayment = async () => {
+    if (!selectedBill || !sessionToPayData) return;
+
+    const amount = parseFloat(sessionToPayData.amount);
+
     try {
       setIsProcessingSessionPayment(true);
       
       const result = await api.paySessionPartial(selectedBill.id || selectedBill._id, {
-        sessionId: selectedSession._id || selectedSession.id,
+        sessionId: sessionToPayData.session._id || sessionToPayData.session.id,
         amount: amount,
-        paymentMethod: sessionPaymentMethod
+        paymentMethod: sessionToPayData.method
       });
 
       if (result.success && result.data) {
-        // إعادة تحميل البيانات أولاً
-        await Promise.all([
-          fetchTables(),
-          fetchBills()
-        ]);
+        // إغلاق نافذة التأكيد فوراً
+        setShowSessionPaymentConfirmModal(false);
+        setSessionToPayData(null);
+        setIsProcessingSessionPayment(false);
 
-        // جلب الفاتورة المحدثة بكل التفاصيل
-        try {
-          const fullBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
-          if (fullBillResponse && fullBillResponse.success && fullBillResponse.data) {
-            setSelectedBill(fullBillResponse.data);
-          } else {
-            setSelectedBill(result.data);
-          }
-        } catch (fetchError) {
-          console.error('خطأ في جلب تفاصيل الفاتورة:', fetchError);
-          setSelectedBill(result.data);
-        }
-
-        // إعادة تعيين الحقول فقط (بدون إغلاق النافذة)
+        // إعادة تعيين الحقول
         setSessionPaymentAmount('');
         setSelectedSession(null);
 
-        // إظهار رسالة نجاح
+        // إظهار رسالة نجاح فوراً
         showNotification('تم تسجيل الدفع الجزئي للجلسة بنجاح!', 'success');
+
+        // إعادة تحميل البيانات في الخلفية
+        Promise.all([
+          fetchTables(),
+          fetchBills()
+        ]).then(async () => {
+          // جلب الفاتورة المحدثة بكل التفاصيل
+          try {
+            const fullBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
+            if (fullBillResponse && fullBillResponse.success && fullBillResponse.data) {
+              setSelectedBill(fullBillResponse.data);
+            }
+          } catch (fetchError) {
+            console.error('خطأ في جلب تفاصيل الفاتورة:', fetchError);
+          }
+        }).catch(err => console.error('Error refreshing data:', err));
       } else {
         showNotification(result.message || 'فشل في تسجيل الدفع الجزئي للجلسة', 'error');
+        setIsProcessingSessionPayment(false);
       }
     } catch (error) {
       showNotification('فشل في تسجيل الدفع الجزئي للجلسة', 'error');
-    } finally {
       setIsProcessingSessionPayment(false);
     }
   };
@@ -1211,37 +1351,39 @@ const Billing = () => {
     try {
       const result = await api.endSession(sessionToEnd, customerNameForEndSession.trim() || undefined);
       if (result && result.success) {
+        // إغلاق النافذة وإظهار رسالة النجاح فوراً
+        setShowSessionEndModal(false);
+        setSessionToEnd(null);
+        setCustomerNameForEndSession('');
+        setIsEndingSession(false);
         showNotification('تم إنهاء الجلسة بنجاح!');
-
-        // إعادة تحميل الفواتير لتحديث البيانات
-        await fetchBills();
 
         // إعادة تعيين بيانات الدفع
         setPaymentAmount('');
         setPaymentMethod('cash');
         setPaymentReference('');
 
-        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-        if (selectedBill) {
-          const updatedStatus = await updateBillStatus(selectedBill.id || selectedBill._id);
-          
-          // إذا أصبحت الفاتورة مدفوعة بالكامل بعد إنهاء الجلسة، تحديث حالة الطاولة
-          if (updatedStatus === 'paid') {
-            await fetchTables();
-            await fetchBills();
+        // إعادة تحميل البيانات في الخلفية
+        fetchBills().then(async () => {
+          // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
+          if (selectedBill) {
+            const updatedStatus = await updateBillStatus(selectedBill.id || selectedBill._id);
+            
+            // إذا أصبحت الفاتورة مدفوعة بالكامل بعد إنهاء الجلسة، تحديث حالة الطاولة
+            if (updatedStatus === 'paid') {
+              await fetchTables();
+              await fetchBills();
+            }
           }
-        }
+        }).catch(err => console.error('Error refreshing data:', err));
 
       } else {
         showNotification('فشل في إنهاء الجلسة');
+        setIsEndingSession(false);
       }
     } catch (error) {
       showNotification('حدث خطأ في إنهاء الجلسة');
-    } finally {
       setIsEndingSession(false);
-      setSessionToEnd(null);
-      setShowSessionEndModal(false);
-      setCustomerNameForEndSession('');
     }
   };
 
@@ -1271,19 +1413,20 @@ const Billing = () => {
       
       const result = await api.deleteBill(billId);
       if (result && result.success) {
-        showNotification('تم حذف الفاتورة بنجاح', 'success');
+        // إغلاق النوافذ وإظهار رسالة النجاح فوراً
         setShowCancelConfirmModal(false);
         handleClosePaymentModal();
+        setIsCancelingBill(false);
+        showNotification('تم حذف الفاتورة بنجاح', 'success');
         
-        // الحذف يتم الآن مباشرة من Local و Atlas في نفس الوقت
-        // لذلك يمكن إعادة جلب الفواتير فوراً بدون تأخير
-        await Promise.all([fetchBills(), fetchTables()]);
+        // إعادة تحميل البيانات في الخلفية
+        Promise.all([fetchBills(), fetchTables()]).catch(err => console.error('Error refreshing data:', err));
       } else {
         showNotification('فشل في حذف الفاتورة', 'error');
+        setIsCancelingBill(false);
       }
     } catch (error) {
       showNotification('حدث خطأ أثناء حذف الفاتورة', 'error');
-    } finally {
       setIsCancelingBill(false);
     }
   };
@@ -2114,6 +2257,7 @@ const Billing = () => {
                             showNotification('حدث خطأ أثناء جلب بيانات الفاتورة للطباعة', 'error');
                           }
                         }}
+                        onPayFullBill={handlePayFullBill}
                         getStatusColor={getStatusColor}
                         getStatusText={getStatusText}
                         formatCurrency={formatCurrency}
@@ -2400,7 +2544,7 @@ const Billing = () => {
                             )}
                           </button>
 
-                          {/* زر دفع مشروب معين */}
+                          {/* زر دفع صنف معين */}
                           <button
                             onClick={async () => {
                               if (selectedBill) {
@@ -2410,8 +2554,8 @@ const Billing = () => {
                             className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500`}
                           >
                             <div className="text-2xl mb-2">🍹</div>
-                            <div className="font-medium dark:text-gray-100">دفع مشروب معين</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">اختيار مشروبات محددة للدفع</div>
+                            <div className="font-medium dark:text-gray-100">دفع صنف معين</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-300">اختيار أصناف محددة للدفع</div>
                           </button>
 
                           {/* زر دفع جزئي للجلسات */}
@@ -2837,6 +2981,32 @@ const Billing = () => {
         loading={isCancelingBill}
       />
 
+      {/* Pay Full Bill Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showPayFullBillConfirmModal}
+        onClose={() => !isProcessingPayment && setShowPayFullBillConfirmModal(false)}
+        onConfirm={confirmPayFullBill}
+        title="تأكيد دفع الفاتورة بالكامل"
+        message={`هل تريد دفع الفاتورة بالكامل؟\n\nرقم الفاتورة: #${billToPayFull?.billNumber || billToPayFull?.id || billToPayFull?._id}\nالمبلغ المتبقي: ${formatCurrency(billToPayFull?.remaining || 0)}\nطريقة الدفع: ${paymentMethod === 'cash' ? 'نقدي' : paymentMethod === 'card' ? 'بطاقة' : 'تحويل'}`}
+        confirmText={isProcessingPayment ? 'جاري الدفع...' : 'نعم، دفع بالكامل'}
+        cancelText="تراجع"
+        confirmColor="bg-green-600 hover:bg-green-700"
+        loading={isProcessingPayment}
+      />
+
+      {/* Session Payment Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showSessionPaymentConfirmModal}
+        onClose={() => !isProcessingSessionPayment && setShowSessionPaymentConfirmModal(false)}
+        onConfirm={confirmSessionPayment}
+        title="تأكيد دفع الجلسة"
+        message={`هل تريد دفع مبلغ للجلسة؟\n\nالجهاز: ${sessionToPayData?.session?.deviceName || sessionToPayData?.session?.deviceNumber || 'غير معروف'}\nالمبلغ: ${formatCurrency(parseFloat(sessionToPayData?.amount || '0'))}\nطريقة الدفع: ${sessionToPayData?.method === 'cash' ? 'نقدي' : sessionToPayData?.method === 'card' ? 'بطاقة' : 'تحويل'}`}
+        confirmText={isProcessingSessionPayment ? 'جاري الدفع...' : 'نعم، تأكيد الدفع'}
+        cancelText="تراجع"
+        confirmColor="bg-blue-600 hover:bg-blue-700"
+        loading={isProcessingSessionPayment}
+      />
+
       {/* Session End Confirmation Modal */}
       {showSessionEndModal && sessionToEnd && (() => {
         const isLinkedToTable = !!(selectedBill?.table);
@@ -3105,9 +3275,7 @@ const Billing = () => {
                           </div>
                           <button
                             onClick={async () => {
-                              setSelectedSession(session);
-                              await handlePaySessionPartial();
-                              setSessionPaymentAmount('');
+                              await handlePaySessionPartial(session);
                             }}
                             disabled={(() => {
                               // التحقق من أن هذه الجلسة هي المحددة
