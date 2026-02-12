@@ -16,6 +16,407 @@ import {
     createOrderSuccessMessages,
 } from "../utils/orderUtils.js";
 
+// ==================== دوال مساعدة لإدارة المخزون ====================
+
+/**
+ * خصم المخزون للطلب
+ * @param {Object} order - الطلب
+ * @param {String} userId - معرف المستخدم
+ */
+async function deductInventoryForOrder(order, userId, billNumber = null) {
+    const allIngredientsNeeded = new Map();
+
+    for (const item of order.items) {
+        if (item.menuItem) {
+            const menuItem = await MenuItem.findById(item.menuItem);
+            if (menuItem && menuItem.ingredients && menuItem.ingredients.length > 0) {
+                for (const ingredient of menuItem.ingredients) {
+                    const key = ingredient.item.toString();
+                    const currentQuantity = allIngredientsNeeded.get(key)?.quantity || 0;
+                    const totalQuantity = currentQuantity + (ingredient.quantity * item.quantity);
+
+                    allIngredientsNeeded.set(key, {
+                        quantity: totalQuantity,
+                        unit: ingredient.unit,
+                        itemName: menuItem.name,
+                    });
+                }
+            }
+        }
+    }
+
+    // خصم جميع المكونات مع حساب السعر باستخدام FIFO
+    for (const [inventoryItemId, ingredientData] of allIngredientsNeeded) {
+        const inventoryItem = await InventoryItem.findById(inventoryItemId);
+        if (inventoryItem) {
+            const convertedQuantityNeeded = convertQuantity(
+                ingredientData.quantity,
+                ingredientData.unit,
+                inventoryItem.unit
+            );
+
+            // حساب السعر باستخدام FIFO
+            const movementDate = new Date();
+            
+            // Get all movements sorted by timestamp (oldest first)
+            const allMovements = inventoryItem.stockMovements
+                .map(m => ({
+                    type: m.type,
+                    quantity: m.quantity,
+                    price: m.price,
+                    timestamp: new Date(m.timestamp || m.date)
+                }))
+                .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+            
+            // Build batches with remaining quantities (FIFO simulation)
+            const batches = [];
+            
+            for (const movement of allMovements) {
+                // Only process movements before the current movement date
+                if (movement.timestamp >= movementDate) break;
+                
+                if (movement.type === 'in' && movement.price) {
+                    // Add new batch
+                    batches.push({
+                        quantity: movement.quantity,
+                        price: movement.price,
+                        remaining: movement.quantity
+                    });
+                } else if (movement.type === 'out') {
+                    // Deduct from oldest batches first (FIFO)
+                    let toDeduct = movement.quantity;
+                    
+                    for (const batch of batches) {
+                        if (toDeduct <= 0) break;
+                        
+                        const deductFromBatch = Math.min(batch.remaining, toDeduct);
+                        batch.remaining -= deductFromBatch;
+                        toDeduct -= deductFromBatch;
+                    }
+                } else if (movement.type === 'adjustment') {
+                    // For adjustment, recalculate all batches proportionally
+                    const totalRemaining = batches.reduce((sum, b) => sum + b.remaining, 0);
+                    
+                    if (totalRemaining > 0) {
+                        const ratio = movement.quantity / totalRemaining;
+                        batches.forEach(batch => {
+                            batch.remaining = batch.remaining * ratio;
+                        });
+                    }
+                }
+            }
+            
+            // Now calculate cost for current deduction using remaining quantities
+            let remainingToDeduct = Math.abs(convertedQuantityNeeded);
+            let totalCost = 0;
+            
+            for (const batch of batches) {
+                if (remainingToDeduct <= 0) break;
+                if (batch.remaining <= 0) continue;
+                
+                const qtyFromThisBatch = Math.min(remainingToDeduct, batch.remaining);
+                totalCost += qtyFromThisBatch * batch.price;
+                remainingToDeduct -= qtyFromThisBatch;
+            }
+            
+            // Calculate totalCost and price
+            const finalTotalCost = Math.round(totalCost * 100) / 100;
+            const finalPrice = Math.abs(convertedQuantityNeeded) > 0 && finalTotalCost > 0
+                ? Math.round((finalTotalCost / Math.abs(convertedQuantityNeeded)) * 100) / 100
+                : null;
+
+            // بناء السبب مع رقم الفاتورة إذا كان متاحاً
+            const reason = billNumber 
+                ? `خصم لطلب رقم ${order.orderNumber} - فاتورة ${billNumber}`
+                : `خصم لطلب رقم ${order.orderNumber}`;
+
+            await inventoryItem.addStockMovement(
+                "out",
+                convertedQuantityNeeded,
+                reason,
+                userId,
+                order._id.toString(),
+                finalPrice,
+                null,
+                finalTotalCost
+            );
+        }
+    }
+}
+
+/**
+ * إرجاع المخزون للطلب
+ * @param {Object} order - الطلب
+ * @param {String} userId - معرف المستخدم
+ */
+export async function restoreInventoryForOrder(order, userId) {
+    const allIngredientsToRestore = new Map();
+
+    for (const item of order.items) {
+        if (item.menuItem) {
+            const menuItem = await MenuItem.findById(item.menuItem);
+            if (menuItem && menuItem.ingredients && menuItem.ingredients.length > 0) {
+                for (const ingredient of menuItem.ingredients) {
+                    const key = ingredient.item.toString();
+                    const currentQuantity = allIngredientsToRestore.get(key)?.quantity || 0;
+                    const totalQuantity = currentQuantity + (ingredient.quantity * item.quantity);
+
+                    allIngredientsToRestore.set(key, {
+                        quantity: totalQuantity,
+                        unit: ingredient.unit,
+                        itemName: menuItem.name,
+                    });
+                }
+            }
+        }
+    }
+
+    // جلب معلومات الفاتورة إذا كانت موجودة
+    let billNumber = null;
+    if (order.bill) {
+        const Bill = (await import("../models/Bill.js")).default;
+        const billDoc = await Bill.findById(order.bill).select('billNumber');
+        if (billDoc) {
+            billNumber = billDoc.billNumber;
+        }
+    }
+
+    // إرجاع جميع المكونات بنفس السعر الذي تم خصمه
+    for (const [inventoryItemId, ingredientData] of allIngredientsToRestore) {
+        const inventoryItem = await InventoryItem.findById(inventoryItemId);
+        if (inventoryItem) {
+            const convertedQuantityToRestore = convertQuantity(
+                ingredientData.quantity,
+                ingredientData.unit,
+                inventoryItem.unit
+            );
+
+            // البحث عن حركة الخصم الأصلية لهذا الطلب
+            const deductMovement = inventoryItem.stockMovements
+                .filter(m => 
+                    m.type === 'out' && 
+                    m.reference && 
+                    m.reference.toString() === order._id.toString()
+                )
+                .sort((a, b) => {
+                    const aTime = new Date(a.timestamp || a.date).getTime();
+                    const bTime = new Date(b.timestamp || b.date).getTime();
+                    return bTime - aTime; // الأحدث أولاً
+                })[0];
+            
+            // استخدام نفس السعر والتكلفة من حركة الخصم
+            const priceToRestore = deductMovement?.price || null;
+            const totalCostToRestore = deductMovement?.totalCost || null;
+
+            // بناء السبب مع رقم الفاتورة إذا كان متاحاً
+            const reason = billNumber 
+                ? `استرداد من حذف طلب رقم ${order.orderNumber} - فاتورة ${billNumber}`
+                : `استرداد من حذف طلب رقم ${order.orderNumber}`;
+
+            await inventoryItem.addStockMovement(
+                "in",
+                convertedQuantityToRestore,
+                reason,
+                userId,
+                order._id.toString(),
+                priceToRestore,
+                null,
+                totalCostToRestore
+            );
+        }
+    }
+}
+
+/**
+ * تعديل المخزون عند تعديل الطلب
+ * @param {Object} oldOrder - الطلب القديم
+ * @param {Object} newOrder - الطلب الجديد
+ * @param {String} userId - معرف المستخدم
+ */
+async function adjustInventoryForOrderUpdate(oldOrder, newOrder, userId) {
+    // جلب معلومات الفاتورة إذا كانت موجودة
+    let billNumber = null;
+    if (newOrder.bill) {
+        const Bill = (await import("../models/Bill.js")).default;
+        const billDoc = await Bill.findById(newOrder.bill).select('billNumber');
+        if (billDoc) {
+            billNumber = billDoc.billNumber;
+        }
+    }
+
+    // حساب المكونات القديمة مع الوحدات
+    const oldIngredients = new Map();
+    for (const item of oldOrder.items) {
+        if (item.menuItem) {
+            const menuItem = await MenuItem.findById(item.menuItem);
+            if (menuItem && menuItem.ingredients && menuItem.ingredients.length > 0) {
+                for (const ingredient of menuItem.ingredients) {
+                    const key = ingredient.item.toString();
+                    const currentQuantity = oldIngredients.get(key)?.quantity || 0;
+                    const totalQuantity = currentQuantity + (ingredient.quantity * item.quantity);
+                    oldIngredients.set(key, {
+                        quantity: totalQuantity,
+                        unit: ingredient.unit
+                    });
+                }
+            }
+        }
+    }
+
+    // حساب المكونات الجديدة مع الوحدات
+    const newIngredients = new Map();
+    for (const item of newOrder.items) {
+        if (item.menuItem) {
+            const menuItem = await MenuItem.findById(item.menuItem);
+            if (menuItem && menuItem.ingredients && menuItem.ingredients.length > 0) {
+                for (const ingredient of menuItem.ingredients) {
+                    const key = ingredient.item.toString();
+                    const currentQuantity = newIngredients.get(key)?.quantity || 0;
+                    const totalQuantity = currentQuantity + (ingredient.quantity * item.quantity);
+                    newIngredients.set(key, {
+                        quantity: totalQuantity,
+                        unit: ingredient.unit
+                    });
+                }
+            }
+        }
+    }
+
+    // حساب الفرق وتعديل المخزون
+    const allIngredientIds = new Set([...oldIngredients.keys(), ...newIngredients.keys()]);
+    
+    for (const ingredientId of allIngredientIds) {
+        const oldData = oldIngredients.get(ingredientId) || { quantity: 0, unit: '' };
+        const newData = newIngredients.get(ingredientId) || { quantity: 0, unit: '' };
+        
+        const inventoryItem = await InventoryItem.findById(ingredientId);
+        if (!inventoryItem) continue;
+
+        // تحويل الكميات إلى وحدة المخزون
+        const oldQtyConverted = convertQuantity(oldData.quantity, oldData.unit, inventoryItem.unit);
+        const newQtyConverted = convertQuantity(newData.quantity, newData.unit, inventoryItem.unit);
+        const difference = newQtyConverted - oldQtyConverted;
+
+        if (difference !== 0) {
+            if (difference > 0) {
+                // زيادة في الكمية - خصم إضافي مع حساب السعر بـ FIFO
+                const movementDate = new Date();
+                
+                // Get all movements sorted by timestamp (oldest first)
+                const allMovements = inventoryItem.stockMovements
+                    .map(m => ({
+                        type: m.type,
+                        quantity: m.quantity,
+                        price: m.price,
+                        timestamp: new Date(m.timestamp || m.date)
+                    }))
+                    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                
+                // Build batches with remaining quantities (FIFO simulation)
+                const batches = [];
+                
+                for (const movement of allMovements) {
+                    if (movement.timestamp >= movementDate) break;
+                    
+                    if (movement.type === 'in' && movement.price) {
+                        batches.push({
+                            quantity: movement.quantity,
+                            price: movement.price,
+                            remaining: movement.quantity
+                        });
+                    } else if (movement.type === 'out') {
+                        let toDeduct = movement.quantity;
+                        for (const batch of batches) {
+                            if (toDeduct <= 0) break;
+                            const deductFromBatch = Math.min(batch.remaining, toDeduct);
+                            batch.remaining -= deductFromBatch;
+                            toDeduct -= deductFromBatch;
+                        }
+                    } else if (movement.type === 'adjustment') {
+                        const totalRemaining = batches.reduce((sum, b) => sum + b.remaining, 0);
+                        if (totalRemaining > 0) {
+                            const ratio = movement.quantity / totalRemaining;
+                            batches.forEach(batch => {
+                                batch.remaining = batch.remaining * ratio;
+                            });
+                        }
+                    }
+                }
+                
+                // Calculate cost for current deduction
+                let remainingToDeduct = Math.abs(difference);
+                let totalCost = 0;
+                
+                for (const batch of batches) {
+                    if (remainingToDeduct <= 0) break;
+                    if (batch.remaining <= 0) continue;
+                    
+                    const qtyFromThisBatch = Math.min(remainingToDeduct, batch.remaining);
+                    totalCost += qtyFromThisBatch * batch.price;
+                    remainingToDeduct -= qtyFromThisBatch;
+                }
+                
+                const finalTotalCost = Math.round(totalCost * 100) / 100;
+                const finalPrice = Math.abs(difference) > 0 && finalTotalCost > 0
+                    ? Math.round((finalTotalCost / Math.abs(difference)) * 100) / 100
+                    : null;
+
+                // بناء السبب مع رقم الفاتورة إذا كان متاحاً
+                const reason = billNumber 
+                    ? `تعديل طلب رقم ${newOrder.orderNumber} (زيادة) - فاتورة ${billNumber}`
+                    : `تعديل طلب رقم ${newOrder.orderNumber} (زيادة)`;
+
+                await inventoryItem.addStockMovement(
+                    "out",
+                    Math.abs(difference),
+                    reason,
+                    userId,
+                    newOrder._id.toString(),
+                    finalPrice,
+                    null,
+                    finalTotalCost
+                );
+            } else {
+                // نقصان في الكمية - إرجاع بنفس السعر من آخر حركة خصم
+                const lastDeductMovement = inventoryItem.stockMovements
+                    .filter(m => 
+                        m.type === 'out' && 
+                        m.reference && 
+                        m.reference.toString() === newOrder._id.toString()
+                    )
+                    .sort((a, b) => {
+                        const aTime = new Date(a.timestamp || a.date).getTime();
+                        const bTime = new Date(b.timestamp || b.date).getTime();
+                        return bTime - aTime;
+                    })[0];
+                
+                const priceToRestore = lastDeductMovement?.price || null;
+                const totalCostToRestore = lastDeductMovement?.totalCost 
+                    ? Math.round((lastDeductMovement.totalCost / lastDeductMovement.quantity) * Math.abs(difference) * 100) / 100
+                    : null;
+
+                // بناء السبب مع رقم الفاتورة إذا كان متاحاً
+                const reason = billNumber 
+                    ? `تعديل طلب رقم ${newOrder.orderNumber} (نقصان) - فاتورة ${billNumber}`
+                    : `تعديل طلب رقم ${newOrder.orderNumber} (نقصان)`;
+
+                await inventoryItem.addStockMovement(
+                    "in",
+                    Math.abs(difference),
+                    reason,
+                    userId,
+                    newOrder._id.toString(),
+                    priceToRestore,
+                    null,
+                    totalCostToRestore
+                );
+            }
+        }
+    }
+}
+
+// ==================== نهاية دوال المخزون ====================
+
 // @desc    Get all orders
 // @route   GET /api/orders
 // @access  Private
@@ -461,6 +862,24 @@ export const createOrder = async (req, res) => {
 
         await order.save();
 
+        // خصم المخزون فوراً عند إنشاء الطلب
+        try {
+            // جلب معلومات الفاتورة إذا كانت موجودة
+            let billNumber = null;
+            if (order.bill) {
+                const Bill = (await import("../models/Bill.js")).default;
+                const billDoc = await Bill.findById(order.bill).select('billNumber');
+                if (billDoc) {
+                    billNumber = billDoc.billNumber;
+                }
+            }
+            await deductInventoryForOrder(order, req.user._id, billNumber);
+            Logger.info(`✓ تم خصم المخزون للطلب ${order.orderNumber}`);
+        } catch (inventoryError) {
+            Logger.error('خطأ في خصم المخزون:', inventoryError);
+            // لا نفشل الطلب، لكن نسجل الخطأ
+        }
+
         // Populate only essential fields for response
         const populatedOrder = await Order.findById(order._id)
             .populate("table", "number name")
@@ -582,6 +1001,13 @@ export const updateOrder = async (req, res) => {
 
         // إذا تم تحديث العناصر، تحقق من المخزون
         let calculatedTotalCost = 0; // متغير لتخزين التكلفة المحسوبة
+        
+        // حفظ نسخة من العناصر القديمة قبل التعديل (للمخزون)
+        const oldOrderItems = order.items.map(item => ({
+            menuItem: item.menuItem,
+            quantity: item.quantity,
+            name: item.name
+        }));
 
         // حساب التكلفة الإجمالية دائماً (حتى لو لم يتم تمرير items)
         if (items && Array.isArray(items) && items.length > 0) {
@@ -767,6 +1193,25 @@ export const updateOrder = async (req, res) => {
                 }));
                 const totalCost = await calculateOrderTotalCost(currentItems);
                 order.totalCost = totalCost;
+            }
+        }
+
+        // تعديل المخزون إذا تم تغيير العناصر
+        if (items && Array.isArray(items) && items.length > 0) {
+            try {
+                // استخدام العناصر القديمة المحفوظة
+                const oldOrderData = {
+                    _id: order._id,
+                    orderNumber: order.orderNumber,
+                    items: oldOrderItems
+                };
+                
+                // الآن order.items تحتوي على العناصر الجديدة بعد التعديل
+                await adjustInventoryForOrderUpdate(oldOrderData, order, req.user._id);
+                Logger.info(`✓ تم تعديل المخزون للطلب ${order.orderNumber}`);
+            } catch (inventoryError) {
+                Logger.error('خطأ في تعديل المخزون:', inventoryError);
+                // نستمر في حفظ الطلب حتى لو فشل تعديل المخزون
             }
         }
 
@@ -1051,57 +1496,13 @@ export const deleteOrder = async (req, res) => {
             });
         }
 
-        // السماح بحذف الطلب في أي حالة
-        // (تم إزالة التحقق من حالة pending فقط)
-
-        // استرداد المخزون إذا كان الطلب يحتوي على عناصر مجهزة
+        // استرداد المخزون عند حذف الطلب
         try {
-            const MenuItem = (await import("../models/MenuItem.js")).default;
-            const InventoryItem = (await import("../models/InventoryItem.js"))
-                .default;
-
-            // دالة لتحويل الوحدات
-
-            for (const item of order.items) {
-                if (
-                    item.preparedCount &&
-                    item.preparedCount > 0 &&
-                    item.menuItem
-                ) {
-                    const menuItem = await MenuItem.findById(item.menuItem);
-                    if (
-                        menuItem &&
-                        menuItem.ingredients &&
-                        menuItem.ingredients.length > 0
-                    ) {
-                        for (const ingredient of menuItem.ingredients) {
-                            const inventoryItem = await InventoryItem.findById(
-                                ingredient.item
-                            );
-                            if (inventoryItem) {
-                                // حساب الكمية المستردة مع التحويل
-                                const quantityToRestore =
-                                    convertQuantity(
-                                        ingredient.quantity,
-                                        ingredient.unit,
-                                        inventoryItem.unit
-                                    ) * item.preparedCount;
-
-                                // استرداد المخزون
-                                await inventoryItem.addStockMovement(
-                                    "in",
-                                    quantityToRestore,
-                                    `استرداد من حذف طلب رقم ${order.orderNumber}`,
-                                    req.user._id,
-                                    order._id.toString()
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            // لا نوقف عملية الحذف إذا فشل استرداد المخزون
+            await restoreInventoryForOrder(order, req.user._id);
+            Logger.info(`✓ تم استرداد المخزون للطلب ${order.orderNumber}`);
+        } catch (inventoryError) {
+            Logger.error('خطأ في استرداد المخزون:', inventoryError);
+            // نستمر في الحذف حتى لو فشل استرداد المخزون
         }
 
         // Remove order from bill.orders if linked to a bill BEFORE deleting the order

@@ -20,7 +20,8 @@ import {
   Server,
   Moon,
   Sun,
-  Package2
+  Package2,
+  CreditCard
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -37,9 +38,10 @@ interface NotificationRead {
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const { user, logout, sessions, orders, notifications } = useApp();
+  const { user, logout, sessions, orders, notifications, subscriptionStatus } = useApp();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const mainContentRef = useRef<HTMLElement>(null);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<any>(null);
 
   // حساب عدد الجلسات النشطة لكل نوع
   const activePlaystationSessions = sessions.filter(s => s.status === 'active' && s.deviceType === 'playstation').length;
@@ -67,6 +69,31 @@ const Layout = () => {
 
     return () => clearTimeout(timer);
   }, []);
+
+  // جلب معلومات الاشتراك
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/billing/subscription/status`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.subscription) {
+            setSubscriptionInfo(data.subscription);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+      }
+    };
+
+    if (user) {
+      fetchSubscription();
+    }
+  }, [user]);
 
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
@@ -117,6 +144,7 @@ const Layout = () => {
     { name: 'التكاليف', href: '/costs', icon: Wallet, permissions: ['costs'] },
     { name: 'المستخدمين', href: '/users', icon: Users, permissions: ['users'] },
     { name: 'الإشعارات', href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'], badge: unreadNotifications },
+    { name: 'الاشتراكات', href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'] },
     { name: 'الإعدادات', href: '/settings', icon: Settings, permissions: ['settings'] },
   ];
 
@@ -322,8 +350,48 @@ const Layout = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Subscription Warning Banner */}
+        {subscriptionInfo && subscriptionStatus === 'active' && (() => {
+          const endDate = new Date(subscriptionInfo.endDate);
+          const now = new Date();
+          const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysLeft <= 5 && daysLeft > 0) {
+            return (
+              <div className="bg-yellow-50 dark:bg-yellow-900 border-b-2 border-yellow-400 dark:border-yellow-600 px-4 py-3 flex items-center justify-between flex-wrap gap-2 fixed top-0 left-0 right-0 z-[60] lg:static">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <svg className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                      ⚠️ تنبيه: اشتراكك سينتهي خلال {daysLeft} {daysLeft === 1 ? 'يوم' : 'أيام'}
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href="/subscription"
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-yellow-800 bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-800 dark:text-yellow-100 dark:hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 flex-shrink-0"
+                >
+                  تجديد الآن
+                </a>
+              </div>
+            );
+          }
+          return null;
+        })()}
+        
         {/* Top Bar */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 flex-shrink-0 fixed top-0 left-0 right-0 z-50 lg:static lg:z-auto">
+        <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 flex-shrink-0 fixed top-0 left-0 right-0 z-50 lg:static lg:z-auto"
+          style={{
+            top: subscriptionInfo && subscriptionStatus === 'active' && (() => {
+              const endDate = new Date(subscriptionInfo.endDate);
+              const now = new Date();
+              const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              return daysLeft <= 5 && daysLeft > 0 ? '52px' : '0';
+            })()
+          }}
+        >
           <div
             className="flex items-center justify-between h-16 px-4 sm:px-6 flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:h-auto"
           >

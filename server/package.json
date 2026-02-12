@@ -28,6 +28,7 @@
     "sync:atlas-to-local": "node scripts/syncAtlasToLocal.js",
     "check:replica": "node scripts/checkReplicaSet.js",
     "fix:devices": "node scripts/fix-invalid-devices.js",
+    "migrate:inventory-prices": "node scripts/migrate-inventory-prices.js",
     "check:sync": "node scripts/check-sync-errors.js",
     "check:bills": "node scripts/check-bills-sync.js",
     "test:bills-sync": "node scripts/test-bills-sync-live.js",

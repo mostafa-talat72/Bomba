@@ -144,6 +144,7 @@ export interface InventoryItem {
   isLowStock: boolean;
   isOutOfStock: boolean;
   profitMargin: number;
+  totalValue?: number; // Virtual property: calculated based on purchase prices
   lastRestocked?: Date;
   expiryDate?: Date;
   createdAt: Date;
@@ -508,9 +509,14 @@ class ApiClient {
             };
           }
         }
+        // Log validation errors for debugging
+        if (response.status === 400 && data.errors) {
+          console.error('Validation errors:', data.errors);
+        }
         return {
           success: false,
-          message: data.message || `خطأ ${response.status}: ${response.statusText}`
+          message: data.message || `خطأ ${response.status}: ${response.statusText}`,
+          errors: data.errors
         };
       }
 
@@ -1164,6 +1170,12 @@ class ApiClient {
   async deleteInventoryItem(id: string): Promise<ApiResponse> {
     return this.request(`/inventory/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async getStockMovements(id: string): Promise<ApiResponse<any[]>> {
+    return this.request(`/inventory/${id}/movements`, {
+      method: 'GET',
     });
   }
 

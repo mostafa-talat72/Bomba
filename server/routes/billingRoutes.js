@@ -29,10 +29,14 @@ const router = express.Router();
 // Public routes for customer access
 router.get("/qr/:billId", getBillByQR);
 router.get("/public/:id", getBill); // Route للعملاء بدون authentication
-router.get("/subscription/status", protect, getSubscriptionStatus);
 
 // All other routes require authentication
 router.use(protect);
+
+// Subscription routes (after protect middleware)
+router.get("/subscription/status", getSubscriptionStatus);
+router.post("/subscription/payment", createSubscriptionPayment);
+router.post("/subscription/fawry-webhook", fawryWebhook);
 
 router
     .route("/")
@@ -67,7 +71,5 @@ router.post("/:id/cleanup-payments", authorize("billing", "all"), cleanupBillPay
 router.post("/:id/pay-items", authorize("billing", "all"), payForItems);
 // دفع جزئي لجلسة محددة
 router.post("/:id/pay-session-partial", authorize("billing", "all"), paySessionPartial);
-router.post("/subscription/payment", protect, createSubscriptionPayment);
-router.post("/subscription/fawry-webhook", fawryWebhook);
 
 export default router;

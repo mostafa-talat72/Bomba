@@ -203,16 +203,11 @@ export const validateOrderUpdate = [
 export const validateInventoryItem = [
     body("name").trim().notEmpty().withMessage("اسم المنتج مطلوب"),
     body("category")
-        .isIn([
-            "مشروبات ساخنة",
-            "مشروبات باردة",
-            "طعام",
-            "حلويات",
-            "مواد خام",
-            "أخرى",
-        ])
-        .withMessage("فئة المنتج غير صحيحة"),
+        .trim()
+        .notEmpty()
+        .withMessage("فئة المنتج مطلوبة"),
     body("currentStock")
+        .optional()
         .isFloat({ min: 0 })
         .withMessage("المخزون الحالي يجب أن يكون رقم موجب"),
     body("minStock")
@@ -220,8 +215,9 @@ export const validateInventoryItem = [
         .withMessage("الحد الأدنى للمخزون يجب أن يكون رقم موجب"),
     body("price").isFloat({ min: 0 }).withMessage("السعر يجب أن يكون رقم موجب"),
     body("unit")
-        .isIn(["قطعة", "كيلو", "جرام", "لتر", "مل", "علبة", "كيس", "زجاجة"])
-        .withMessage("وحدة القياس غير صحيحة"),
+        .trim()
+        .notEmpty()
+        .withMessage("وحدة القياس مطلوبة"),
 ];
 
 // Cost validation rules

@@ -401,12 +401,22 @@ export const cleanExpiredNotifications = async (req, res) => {
     }
 };
 
-export const sendSubscriptionNotification = async (userId, message) => {
-    await Notification.create({
-        user: userId,
-        message,
-        type: "subscription",
-        read: false,
-        createdAt: new Date(),
-    });
+export const sendSubscriptionNotification = async (organization, userId, message) => {
+    try {
+        await Notification.create({
+            title: "تحديث الاشتراك",
+            message,
+            type: "success",
+            category: "billing",
+            priority: "high",
+            targetUsers: [userId],
+            targetRoles: ["admin"],
+            actionRequired: false,
+            createdBy: userId,
+            organization: organization,
+        });
+    } catch (error) {
+        console.error("Error creating subscription notification:", error);
+        // Don't throw - notification failure shouldn't break subscription creation
+    }
 };

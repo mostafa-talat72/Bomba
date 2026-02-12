@@ -15,6 +15,20 @@ export const getDateRange = (filter) => {
   const now = moment();
   let startDate, endDate;
 
+  // Handle direct startDate and endDate (from frontend)
+  if (filter && filter.startDate && filter.endDate) {
+    startDate = moment(filter.startDate);
+    endDate = moment(filter.endDate);
+    
+    // Validate dates
+    if (startDate.isValid() && endDate.isValid()) {
+      return {
+        startDate: startDate.toDate(),
+        endDate: endDate.toDate()
+      };
+    }
+  }
+
   // Handle old string-based period for backward compatibility
   if (typeof filter === 'string') {
     switch (filter) {

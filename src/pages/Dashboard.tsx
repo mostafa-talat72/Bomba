@@ -110,10 +110,8 @@ const Dashboard = () => {
 
       const [statsResponse, activityData] = await Promise.all([
         api.getDashboardStats('today'),
-        getRecentActivity(5) // تغيير من 10 إلى 5
+        getRecentActivity(5)
       ]);
-
-
 
       if (statsResponse.success) {
         setDashboardStats(statsResponse.data);

@@ -7,7 +7,9 @@ import {
   updateStock,
   getLowStockItems,
   getStockMovements,
-  deleteInventoryItem
+  deleteInventoryItem,
+  deleteStockMovement,
+  updateStockMovement
 } from '../controllers/inventoryController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { validateInventoryItem, validateRequest } from '../middleware/validation.js';
@@ -30,5 +32,10 @@ router.route('/:id')
 
 router.put('/:id/stock', authorize('inventory', 'all'), updateStock);
 router.get('/:id/movements', authorize('inventory', 'all'), getStockMovements);
+
+// Movement management routes
+router.route('/:id/movements/:movementId')
+  .put(authorize('inventory', 'all'), updateStockMovement)
+  .delete(authorize('inventory', 'all'), deleteStockMovement);
 
 export default router;

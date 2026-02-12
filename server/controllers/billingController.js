@@ -1705,6 +1705,23 @@ export const deleteBill = async (req, res) => {
             if (orderIds.length > 0) {
                 Logger.info(`🗑️ Deleting ${orderIds.length} orders associated with bill ${bill.billNumber}`);
                 
+                // استيراد دالة استرداد المخزون
+                const orderController = await import('./orderController.js');
+                
+                // استرداد المخزون لكل طلب قبل الحذف
+                for (const orderId of orderIds) {
+                    try {
+                        const order = await Order.findById(orderId);
+                        if (order) {
+                            await orderController.restoreInventoryForOrder(order, req.user._id);
+                            Logger.info(`✓ تم استرداد المخزون للطلب ${order.orderNumber}`);
+                        }
+                    } catch (inventoryError) {
+                        Logger.error(`خطأ في استرداد المخزون للطلب ${orderId}:`, inventoryError);
+                        // نستمر في الحذف حتى لو فشل استرداد المخزون
+                    }
+                }
+                
                 // حذف من Local
                 const deleteResult = await Order.deleteMany({ _id: { $in: orderIds } });
                 Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local MongoDB`);
@@ -2322,35 +2339,73 @@ export const getAvailableBillsForSession = async (req, res) => {
 };
 
 export const getSubscriptionStatus = async (req, res) => {
+    // منع تنفيذ الـ function مرتين
+    if (res.headersSent) {
+        return;
+    }
+    
     try {
+        
         // جلب المستخدم الحالي
         const user = await User.findById(req.user.id);
+        
         if (!user || !user.organization) {
             return res.status(401).json({
                 status: "expired",
                 message: "لا يوجد منشأة مرتبطة بهذا الحساب",
+                userRole: "unknown"
             });
         }
+        
+        
         // جلب أحدث اشتراك للمنشأة
         const subscription = await Subscription.findOne({
             organization: user.organization,
         }).sort({ endDate: -1 });
+        
+        
         if (!subscription) {
-            return res
-                .status(200)
-                .json({ status: "expired", message: "لا يوجد اشتراك فعال" });
+            return res.status(200).json({ 
+                status: "expired", 
+                message: "لا يوجد اشتراك فعال",
+                userRole: user.role,
+                subscription: null
+            });
         }
+        
         const now = new Date();
-        if (subscription.status === "active" && subscription.endDate > now) {
-            return res.status(200).json({ status: "active" });
-        } else {
-            return res.status(200).json({ status: "expired" });
-        }
+        const isActive = subscription.status === "active" && subscription.endDate > now;
+        
+        
+        
+        const responseData = { 
+            status: isActive ? "active" : "expired",
+            subscription: {
+                plan: subscription.plan,
+                startDate: subscription.startDate,
+                endDate: subscription.endDate,
+                paymentMethod: subscription.paymentMethod
+            },
+            userRole: user.role
+        };
+        
+        
+        res.status(200).json(responseData);
+        
     } catch (error) {
-        res.status(500).json({
-            status: "expired",
-            message: "خطأ في جلب حالة الاشتراك",
-        });
+        console.error("=== ERROR in getSubscriptionStatus ===");
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+        
+        if (!res.headersSent) {
+            return res.status(500).json({
+                status: "expired",
+                message: "خطأ في جلب حالة الاشتراك",
+                error: error.message,
+                userRole: "unknown",
+                subscription: null
+            });
+        }
     }
 };
 
@@ -2364,26 +2419,97 @@ export const createSubscriptionPayment = async (req, res) => {
                 message: "لا يوجد منشأة مرتبطة بهذا الحساب",
             });
         }
-        // تحديد السعر حسب الباقة
-        let amount = 0,
-            description = "";
+        
+        // تحديد السعر والمدة حسب الباقة
+        let amount = 0, description = "", duration = 0;
         if (plan === "monthly") {
             amount = 299;
+            duration = 30;
             description = "اشتراك شهري في النظام";
         } else if (plan === "yearly") {
             amount = 2999;
+            duration = 365;
             description = "اشتراك سنوي في النظام";
         } else {
-            return res
-                .status(400)
-                .json({ success: false, message: "خطة اشتراك غير صحيحة" });
+            return res.status(400).json({ 
+                success: false, 
+                message: "خطة اشتراك غير صحيحة" 
+            });
         }
-        // رقم الطلب (يمكنك توليده بأي طريقة فريدة)
+        
+        // وضع التطوير: تفعيل مباشر بدون Fawry
+        if (process.env.NODE_ENV === "development") {
+            
+            // البحث عن اشتراك موجود
+            let subscription = await Subscription.findOne({
+                organization: user.organization
+            }).sort({ createdAt: -1 });
+            
+            const now = new Date();
+            let newEndDate;
+            
+            if (subscription && subscription.status === 'active') {
+                // تجديد اشتراك نشط: إضافة المدة للتاريخ الحالي
+                newEndDate = new Date(subscription.endDate);
+                newEndDate.setDate(newEndDate.getDate() + duration);
+                
+                subscription.plan = plan;
+                subscription.endDate = newEndDate;
+                subscription.paymentMethod = "manual";
+                subscription.paymentRef = `dev-test-${Date.now()}`;
+                await subscription.save();
+            } else {
+                // اشتراك جديد أو منتهي: البدء من الآن
+                newEndDate = new Date(now);
+                newEndDate.setDate(newEndDate.getDate() + duration);
+                
+                if (subscription) {
+                    // تحديث الاشتراك المنتهي
+                    subscription.plan = plan;
+                    subscription.status = "active";
+                    subscription.startDate = now;
+                    subscription.endDate = newEndDate;
+                    subscription.paymentMethod = "manual";
+                    subscription.paymentRef = `dev-test-${Date.now()}`;
+                    await subscription.save();
+                } else {
+                    // إنشاء اشتراك جديد
+                    subscription = await Subscription.create({
+                        organization: user.organization,
+                        plan: plan,
+                        status: "active",
+                        startDate: now,
+                        endDate: newEndDate,
+                        paymentMethod: "manual",
+                        paymentRef: `dev-test-${Date.now()}`
+                    });
+                }
+            }
+            
+            // إرسال إشعار للمستخدم
+            await sendSubscriptionNotification(
+                user.organization,
+                user._id,
+                `تم ${subscription.createdAt < now ? 'تجديد' : 'تفعيل'} اشتراكك (${plan === 'monthly' ? 'شهري' : 'سنوي'}) بنجاح!`
+            );
+            
+            return res.json({
+                success: true,
+                message: `تم ${subscription.createdAt < now ? 'تجديد' : 'تفعيل'} الاشتراك بنجاح`,
+                subscription: {
+                    plan: subscription.plan,
+                    startDate: subscription.startDate,
+                    endDate: subscription.endDate,
+                    status: subscription.status
+                },
+                developmentMode: true
+            });
+        }
+        
+        // وضع الإنتاج: استخدام Fawry
         const orderId = `${user.organization}-${Date.now()}`;
-        // رابط العودة بعد الدفع
-        const returnUrl = `${
-            process.env.FRONTEND_URL || "http://localhost:5173"
-        }/subscription?success=1`;
+        const returnUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/subscription?success=1`;
+        
         // إنشاء طلب دفع فوري
         const payment = await createFawryPayment({
             customerEmail: user.email,
@@ -2393,8 +2519,10 @@ export const createSubscriptionPayment = async (req, res) => {
             description,
             returnUrl,
         });
+        
         res.json({ success: true, payment });
     } catch (error) {
+        console.error("Error in createSubscriptionPayment:", error);
         res.status(500).json({
             success: false,
             message: "خطأ في إنشاء طلب الدفع",
@@ -2434,6 +2562,7 @@ export const fawryWebhook = async (req, res) => {
         const orgOwner = await User.findOne({ organization, role: "owner" });
         if (orgOwner) {
             await sendSubscriptionNotification(
+                organization,
                 orgOwner._id,
                 "تم تفعيل اشتراك منشأتك بنجاح. شكراً لاستخدامك منصتنا!"
             );

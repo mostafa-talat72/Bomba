@@ -311,13 +311,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         setSubscriptionStatus('loading');
         const token = localStorage.getItem('token');
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/billing/subscription/status`, {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/billing/subscription/status`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
+        
+        // التحقق من حالة الاستجابة
+        if (!res.ok) {
+          console.error('Subscription status error:', res.status);
+          setSubscriptionStatus('expired');
+          return;
+        }
+        
         const data = await res.json();
-        if (data.status === 'active') setSubscriptionStatus('active');
-        else setSubscriptionStatus('expired');
-      } catch {
+        if (data.status === 'active') {
+          setSubscriptionStatus('active');
+        } else {
+          setSubscriptionStatus('expired');
+        }
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
         if (!isAuthenticated || isLoggingOut) return;
         setSubscriptionStatus('expired');
       }
@@ -326,11 +338,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [isAuthenticated, isLoggingOut]);
 
   useEffect(() => {
-    // تم تعطيل التوجيه التلقائي لصفحة الاشتراكات، النظام مجاني حالياً
-    // if (subscriptionStatus === 'expired') {
-    //   navigate('/subscription');
-    // }
-  }, [subscriptionStatus, navigate]);
+    // التوجيه التلقائي لصفحة الاشتراكات عند انتهاء الاشتراك
+    if (subscriptionStatus === 'expired' && isAuthenticated && !isLoggingOut) {
+      const currentPath = window.location.pathname;
+      // عدم التوجيه إذا كان المستخدم بالفعل في صفحة الاشتراك أو تسجيل الدخول
+      if (currentPath !== '/subscription' && currentPath !== '/login' && currentPath !== '/register') {
+        navigate('/subscription');
+      }
+    }
+  }, [subscriptionStatus, navigate, isAuthenticated, isLoggingOut]);
 
   const checkAuth = async () => {
     try {
@@ -983,6 +999,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         showNotification('تم إضافة المنتج بنجاح', 'success');
         updateNotificationCount(1);
         return response.data;
+      }
+      // Show validation errors if available
+      if (response.errors && Array.isArray(response.errors)) {
+        const errorMessages = response.errors.map((e: any) => `${e.field}: ${e.message}`).join('\n');
+        showNotification(`${response.message}\n${errorMessages}`, 'error');
+      } else {
+        showNotification(response.message || 'فشل في إضافة المنتج', 'error');
       }
       return null;
     } catch (error: unknown) {
@@ -1783,27 +1806,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Report methods
-  const getSalesReport = async (filter: Filter): Promise<any> => {
+  const getSalesReport = async (filter: Filter, groupBy?: string): Promise<any> => {
     try {
-      const response = await api.getSalesReport(filter);
+      const response = await api.getSalesReport(filter, groupBy);
       return response.success ? response.data : null;
     } catch (error) {
       return null;
     }
   };
 
-  const getSessionsReport = async (filter: Filter): Promise<any> => {
+  const getSessionsReport = async (filter: Filter, device?: string): Promise<any> => {
     try {
-      const response = await api.getSessionsReport(filter);
+      const response = await api.getSessionsReport(filter, device);
       return response.success ? response.data : null;
     } catch (error) {
       return null;
     }
   };
 
-  const getInventoryReport = async (): Promise<any> => {
+  const getInventoryReport = async (category?: string): Promise<any> => {
     try {
-      const response = await api.getInventoryReport();
+      const response = await api.getInventoryReport(category);
       return response.success ? response.data : null;
     } catch (error) {
       return null;

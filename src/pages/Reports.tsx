@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, ReactNode, memo } from 'react';
 import { TrendingUp, TrendingDown, ArrowUp, ArrowDown, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, Filter, ChevronDown, BarChart3 } from 'lucide-react';
 import { format, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -66,6 +66,7 @@ interface FinancialStatProps {
   label: string;
   value: string | number;
   color: string;
+  showWarning?: boolean;
 }
 
 interface ProductSalesBySection {
@@ -147,6 +148,19 @@ interface StaffPerformance {
   sessionsCount: number;
   totalRevenue: number;
   avgOrderValue: number;
+}
+
+interface BasicStats {
+  revenue: number;
+  orders: number;
+  avgOrderValue: number;
+  sessions: number;
+}
+
+interface RevenueBreakdown {
+  playstation: number;
+  computer: number;
+  cafe: number;
 }
 
 import { useApp } from '../context/AppContext';
@@ -966,6 +980,13 @@ const Reports = () => {
         const yesterday = addDays(now, -1);
         startDate = startOfDay(yesterday);
         endDate = endOfDay(yesterday);
+      } else if (selectedPeriod === 'thisWeek') {
+        // بداية الأسبوع (السبت) في الدول العربية
+        const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+        // حساب عدد الأيام من السبت الماضي
+        const daysFromSaturday = dayOfWeek === 6 ? 0 : dayOfWeek + 1;
+        startDate = addDays(startOfDay(now), -daysFromSaturday);
+        endDate = endOfDay(now);
       } else if (selectedPeriod === 'last7') {
         startDate = addDays(now, -6);
         endDate = now;
@@ -1075,6 +1096,10 @@ const Reports = () => {
           } else {
             results[key] = value as Record<string, unknown>;
           }
+          
+          // Log financial data for debugging
+          if (key === 'financial') {
+         }
         } catch (error) {
           console.error(`Error loading ${key} report:`, error);
           errors.push({ key, reason: error });
@@ -1101,15 +1126,8 @@ const Reports = () => {
     loadReports();
   }, [loadReports]);
 
-  // حساب الإحصائيات الأساسية
-  interface BasicStats {
-    revenue: number;
-    orders: number;
-    avgOrderValue: number;
-    sessions: number;
-  }
-
-  const calculateBasicStats = (): BasicStats => {
+  // Memoize calculations for better performance
+  const basicStats = useMemo((): BasicStats => {
     if (!reports.sales) return { revenue: 0, orders: 0, avgOrderValue: 0, sessions: 0 };
 
     const revenue = reports.sales.totalRevenue || 0;
@@ -1118,16 +1136,9 @@ const Reports = () => {
     const sessions = reports.sessions?.totalSessions || 0;
 
     return { revenue, orders, avgOrderValue, sessions };
-  };
+  }, [reports.sales, reports.sessions]);
 
-  // حساب توزيع الإيرادات
-  interface RevenueBreakdown {
-    playstation: number;
-    computer: number;
-    cafe: number;
-  }
-
-  const calculateRevenueBreakdown = (): RevenueBreakdown => {
+  const revenueBreakdown = useMemo((): RevenueBreakdown => {
     if (!reports.sales) return { playstation: 0, computer: 0, cafe: 0 };
 
     return {
@@ -1135,82 +1146,67 @@ const Reports = () => {
       computer: reports.sales.revenueByType?.computer || 0,
       cafe: reports.sales.revenueByType?.cafe || 0
     };
-  };
+  }, [reports.sales]);
 
-  // حساب الأرباح الإجمالية
-  const calculateNetProfit = (): number => {
+  const netProfit = useMemo((): number => {
     if (!reports.financial) return 0;
     const financial = reports.financial as {
       profit?: number;
       summary?: { netProfit?: number };
     };
-    return financial?.profit || financial?.summary?.netProfit || 0;
-  };
+    const value = financial?.summary?.netProfit || financial?.profit || 0;
+    return value;
+  }, [reports.financial]);
 
-  // حساب هامش الربح
-  const calculateProfitMargin = (): number => {
+  const profitMargin = useMemo((): number => {
     if (!reports.financial) return 0;
     const financial = reports.financial as {
-      totalRevenue?: number;
-      summary?: { totalRevenue?: number; totalPaid?: number; netProfit?: number };
-      totalPaid?: number;
-      profit?: number;
+      summary?: { profitMargin?: number };
+      profitMargin?: number;
     };
+    const value = financial?.summary?.profitMargin || financial?.profitMargin || 0;
+    return value;
+  }, [reports.financial]);
 
-    const revenue = financial?.totalRevenue || financial?.summary?.totalRevenue || 0;
-    const paid = financial?.totalPaid || financial?.summary?.totalPaid || 0;
-    const profit = financial?.profit || financial?.summary?.netProfit || 0;
-    const actualRevenue = paid > 0 ? paid : revenue;
-    return actualRevenue === 0 ? 0 : (profit / actualRevenue) * 100;
-  };
+  const totalTransactions = useMemo((): number => {
+    if (!reports.financial) return 0;
+    const financial = reports.financial as {
+      summary?: { totalTransactions?: number };
+      totalTransactions?: number;
+    };
+    const value = financial?.summary?.totalTransactions || financial?.totalTransactions || 0;
+    return value;
+  }, [reports.financial]);
 
-  // حساب عدد المعاملات
-  const calculateTotalTransactions = (): number => {
-    if (reports.financial) {
-      const financial = reports.financial as {
-        summary?: { totalTransactions?: number };
-        revenue?: { totalBills?: number };
-        totalTransactions?: number;
-      };
-
-      let totalTransactions = financial?.summary?.totalTransactions ||
-                            financial?.revenue?.totalBills ||
-                            financial?.totalTransactions || 0;
-
-      if (totalTransactions === 0 && reports.sales) {
-        const salesData = reports.sales as {
-          totalOrders?: number;
-          totalBills?: number;
-        };
-        totalTransactions = salesData?.totalOrders || salesData?.totalBills || 0;
-      }
-      return totalTransactions;
-    }
-    return 0;
-  };
+  const totalCosts = useMemo((): number => {
+    if (!reports.financial) return 0;
+    const financial = reports.financial as {
+      summary?: { totalCosts?: number };
+      totalCosts?: number;
+    };
+    const value = financial?.summary?.totalCosts || financial?.totalCosts || 0;
+    return value;
+  }, [reports.financial]);
 
   // تنسيق الأرقام
   const formatNumber = (num: number) => formatDecimal(num);
   const formatCurrency = (amount: number) => formatCurrencyUtil(amount);
 
-  // Format percentage helper (removed unused function)
-
-  const basicStats = calculateBasicStats();
-  const revenueBreakdown = calculateRevenueBreakdown();
   const totalRevenue = basicStats.revenue;
 
-  // Export functions
-  const handleExport = async (
+  // Export functions - Memoized
+  const handleExport = useCallback(async (
     exportFunc: (reportType: string, filter: Record<string, unknown>) => Promise<void>,
     reportType: string
   ) => {
     try {
       const filter = buildFilter();
       await exportFunc(reportType, filter);
+      showNotification('تم التصدير بنجاح', 'success');
     } catch {
       showNotification('فشل في تصدير التقرير', 'error');
     }
-  };
+  }, [buildFilter, showNotification]);
 
   const renderFilterControls = () => {
     const inputClasses = "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 rounded-md px-3 py-2 text-sm w-full";
@@ -1652,20 +1648,25 @@ const Reports = () => {
 
       {/* Financial Summary */}
       <ReportSection title="الملخص المالي" onExportExcel={() => handleExport(exportReportToExcel, 'financial')} onExportPDF={() => handleExport(exportReportToPDF, 'financial')}>
-        {reports.financial && (
+        {reports.financial ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <FinancialStat label="إجمالي الربح" value={formatCurrency(calculateNetProfit())} color="green" />
-            <FinancialStat
-              label="إجمالي التكاليف"
-              value={formatCurrency(
-                (reports.financial as { totalCosts?: number; summary?: { totalCosts?: number } })?.totalCosts ||
-                (reports.financial as { summary?: { totalCosts?: number } })?.summary?.totalCosts || 0
-              )}
-              color="red"
+            <FinancialStat 
+              label="إجمالي الربح" 
+              value={formatCurrency(netProfit)} 
+              color={netProfit >= 0 ? "green" : "red"} 
+              showWarning={netProfit < 0}
             />
-            <FinancialStat label="هامش الربح" value={`${formatDecimal(calculateProfitMargin())}%`} color="purple" />
-            <FinancialStat label="عدد المعاملات" value={formatNumber(calculateTotalTransactions())} color="orange" />
+            <FinancialStat label="إجمالي التكاليف" value={formatCurrency(totalCosts)} color="red" />
+            <FinancialStat 
+              label="هامش الربح" 
+              value={`${formatDecimal(profitMargin)}%`} 
+              color={profitMargin >= 0 ? "purple" : "red"} 
+              showWarning={profitMargin < 0}
+            />
+            <FinancialStat label="عدد المعاملات" value={formatNumber(totalTransactions)} color="orange" />
           </div>
+        ) : (
+          <p className="text-gray-500 dark:text-gray-400 text-center py-4">لا توجد بيانات مالية متاحة</p>
         )}
       </ReportSection>
 
@@ -1734,9 +1735,24 @@ const ReportSection = ({ title, onExportExcel, onExportPDF, children }: ReportSe
   </div>
 );
 
-const FinancialStat = ({ label, value, color }: FinancialStatProps) => (
+const FinancialStat = ({ label, value, color, showWarning = false }: FinancialStatProps) => (
   <div className={`text-center p-4 bg-${color}-50 dark:bg-[#2d333a] rounded-lg hover:bg-${color}-100 dark:hover:bg-[#374151] transition-colors duration-200`}>
-    <div className={`text-2xl font-bold text-${color}-600 dark:text-${color}-400`}>{value}</div>
+    <div className="flex items-center justify-center gap-2">
+      {showWarning && (
+        <svg 
+          className="w-6 h-6 text-red-600 dark:text-red-400 animate-pulse" 
+          fill="currentColor" 
+          viewBox="0 0 20 20"
+        >
+          <path 
+            fillRule="evenodd" 
+            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" 
+            clipRule="evenodd" 
+          />
+        </svg>
+      )}
+      <div className={`text-2xl font-bold text-${color}-600 dark:text-${color}-400`}>{value}</div>
+    </div>
     <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">{label}</div>
   </div>
 );

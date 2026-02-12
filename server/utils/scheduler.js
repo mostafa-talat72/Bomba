@@ -754,6 +754,7 @@ export const scheduleSubscriptionExpiryNotifications = () => {
             });
             if (orgOwner) {
                 await sendSubscriptionNotification(
+                    sub.organization,
                     orgOwner._id,
                     "تنبيه: اشتراك منشأتك سينتهي خلال 3 أيام. يرجى التجديد لتجنب توقف الخدمة."
                 );

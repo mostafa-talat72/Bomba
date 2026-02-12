@@ -85,20 +85,24 @@ export const register = async (req, res) => {
                 organizationId: user.organization,
             });
 
-            // إضافة اشتراك وهمي تلقائي للمنشأة الجديدة
+            // إضافة اشتراك تجريبي للمنشأة الجديدة (30 يوم)
+            const trialEndDate = new Date();
+            trialEndDate.setDate(trialEndDate.getDate() + 30);
+            
             await Subscription.create({
                 organization: organization._id,
-                plan: "yearly",
+                plan: "trial",
                 status: "active",
                 startDate: new Date(),
-                endDate: new Date(2099, 0, 1),
+                endDate: trialEndDate,
                 paymentMethod: "manual",
-                paymentRef: "dummy",
+                paymentRef: "trial",
                 createdAt: new Date(),
             });
 
-            Logger.info("Subscription created for organization", {
+            Logger.info("Trial subscription created for organization", {
                 organizationId: organization._id,
+                endDate: trialEndDate,
             });
         } else {
             // إذا لم يتم تمرير organization، اربطه بنفس منشأة المستخدم الحالي (المدير)
