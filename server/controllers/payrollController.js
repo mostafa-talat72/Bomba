@@ -886,17 +886,7 @@ export const getPayrollSummary = async (req, res) => {
     
     // Get total days in the month for absence calculation
     const daysInMonth = getDaysInMonth(new Date(yearNum, monthNum - 1));
-    
-    console.log('Summary calculation:', { 
-      monthStr, 
-      startDate: startDate.toISOString(), 
-      endDate: endDate.toISOString(), 
-      isCurrentMonth,
-      daysInMonth,
-      startDateLocal: `${startDate.getFullYear()}-${(startDate.getMonth()+1).toString().padStart(2,'0')}-${startDate.getDate().toString().padStart(2,'0')}`,
-      endDateLocal: `${endDate.getFullYear()}-${(endDate.getMonth()+1).toString().padStart(2,'0')}-${endDate.getDate().toString().padStart(2,'0')}`
-    });
-    
+      
     // Calculate statistics for each employee
     let totalGrossSalary = 0;
     let totalDeductions = 0;
@@ -923,9 +913,7 @@ export const getPayrollSummary = async (req, res) => {
           
           if (lastAttendance) {
             employeeEndDate = lastAttendance.date;
-            console.log(`Employee ${employee.personalInfo?.name} is ${employee.employment.status}. Calculating until last attendance: ${employeeEndDate}`);
           } else {
-            console.log(`Employee ${employee.personalInfo?.name} is ${employee.employment.status} with no attendance. Skipping.`);
             continue;
           }
         }
@@ -959,23 +947,14 @@ export const getPayrollSummary = async (req, res) => {
           grossSalary = (employee.compensation.hourly || 0) * totalHours;
           salaryCalculationNote = `${totalHours} ساعة × ${employee.compensation.hourly} = ${grossSalary} جنيه`;
         }
-        
-        console.log(`\n=== Salary Calculation for ${employee.personalInfo?.name} ===`);
-        console.log(`Employment Type: ${employee.employment.type}`);
-        console.log(`Attendance Records: ${attendance.length}`);
-        console.log(`Calculation: ${salaryCalculationNote}`);
-        console.log(`Gross Salary: ${grossSalary.toFixed(2)} EGP`);
-        
+ 
         // Get ALL advances for this employee
         const allAdvances = await Advance.find({
           employeeId: employee._id,
           organizationId: req.user.organization,
           status: { $in: ['approved', 'paid', 'completed'] }
         });
-        
-        console.log(`\n--- Advances for ${employee.personalInfo?.name} (${monthStr}) ---`);
-        console.log(`Total advances in DB: ${allAdvances.length}`);
-        
+
         let advancesTotal = 0;
         
         // Calculate advances for this month
@@ -987,7 +966,6 @@ export const getPayrollSummary = async (req, res) => {
             const deductionForMonth = adv.repayment?.deductions?.find(d => d.month === monthStr);
             
             if (deductionForMonth) {
-              console.log(`  ✓ Deduction recorded: ${deductionForMonth.amount} EGP`);
               advancesTotal += deductionForMonth.amount;
             } else if (adv.repayment?.remainingAmount > 0) {
               const startMonth = adv.repayment?.startMonth || monthStr;
@@ -999,16 +977,13 @@ export const getPayrollSummary = async (req, res) => {
                 );
                 
                 if (deductionAmount > 0) {
-                  console.log(`  ✓ Calculated deduction: ${deductionAmount} EGP`);
                   advancesTotal += deductionAmount;
                 }
               }
             }
           }
         }
-        
-        console.log(`\n→ Total advances for ${employee.personalInfo?.name}: ${advancesTotal} EGP\n`);
-        
+                
         // Get manual deductions for the month
         const manualDeductions = await Deduction.find({
           employeeId: employee._id,
@@ -1020,11 +995,7 @@ export const getPayrollSummary = async (req, res) => {
         // NO automatic absence deduction
         // Deductions are ONLY from manual entries in Deduction table
         // Absence does NOT automatically create a deduction
-        
-        console.log(`\n--- Manual Deductions for ${employee.personalInfo?.name} (${monthStr}) ---`);
-        console.log(`Manual deductions count: ${manualDeductions.length}`);
-        console.log(`Manual deductions total: ${manualDeductionsTotal} EGP`);
-        
+
         const otherDeductionsTotal = manualDeductionsTotal;
         const totalDeductionsEmp = advancesTotal + otherDeductionsTotal;
         const netSalary = grossSalary - totalDeductionsEmp;
@@ -1037,7 +1008,8 @@ export const getPayrollSummary = async (req, res) => {
         });
         const paidAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
         
-        const unpaidBalance = Math.max(0, netSalary - paidAmount);
+        // unpaidBalance can be negative if paid more than current month salary
+        const unpaidBalance = netSalary - paidAmount;
         
         // Calculate carried forward from previous months
         // Using the SAME logic as EmployeeProfile (paymentController.js)
@@ -1046,11 +1018,7 @@ export const getPayrollSummary = async (req, res) => {
         const hireDate = employee.personalInfo?.hireDate || employee.createdAt || new Date('2020-01-01');
         const previousMonthEnd = new Date(startDate);
         previousMonthEnd.setDate(0); // آخر يوم من الشهر السابق
-        
-        console.log(`\n--- Calculating Carried Forward for ${employee.personalInfo?.name} ---`);
-        console.log(`Hire Date: ${hireDate}`);
-        console.log(`Previous Month End: ${previousMonthEnd}`);
-        
+
         // Get all previous attendance
         const previousAttendance = await Attendance.find({
           employeeId: employee._id,
@@ -1058,7 +1026,6 @@ export const getPayrollSummary = async (req, res) => {
           date: { $gte: hireDate, $lte: previousMonthEnd }
         });
         
-        console.log(`Previous Attendance Records: ${previousAttendance.length}`);
         
         // Calculate previous salaries based on employment type
         let previousSalaries = 0;
@@ -1094,7 +1061,6 @@ export const getPayrollSummary = async (req, res) => {
             
             previousSalaries += monthSalary;
             
-            console.log(`  Month ${monthKey}: ${monthData.present} days present out of ${daysInMonth} days = ${monthSalary.toFixed(2)} EGP`);
           });
         } else if (employee.employment.type === 'daily') {
           // For daily employees: use totalPay from records
@@ -1107,9 +1073,7 @@ export const getPayrollSummary = async (req, res) => {
             sum + (record.details?.totalPay || 0), 0
           );
         }
-        
-        console.log(`Previous Salaries (calculated): ${previousSalaries.toFixed(2)} EGP`);
-        
+                
         // Get all previous advances
         const previousAdvances = await Advance.find({
           employeeId: employee._id,
@@ -1119,7 +1083,6 @@ export const getPayrollSummary = async (req, res) => {
         });
         
         const previousAdvancesTotal = previousAdvances.reduce((sum, adv) => sum + adv.amount, 0);
-        console.log(`Previous Advances Total: ${previousAdvancesTotal.toFixed(2)} EGP`);
         
         // Get all previous deductions
         const previousDeductions = await Deduction.find({
@@ -1129,7 +1092,6 @@ export const getPayrollSummary = async (req, res) => {
         });
         
         const previousDeductionsTotal = previousDeductions.reduce((sum, ded) => sum + ded.amount, 0);
-        console.log(`Previous Deductions Total: ${previousDeductionsTotal.toFixed(2)} EGP`);
         
         // Get all previous payments
         const previousPayments = await Payment.find({
@@ -1139,36 +1101,13 @@ export const getPayrollSummary = async (req, res) => {
         });
         
         const previousPaid = previousPayments.reduce((sum, pay) => sum + pay.amount, 0);
-        console.log(`Previous Paid: ${previousPaid.toFixed(2)} EGP`);
         
         // Carried Forward = (Previous Salaries - Previous Advances - Previous Deductions) - Previous Paid
         // This can be positive (مستحقات) or negative (ديون)
         carriedForward = (previousSalaries - previousAdvancesTotal - previousDeductionsTotal) - previousPaid;
         
-        console.log(`\n========== CARRIED FORWARD CALCULATION ==========`);
-        console.log(`Previous Salaries: ${previousSalaries.toFixed(2)}`);
-        console.log(`Previous Advances: ${previousAdvancesTotal.toFixed(2)}`);
-        console.log(`Previous Deductions: ${previousDeductionsTotal.toFixed(2)}`);
-        console.log(`Previous Paid: ${previousPaid.toFixed(2)}`);
-        console.log(`Calculation: (${previousSalaries.toFixed(2)} - ${previousAdvancesTotal.toFixed(2)} - ${previousDeductionsTotal.toFixed(2)}) - ${previousPaid.toFixed(2)}`);
-        console.log(`Carried Forward Result: ${carriedForward.toFixed(2)} EGP`);
-        console.log(`=================================================\n`);
-        
         const totalUnpaidWithCarried = unpaidBalance + carriedForward;
-        
-        console.log(`\n=== Employee: ${employee.personalInfo?.name} ===`);
-        console.log(`Gross Salary: ${grossSalary}`);
-        console.log(`Advances: ${advancesTotal}`);
-        console.log(`Manual Deductions: ${manualDeductionsTotal}`);
-        console.log(`Other Deductions Total: ${otherDeductionsTotal}`);
-        console.log(`Total Deductions: ${totalDeductionsEmp}`);
-        console.log(`Net Salary: ${netSalary}`);
-        console.log(`Paid Amount: ${paidAmount}`);
-        console.log(`Unpaid Balance (Current Month): ${unpaidBalance}`);
-        console.log(`Carried Forward: ${carriedForward}`);
-        console.log(`Total Unpaid (with Carried): ${totalUnpaidWithCarried}`);
-        console.log(`===================================\n`);
-        
+
         totalGrossSalary += grossSalary;
         totalDeductions += totalDeductionsEmp;
         totalNetSalary += netSalary;
@@ -1200,16 +1139,24 @@ export const getPayrollSummary = async (req, res) => {
       }
     }
     
-    console.log('\n=== SUMMARY TOTALS ===');
-    console.log(`Total Employees: ${employeesData.length}`);
-    console.log(`Total Gross Salary: ${totalGrossSalary}`);
-    console.log(`Total Advances: ${totalAdvances}`);
-    console.log(`Total Other Deductions: ${totalOtherDeductions}`);
-    console.log(`Total Deductions: ${totalDeductions}`);
-    console.log(`Total Net Salary: ${totalNetSalary}`);
-    console.log(`Total Paid: ${totalPaid}`);
-    console.log(`Total Unpaid: ${totalUnpaid}`);
-    console.log('======================\n');
+    // Calculate additional statistics
+    const totalCarriedForward = employeesData.reduce((sum, e) => sum + (e.carriedForward || 0), 0);
+    const totalUnpaidCurrentMonth = totalNetSalary - totalPaid; // المتبقي من الشهر الحالي فقط
+    const totalObligationsWithCarried = totalUnpaid; // إجمالي المستحقات الكلي (المتبقي + المرحل)
+    
+    // Count employees by financial status
+    const employeesWithDues = employeesData.filter(e => e.totalUnpaid > 0).length;
+    const employeesWithDebts = employeesData.filter(e => e.totalUnpaid < 0).length;
+    const employeesBalanced = employeesData.filter(e => e.totalUnpaid === 0).length;
+    
+    // Sum of positive and negative totalUnpaid
+    const totalEmployeeDues = employeesData
+      .filter(e => e.totalUnpaid > 0)
+      .reduce((sum, e) => sum + e.totalUnpaid, 0);
+    
+    const totalEmployeeDebts = Math.abs(employeesData
+      .filter(e => e.totalUnpaid < 0)
+      .reduce((sum, e) => sum + e.totalUnpaid, 0));
     
     res.json({
       success: true,
@@ -1222,9 +1169,16 @@ export const getPayrollSummary = async (req, res) => {
           totalDeductions,
           totalNetSalary,
           totalPaid,
-          totalUnpaid,
+          totalUnpaid, // إجمالي المستحقات الكلي (المتبقي + المرحل)
+          totalUnpaidCurrentMonth, // المتبقي من الشهر الحالي فقط
           totalAdvances,
-          totalOtherDeductions
+          totalOtherDeductions,
+          totalCarriedForward, // المرحل من أشهر سابقة
+          employeesWithDues,
+          employeesWithDebts,
+          employeesBalanced,
+          totalEmployeeDues,
+          totalEmployeeDebts
         },
         employees: employeesData
       }

@@ -531,9 +531,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   // Advance handlers
   const handleSubmitAdvance = async (values: any) => {
     try {
-      console.log('Submitting advance with values:', values);
-      console.log('Employee ID:', employeeId);
-      
+
       const payload = {
         employeeId,
         amount: values.amount,
@@ -544,10 +542,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }
       };
       
-      console.log('Advance payload:', payload);
       
       const response = await api.post('/payroll/advances', payload);
-      console.log('Advance response:', response);
       
       message.success('تم إضافة السلفة بنجاح');
       setAdvanceModalVisible(false);
@@ -571,9 +567,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   // Deduction handlers
   const handleSubmitDeduction = async (values: any) => {
     try {
-      console.log('Submitting deduction with values:', values);
-      console.log('Employee ID:', employeeId);
-      
+   
       const deductionDate = values.date || dayjs();
       const payload = {
         employeeId,
@@ -584,10 +578,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         month: deductionDate.format('YYYY-MM')
       };
       
-      console.log('Deduction payload:', payload);
       
       const response = await api.post('/payroll/deductions', payload);
-      console.log('Deduction response:', response);
       
       message.success('تم إضافة الخصم بنجاح');
       setDeductionModalVisible(false);

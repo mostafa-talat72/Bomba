@@ -318,7 +318,6 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         message.success(`تم تسجيل الحضور لـ ${successCount} يوم بنجاح`);
         if (errors.length > 0) {
           message.warning(`فشل تسجيل ${errors.length} يوم`);
-          console.log('الأخطاء:', errors);
         }
         setIsMarkModalVisible(false);
         form.resetFields();
@@ -327,9 +326,6 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         fetchAttendance();
       } else {
         message.error('فشل في تسجيل الحضور لجميع الأيام');
-        if (errors.length > 0) {
-          console.log('الأخطاء:', errors);
-        }
       }
     } catch (error: any) {
       message.error(error.response?.data?.error || 'فشل في تسجيل الحضور');

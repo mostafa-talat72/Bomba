@@ -17,8 +17,15 @@ interface PayrollSummaryData {
     totalNetSalary: number;
     totalPaid: number;
     totalUnpaid: number;
+    totalUnpaidCurrentMonth: number;
     totalAdvances: number;
     totalOtherDeductions: number;
+    totalCarriedForward: number;
+    employeesWithDues: number;
+    employeesWithDebts: number;
+    employeesBalanced: number;
+    totalEmployeeDues: number;
+    totalEmployeeDebts: number;
   };
   employees: Array<{
     employeeId: string;
@@ -42,30 +49,22 @@ const PayrollSummary: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [summaryData, setSummaryData] = useState<PayrollSummaryData | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
-  const [showAllMonths, setShowAllMonths] = useState(false);
 
   useEffect(() => {
     fetchSummary();
-  }, [selectedMonth, showAllMonths]);
+  }, [selectedMonth]);
 
   const fetchSummary = async () => {
     try {
       setLoading(true);
       
-      let params: any = {};
+      const month = selectedMonth.month() + 1; // 1-12
+      const year = selectedMonth.year();
+      const params = { month, year };
       
-      if (!showAllMonths) {
-        const month = selectedMonth.month() + 1; // 1-12
-        const year = selectedMonth.year();
-        params = { month, year };
-      }
-      
-      console.log('Fetching summary for:', params);
       
       const response = await api.get('/payroll/payrolls/summary', { params });
-      
-      console.log('Summary response:', response);
-      
+            
       if (response.success && response.data) {
         setSummaryData(response.data);
       } else {
@@ -86,7 +85,6 @@ const PayrollSummary: React.FC = () => {
       const year = selectedMonth.year();
       
       // TODO: Implement PDF export
-      console.log('Export summary for', month, year);
     } catch (error) {
       console.error('فشل في تصدير التقرير');
     }
@@ -104,14 +102,6 @@ const PayrollSummary: React.FC = () => {
         </div>
       )
     },
-    ...(showAllMonths ? [{
-      title: 'الشهر',
-      dataIndex: 'month',
-      key: 'month',
-      render: (month: string) => (
-        <span className="text-sm">{dayjs(month).format('MMMM YYYY')}</span>
-      )
-    }] : []),
     {
       title: 'الراتب الإجمالي',
       dataIndex: 'grossSalary',
@@ -283,14 +273,7 @@ const PayrollSummary: React.FC = () => {
               placeholder="اختر الشهر"
               style={{ width: 200 }}
               format="MMMM YYYY"
-              disabled={showAllMonths}
             />
-            <Button
-              type={showAllMonths ? 'primary' : 'default'}
-              onClick={() => setShowAllMonths(!showAllMonths)}
-            >
-              {showAllMonths ? 'عرض شهر محدد' : 'عرض كل الشهور'}
-            </Button>
             <Button
               icon={<RefreshCw size={16} />}
               onClick={() => fetchSummary()}
@@ -332,7 +315,7 @@ const PayrollSummary: React.FC = () => {
                   <div>
                     <p className="text-gray-600 dark:text-gray-400 text-sm mb-1">لهم مستحقات</p>
                     <p className="text-3xl font-bold text-green-600">
-                      {summaryData.employees.filter((e: any) => e.totalUnpaid > 0).length}
+                      {summaryData.statistics.employeesWithDues}
                     </p>
                     <p className="text-xs text-gray-500">موظف</p>
                   </div>
@@ -349,7 +332,7 @@ const PayrollSummary: React.FC = () => {
                   <div>
                     <p className="text-gray-600 dark:text-gray-400 text-sm mb-1">مدينون</p>
                     <p className="text-3xl font-bold text-red-600">
-                      {summaryData.employees.filter((e: any) => e.totalUnpaid < 0).length}
+                      {summaryData.statistics.employeesWithDebts}
                     </p>
                     <p className="text-xs text-gray-500">موظف</p>
                   </div>
@@ -366,7 +349,7 @@ const PayrollSummary: React.FC = () => {
                   <div>
                     <p className="text-gray-600 dark:text-gray-400 text-sm mb-1">متساوون</p>
                     <p className="text-3xl font-bold text-gray-600">
-                      {summaryData.employees.filter((e: any) => e.totalUnpaid === 0).length}
+                      {summaryData.statistics.employeesBalanced}
                     </p>
                     <p className="text-xs text-gray-500">موظف</p>
                   </div>
@@ -449,9 +432,9 @@ const PayrollSummary: React.FC = () => {
               <Card className="hover:shadow-lg transition-shadow">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 dark:text-gray-400 text-sm mb-1">المتبقي</p>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm mb-1">المتبقي (الشهر الحالي)</p>
                     <p className="text-3xl font-bold text-orange-600">
-                      {summaryData.statistics.totalUnpaid.toFixed(2)}
+                      {summaryData.statistics.totalUnpaidCurrentMonth.toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-500">جنيه</p>
                   </div>
@@ -468,10 +451,7 @@ const PayrollSummary: React.FC = () => {
                   <div>
                     <p className="text-gray-700 dark:text-gray-300 text-sm mb-1 font-medium">إجمالي المستحقات للموظفين</p>
                     <p className="text-3xl font-bold text-green-700 dark:text-green-400">
-                      {summaryData.employees
-                        .filter((e: any) => e.totalUnpaid > 0)
-                        .reduce((sum: number, e: any) => sum + e.totalUnpaid, 0)
-                        .toFixed(2)}
+                      {summaryData.statistics.totalEmployeeDues.toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-400">جنيه</p>
                   </div>
@@ -488,10 +468,7 @@ const PayrollSummary: React.FC = () => {
                   <div>
                     <p className="text-gray-700 dark:text-gray-300 text-sm mb-1 font-medium">إجمالي ديون الموظفين</p>
                     <p className="text-3xl font-bold text-red-700 dark:text-red-400">
-                      {Math.abs(summaryData.employees
-                        .filter((e: any) => e.totalUnpaid < 0)
-                        .reduce((sum: number, e: any) => sum + e.totalUnpaid, 0))
-                        .toFixed(2)}
+                      {summaryData.statistics.totalEmployeeDebts.toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-400">جنيه</p>
                   </div>
@@ -508,20 +485,18 @@ const PayrollSummary: React.FC = () => {
                   <div>
                     <p className="text-gray-700 dark:text-gray-300 text-sm mb-1 font-medium">المرحل من أشهر سابقة</p>
                     <p className={`text-3xl font-bold ${
-                      summaryData.employees.reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0) > 0 
+                      summaryData.statistics.totalCarriedForward > 0 
                         ? 'text-green-700 dark:text-green-400' 
-                        : summaryData.employees.reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0) < 0
+                        : summaryData.statistics.totalCarriedForward < 0
                         ? 'text-red-700 dark:text-red-400'
                         : 'text-gray-700 dark:text-gray-400'
                     }`}>
-                      {summaryData.employees
-                        .reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0)
-                        .toFixed(2)}
+                      {summaryData.statistics.totalCarriedForward.toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-400">
-                      {summaryData.employees.reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0) > 0 
+                      {summaryData.statistics.totalCarriedForward > 0 
                         ? 'مستحقات مرحلة' 
-                        : summaryData.employees.reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0) < 0
+                        : summaryData.statistics.totalCarriedForward < 0
                         ? 'ديون مرحلة'
                         : 'لا يوجد'}
                     </p>
@@ -539,17 +514,16 @@ const PayrollSummary: React.FC = () => {
                   <div>
                     <p className="text-gray-700 dark:text-gray-300 text-sm mb-1 font-bold">إجمالي المستحقات الكلي</p>
                     <p className={`text-4xl font-extrabold ${
-                      (summaryData.statistics.totalNetSalary + summaryData.employees.reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0)) > 0 
+                      summaryData.statistics.totalUnpaid > 0 
                         ? 'text-indigo-700 dark:text-indigo-400' 
-                        : (summaryData.statistics.totalNetSalary + summaryData.employees.reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0)) < 0
+                        : summaryData.statistics.totalUnpaid < 0
                         ? 'text-red-700 dark:text-red-400'
                         : 'text-gray-700 dark:text-gray-400'
                     }`}>
-                      {(summaryData.statistics.totalNetSalary + summaryData.employees.reduce((sum: number, e: any) => sum + (e.carriedForward || 0), 0))
-                        .toFixed(2)}
+                      {summaryData.statistics.totalUnpaid.toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                      الشهر الحالي + المرحل من الأشهر السابقة
+                      المتبقي (الشهر الحالي) + المرحل من الأشهر السابقة
                     </p>
                   </div>
                   <div className="w-16 h-16 bg-indigo-200 dark:bg-indigo-800/50 rounded-full flex items-center justify-center">
@@ -698,31 +672,19 @@ const PayrollSummary: React.FC = () => {
           <Empty 
             description={
               <div className="text-center">
-                <p className="text-lg font-medium mb-2">لا توجد كشوف رواتب {showAllMonths ? 'في النظام' : 'للشهر المحدد'}</p>
+                <p className="text-lg font-medium mb-2">لا توجد بيانات للشهر المحدد</p>
                 <p className="text-gray-500 mb-4">
-                  {showAllMonths 
-                    ? 'لم يتم إنشاء أي كشوف رواتب بعد. لإنشاء كشف راتب:'
-                    : 'لا توجد كشوف رواتب لهذا الشهر.'
-                  }
+                  لا توجد كشوف رواتب لهذا الشهر.
                 </p>
-                {showAllMonths ? (
-                  <div className="text-right max-w-md mx-auto bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                    <p className="font-medium mb-2">كيفية إنشاء كشف راتب:</p>
-                    <ol className="text-sm space-y-2">
-                      <li>1. اذهب إلى تبويب "الموظفين"</li>
-                      <li>2. اختر موظف واضغط "عرض التفاصيل"</li>
-                      <li>3. في صفحة الموظف، اضغط "صرف جزء من المرتب"</li>
-                      <li>4. سيتم إنشاء كشف الراتب تلقائياً</li>
-                    </ol>
-                  </div>
-                ) : (
-                  <Button 
-                    type="primary" 
-                    onClick={() => setShowAllMonths(true)}
-                  >
-                    عرض كل الشهور
-                  </Button>
-                )}
+                <div className="text-right max-w-md mx-auto bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                  <p className="font-medium mb-2">كيفية إنشاء كشف راتب:</p>
+                  <ol className="text-sm space-y-2">
+                    <li>1. اذهب إلى تبويب "الموظفين"</li>
+                    <li>2. اختر موظف واضغط "عرض التفاصيل"</li>
+                    <li>3. في صفحة الموظف، اضغط "صرف جزء من المرتب"</li>
+                    <li>4. سيتم إنشاء كشف الراتب تلقائياً</li>
+                  </ol>
+                </div>
               </div>
             }
           />

@@ -161,7 +161,6 @@ export const markAttendance = async (req, res) => {
         workHoursPerDay = payrollSettings.settings.workHoursPerDay;
       }
     } catch (error) {
-      console.log('Using default work hours:', workHoursPerDay);
     }
     
     const attendanceDate = new Date(date);

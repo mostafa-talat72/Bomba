@@ -35,16 +35,7 @@ export const getEmployeeSalarySummary = async (req, res) => {
     const previousMonthEnd = new Date(currentMonthStart);
     previousMonthEnd.setDate(0); // آخر يوم من الشهر السابق
     
-    console.log('=== Get Employee Salary Summary ===');
-    console.log('Employee:', employee.personalInfo?.name);
-    console.log('Employee ID:', employeeId);
-    console.log('Month:', month);
-    console.log('Hire Date:', hireDate);
-    console.log('Current Month Start:', currentMonthStart);
-    console.log('Current Month End:', currentMonthEnd);
-    console.log('Previous Month End:', previousMonthEnd);
-    console.log('Will search from:', hireDate, 'to', previousMonthEnd);
-    
+  
     // ========== الشهر الحالي ==========
     const currentMonthAttendance = await Attendance.find({
       employeeId,
@@ -65,7 +56,6 @@ export const getEmployeeSalarySummary = async (req, res) => {
       const monthlySalary = employee.compensation?.monthly || 0;
       currentMonthSalary = (monthlySalary / daysInMonth) * daysPresent;
       
-      console.log(`Current Month: ${daysPresent} days present out of ${daysInMonth} days = ${currentMonthSalary.toFixed(2)} EGP`);
     } else {
       // للموظف اليومي أو بالساعة: نستخدم totalPay من السجلات
       currentMonthSalary = currentMonthAttendance.reduce((sum, record) => 
@@ -105,12 +95,7 @@ export const getEmployeeSalarySummary = async (req, res) => {
       organizationId: req.user.organization
     });
     
-    console.log('Previous Attendance Records:', previousAttendance.length);
-    if (previousAttendance.length > 0) {
-      console.log('First record date:', previousAttendance[0].date);
-      console.log('Last record date:', previousAttendance[previousAttendance.length - 1].date);
-    }
-    
+   
     // حساب الرواتب السابقة بناءً على نوع التوظيف
     let previousSalaries = 0;
     
@@ -146,7 +131,6 @@ export const getEmployeeSalarySummary = async (req, res) => {
         
         previousSalaries += monthSalary;
         
-        console.log(`Month ${monthKey}: ${monthData.present} days present out of ${daysInMonth} days = ${monthSalary.toFixed(2)} EGP`);
       });
     } else {
       // للموظف اليومي أو بالساعة: نستخدم totalPay من السجلات
@@ -154,25 +138,14 @@ export const getEmployeeSalarySummary = async (req, res) => {
         sum + (record.details?.totalPay || 0), 0
       );
     }
-    
-    console.log('Previous Salaries (calculated):', previousSalaries);
-    
+        
     const previousAdvances = await Advance.find({
       employeeId,
       status: { $in: ['approved', 'paid'] },
       requestDate: { $lte: previousMonthEnd },
       organizationId: req.user.organization
     });
-    
-    console.log('Previous Advances:', previousAdvances.length);
-    if (previousAdvances.length > 0) {
-      console.log('Previous Advances Details:', previousAdvances.map(a => ({
-        amount: a.amount,
-        date: a.requestDate,
-        status: a.status
-      })));
-    }
-    
+        
     const previousAdvancesTotal = previousAdvances.reduce((sum, adv) => sum + adv.amount, 0);
     
     const previousDeductions = await Deduction.find({
@@ -181,47 +154,19 @@ export const getEmployeeSalarySummary = async (req, res) => {
       organizationId: req.user.organization
     });
     
-    console.log('Previous Deductions:', previousDeductions.length);
-    if (previousDeductions.length > 0) {
-      console.log('Previous Deductions Details:', previousDeductions.map(d => ({
-        amount: d.amount,
-        date: d.date,
-        type: d.type
-      })));
-    }
-    
     const previousDeductionsTotal = previousDeductions.reduce((sum, ded) => sum + ded.amount, 0);
     
     const previousPayments = await Payment.find({
       employeeId,
       paymentDate: { $lte: previousMonthEnd },
       organizationId: req.user.organization
-    });
-    
-    console.log('Previous Payments:', previousPayments.length);
-    if (previousPayments.length > 0) {
-      console.log('Previous Payments Details:', previousPayments.map(p => ({
-        amount: p.amount,
-        date: p.paymentDate,
-        month: p.month
-      })));
-    }
-    
+    });    
     const previousPaid = previousPayments.reduce((sum, pay) => sum + pay.amount, 0);
     
     // ========== الحسابات ==========
     // المرحل من الأشهر السابقة
     const carriedForward = (previousSalaries - previousAdvancesTotal - previousDeductionsTotal) - previousPaid;
-    
-    console.log('========== CARRIED FORWARD CALCULATION ==========');
-    console.log('Previous Salaries:', previousSalaries);
-    console.log('Previous Advances Total:', previousAdvancesTotal);
-    console.log('Previous Deductions Total:', previousDeductionsTotal);
-    console.log('Previous Paid:', previousPaid);
-    console.log('Calculation: (' + previousSalaries + ' - ' + previousAdvancesTotal + ' - ' + previousDeductionsTotal + ') - ' + previousPaid);
-    console.log('Carried Forward Result:', carriedForward);
-    console.log('=================================================');
-    
+
     // الإجماليات التراكمية (حتى نهاية الشهر الحالي)
     const totalSalaries = previousSalaries + currentMonthSalary;
     const totalAdvances = previousAdvancesTotal + currentMonthAdvancesTotal;
@@ -231,22 +176,6 @@ export const getEmployeeSalarySummary = async (req, res) => {
     // الرصيد المتاح
     const netSalary = totalSalaries - totalAdvances - totalDeductions;
     const remainingBalance = netSalary - totalPaid;
-    
-    console.log('Current Month Salary:', currentMonthSalary);
-    console.log('Current Month Advances:', currentMonthAdvancesTotal);
-    console.log('Current Month Deductions:', currentMonthDeductionsTotal);
-    console.log('Current Month Paid:', currentMonthPaid);
-    console.log('Previous Salaries:', previousSalaries);
-    console.log('Previous Advances:', previousAdvancesTotal);
-    console.log('Previous Deductions:', previousDeductionsTotal);
-    console.log('Previous Paid:', previousPaid);
-    console.log('Carried Forward:', carriedForward);
-    console.log('Total Salaries:', totalSalaries);
-    console.log('Total Advances:', totalAdvances);
-    console.log('Total Deductions:', totalDeductions);
-    console.log('Total Paid:', totalPaid);
-    console.log('Remaining Balance:', remainingBalance);
-    console.log('=====================================');
     
     res.json({
       success: true,
@@ -293,13 +222,7 @@ export const makePayment = async (req, res) => {
   try {
     const { employeeId, amount, month, method, notes, receiptNumber, date } = req.body;
     
-    console.log('=== Make Payment Request ===');
-    console.log('Body:', req.body);
-    console.log('User:', req.user?.username);
-    console.log('Organization:', req.user?.organization);
-    
     if (!employeeId || !amount || !month) {
-      console.log('Missing required fields');
       return res.status(400).json({ 
         success: false, 
         error: 'الموظف والمبلغ والشهر مطلوبة' 
@@ -313,23 +236,15 @@ export const makePayment = async (req, res) => {
     });
     
     if (!employee) {
-      console.log('Employee not found');
       return res.status(404).json({ success: false, error: 'الموظف غير موجود' });
     }
     
-    console.log('Employee found:', employee.personalInfo?.name);
     
     // التحقق من الرصيد المتاح - حساب للشهر الحالي فقط
     const monthStart = new Date(month + '-01');
     const monthEnd = new Date(month + '-01');
     monthEnd.setMonth(monthEnd.getMonth() + 1);
     monthEnd.setDate(0);
-    
-    console.log('=== Payment Calculation Debug ===');
-    console.log('Employee:', employee.personalInfo?.name);
-    console.log('Month:', month);
-    console.log('Month Start:', monthStart);
-    console.log('Month End:', monthEnd);
     
     // حساب مرتبات الشهر الحالي فقط
     const attendanceRecords = await Attendance.find({
@@ -341,9 +256,7 @@ export const makePayment = async (req, res) => {
     const currentMonthSalary = attendanceRecords.reduce((sum, record) => 
       sum + (record.details?.totalPay || 0), 0
     );
-    
-    console.log('Current Month Salary:', currentMonthSalary);
-    
+        
     // حساب سلف الشهر الحالي فقط
     const advances = await Advance.find({
       employeeId,
@@ -353,7 +266,6 @@ export const makePayment = async (req, res) => {
     });
     
     const currentMonthAdvances = advances.reduce((sum, adv) => sum + adv.amount, 0);
-    console.log('Current Month Advances:', currentMonthAdvances);
     
     // حساب خصومات الشهر الحالي فقط
     const deductions = await Deduction.find({
@@ -363,7 +275,6 @@ export const makePayment = async (req, res) => {
     });
     
     const currentMonthDeductions = deductions.reduce((sum, ded) => sum + ded.amount, 0);
-    console.log('Current Month Deductions:', currentMonthDeductions);
     
     // حساب المدفوعات السابقة في هذا الشهر
     const payments = await Payment.find({
@@ -373,7 +284,6 @@ export const makePayment = async (req, res) => {
     });
     
     const currentMonthPaid = payments.reduce((sum, pay) => sum + pay.amount, 0);
-    console.log('Current Month Paid:', currentMonthPaid);
     
     // حساب المبالغ المرحلة من الأشهر السابقة
     // نحسب كل المرتبات والسلف والخصومات والمدفوعات من بداية التوظيف حتى الشهر السابق
@@ -424,21 +334,10 @@ export const makePayment = async (req, res) => {
     // المبلغ المرحل من الأشهر السابقة
     const carriedForward = (previousTotalSalaries - previousTotalAdvances - previousTotalDeductions) - previousTotalPaid;
     
-    console.log('Previous Total Salaries:', previousTotalSalaries);
-    console.log('Previous Total Advances:', previousTotalAdvances);
-    console.log('Previous Total Deductions:', previousTotalDeductions);
-    console.log('Previous Total Paid:', previousTotalPaid);
-    console.log('Carried Forward:', carriedForward);
-    
     // الرصيد المتاح = (مرتب الشهر الحالي - سلف الشهر - خصومات الشهر - مدفوعات الشهر) + المرحل
     const netSalary = currentMonthSalary - currentMonthAdvances - currentMonthDeductions;
     const remainingBalance = netSalary - currentMonthPaid + carriedForward;
-    
-    console.log('Net Salary (Current Month):', netSalary);
-    console.log('Remaining Balance (with carried forward):', remainingBalance);
-    console.log('Requested Amount:', amount);
-    console.log('=================================');
-    
+
     if (amount > remainingBalance) {
       return res.status(400).json({ 
         success: false, 

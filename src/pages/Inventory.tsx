@@ -151,7 +151,6 @@ const Inventory = () => {
 
     // Listen for inventory updates
     socket.on('inventory-update', async (data: any) => {
-      console.log('Inventory update received:', data);
       // Refresh inventory list
       await fetchInventoryItems();
       
@@ -163,11 +162,9 @@ const Inventory = () => {
 
     // Connection event handlers
     socket.on('connect', () => {
-      console.log('Socket.IO connected for inventory updates');
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('Socket.IO disconnected:', reason);
     });
 
     return () => {

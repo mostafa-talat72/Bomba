@@ -47,9 +47,7 @@ export const getAdvanceById = async (req, res) => {
 // Request advance
 export const requestAdvance = async (req, res) => {
   try {
-    console.log('Request body:', req.body);
-    console.log('User organization:', req.user.organization);
-    
+
     const { employeeId, amount, reason, repayment } = req.body;
     
     // التحقق من وجود الموظف
@@ -58,7 +56,6 @@ export const requestAdvance = async (req, res) => {
       organizationId: req.user.organization
     });
     
-    console.log('Employee found:', employee ? 'Yes' : 'No');
     
     if (!employee) {
       return res.status(404).json({ success: false, error: 'الموظف غير موجود' });
@@ -82,12 +79,10 @@ export const requestAdvance = async (req, res) => {
       organizationId: req.user.organization
     };
     
-    console.log('Creating advance with data:', advanceData);
     
     const advance = new Advance(advanceData);
     await advance.save();
     
-    console.log('Advance created successfully:', advance._id);
     
     res.status(201).json({
       success: true,
