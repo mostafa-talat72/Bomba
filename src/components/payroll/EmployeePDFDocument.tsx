@@ -62,6 +62,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
     color: '#2c3e50',
+    wordBreak: 'break-word',
   },
   statsGrid: {
     flexDirection: 'row-reverse',
@@ -192,15 +193,22 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
   advances,
   deductions,
   payments,
-}) => (
+}) => {
+  // دالة لتنظيف النصوص وتجنب المشاكل
+  const cleanText = (text: any) => {
+    if (!text) return '-';
+    return String(text).trim() || '-';
+  };
+
+  return (
   <Document>
     {/* الصفحة الأولى - معلومات الموظف والإحصائيات */}
     <Page size="A4" style={styles.page}>
       {/* العنوان */}
       <View style={styles.header}>
         <Text style={styles.title}>تقرير الموظف الشامل</Text>
-        <Text style={styles.subtitle}>{employee.personalInfo?.name}</Text>
-        <Text style={styles.subtitle}>{monthName}</Text>
+        <Text style={styles.subtitle}>{cleanText(employee.personalInfo?.name)}</Text>
+        <Text style={styles.subtitle}>{cleanText(monthName)}</Text>
       </View>
 
       {/* معلومات الموظف */}
@@ -209,15 +217,15 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
         <View style={styles.infoGrid}>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>الاسم</Text>
-            <Text style={styles.infoValue}>{employee.personalInfo?.name}</Text>
+            <Text style={styles.infoValue}>{cleanText(employee.personalInfo?.name)}</Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>رقم الهاتف</Text>
-            <Text style={styles.infoValue}>{employee.personalInfo?.phone || '-'}</Text>
+            <Text style={styles.infoValue}>{cleanText(employee.personalInfo?.phone)}</Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>الرقم القومي</Text>
-            <Text style={styles.infoValue}>{employee.personalInfo?.nationalId || '-'}</Text>
+            <Text style={styles.infoValue}>{cleanText(employee.personalInfo?.nationalId)}</Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>تاريخ التعيين</Text>
@@ -233,14 +241,14 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>المنصب</Text>
-            <Text style={styles.infoValue}>{employee.employment?.position}</Text>
+            <Text style={styles.infoValue}>{cleanText(employee.employment?.position)}</Text>
           </View>
         </View>
       </View>
 
       {/* الإحصائيات المالية */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>الملخص المالي - {monthName}</Text>
+        <Text style={styles.sectionTitle}>الملخص المالي - {cleanText(monthName)}</Text>
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <View style={styles.statBox}>
@@ -304,7 +312,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>سجل الحضور والانصراف</Text>
-          <Text style={styles.subtitle}>{employee.personalInfo?.name} - {monthName}</Text>
+          <Text style={styles.subtitle}>{cleanText(employee.personalInfo?.name)} - {cleanText(monthName)}</Text>
         </View>
 
         <View style={styles.section}>
@@ -323,8 +331,8 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
                   {dayjs(record.date).format('DD/MM/YYYY')}
                 </Text>
                 <Text style={[styles.tableCell, styles.col2]}>{getStatusName(record.status)}</Text>
-                <Text style={[styles.tableCell, styles.col3]}>{record.checkIn || '-'}</Text>
-                <Text style={[styles.tableCell, styles.col3]}>{record.checkOut || '-'}</Text>
+                <Text style={[styles.tableCell, styles.col3]}>{cleanText(record.checkIn)}</Text>
+                <Text style={[styles.tableCell, styles.col3]}>{cleanText(record.checkOut)}</Text>
                 <Text style={[styles.tableCell, styles.col3]}>
                   {record.hours ? record.hours.toFixed(1) : '-'}
                 </Text>
@@ -349,7 +357,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>السلف والخصومات والدفعات</Text>
-          <Text style={styles.subtitle}>{employee.personalInfo?.name} - {monthName}</Text>
+          <Text style={styles.subtitle}>{cleanText(employee.personalInfo?.name)} - {cleanText(monthName)}</Text>
         </View>
 
         {/* السلف */}
@@ -369,7 +377,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
                     {dayjs(advance.requestDate).format('DD/MM/YYYY')}
                   </Text>
                   <Text style={[styles.tableCell, styles.col2]}>{advance.amount.toFixed(2)}</Text>
-                  <Text style={[styles.tableCell, styles.col2]}>{advance.reason}</Text>
+                  <Text style={[styles.tableCell, styles.col2]}>{cleanText(advance.reason)}</Text>
                   <Text style={[styles.tableCell, styles.col2]}>{getStatusName(advance.status)}</Text>
                 </View>
               ))}
@@ -397,7 +405,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
                     {getDeductionTypeName(deduction.type)}
                   </Text>
                   <Text style={[styles.tableCell, styles.col2]}>{deduction.amount.toFixed(2)}</Text>
-                  <Text style={[styles.tableCell, styles.col2]}>{deduction.reason}</Text>
+                  <Text style={[styles.tableCell, styles.col2]}>{cleanText(deduction.reason)}</Text>
                 </View>
               ))}
             </View>
@@ -420,7 +428,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
                     {dayjs(payment.paymentDate).format('DD/MM/YYYY')}
                   </Text>
                   <Text style={[styles.tableCell, styles.col3]}>{payment.amount.toFixed(2)}</Text>
-                  <Text style={[styles.tableCell, styles.col3]}>{payment.method}</Text>
+                  <Text style={[styles.tableCell, styles.col3]}>{cleanText(payment.method)}</Text>
                 </View>
               ))}
             </View>
@@ -435,6 +443,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
       </Page>
     )}
   </Document>
-);
+  );
+};
 
 export default EmployeePDFDocument;

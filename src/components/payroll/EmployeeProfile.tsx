@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Tag, Statistic, Row, Col, Empty, Spin, Button, DatePicker, InputNumber, Modal, message, Form, Input, Select, TimePicker, Table } from 'antd';
-import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2, Download } from 'lucide-react';
+import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2, Download, MessageCircle } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
@@ -229,6 +229,102 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       console.error('فشل في تصدير التقرير:', error);
       message.destroy();
       message.error('فشل في تصدير التقرير');
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    try {
+      const phone = employee.personalInfo?.phone;
+      
+      if (!phone) {
+        message.error('لا يوجد رقم هاتف للموظف');
+        return;
+      }
+
+      // تنظيف رقم الهاتف (إزالة المسافات والرموز)
+      let cleanPhone = phone.replace(/\D/g, '');
+      
+      // إضافة كود مصر إذا لم يكن موجوداً
+      if (!cleanPhone.startsWith('20')) {
+        if (cleanPhone.startsWith('0')) {
+          cleanPhone = '20' + cleanPhone.substring(1);
+        } else {
+          cleanPhone = '20' + cleanPhone;
+        }
+      }
+
+      message.loading('جاري إنشاء ملف PDF...', 0);
+      
+      const monthName = selectedMonth.format('MMMM YYYY');
+      
+      // إنشاء مستند PDF
+      const blob = await pdf(
+        <EmployeePDFDocument 
+          employee={employee}
+          monthName={monthName}
+          stats={stats}
+          attendance={attendance}
+          advances={advances}
+          deductions={deductions}
+          payments={payments}
+        />
+      ).toBlob();
+      
+      message.destroy();
+      
+      // إنشاء رسالة WhatsApp
+      const employeeName = employee.personalInfo?.name;
+      const whatsappMessage = `مرحباً ${employeeName}،\n\nإليك تقرير المرتبات الخاص بك لشهر ${monthName}\n\nالرصيد المتاح: ${stats.remainingBalance.toFixed(2)} جنيه`;
+      
+      // فتح WhatsApp Web مع الرسالة
+      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
+      
+      // حفظ الملف محلياً أولاً
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `employee-report-${employeeName}-${selectedMonth.format('YYYY-MM')}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      // فتح WhatsApp
+      window.open(whatsappUrl, '_blank');
+      
+      Modal.info({
+        title: '📱 إرسال التقرير عبر WhatsApp',
+        content: (
+          <div className="space-y-4">
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="font-bold text-green-700 dark:text-green-400 mb-2">✅ تم تنزيل الملف بنجاح!</p>
+              <p className="text-sm">اسم الملف: <strong>employee-report-{employeeName}-{selectedMonth.format('YYYY-MM')}.pdf</strong></p>
+            </div>
+            
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="font-bold text-blue-700 dark:text-blue-400 mb-3">📋 خطوات الإرسال:</p>
+              <ol className="list-decimal mr-5 space-y-2 text-sm">
+                <li>في نافذة WhatsApp التي فتحت، اضغط على أيقونة <strong>المرفقات 📎</strong></li>
+                <li>اختر <strong>"مستند"</strong> أو <strong>"Document"</strong></li>
+                <li>اختر الملف الذي تم تنزيله للتو</li>
+                <li>اضغط <strong>إرسال ✓</strong></li>
+              </ol>
+            </div>
+            
+            <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                📞 رقم الموظف: <strong className="text-blue-600 dark:text-blue-400">{phone}</strong>
+              </p>
+            </div>
+          </div>
+        ),
+        okText: 'فهمت',
+        width: 600,
+        className: 'whatsapp-modal',
+      });
+      
+    } catch (error) {
+      console.error('فشل في إرسال التقرير:', error);
+      message.destroy();
+      message.error('فشل في إرسال التقرير');
     }
   };
 
@@ -991,7 +1087,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button 
                 type="default"
                 size="large" 
@@ -999,7 +1095,17 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 onClick={handleExportPDF}
                 className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
               >
-                تصدير تقرير شامل PDF
+                تصدير PDF
+              </Button>
+              <Button 
+                type="default"
+                size="large" 
+                icon={<MessageCircle size={20} />} 
+                onClick={handleSendWhatsApp}
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                style={{ backgroundColor: '#25D366', borderColor: '#25D366', color: 'white' }}
+              >
+                إرسال عبر WhatsApp
               </Button>
               <Button 
                 type="primary" 
