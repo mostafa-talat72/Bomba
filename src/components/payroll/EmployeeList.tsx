@@ -3,6 +3,7 @@ import { Button, Tag, Input, Select, Modal, Form, InputNumber, message, Card, Ro
 import { Plus, Trash2, Search, User, Phone, Briefcase, DollarSign } from 'lucide-react';
 import api from '../../services/api';
 import EmployeeProfile from './EmployeeProfile';
+import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
 import dayjs from 'dayjs';
 
 const { Option } = Select;
@@ -410,17 +411,17 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
                 <>
                   {type === 'monthly' && (
                     <Form.Item label={<span className="dark:text-gray-200">الراتب الشهري</span>} name="monthly">
-                      <InputNumber style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+                      <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
                     </Form.Item>
                   )}
                   {type === 'daily' && (
                     <Form.Item label={<span className="dark:text-gray-200">الأجر اليومي</span>} name="daily">
-                      <InputNumber style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+                      <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
                     </Form.Item>
                   )}
                   {type === 'hourly' && (
                     <Form.Item label={<span className="dark:text-gray-200">الأجر بالساعة</span>} name="hourly">
-                      <InputNumber style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+                      <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
                     </Form.Item>
                   )}
                 </>
@@ -434,7 +435,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
             tooltip="المبلغ الذي يحصل عليه الموظف عن كل ساعة إضافية"
           >
             <InputNumber 
-              style={{ width: '100%' }} 
+              {...numberOnlyInputProps} style={{ width: '100%' }} 
               min={0} 
               placeholder="0"
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 

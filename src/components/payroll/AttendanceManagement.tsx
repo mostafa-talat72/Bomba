@@ -3,6 +3,7 @@ import { Button, DatePicker, Select, Tag, message, Card, Statistic, Row, Col, Mo
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Edit2 } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
+import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
 import 'dayjs/locale/ar';
 
 dayjs.locale('ar');

@@ -217,3 +217,276 @@
   }
 }
 
+
+/* Professional Modal Styles */
+.professional-modal .ant-modal-content {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.professional-modal .ant-modal-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-bottom: none;
+  padding: 20px 24px;
+  border-radius: 12px 12px 0 0;
+}
+
+.professional-modal .ant-modal-title {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.professional-modal .ant-modal-close {
+  color: white;
+  opacity: 0.8;
+  transition: opacity 0.3s;
+}
+
+.professional-modal .ant-modal-close:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.professional-modal .ant-modal-body {
+  padding: 24px;
+  background: #fafafa;
+}
+
+.dark .professional-modal .ant-modal-body {
+  background: #1f2937;
+}
+
+.professional-modal .ant-form-item-label > label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.dark .professional-modal .ant-form-item-label > label {
+  color: #e5e7eb;
+}
+
+/* Success Modal */
+.success-modal .ant-modal-header {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+/* Warning Modal */
+.warning-modal .ant-modal-header {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+/* Danger Modal */
+.danger-modal .ant-modal-header {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* Info Modal */
+.info-modal .ant-modal-header {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+/* Form Section Headers */
+.form-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  color: #374151;
+  border-left: 4px solid #667eea;
+}
+
+.dark .form-section-header {
+  background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+  color: #e5e7eb;
+  border-left-color: #818cf8;
+}
+
+/* Enhanced Input Styles */
+.professional-modal .ant-input,
+.professional-modal .ant-input-number,
+.professional-modal .ant-picker,
+.professional-modal .ant-select-selector,
+.professional-modal textarea {
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  transition: all 0.3s;
+}
+
+.professional-modal .ant-input:hover,
+.professional-modal .ant-input-number:hover,
+.professional-modal .ant-picker:hover,
+.professional-modal .ant-select-selector:hover,
+.professional-modal textarea:hover {
+  border-color: #667eea;
+}
+
+.professional-modal .ant-input:focus,
+.professional-modal .ant-input-number-focused,
+.professional-modal .ant-picker-focused,
+.professional-modal .ant-select-focused .ant-select-selector,
+.professional-modal textarea:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Enhanced Button Styles */
+.professional-modal .ant-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  height: 40px;
+  padding: 0 24px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s;
+}
+
+.professional-modal .ant-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.professional-modal .ant-btn-default {
+  border-radius: 8px;
+  height: 40px;
+  padding: 0 24px;
+  border: 2px solid #e5e7eb;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+
+.professional-modal .ant-btn-default:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+/* Card Styles in Modals */
+.professional-modal .ant-card {
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  transition: all 0.3s;
+}
+
+.professional-modal .ant-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+}
+
+.dark .professional-modal .ant-card {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+/* Info Box Styles */
+.info-box {
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  margin-bottom: 16px;
+}
+
+.info-box.info {
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+  color: #1e40af;
+}
+
+.info-box.success {
+  background: #f0fdf4;
+  border-left-color: #10b981;
+  color: #065f46;
+}
+
+.info-box.warning {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+  color: #92400e;
+}
+
+.info-box.error {
+  background: #fef2f2;
+  border-left-color: #ef4444;
+  color: #991b1b;
+}
+
+.dark .info-box.info {
+  background: #1e3a8a;
+  color: #bfdbfe;
+}
+
+.dark .info-box.success {
+  background: #064e3b;
+  color: #a7f3d0;
+}
+
+.dark .info-box.warning {
+  background: #78350f;
+  color: #fde68a;
+}
+
+.dark .info-box.error {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+/* Animation */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.professional-modal .ant-modal-content {
+  animation: slideInUp 0.3s ease-out;
+}
+
+
+/* إصلاح لون النص في حقول InputNumber في الوضع المظلم */
+.dark .ant-input-number {
+  background-color: #374151 !important;
+  border-color: #4b5563 !important;
+  color: #f3f4f6 !important;
+}
+
+.dark .ant-input-number input {
+  background-color: #374151 !important;
+  color: #f3f4f6 !important;
+}
+
+.dark .ant-input-number:hover {
+  border-color: #6b7280 !important;
+}
+
+.dark .ant-input-number-focused {
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2) !important;
+}
+
+.dark .ant-input-number-disabled {
+  background-color: #1f2937 !important;
+  color: #6b7280 !important;
+}
+
+/* إصلاح لون prefix icons في الوضع المظلم */
+.dark .ant-input-number-prefix {
+  color: #9ca3af !important;
+}
+
+/* إصلاح placeholder في الوضع المظلم */
+.dark .ant-input-number input::placeholder {
+  color: #6b7280 !important;
+}

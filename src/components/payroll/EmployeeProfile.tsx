@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Tag, Statistic, Row, Col, Empty, Spin, Button, DatePicker, InputNumber, Modal, message, Form, Input, Select, TimePicker, Table } from 'antd';
-import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2, Download, MessageCircle } from 'lucide-react';
+import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2, Download, MessageCircle, Phone, Briefcase } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
 import { pdf } from '@react-pdf/renderer';
 import EmployeePDFDocument from './EmployeePDFDocument';
+import { numberOnlyInputProps } from '../../utils/inputHelpers';
 import './EmployeeProfile.css';
 
 dayjs.locale('ar');
@@ -1437,7 +1438,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       {/* Edit Modals */}
       {/* Modal تعديل الحضور */}
       <Modal
-        title="تعديل الحضور"
+        title={
+          <div className="flex items-center gap-2">
+            <Edit size={20} />
+            <span>تعديل الحضور</span>
+          </div>
+        }
         open={editAttendanceModalVisible}
         onCancel={() => {
           setEditAttendanceModalVisible(false);
@@ -1446,7 +1452,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }}
         footer={null}
         width={600}
-        className="dark:bg-gray-800"
+        className="professional-modal info-modal"
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdateAttendance}>
           <Form.Item
@@ -1458,6 +1464,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               format="YYYY-MM-DD" 
               className="dark:bg-gray-700 dark:border-gray-600"
               disabled
+              size="large"
             />
           </Form.Item>
 
@@ -1466,7 +1473,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             name="status"
             rules={[{ required: true, message: 'الرجاء اختيار الحالة' }]}
           >
-            <Select className="dark:bg-gray-700">
+            <Select className="dark:bg-gray-700" size="large">
               <Option value="present">حضور</Option>
               <Option value="absent">غياب</Option>
               <Option value="late">تأخير</Option>
@@ -1487,6 +1494,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   format="hh:mm A"
                   use12Hours
                   className="dark:bg-gray-700 dark:border-gray-600"
+                  size="large"
                 />
               </Form.Item>
             </Col>
@@ -1500,6 +1508,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   format="hh:mm A"
                   use12Hours
                   className="dark:bg-gray-700 dark:border-gray-600"
+                  size="large"
                 />
               </Form.Item>
             </Col>
@@ -1509,7 +1518,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             label={<span className="dark:text-gray-200">السبب</span>} 
             name="reason"
           >
-            <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+            <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
           </Form.Item>
 
           <Form.Item label={<span className="dark:text-gray-200">ملاحظات</span>} name="notes">
@@ -1518,14 +1527,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
           <Form.Item>
             <div className="flex gap-2">
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" size="large">
                 حفظ
               </Button>
               <Button onClick={() => {
                 setEditAttendanceModalVisible(false);
                 setEditingAttendance(null);
                 editForm.resetFields();
-              }}>
+              }} size="large">
                 إلغاء
               </Button>
             </div>
@@ -1535,7 +1544,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {/* Modal تعديل السلفة */}
       <Modal
-        title="تعديل السلفة"
+        title={
+          <div className="flex items-center gap-2">
+            <Edit size={20} />
+            <span>تعديل السلفة</span>
+          </div>
+        }
         open={editAdvanceModalVisible}
         onCancel={() => {
           setEditAdvanceModalVisible(false);
@@ -1544,7 +1558,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }}
         footer={null}
         width={600}
-        className="dark:bg-gray-800"
+        className="professional-modal warning-modal"
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdateAdvance}>
           <Form.Item
@@ -1553,9 +1567,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
             <InputNumber
-              style={{ width: '100%' }}
+              {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
             />
           </Form.Item>
 
@@ -1575,19 +1591,20 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               style={{ width: '100%' }}
               format="YYYY-MM-DD"
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
             />
           </Form.Item>
 
           <Form.Item>
             <div className="flex gap-2">
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" size="large">
                 حفظ
               </Button>
               <Button onClick={() => {
                 setEditAdvanceModalVisible(false);
                 setEditingAdvance(null);
                 editForm.resetFields();
-              }}>
+              }} size="large">
                 إلغاء
               </Button>
             </div>
@@ -1597,7 +1614,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {/* Modal تعديل الخصم */}
       <Modal
-        title="تعديل الخصم"
+        title={
+          <div className="flex items-center gap-2">
+            <Edit size={20} />
+            <span>تعديل الخصم</span>
+          </div>
+        }
         open={editDeductionModalVisible}
         onCancel={() => {
           setEditDeductionModalVisible(false);
@@ -1606,7 +1628,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }}
         footer={null}
         width={600}
-        className="dark:bg-gray-800"
+        className="professional-modal danger-modal"
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdateDeduction}>
           <Form.Item
@@ -1614,7 +1636,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             name="type"
             rules={[{ required: true, message: 'الرجاء اختيار النوع' }]}
           >
-            <Select className="dark:bg-gray-700">
+            <Select className="dark:bg-gray-700" size="large">
               <Option value="absence">غياب</Option>
               <Option value="late">تأخير</Option>
               <Option value="penalty">جزاء</Option>
@@ -1631,9 +1653,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
             <InputNumber
-              style={{ width: '100%' }}
+              {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
             />
           </Form.Item>
 
@@ -1645,6 +1669,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               style={{ width: '100%' }}
               format="YYYY-MM-DD"
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
             />
           </Form.Item>
 
@@ -1658,14 +1683,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
           <Form.Item>
             <div className="flex gap-2">
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" size="large">
                 حفظ
               </Button>
               <Button onClick={() => {
                 setEditDeductionModalVisible(false);
                 setEditingDeduction(null);
                 editForm.resetFields();
-              }}>
+              }} size="large">
                 إلغاء
               </Button>
             </div>
@@ -1675,7 +1700,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {/* Modal تعديل الدفعة */}
       <Modal
-        title="تعديل الدفعة"
+        title={
+          <div className="flex items-center gap-2">
+            <Edit size={20} />
+            <span>تعديل الدفعة</span>
+          </div>
+        }
         open={editPaymentModalVisible}
         onCancel={() => {
           setEditPaymentModalVisible(false);
@@ -1684,7 +1714,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }}
         footer={null}
         width={600}
-        className="dark:bg-gray-800"
+        className="professional-modal success-modal"
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdatePayment}>
           <Form.Item
@@ -1693,9 +1723,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
             <InputNumber
-              style={{ width: '100%' }}
+              {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
             />
           </Form.Item>
 
@@ -1703,7 +1735,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             label={<span className="dark:text-gray-200">طريقة الدفع</span>}
             name="method"
           >
-            <Select className="dark:bg-gray-700">
+            <Select className="dark:bg-gray-700" size="large">
               <Option value="cash">نقدي</Option>
               <Option value="card">بطاقة</Option>
               <Option value="transfer">تحويل</Option>
@@ -1718,6 +1750,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               style={{ width: '100%' }}
               format="YYYY-MM-DD"
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
             />
           </Form.Item>
 
@@ -1730,7 +1763,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
           <Form.Item>
             <div className="flex gap-2">
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" size="large">
                 حفظ
               </Button>
               <Button onClick={() => {
@@ -1745,13 +1778,50 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         </Form>
       </Modal>
 
-      <Modal title="صرف جزء من المرتب" open={paymentModalVisible} onCancel={() => { setPaymentModalVisible(false); setPaymentAmount(0); setPaymentDate(dayjs()); }} onOk={handlePayment} okText="صرف" cancelText="إلغاء" className="dark:bg-gray-800">
+      <Modal 
+        title={
+          <div className="flex items-center gap-2">
+            <Wallet size={20} />
+            <span>صرف جزء من المرتب</span>
+          </div>
+        }
+        open={paymentModalVisible} 
+        onCancel={() => { 
+          setPaymentModalVisible(false); 
+          setPaymentAmount(0); 
+          setPaymentDate(dayjs()); 
+        }} 
+        onOk={handlePayment} 
+        okText="صرف" 
+        cancelText="إلغاء" 
+        className="professional-modal success-modal"
+        width={500}
+      >
         <div className="space-y-4">
-          <div><label className="block text-sm font-medium mb-2 dark:text-gray-200">الرصيد المتاح: {toArabicNumbers(stats.remainingBalance.toFixed(2))} جنيه</label></div>
+          <div className="info-box success">
+            <div className="flex items-center gap-2 mb-2">
+              <Wallet size={18} />
+              <span className="font-bold">الرصيد المتاح</span>
+            </div>
+            <div className="text-2xl font-bold">{toArabicNumbers(stats.remainingBalance.toFixed(2))} جنيه</div>
+          </div>
+          
           <div>
             <label className="block text-sm font-medium mb-2 dark:text-gray-200">المبلغ المطلوب صرفه</label>
-            <InputNumber value={paymentAmount} onChange={(value) => setPaymentAmount(value || 0)} min={0} max={stats.remainingBalance} style={{ width: '100%' }} className="dark:bg-gray-700 dark:border-gray-600" placeholder="أدخل المبلغ" />
+            <InputNumber 
+              {...numberOnlyInputProps}
+              value={paymentAmount} 
+              onChange={(value) => setPaymentAmount(value || 0)} 
+              min={0} 
+              max={stats.remainingBalance} 
+              style={{ width: '100%' }} 
+              className="dark:bg-gray-700 dark:border-gray-600" 
+              placeholder="أدخل المبلغ"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
+            />
           </div>
+          
           <div>
             <label className="block text-sm font-medium mb-2 dark:text-gray-200">تاريخ الصرف</label>
             <DatePicker 
@@ -1761,16 +1831,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               style={{ width: '100%' }} 
               className="dark:bg-gray-700 dark:border-gray-600"
               placeholder="اختر تاريخ الصرف"
+              size="large"
               disabledDate={(current) => {
                 if (!current) return false;
                 const today = dayjs();
                 const currentMonthStart = selectedMonth.startOf('month');
                 const currentMonthEnd = selectedMonth.endOf('month');
                 
-                // لا يمكن اختيار تاريخ في المستقبل
                 if (current.isAfter(today, 'day')) return true;
-                
-                // يجب أن يكون التاريخ في الشهر المحدد
                 if (current.isBefore(currentMonthStart, 'day') || current.isAfter(currentMonthEnd, 'day')) return true;
                 
                 return false;
@@ -1781,8 +1849,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       </Modal>
 
       {/* Modal تسجيل الحضور */}
+      {/* Modal تسجيل حضور */}
       <Modal
-        title="تسجيل حضور"
+        title={
+          <div className="flex items-center gap-2">
+            <Calendar size={20} />
+            <span>تسجيل حضور</span>
+          </div>
+        }
         open={attendanceModalVisible}
         onCancel={() => {
           setAttendanceModalVisible(false);
@@ -1793,7 +1867,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }}
         footer={null}
         width={800}
-        className="dark:bg-gray-800"
+        className="professional-modal info-modal"
       >
         <Form form={attendanceForm} layout="vertical" onFinish={handleSubmitAttendance}>
           <Form.Item
@@ -1808,6 +1882,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               className="dark:bg-gray-700 dark:border-gray-600"
               placeholder="اختر يوم أو أكثر"
               onChange={handleDatesChange}
+              size="large"
             />
           </Form.Item>
 
@@ -1816,7 +1891,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             name="status"
             rules={[{ required: true, message: 'الرجاء اختيار الحالة' }]}
           >
-            <Select className="dark:bg-gray-700">
+            <Select className="dark:bg-gray-700" size="large">
               <Option value="present">حضور</Option>
               <Option value="absent">غياب</Option>
               <Option value="late">تأخير</Option>
@@ -1839,36 +1914,52 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   {(status === 'present' || status === 'late' || status === 'half_day') && dates.length > 0 && (
                     <>
                       {dates.length > 1 && (
-                        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                          <div className="text-sm font-medium mb-3 text-gray-700 dark:text-gray-200">
-                            اختر طريقة تحديد الأوقات:
+                        <div className="mb-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl border-2 border-blue-200 dark:border-blue-700 shadow-sm">
+                          <div className="flex items-center gap-2 mb-4">
+                            <Calendar size={20} className="text-blue-600 dark:text-blue-400" />
+                            <span className="text-base font-bold text-blue-900 dark:text-blue-200">
+                              اختر طريقة تحديد الأوقات:
+                            </span>
                           </div>
                           <div className="flex flex-col gap-3">
-                            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-all hover:bg-blue-100 dark:hover:bg-blue-900/30 dark:text-gray-200"
-                              style={{
-                                borderColor: timeMode === 'same' ? '#1890ff' : '#d9d9d9',
-                                backgroundColor: timeMode === 'same' ? '#e6f7ff' : 'transparent'
-                              }}
+                            <label 
+                              className={`flex items-center gap-3 cursor-pointer p-4 rounded-xl border-2 transition-all duration-300 ${
+                                timeMode === 'same' 
+                                  ? 'border-blue-500 bg-blue-100 dark:bg-blue-900/40 shadow-md scale-[1.02]' 
+                                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                              }`}
                             >
                               <input
                                 type="radio"
                                 checked={timeMode === 'same'}
                                 onChange={() => setTimeMode('same')}
-                                className="w-5 h-5"
+                                className="w-5 h-5 text-blue-600 focus:ring-blue-500"
                               />
-                              <div>
-                                <div className="font-medium">نفس الوقت لجميع الأيام</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                              <div className="flex-1">
+                                <div className={`font-bold text-base mb-1 ${
+                                  timeMode === 'same' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'
+                                }`}>
+                                  ⏰ نفس الوقت لجميع الأيام
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
                                   سيتم تطبيق نفس وقت الحضور والانصراف على جميع الأيام المختارة
                                 </div>
                               </div>
+                              {timeMode === 'same' && (
+                                <div className="flex-shrink-0 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              )}
                             </label>
                             
-                            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-all hover:bg-blue-100 dark:hover:bg-blue-900/30 dark:text-gray-200"
-                              style={{
-                                borderColor: timeMode === 'groups' ? '#1890ff' : '#d9d9d9',
-                                backgroundColor: timeMode === 'groups' ? '#e6f7ff' : 'transparent'
-                              }}
+                            <label 
+                              className={`flex items-center gap-3 cursor-pointer p-4 rounded-xl border-2 transition-all duration-300 ${
+                                timeMode === 'groups' 
+                                  ? 'border-purple-500 bg-purple-100 dark:bg-purple-900/40 shadow-md scale-[1.02]' 
+                                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+                              }`}
                             >
                               <input
                                 type="radio"
@@ -1879,71 +1970,102 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                     addTimeGroup();
                                   }
                                 }}
-                                className="w-5 h-5"
+                                className="w-5 h-5 text-purple-600 focus:ring-purple-500"
                               />
-                              <div>
-                                <div className="font-medium">مجموعات أيام بأوقات مختلفة</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                              <div className="flex-1">
+                                <div className={`font-bold text-base mb-1 ${
+                                  timeMode === 'groups' ? 'text-purple-700 dark:text-purple-300' : 'text-gray-800 dark:text-gray-200'
+                                }`}>
+                                  📋 مجموعات أيام بأوقات مختلفة
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
                                   يمكنك تقسيم الأيام إلى مجموعات، كل مجموعة لها وقت خاص
                                 </div>
                               </div>
+                              {timeMode === 'groups' && (
+                                <div className="flex-shrink-0 w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              )}
                             </label>
                             
-                            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-all hover:bg-blue-100 dark:hover:bg-blue-900/30 dark:text-gray-200"
-                              style={{
-                                borderColor: timeMode === 'different' ? '#1890ff' : '#d9d9d9',
-                                backgroundColor: timeMode === 'different' ? '#e6f7ff' : 'transparent'
-                              }}
+                            <label 
+                              className={`flex items-center gap-3 cursor-pointer p-4 rounded-xl border-2 transition-all duration-300 ${
+                                timeMode === 'different' 
+                                  ? 'border-green-500 bg-green-100 dark:bg-green-900/40 shadow-md scale-[1.02]' 
+                                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
+                              }`}
                             >
                               <input
                                 type="radio"
                                 checked={timeMode === 'different'}
                                 onChange={() => setTimeMode('different')}
-                                className="w-5 h-5"
+                                className="w-5 h-5 text-green-600 focus:ring-green-500"
                               />
-                              <div>
-                                <div className="font-medium">وقت مختلف لكل يوم</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                              <div className="flex-1">
+                                <div className={`font-bold text-base mb-1 ${
+                                  timeMode === 'different' ? 'text-green-700 dark:text-green-300' : 'text-gray-800 dark:text-gray-200'
+                                }`}>
+                                  📅 وقت مختلف لكل يوم
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
                                   يمكنك تحديد وقت حضور وانصراف مختلف لكل يوم على حدة
                                 </div>
                               </div>
+                              {timeMode === 'different' && (
+                                <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              )}
                             </label>
                           </div>
                         </div>
                       )}
 
                       {timeMode === 'same' && (
-                        <Row gutter={16}>
-                          <Col span={12}>
-                            <Form.Item 
-                              label={<span className="dark:text-gray-200">وقت الحضور</span>} 
-                              name="checkIn"
-                              rules={status === 'present' || status === 'late' ? [{ required: true, message: 'مطلوب' }] : []}
-                            >
-                              <TimePicker 
-                                style={{ width: '100%' }} 
-                                format="hh:mm A"
-                                use12Hours
-                                className="dark:bg-gray-700 dark:border-gray-600"
-                                placeholder="اختر الوقت"
-                              />
-                            </Form.Item>
-                          </Col>
-                          <Col span={12}>
-                            <Form.Item 
-                              label={<span className="dark:text-gray-200">وقت الانصراف</span>} 
-                              name="checkOut"
-                            >
-                              <TimePicker 
-                                style={{ width: '100%' }} 
-                                format="hh:mm A"
-                                use12Hours
-                                className="dark:bg-gray-700 dark:border-gray-600"
-                                placeholder="اختر الوقت"
-                              />
-                            </Form.Item>
-                          </Col>
-                        </Row>
+                        <div className="mb-4">
+                          <div className="form-section-header mb-3">
+                            <Calendar size={18} />
+                            <span>أوقات الحضور والانصراف</span>
+                          </div>
+                          <Row gutter={16}>
+                            <Col span={12}>
+                              <Form.Item 
+                                label={<span className="dark:text-gray-200">وقت الحضور</span>} 
+                                name="checkIn"
+                                rules={status === 'present' || status === 'late' ? [{ required: true, message: 'مطلوب' }] : []}
+                              >
+                                <TimePicker 
+                                  style={{ width: '100%' }} 
+                                  format="hh:mm A"
+                                  use12Hours
+                                  className="dark:bg-gray-700 dark:border-gray-600"
+                                  placeholder="اختر الوقت"
+                                  size="large"
+                                />
+                              </Form.Item>
+                            </Col>
+                            <Col span={12}>
+                              <Form.Item 
+                                label={<span className="dark:text-gray-200">وقت الانصراف</span>} 
+                                name="checkOut"
+                              >
+                                <TimePicker 
+                                  style={{ width: '100%' }} 
+                                  format="hh:mm A"
+                                  use12Hours
+                                  className="dark:bg-gray-700 dark:border-gray-600"
+                                  placeholder="اختر الوقت"
+                                  size="large"
+                                />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                        </div>
                       )}
 
                       {timeMode === 'groups' && (
@@ -2186,7 +2308,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {/* Modal إضافة سلفة */}
       <Modal
-        title="طلب سلفة جديدة"
+        title={
+          <div className="flex items-center gap-2">
+            <Plus size={20} />
+            <span>طلب سلفة جديدة</span>
+          </div>
+        }
         open={advanceModalVisible}
         onCancel={() => {
           setAdvanceModalVisible(false);
@@ -2194,19 +2321,28 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }}
         footer={null}
         width={600}
-        className="dark:bg-gray-800"
+        className="professional-modal warning-modal"
       >
         <Form form={advanceForm} layout="vertical" onFinish={handleSubmitAdvance}>
+          <div className="info-box warning mb-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} />
+              <span className="font-medium">سيتم خصم السلفة من المرتبات القادمة</span>
+            </div>
+          </div>
+
           <Form.Item
             label={<span className="dark:text-gray-200">المبلغ</span>}
             name="amount"
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
             <InputNumber
-              style={{ width: '100%' }}
+              {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
               placeholder="المبلغ بالجنيه"
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
             />
           </Form.Item>
 
@@ -2222,12 +2358,17 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             />
           </Form.Item>
 
+          <div className="form-section-header">
+            <Calendar size={18} />
+            <span>طريقة السداد</span>
+          </div>
+
           <Form.Item
             label={<span className="dark:text-gray-200">طريقة السداد</span>}
             name="repaymentMethod"
             initialValue="installments"
           >
-            <Select className="dark:bg-gray-700">
+            <Select className="dark:bg-gray-700" size="large">
               <Option value="full">دفعة واحدة</Option>
               <Option value="installments">أقساط شهرية</Option>
             </Select>
@@ -2249,10 +2390,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     rules={[{ required: true, message: 'الرجاء إدخال عدد الأقساط' }]}
                   >
                     <InputNumber
-                      style={{ width: '100%' }}
+                      {...numberOnlyInputProps} style={{ width: '100%' }}
                       min={1}
                       placeholder="عدد الأقساط الشهرية"
                       className="dark:bg-gray-700 dark:border-gray-600"
+                      size="large"
                     />
                   </Form.Item>
                 )
@@ -2262,13 +2404,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
           <Form.Item>
             <div className="flex gap-2">
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" size="large">
                 تقديم الطلب
               </Button>
               <Button onClick={() => {
                 setAdvanceModalVisible(false);
                 advanceForm.resetFields();
-              }}>
+              }} size="large">
                 إلغاء
               </Button>
             </div>
@@ -2278,7 +2420,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {/* Modal إضافة خصم */}
       <Modal
-        title="إضافة خصم"
+        title={
+          <div className="flex items-center gap-2">
+            <Minus size={20} />
+            <span>إضافة خصم</span>
+          </div>
+        }
         open={deductionModalVisible}
         onCancel={() => {
           setDeductionModalVisible(false);
@@ -2286,15 +2433,22 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }}
         footer={null}
         width={600}
-        className="dark:bg-gray-800"
+        className="professional-modal danger-modal"
       >
         <Form form={deductionForm} layout="vertical" onFinish={handleSubmitDeduction}>
+          <div className="info-box error mb-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} />
+              <span className="font-medium">سيتم خصم المبلغ من مرتب الموظف</span>
+            </div>
+          </div>
+
           <Form.Item
             label={<span className="dark:text-gray-200">نوع الخصم</span>}
             name="type"
             rules={[{ required: true, message: 'الرجاء اختيار نوع الخصم' }]}
           >
-            <Select className="dark:bg-gray-700">
+            <Select className="dark:bg-gray-700" size="large">
               <Option value="absence">غياب</Option>
               <Option value="late">تأخير</Option>
               <Option value="penalty">جزاء</Option>
@@ -2311,10 +2465,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
             <InputNumber
-              style={{ width: '100%' }}
+              {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
               placeholder="المبلغ بالجنيه"
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
             />
           </Form.Item>
 
@@ -2327,6 +2483,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               style={{ width: '100%' }}
               placeholder="اختر التاريخ"
               className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
             />
           </Form.Item>
 
@@ -2344,13 +2501,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
           <Form.Item>
             <div className="flex gap-2">
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" size="large">
                 إضافة
               </Button>
               <Button onClick={() => {
                 setDeductionModalVisible(false);
                 deductionForm.resetFields();
-              }}>
+              }} size="large">
                 إلغاء
               </Button>
             </div>
@@ -2360,19 +2517,27 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {/* Modal تعديل بيانات الموظف */}
       <Modal
-        title="تعديل بيانات الموظف"
+        title={
+          <div className="flex items-center gap-2">
+            <User size={20} />
+            <span>تعديل بيانات الموظف</span>
+          </div>
+        }
         open={editEmployeeModalVisible}
         onCancel={() => {
           setEditEmployeeModalVisible(false);
           editEmployeeForm.resetFields();
         }}
         footer={null}
-        width={800}
-        className="dark:bg-gray-800"
+        width={900}
+        className="professional-modal info-modal"
       >
         <Form form={editEmployeeForm} layout="vertical" onFinish={handleEditEmployee}>
           <div className="mb-4">
-            <h4 className="text-md font-bold text-gray-700 dark:text-gray-300 mb-3">المعلومات الشخصية</h4>
+            <div className="form-section-header">
+              <User size={18} />
+              <span>المعلومات الشخصية</span>
+            </div>
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
@@ -2380,7 +2545,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   name="name"
                   rules={[{ required: true, message: 'الرجاء إدخال الاسم' }]}
                 >
-                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -2389,7 +2554,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   name="phone"
                   rules={[{ required: true, message: 'الرجاء إدخال رقم الهاتف' }]}
                 >
-                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" prefix={<Phone size={16} className="text-gray-400" />} />
                 </Form.Item>
               </Col>
             </Row>
@@ -2400,7 +2565,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   label={<span className="dark:text-gray-200">الرقم القومي</span>}
                   name="nationalId"
                 >
-                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -2410,6 +2575,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 >
                   <DatePicker
                     style={{ width: '100%' }}
+                    size="large"
                     format="YYYY-MM-DD"
                     className="dark:bg-gray-700 dark:border-gray-600"
                   />
@@ -2426,7 +2592,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </div>
 
           <div className="mb-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-            <h4 className="text-md font-bold text-gray-700 dark:text-gray-300 mb-3">بيانات التوظيف</h4>
+            <div className="form-section-header">
+              <Briefcase size={18} />
+              <span>بيانات التوظيف</span>
+            </div>
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
@@ -2434,7 +2603,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   name="department"
                   rules={[{ required: true, message: 'الرجاء اختيار القسم' }]}
                 >
-                  <Select className="dark:bg-gray-700">
+                  <Select className="dark:bg-gray-700" size="large">
                     <Option value="kitchen">المطبخ</Option>
                     <Option value="cashier">الكاشير</Option>
                     <Option value="waiter">الخدمة</Option>
@@ -2450,7 +2619,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   name="position"
                   rules={[{ required: true, message: 'الرجاء إدخال المنصب' }]}
                 >
-                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+                  <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
                 </Form.Item>
               </Col>
             </Row>
@@ -2462,7 +2631,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   name="type"
                   rules={[{ required: true, message: 'الرجاء اختيار نوع التوظيف' }]}
                 >
-                  <Select className="dark:bg-gray-700">
+                  <Select className="dark:bg-gray-700" size="large">
                     <Option value="monthly">شهري</Option>
                     <Option value="daily">يومي</Option>
                     <Option value="hourly">بالساعة</Option>
@@ -2475,7 +2644,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   name="status"
                   rules={[{ required: true, message: 'الرجاء اختيار الحالة' }]}
                 >
-                  <Select className="dark:bg-gray-700">
+                  <Select className="dark:bg-gray-700" size="large">
                     <Option value="active">نشط</Option>
                     <Option value="suspended">موقوف</Option>
                     <Option value="terminated">منتهي</Option>
@@ -2486,7 +2655,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </div>
 
           <div className="pt-4 border-t border-gray-200 dark:border-gray-600">
-            <h4 className="text-md font-bold text-gray-700 dark:text-gray-300 mb-3">التعويضات</h4>
+            <div className="form-section-header">
+              <DollarSign size={18} />
+              <span>التعويضات</span>
+            </div>
             
             <Form.Item
               noStyle
@@ -2505,10 +2677,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           rules={[{ required: true, message: 'الرجاء إدخال الراتب' }]}
                         >
                           <InputNumber
-                            style={{ width: '100%' }}
+                            {...numberOnlyInputProps} style={{ width: '100%' }}
                             min={0}
                             placeholder="الراتب بالجنيه"
                             className="dark:bg-gray-700 dark:border-gray-600"
+                            size="large"
+                            prefix={<DollarSign size={16} className="text-gray-400" />}
                           />
                         </Form.Item>
                       </Col>
@@ -2522,10 +2696,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           rules={[{ required: true, message: 'الرجاء إدخال الأجر' }]}
                         >
                           <InputNumber
-                            style={{ width: '100%' }}
+                            {...numberOnlyInputProps} style={{ width: '100%' }}
                             min={0}
                             placeholder="الأجر بالجنيه"
                             className="dark:bg-gray-700 dark:border-gray-600"
+                            size="large"
+                            prefix={<DollarSign size={16} className="text-gray-400" />}
                           />
                         </Form.Item>
                       </Col>
@@ -2539,7 +2715,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           rules={[{ required: true, message: 'الرجاء إدخال الأجر' }]}
                         >
                           <InputNumber
-                            style={{ width: '100%' }}
+                            {...numberOnlyInputProps} style={{ width: '100%' }}
                             min={0}
                             placeholder="الأجر بالجنيه"
                             className="dark:bg-gray-700 dark:border-gray-600"
@@ -2554,7 +2730,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                         name="overtimeHourlyRate"
                       >
                         <InputNumber
-                          style={{ width: '100%' }}
+                          {...numberOnlyInputProps} style={{ width: '100%' }}
                           min={0}
                           placeholder="الأجر بالجنيه"
                           className="dark:bg-gray-700 dark:border-gray-600"

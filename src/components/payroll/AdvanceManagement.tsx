@@ -3,6 +3,7 @@ import { Button, Modal, Form, InputNumber, Input, Select, Tag, message, Card, Ro
 import { Plus, Check, X, DollarSign, User, Calendar, FileText } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
+import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -301,7 +302,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
             <InputNumber
-              style={{ width: '100%' }}
+              {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
               placeholder="المبلغ بالجنيه"
               className="dark:bg-gray-700 dark:border-gray-600"
@@ -347,7 +348,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
                     rules={[{ required: true, message: 'الرجاء إدخال عدد الأقساط' }]}
                   >
                     <InputNumber
-                      style={{ width: '100%' }}
+                      {...numberOnlyInputProps} style={{ width: '100%' }}
                       min={1}
                       placeholder="عدد الأقساط الشهرية"
                       className="dark:bg-gray-700 dark:border-gray-600"

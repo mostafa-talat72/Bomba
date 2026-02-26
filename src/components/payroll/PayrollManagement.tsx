@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Select, DatePicker, Tag, Space, Description
 import { Plus, Eye, Check, DollarSign, Lock, Unlock, Printer, FileText, TrendingUp, TrendingDown } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
+import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
 import 'dayjs/locale/ar';
 
 dayjs.locale('ar');
@@ -1058,7 +1059,7 @@ const PayrollManagement: React.FC = () => {
             name="amount"
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
-            <InputNumber style={{ width: '100%' }} min={0} />
+            <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} />
           </Form.Item>
 
           <Form.Item
