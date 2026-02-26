@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Tag, Statistic, Row, Col, Empty, Spin, Button, DatePicker, InputNumber, Modal, message, Form, Input, Select, TimePicker, Table } from 'antd';
-import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2 } from 'lucide-react';
+import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2, Download } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
+import { pdf } from '@react-pdf/renderer';
+import EmployeePDFDocument from './EmployeePDFDocument';
 import './EmployeeProfile.css';
 
 dayjs.locale('ar');
@@ -191,6 +193,42 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || error.message || 'فشل في تسجيل الدفعة';
       message.error(errorMessage);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      message.loading('جاري إنشاء ملف PDF...', 0);
+      
+      const monthName = selectedMonth.format('MMMM YYYY');
+      
+      // إنشاء مستند PDF
+      const blob = await pdf(
+        <EmployeePDFDocument 
+          employee={employee}
+          monthName={monthName}
+          stats={stats}
+          attendance={attendance}
+          advances={advances}
+          deductions={deductions}
+          payments={payments}
+        />
+      ).toBlob();
+      
+      // تنزيل الملف
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `employee-report-${employee.personalInfo?.name}-${selectedMonth.format('YYYY-MM')}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      message.destroy();
+      message.success('تم تصدير التقرير بنجاح');
+    } catch (error) {
+      console.error('فشل في تصدير التقرير:', error);
+      message.destroy();
+      message.error('فشل في تصدير التقرير');
     }
   };
 
@@ -954,6 +992,15 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               )}
             </div>
             <div className="flex gap-2">
+              <Button 
+                type="default"
+                size="large" 
+                icon={<Download size={20} />} 
+                onClick={handleExportPDF}
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+              >
+                تصدير تقرير شامل PDF
+              </Button>
               <Button 
                 type="primary" 
                 size="large" 
