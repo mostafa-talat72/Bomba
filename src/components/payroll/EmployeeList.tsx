@@ -311,14 +311,6 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
                       {getEmploymentType(employee.employment.type)}
                     </Tag>
                   </div>
-
-                  {/* Compensation */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <DollarSign size={16} className="text-green-600 dark:text-green-400 flex-shrink-0" />
-                    <span className="font-bold text-green-600 dark:text-green-400 truncate">
-                      {getCompensationDisplay(employee)}
-                    </span>
-                  </div>
                 </div>
               </Card>
             </Col>

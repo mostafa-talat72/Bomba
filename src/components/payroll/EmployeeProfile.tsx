@@ -821,29 +821,34 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   return (
     <div className="employee-profile">
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4">
+          {/* Header Section */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <Button icon={<ArrowLeft size={20} />} onClick={onClose} type="text" className="dark:text-gray-300">رجوع</Button>
-            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-              <User size={32} className="text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold dark:text-gray-100">{employee.personalInfo?.name}</h2>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Tag color={getStatusColor(employee.employment?.status)}>{getStatusName(employee.employment?.status)}</Tag>
-                <span className="text-gray-600 dark:text-gray-300 text-sm">{employee.employment?.position} - {getDepartmentName(employee.employment?.department)}</span>
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
+                <User size={24} className="sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl sm:text-2xl font-bold dark:text-gray-100 truncate">{employee.personalInfo?.name}</h2>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <Tag color={getStatusColor(employee.employment?.status)}>{getStatusName(employee.employment?.status)}</Tag>
+                  <span className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm truncate">{employee.employment?.position} - {getDepartmentName(employee.employment?.department)}</span>
+                </div>
               </div>
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Actions Section */}
+          <div className="flex flex-col gap-3">
+            {/* Action Buttons Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
               <Button 
                 type="default" 
                 size="large"
-                icon={<Calendar size={20} />}
+                icon={<Calendar size={18} />}
                 onClick={() => setAttendanceModalVisible(true)}
-                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full"
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm sm:text-base"
                 block
               >
                 الحضور والانصراف
@@ -851,9 +856,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               <Button 
                 type="default" 
                 size="large"
-                icon={<Plus size={20} />}
+                icon={<Plus size={18} />}
                 onClick={() => setAdvanceModalVisible(true)}
-                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full"
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm sm:text-base"
                 block
               >
                 السلف
@@ -861,24 +866,25 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               <Button 
                 type="default" 
                 size="large"
-                icon={<Minus size={20} />}
+                icon={<Minus size={18} />}
                 onClick={() => setDeductionModalVisible(true)}
-                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full"
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm sm:text-base"
                 block
               >
                 الخصومات
               </Button>
             </div>
             
-            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
+            {/* Month Picker Row */}
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg w-full sm:w-auto">
               <span className="text-gray-600 dark:text-gray-300 text-sm whitespace-nowrap">الشهر:</span>
               <DatePicker 
                 picker="month" 
                 value={selectedMonth} 
                 onChange={(date) => date && setSelectedMonth(date)} 
                 format="MMMM YYYY" 
-                className="dark:bg-gray-700 dark:border-gray-600" 
-                style={{ width: 180 }} 
+                className="dark:bg-gray-700 dark:border-gray-600 flex-1 sm:flex-initial" 
+                style={{ minWidth: 150 }} 
               />
             </div>
           </div>
@@ -887,12 +893,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {/* Employee Information Card */}
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-lg font-bold dark:text-gray-100 flex items-center gap-2">
-            <User size={20} className="text-blue-600 dark:text-blue-400" />
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-3 mb-4">
+          <h3 className="text-base sm:text-lg font-bold dark:text-gray-100 flex items-center gap-2">
+            <User size={18} className="sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
             بيانات الموظف
           </h3>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button 
               type="default"
               icon={<Edit size={16} />}
@@ -914,7 +920,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 });
                 setEditEmployeeModalVisible(true);
               }}
-              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full sm:w-auto text-sm"
             >
               تعديل البيانات
             </Button>
@@ -922,6 +928,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               type="primary"
               icon={showFinancials ? <Minus size={16} /> : <Plus size={16} />}
               onClick={() => setShowFinancials(!showFinancials)}
+              className="w-full sm:w-auto text-sm"
             >
               {showFinancials ? 'إخفاء البيانات المالية' : 'إظهار البيانات المالية'}
             </Button>
@@ -1042,34 +1049,34 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {showFinancials && (
         <Row gutter={[16, 16]} className="mb-4">
-        <Col xs={24} sm={12} lg={8} xl={4}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-sm">مرحل من أشهر سابقة</span>} value={toArabicNumbers(stats.carriedForward.toFixed(2))} suffix="جنيه" prefix={<TrendingUp size={18} />} valueStyle={{ color: stats.carriedForward > 0 ? '#fa8c16' : '#8c8c8c', fontSize: '20px' }} />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">مرحل من أشهر سابقة</span>} value={toArabicNumbers(stats.carriedForward.toFixed(2))} suffix="جنيه" prefix={<TrendingUp size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: stats.carriedForward > 0 ? '#fa8c16' : '#8c8c8c', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={8} xl={4}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-sm">مرتب الشهر الحالي</span>} value={toArabicNumbers(stats.currentMonthSalary.toFixed(2))} suffix="جنيه" prefix={<DollarSign size={18} />} valueStyle={{ color: '#52c41a', fontSize: '20px' }} />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">مرتب الشهر الحالي</span>} value={toArabicNumbers(stats.currentMonthSalary.toFixed(2))} suffix="جنيه" prefix={<DollarSign size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#52c41a', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={8} xl={4}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-sm">سلف الشهر</span>} value={toArabicNumbers(stats.currentMonthAdvances.toFixed(2))} suffix="جنيه" prefix={<AlertCircle size={18} />} valueStyle={{ color: '#faad14', fontSize: '20px' }} />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">سلف الشهر</span>} value={toArabicNumbers(stats.currentMonthAdvances.toFixed(2))} suffix="جنيه" prefix={<AlertCircle size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#faad14', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={8} xl={4}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-sm">خصومات الشهر</span>} value={toArabicNumbers(stats.currentMonthDeductions.toFixed(2))} suffix="جنيه" prefix={<AlertCircle size={18} />} valueStyle={{ color: '#ff4d4f', fontSize: '20px' }} />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">خصومات الشهر</span>} value={toArabicNumbers(stats.currentMonthDeductions.toFixed(2))} suffix="جنيه" prefix={<AlertCircle size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#ff4d4f', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={8} xl={4}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-sm">المرتب المصروف</span>} value={toArabicNumbers(stats.currentMonthPaid.toFixed(2))} suffix="جنيه" prefix={<Wallet size={18} />} valueStyle={{ color: '#722ed1', fontSize: '20px' }} />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">المرتب المصروف</span>} value={toArabicNumbers(stats.currentMonthPaid.toFixed(2))} suffix="جنيه" prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#722ed1', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={8} xl={4}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
-            <Statistic title={<span className="dark:text-gray-300 text-sm font-bold">الرصيد المتاح</span>} value={toArabicNumbers(stats.remainingBalance.toFixed(2))} suffix="جنيه" prefix={<Wallet size={18} />} valueStyle={{ color: '#1890ff', fontSize: '22px', fontWeight: 'bold' }} />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm font-bold">الرصيد المتاح</span>} value={toArabicNumbers(stats.remainingBalance.toFixed(2))} suffix="جنيه" prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#1890ff', fontSize: '20px', fontWeight: 'bold' }} className="[&_.ant-statistic-content]:text-lg sm:[&_.ant-statistic-content]:text-xl" />
           </Card>
         </Col>
       </Row>
@@ -1077,42 +1084,46 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
       {showFinancials && (
         <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
-          <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex flex-col gap-4">
             <div>
-              <h3 className="text-lg font-bold dark:text-gray-100">الرصيد المتاح للصرف</h3>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-2">{toArabicNumbers(stats.remainingBalance.toFixed(2))} جنيه</p>
+              <h3 className="text-base sm:text-lg font-bold dark:text-gray-100">الرصيد المتاح للصرف</h3>
+              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 mt-2">{toArabicNumbers(stats.remainingBalance.toFixed(2))} جنيه</p>
               {!isCurrentMonth && (
-                <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">
+                <p className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 mt-1">
                   لا يمكن صرف مرتب إلا للشهر الحالي
                 </p>
               )}
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
               <Button 
                 type="default"
                 size="large" 
-                icon={<Download size={20} />} 
+                icon={<Download size={18} />} 
                 onClick={handleExportPDF}
-                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm"
+                block
               >
                 تصدير PDF
               </Button>
               <Button 
                 type="default"
                 size="large" 
-                icon={<MessageCircle size={20} />} 
+                icon={<MessageCircle size={18} />} 
                 onClick={handleSendWhatsApp}
-                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                className="w-full text-sm"
                 style={{ backgroundColor: '#25D366', borderColor: '#25D366', color: 'white' }}
+                block
               >
                 إرسال عبر WhatsApp
               </Button>
               <Button 
                 type="primary" 
                 size="large" 
-                icon={<Wallet size={20} />} 
+                icon={<Wallet size={18} />} 
                 onClick={() => setPaymentModalVisible(true)} 
                 disabled={stats.remainingBalance <= 0 || !isCurrentMonth}
+                className="w-full text-sm sm:col-span-2 lg:col-span-1"
+                block
               >
                 صرف جزء من المرتب
               </Button>

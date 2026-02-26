@@ -193,8 +193,9 @@ const Layout = () => {
       <div
         className={`
           fixed inset-y-0 right-0 z-40 w-64 bg-white dark:bg-gray-950 shadow-lg transform transition-transform duration-300 ease-in-out
+          flex flex-col overflow-hidden
           ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
-          lg:translate-x-0 lg:static lg:inset-0 lg:w-64 lg:z-10
+          lg:relative lg:translate-x-0 lg:w-64 lg:z-10
         `}
         style={{ direction: 'rtl' }}
       >
@@ -247,7 +248,7 @@ const Layout = () => {
           </div>
         </div>
         {/* Navigation */}
-        <nav className="mt-4 flex-1 overflow-y-auto">
+        <nav className="mt-4 flex-1 overflow-y-auto pb-4">
           <div className="px-2 sm:px-3 space-y-1">
             {filteredNavigation.length === 0 ? (
               <div className="p-3 text-center">
@@ -399,7 +400,7 @@ const Layout = () => {
           >
             <div className="flex items-center min-w-0 xs:w-full xs:mb-2 xs:justify-between">
               <button
-                onClick={() => setSidebarOpen(true)}
+                onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="lg:hidden p-2 rounded-md hover:bg-orange-50 dark:hover:bg-orange-900/20 flex-shrink-0"
               >
                 <Menu className="h-6 w-6 text-gray-900 dark:text-gray-100" />
