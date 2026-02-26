@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, DatePicker, Button, Space, Table, Tag, Spin, Empty, Divider } from 'antd';
+import { Card, Row, Col, DatePicker, Button, Space, Table, Tag, Spin, Empty, Divider, message } from 'antd';
 import { DollarSign, TrendingUp, TrendingDown, Users, Calendar, Download, FileText, RefreshCw } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
+import { pdf } from '@react-pdf/renderer';
+import PayrollPDFDocument from './PayrollPDFDocument';
 
 dayjs.locale('ar');
 
@@ -81,12 +83,39 @@ const PayrollSummary: React.FC = () => {
 
   const handleExport = async () => {
     try {
+      if (!summaryData) {
+        message.error('لا توجد بيانات للتصدير');
+        return;
+      }
+
       const month = selectedMonth.month() + 1;
       const year = selectedMonth.year();
+      const monthName = selectedMonth.format('MMMM YYYY');
       
-      // TODO: Implement PDF export
+      message.loading('جاري إنشاء ملف PDF...', 0);
+      
+      // إنشاء مستند PDF
+      const blob = await pdf(
+        <PayrollPDFDocument 
+          data={summaryData} 
+          monthName={monthName}
+        />
+      ).toBlob();
+      
+      // تنزيل الملف
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payroll-summary-${year}-${month.toString().padStart(2, '0')}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      message.destroy();
+      message.success('تم تصدير التقرير بنجاح');
     } catch (error) {
-      console.error('فشل في تصدير التقرير');
+      console.error('فشل في تصدير التقرير:', error);
+      message.destroy();
+      message.error('فشل في تصدير التقرير');
     }
   };
 
