@@ -82,8 +82,9 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ onRetry }) =
     // فحص أولي
     checkServerStatus();
     
-    // فحص كل 5 ثوانٍ (فحص سريع ومستمر)
-    checkIntervalRef.current = setInterval(checkServerStatus, 5000);
+    // تم تعطيل الفحص الدوري المستمر
+    // إذا أردت تفعيله مرة أخرى، قم بإلغاء التعليق على السطور التالية
+    // checkIntervalRef.current = setInterval(checkServerStatus, 60000); // كل دقيقة بدلاً من 5 ثوانٍ
 
     return () => {
       if (checkIntervalRef.current) {
@@ -92,14 +93,16 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ onRetry }) =
     };
   }, []);
 
-  // عرض مؤشر الحالة في الزاوية
+  // عرض مؤشر الحالة في الزاوية - معطل افتراضياً
   const StatusIndicator = () => {
-    if (!isOnline || serverStatus === 'offline') {
+    // تم تعطيل المؤشر المستمر - سيظهر فقط عند انقطاع الاتصال الفعلي
+    // من خلال events المتصفح (online/offline)
+    if (!isOnline) {
       return (
         <div className="fixed top-4 left-4 z-50 flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg animate-pulse">
           <WifiOff className="w-5 h-5" />
           <span className="text-sm font-medium">
-            {!isOnline ? 'لا يوجد اتصال بالإنترنت' : 'انقطع الاتصال بالسيرفر'}
+            لا يوجد اتصال بالإنترنت
           </span>
         </div>
       );
@@ -108,9 +111,10 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ onRetry }) =
     return null;
   };
 
-  // Modal عند فقدان الاتصال
+  // Modal عند فقدان الاتصال - يظهر فقط عند انقطاع الاتصال الفعلي
   const OfflineModal = () => {
-    if (!showOfflineModal) return null;
+    // يظهر فقط عند انقطاع الاتصال بالإنترنت (من المتصفح)
+    if (!showOfflineModal || isOnline) return null;
 
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-75 backdrop-blur-sm">
@@ -122,25 +126,20 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ onRetry }) =
 
           {/* العنوان */}
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
-            انقطع الاتصال
+            انقطع الاتصال بالإنترنت
           </h2>
 
           {/* الوصف */}
           <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
-            {!isOnline
-              ? 'لا يوجد اتصال بالإنترنت. يرجى التحقق من اتصالك بالشبكة.'
-              : 'لا يمكن الاتصال بالسيرفر. يرجى الانتظار أو إعادة المحاولة.'}
+            لا يوجد اتصال بالإنترنت. يرجى التحقق من اتصالك بالشبكة.
           </p>
 
           {/* حالة الفحص */}
           <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>جاري المحاولة تلقائياً...</span>
+              <span>في انتظار عودة الاتصال...</span>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              آخر فحص: {lastChecked.toLocaleTimeString('ar-EG')}
-            </p>
           </div>
 
           {/* أزرار */}
@@ -153,13 +152,13 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ onRetry }) =
               className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
             >
               <RefreshCw className="w-5 h-5" />
-              إعادة المحاولة الآن
+              إعادة المحاولة
             </button>
             <button
               onClick={() => window.location.reload()}
               className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors"
             >
-              إعادة تحميل الصفحة
+              إعادة تحميل
             </button>
           </div>
         </div>
