@@ -513,9 +513,17 @@ class ApiClient {
         if (response.status === 400 && data.errors) {
           console.error('Validation errors:', data.errors);
         }
+        
+        // Log the full error response for debugging
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
+        
         return {
           success: false,
-          message: data.message || `خطأ ${response.status}: ${response.statusText}`,
+          message: data.error || data.message || `خطأ ${response.status}: ${response.statusText}`,
           errors: data.errors
         };
       }

@@ -28,6 +28,7 @@ import Subscription from './pages/Subscription';
 import VerifyEmail from './pages/VerifyEmail';
 import ResetPassword from './pages/ResetPassword';
 import ConsumptionReport from './pages/ConsumptionReport';
+import Payroll from './pages/Payroll';
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
@@ -183,6 +184,11 @@ const RouteHandler = () => {
           <Route path="costs" element={
             <ProtectedRoute requiredPermissions={['costs']}>
               <Costs />
+            </ProtectedRoute>
+          } />
+          <Route path="payroll" element={
+            <ProtectedRoute requiredPermissions={['users']}>
+              <Payroll />
             </ProtectedRoute>
           } />
           <Route path="users" element={

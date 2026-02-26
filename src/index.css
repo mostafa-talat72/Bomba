@@ -515,3 +515,182 @@ body.hide-scroll-buttons button[title="الصعود للأعلى"],
 body.hide-scroll-buttons button[title="النزول للأسفل"] {
 	display: none !important;
 }
+
+
+/* Dark mode support for Ant Design components */
+.dark .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+  background: #374151;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+.dark .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active {
+  background: #1f2937;
+  border-color: #f97316;
+  color: #f97316;
+}
+
+.dark .ant-tabs-card > .ant-tabs-content {
+  background: transparent;
+}
+
+.dark .ant-modal-content {
+  background: #1f2937;
+  color: #e5e7eb;
+}
+
+.dark .ant-modal-header {
+  background: #1f2937;
+  border-bottom-color: #374151;
+}
+
+.dark .ant-modal-title {
+  color: #e5e7eb;
+}
+
+.dark .ant-modal-close {
+  color: #9ca3af;
+}
+
+.dark .ant-modal-close:hover {
+  color: #e5e7eb;
+}
+
+.dark .ant-form-item-label > label {
+  color: #e5e7eb;
+}
+
+.dark .ant-input,
+.dark .ant-input-number,
+.dark .ant-picker,
+.dark .ant-select-selector {
+  background: #374151 !important;
+  border-color: #4b5563 !important;
+  color: #e5e7eb !important;
+}
+
+.dark .ant-input::placeholder,
+.dark .ant-input-number input::placeholder {
+  color: #6b7280;
+}
+
+.dark .ant-select-arrow,
+.dark .ant-picker-suffix {
+  color: #9ca3af;
+}
+
+.dark .ant-select-dropdown {
+  background: #1f2937;
+}
+
+.dark .ant-select-item {
+  color: #e5e7eb;
+}
+
+.dark .ant-select-item-option-selected {
+  background: #374151;
+}
+
+.dark .ant-select-item-option-active {
+  background: #4b5563;
+}
+
+.dark .ant-picker-panel-container {
+  background: #1f2937;
+}
+
+.dark .ant-picker-header,
+.dark .ant-picker-content th {
+  color: #e5e7eb;
+}
+
+.dark .ant-picker-cell {
+  color: #9ca3af;
+}
+
+.dark .ant-picker-cell-in-view {
+  color: #e5e7eb;
+}
+
+.dark .ant-picker-cell:hover:not(.ant-picker-cell-selected):not(.ant-picker-cell-range-start):not(.ant-picker-cell-range-end) .ant-picker-cell-inner {
+  background: #374151;
+}
+
+.dark .ant-empty-description {
+  color: #9ca3af;
+}
+
+.dark .ant-card {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+.dark .ant-card-head {
+  border-bottom-color: #374151;
+  color: #e5e7eb;
+}
+
+.dark .ant-card-head-title {
+  color: #e5e7eb;
+}
+
+.dark .ant-statistic-title {
+  color: #9ca3af;
+}
+
+.dark .ant-statistic-content {
+  color: #e5e7eb;
+}
+
+.dark .ant-btn-default {
+  background: #374151;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+.dark .ant-btn-default:hover {
+  background: #4b5563;
+  border-color: #6b7280;
+  color: #f3f4f6;
+}
+
+.dark .ant-table {
+  background: #1f2937;
+  color: #e5e7eb;
+}
+
+.dark .ant-table-thead > tr > th {
+  background: #374151;
+  color: #e5e7eb;
+  border-bottom-color: #4b5563;
+}
+
+.dark .ant-table-tbody > tr > td {
+  border-bottom-color: #374151;
+}
+
+.dark .ant-table-tbody > tr:hover > td {
+  background: #374151;
+}
+
+.dark .ant-pagination-item {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+.dark .ant-pagination-item a {
+  color: #e5e7eb;
+}
+
+.dark .ant-pagination-item-active {
+  background: #f97316;
+  border-color: #f97316;
+}
+
+.dark .ant-pagination-item-active a {
+  color: #fff;
+}
+
+.dark .ant-spin-dot-item {
+  background-color: #f97316;
+}

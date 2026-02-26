@@ -200,6 +200,12 @@ const Settings: FC = () => {
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
   const [organizationLoading, setOrganizationLoading] = useState(true);
 
+  // Payroll settings state
+  const [payrollSettings, setPayrollSettings] = useState({
+    workHoursPerDay: 10,
+  });
+  const [payrollSaving, setPayrollSaving] = useState(false);
+
   // Show alert function
   const showAlertMessage = (message: string, type: AlertType = 'success') => {
     setAlertMessage(message);
@@ -330,6 +336,34 @@ const Settings: FC = () => {
       loadOrganizationData();
     }
   }, [user, getOrganization, canEditOrganization, getAvailableManagers]);
+
+  // Load payroll settings
+  useEffect(() => {
+    const loadPayrollSettings = async () => {
+      if (user) {
+        try {
+          const response = await fetch('/api/settings/payroll', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data) {
+              setPayrollSettings(prev => ({
+                ...prev,
+                ...data.data,
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error loading payroll settings:', error);
+        }
+      }
+    };
+
+    loadPayrollSettings();
+  }, [user]);
 
   // Show loading state if user is not loaded yet
   if (!user) {
@@ -1577,10 +1611,72 @@ const Settings: FC = () => {
                     </div>
                   )}
 
+                  {/* Payroll Settings Section */}
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-6">
+                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                      <Clock className="h-5 w-5 ml-2 text-orange-600 dark:text-orange-400" />
+                      إعدادات المرتبات
+                    </h4>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        هذه الإعدادات تؤثر على حساب الساعات الإضافية والرواتب لجميع الموظفين
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        عدد ساعات العمل اليومية
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="number"
+                          min="1"
+                          max="24"
+                          value={payrollSettings.workHoursPerDay}
+                          onChange={(e) => setPayrollSettings({ ...payrollSettings, workHoursPerDay: parseInt(e.target.value) || 10 })}
+                          className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">ساعة</span>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        أي ساعات تزيد عن هذا العدد ستُحسب كساعات إضافية
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Save Button */}
                   <div className="mt-6">
                     <button
-                      onClick={handleOrganizationUpdate}
+                      onClick={async () => {
+                        setOrganizationSaving(true);
+                        try {
+                          // حفظ بيانات المنشأة
+                          const orgSuccess = await updateOrganization(organization);
+                          
+                          // حفظ إعدادات المرتبات
+                          const payrollResponse = await fetch('/api/settings/payroll', {
+                            method: 'POST',
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                            },
+                            body: JSON.stringify(payrollSettings),
+                          });
+                          const payrollData = await payrollResponse.json();
+                          
+                          if (orgSuccess && payrollResponse.ok && payrollData.success) {
+                            showAlertMessage('تم حفظ جميع الإعدادات بنجاح');
+                          } else if (!orgSuccess) {
+                            showAlertMessage('حدث خطأ أثناء حفظ بيانات المنشأة', 'error');
+                          } else {
+                            showAlertMessage('تم حفظ بيانات المنشأة ولكن حدث خطأ في حفظ إعدادات المرتبات', 'warning');
+                          }
+                        } catch (error) {
+                          console.error('Error saving settings:', error);
+                          showAlertMessage('حدث خطأ أثناء حفظ الإعدادات', 'error');
+                        } finally {
+                          setOrganizationSaving(false);
+                        }
+                      }}
                       disabled={organizationSaving}
                       className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-md disabled:opacity-50 min-w-48 justify-center"
                     >
@@ -1595,7 +1691,7 @@ const Settings: FC = () => {
                       ) : (
                         <>
                           <Save className="h-4 w-4" />
-                          <span>حفظ بيانات المنشأة</span>
+                          <span>حفظ الإعدادات</span>
                         </>
                       )}
                     </button>

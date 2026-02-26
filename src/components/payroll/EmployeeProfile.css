@@ -1,0 +1,219 @@
+/* Employee Profile Styles */
+
+.employee-profile {
+  direction: rtl;
+}
+
+/* Tabs styling - improved spacing and colors */
+.employee-profile .ant-tabs {
+  direction: rtl;
+}
+
+.employee-profile .ant-tabs-nav {
+  margin-bottom: 24px !important;
+}
+
+.employee-profile .ant-tabs-tab {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  padding: 12px 24px !important;
+  margin: 0 8px !important;
+  border-radius: 8px 8px 0 0 !important;
+  transition: all 0.3s ease !important;
+}
+
+.employee-profile .ant-tabs-tab:hover {
+  color: #1890ff !important;
+}
+
+.employee-profile .ant-tabs-tab-active {
+  background: linear-gradient(to bottom, #e6f7ff, #ffffff) !important;
+  border-bottom: 3px solid #1890ff !important;
+}
+
+.dark .employee-profile .ant-tabs-tab {
+  color: #9ca3af !important;
+}
+
+.dark .employee-profile .ant-tabs-tab:hover {
+  color: #60a5fa !important;
+}
+
+.dark .employee-profile .ant-tabs-tab-active {
+  background: linear-gradient(to bottom, #1e3a5f, #1f2937) !important;
+  color: #60a5fa !important;
+  border-bottom: 3px solid #60a5fa !important;
+}
+
+.dark .employee-profile .ant-tabs-ink-bar {
+  background: #60a5fa !important;
+}
+
+.employee-profile .ant-tabs-content {
+  padding: 16px 0;
+}
+
+/* Button spacing - increased spacing */
+.employee-profile .ant-btn {
+  margin: 0 8px !important;
+}
+
+.employee-profile .ant-space-item {
+  margin-left: 12px !important;
+  margin-right: 12px !important;
+}
+
+.employee-profile .ant-space {
+  gap: 16px !important;
+}
+
+.employee-profile .ant-space-horizontal {
+  gap: 16px !important;
+}
+
+.employee-profile .ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.employee-profile .ant-statistic-title {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.employee-profile .ant-statistic-content {
+  font-size: 20px;
+}
+
+/* Table responsive styles */
+.employee-profile .ant-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.employee-profile .ant-table {
+  direction: rtl;
+  min-width: 800px; /* Minimum width to prevent squishing */
+}
+
+.employee-profile .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 12px 8px;
+}
+
+.employee-profile .ant-table-tbody > tr > td {
+  white-space: nowrap;
+  padding: 12px 8px;
+}
+
+.dark .employee-profile .ant-table-thead > tr > th {
+  background-color: #374151;
+  color: #e5e7eb;
+  border-bottom: 2px solid #4b5563;
+}
+
+.dark .employee-profile .ant-table {
+  background-color: #1f2937;
+  color: #e5e7eb;
+}
+
+.dark .employee-profile .ant-table-tbody > tr > td {
+  border-color: #374151;
+  background-color: #1f2937;
+}
+
+.dark .employee-profile .ant-table-tbody > tr:hover > td {
+  background-color: #374151 !important;
+}
+
+.dark .employee-profile .ant-table-tbody > tr.ant-table-row:hover > td {
+  background-color: #374151 !important;
+}
+
+.employee-profile .ant-modal-header {
+  direction: rtl;
+}
+
+.employee-profile .ant-modal-body {
+  direction: rtl;
+}
+
+.employee-profile .ant-form-item-label {
+  text-align: right;
+}
+
+/* Dark mode support */
+.dark .employee-profile .ant-card {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.dark .employee-profile .ant-statistic-title {
+  color: #9ca3af;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .employee-profile .ant-statistic-content {
+    font-size: 18px;
+  }
+  
+  .employee-profile .ant-card {
+    margin-bottom: 12px;
+  }
+  
+  .employee-profile .ant-table {
+    font-size: 13px;
+  }
+  
+  .employee-profile .ant-table-thead > tr > th,
+  .employee-profile .ant-table-tbody > tr > td {
+    padding: 8px 6px;
+  }
+  
+  .employee-profile .ant-tabs-tab {
+    font-size: 13px !important;
+    padding: 10px 16px !important;
+    margin: 0 4px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .employee-profile .ant-table {
+    font-size: 12px;
+    min-width: 600px;
+  }
+  
+  .employee-profile .ant-statistic-content {
+    font-size: 16px;
+  }
+  
+  .employee-profile .ant-tabs-tab {
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+  }
+}
+
+/* Scroll hint for tables on mobile */
+@media (max-width: 768px) {
+  .employee-profile .ant-table-wrapper::after {
+    content: '← اسحب لليسار لرؤية المزيد';
+    display: block;
+    text-align: center;
+    padding: 8px;
+    font-size: 12px;
+    color: #999;
+    background: linear-gradient(to left, rgba(255,255,255,0), rgba(255,255,255,0.9));
+    position: sticky;
+    left: 0;
+    bottom: 0;
+  }
+  
+  .dark .employee-profile .ant-table-wrapper::after {
+    background: linear-gradient(to left, rgba(31,41,55,0), rgba(31,41,55,0.9));
+    color: #9ca3af;
+  }
+}
+

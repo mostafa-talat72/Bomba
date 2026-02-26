@@ -21,7 +21,8 @@ import {
   Moon,
   Sun,
   Package2,
-  CreditCard
+  CreditCard,
+  DollarSign
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -142,6 +143,7 @@ const Layout = () => {
     { name: 'تقرير الاستهلاك', href: '/consumption-report', icon: Package2, permissions: ['reports'] },
     { name: 'المخزون', href: '/inventory', icon: Package, permissions: ['inventory'] },
     { name: 'التكاليف', href: '/costs', icon: Wallet, permissions: ['costs'] },
+    { name: 'المرتبات', href: '/payroll', icon: DollarSign, permissions: ['users'] },
     { name: 'المستخدمين', href: '/users', icon: Users, permissions: ['users'] },
     { name: 'الإشعارات', href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'], badge: unreadNotifications },
     { name: 'الاشتراكات', href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'] },

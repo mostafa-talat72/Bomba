@@ -54,6 +54,7 @@ import performanceRoutes from "./routes/performanceRoutes.js";
 import syncRoutes from "./routes/syncRoutes.js";
 import organizationRoutes from "./routes/organizationRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
+import payrollRoutes from "./routes/payroll.js";
 
 // Load environment variables
 dotenv.config();
@@ -523,6 +524,7 @@ app.use("/api/tables", tableRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/organization", organizationRoutes);
+app.use("/api/payroll", payrollRoutes);
 app.use("/public", publicRoutes);
 
 // REMOVED: Public bill viewing route for security reasons

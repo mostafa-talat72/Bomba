@@ -10,6 +10,8 @@ import {
     updateNotificationSettings,
     getGeneralSettings,
     updateGeneralSettings,
+    getPayrollSettings,
+    updatePayrollSettings,
 } from "../controllers/settingsController.js";
 import {
     updateProfile,
@@ -33,6 +35,10 @@ router.put("/notifications", updateNotificationSettings);
 // General settings routes
 router.get("/general", getGeneralSettings);
 router.put("/general", updateGeneralSettings);
+
+// Payroll settings routes
+router.get("/payroll", getPayrollSettings);
+router.post("/payroll", updatePayrollSettings);
 
 // Settings routes (require settings permission)
 router.get("/", authorize("settings", "all"), getAllSettings);

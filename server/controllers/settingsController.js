@@ -431,3 +431,80 @@ export const importSettings = async (req, res) => {
         });
     }
 };
+
+// @desc    Get payroll settings
+// @route   GET /api/settings/payroll
+// @access  Private
+export const getPayrollSettings = async (req, res) => {
+    try {
+        const settings = await Settings.findOne({
+            category: 'payroll',
+            organization: req.user.organization,
+        });
+
+        // Default payroll settings if not found
+        const defaultSettings = {
+            workHoursPerDay: 10,
+        };
+
+        res.json({
+            success: true,
+            data: settings ? settings.settings : defaultSettings,
+        });
+    } catch (error) {
+        console.error('Error getting payroll settings:', error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في جلب إعدادات المرتبات",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Update payroll settings
+// @route   POST /api/settings/payroll
+// @access  Private (Admin only)
+export const updatePayrollSettings = async (req, res) => {
+    try {
+        const { workHoursPerDay } = req.body;
+
+        if (!workHoursPerDay || workHoursPerDay < 1 || workHoursPerDay > 24) {
+            return res.status(400).json({
+                success: false,
+                message: "عدد ساعات العمل يجب أن يكون بين 1 و 24",
+            });
+        }
+
+        const settings = {
+            workHoursPerDay: parseInt(workHoursPerDay),
+        };
+
+        const updatedSettings = await Settings.findOneAndUpdate(
+            { category: 'payroll', organization: req.user.organization },
+            {
+                category: 'payroll',
+                settings,
+                updatedBy: req.user._id,
+                organization: req.user.organization,
+            },
+            {
+                new: true,
+                upsert: true,
+                runValidators: true,
+            }
+        ).populate("updatedBy", "name");
+
+        res.json({
+            success: true,
+            message: "تم تحديث إعدادات المرتبات بنجاح",
+            data: updatedSettings,
+        });
+    } catch (error) {
+        console.error('Error updating payroll settings:', error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تحديث إعدادات المرتبات",
+            error: error.message,
+        });
+    }
+};
