@@ -101,10 +101,10 @@ const ConsumptionReport = () => {
       align: 'center' as const,
       sorter: (a: ConsumptionItem, b: ConsumptionItem) => a.quantity - b.quantity,
       render: (quantity: number, record: ConsumptionItem) => {
-        const isPlayStation = record.category === 'البلايستيشن';
+        const isGamingDevice = record.category === 'البلايستيشن' || record.category === 'الكمبيوتر';
         
-        // For PlayStation, show hours
-        if (isPlayStation) {
+        // For Gaming Devices, show hours
+        if (isGamingDevice) {
           // Check if hours is integer
           const isInteger = quantity % 1 === 0;
           const formatted = isInteger ? quantity.toFixed(0) : quantity.toFixed(2);
@@ -132,10 +132,10 @@ const ConsumptionReport = () => {
       key: 'price',
       align: 'center' as const,
       render: (price: number, record: ConsumptionItem) => {
-        const isPlayStation = record.category === 'البلايستيشن';
+        const isGamingDevice = record.category === 'البلايستيشن' || record.category === 'الكمبيوتر';
         
-        // For PlayStation, show "-" instead of price
-        if (isPlayStation) {
+        // For Gaming Devices, show "-" instead of price
+        if (isGamingDevice) {
           return (
             <span className="font-semibold text-gray-500 dark:text-gray-400">
               -
@@ -173,8 +173,9 @@ const ConsumptionReport = () => {
       itemsBySection[section.name] = [];
     });
 
-    // Add PlayStation section
+    // Add separate sections for PlayStation and Computer
     itemsBySection['البلايستيشن'] = [];
+    itemsBySection['الكمبيوتر'] = [];
 
     // Process cafe orders directly
     ordersToProcess.forEach((order) => {
@@ -242,8 +243,8 @@ const ConsumptionReport = () => {
 
    
     sessionsToProcess.forEach((session) => {
-      // Only process PlayStation sessions
-      if (session.deviceType !== 'playstation') return;
+      // Process both PlayStation and Computer sessions
+      if (session.deviceType !== 'playstation' && session.deviceType !== 'computer') return;
       
       // Only include completed sessions
       if (session.status !== 'completed') return;
@@ -278,20 +279,23 @@ const ConsumptionReport = () => {
       }
 
 
+      // Determine which section to add to based on device type
+      const sectionName = session.deviceType === 'computer' ? 'الكمبيوتر' : 'البلايستيشن';
+      
       // Group by device name - sum hours and costs for each device
-      const existingItem = itemsBySection['البلايستيشن'].find(i => i.name === deviceName);
+      const existingItem = itemsBySection[sectionName].find(i => i.name === deviceName);
       
       if (existingItem) {
         existingItem.quantity += totalHours; // Add hours
         existingItem.total += sessionCost; // Add total cost
       } else {
-        itemsBySection['البلايستيشن'].push({
+        itemsBySection[sectionName].push({
           id: session._id || session.id || Math.random().toString(),
           name: deviceName,
           price: 0, // Will show as "-" in the table
           quantity: totalHours, // Total hours from controllersHistory
           total: sessionCost, // Total cost
-          category: 'البلايستيشن'
+          category: sectionName
         });
       }
     });
@@ -355,9 +359,9 @@ const ConsumptionReport = () => {
         const filteredOrders = ordersResponse.data;
         const allSessions = sessionsResponse.data;
         
-        // Filter PlayStation sessions only (backend already filtered by date and status)
+        // Filter gaming sessions (PlayStation & Computer) only (backend already filtered by date and status)
         const filteredSessions = allSessions.filter((session) => {
-          return session.deviceType === 'playstation' && session.endTime;
+          return (session.deviceType === 'playstation' || session.deviceType === 'computer') && session.endTime;
         });
         
         
@@ -429,11 +433,11 @@ const ConsumptionReport = () => {
                   </thead>
                   <tbody>
                     ${items.map(item => {
-                      const isPlayStation = item.category === 'البلايستيشن';
-                      const quantityDisplay = isPlayStation 
+                      const isGamingDevice = item.category === 'البلايستيشن' || item.category === 'الكمبيوتر';
+                      const quantityDisplay = isGamingDevice 
                         ? `${toArabicNumbers(item.quantity.toFixed(2).replace('.', '،'))} س`
                         : toArabicNumbers(Math.round(item.quantity));
-                      const unitPriceDisplay = isPlayStation 
+                      const unitPriceDisplay = isGamingDevice 
                         ? '-' 
                         : formatNumber(item.price);
                       
@@ -908,6 +912,10 @@ const ConsumptionReport = () => {
       return <span className="ml-1">🎮</span>;
     }
     
+    if (lowerCategory.includes('كمبيوتر') || lowerCategory.includes('computer')) {
+      return <span className="ml-1">💻</span>;
+    }
+    
     switch (lowerCategory) {
       case 'مشروبات ساخنة':
       case 'قهوة':
@@ -1017,8 +1025,8 @@ const ConsumptionReport = () => {
       ),
     };
 
-    // Create tabs for menu sections + PlayStation
-    const allSections = [...menuSections.map(s => s.name), 'البلايستيشن'];
+    // Create tabs for menu sections + PlayStation + Computer
+    const allSections = [...menuSections.map(s => s.name), 'البلايستيشن', 'الكمبيوتر'];
     
     const sectionTabs = allSections.map(sectionName => {
       const items = consumptionData[sectionName] || [];

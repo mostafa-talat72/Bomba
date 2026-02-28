@@ -314,6 +314,7 @@ const Billing = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [billTypeFilter, setBillTypeFilter] = useState<'all' | 'cafe' | 'playstation' | 'computer'>('all');
   const [playstationSearchQuery, setPlaystationSearchQuery] = useState('');
+  const [gamingDeviceTypeFilter, setGamingDeviceTypeFilter] = useState<'all' | 'playstation' | 'computer'>('all'); // فلتر نوع الجهاز
   const [isPlaystationSectionCollapsed, setIsPlaystationSectionCollapsed] = useState(false);
   const [collapsedDevices, setCollapsedDevices] = useState<Set<string>>(new Set());
   const [showSessionPaymentModal, setShowSessionPaymentModal] = useState(false);
@@ -1632,8 +1633,8 @@ const Billing = () => {
         </div>
       )}
 
-      {/* PlayStation Devices Section */}
-      {(billTypeFilter === 'all' || billTypeFilter === 'playstation') && (
+      {/* Gaming Devices Section (PlayStation & Computer) */}
+      {(billTypeFilter === 'all' || billTypeFilter === 'playstation' || billTypeFilter === 'computer') && (
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl shadow-lg border-2 border-blue-200 dark:border-blue-700 p-3 sm:p-6 mb-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
             <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
@@ -1648,13 +1649,47 @@ const Billing = () => {
                 )}
               </button>
               <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center truncate">
-                <Gamepad2 className="h-5 w-5 sm:h-6 sm:w-6 ml-2 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                أجهزة البلايستيشن
+                <span className="text-2xl ml-2">🎯</span>
+                أجهزة الألعاب (بلايستيشن وكمبيوتر)
               </h2>
             </div>
             {!isPlaystationSectionCollapsed && (
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                {/* Filter buttons */}
+                {/* Device type filter buttons */}
+                <div className="flex gap-1 sm:gap-2 order-1">
+                  <button
+                    onClick={() => setGamingDeviceTypeFilter('all')}
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 ${
+                      gamingDeviceTypeFilter === 'all'
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    🎯 الكل
+                  </button>
+                  <button
+                    onClick={() => setGamingDeviceTypeFilter('playstation')}
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 ${
+                      gamingDeviceTypeFilter === 'playstation'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    🎮 بلايستيشن
+                  </button>
+                  <button
+                    onClick={() => setGamingDeviceTypeFilter('computer')}
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 ${
+                      gamingDeviceTypeFilter === 'computer'
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    💻 كمبيوتر
+                  </button>
+                </div>
+                
+                {/* Status filter buttons */}
                 <div className="flex gap-1 sm:gap-2 order-2 sm:order-1">
                   <button
                     onClick={() => setPlaystationStatusFilter('unpaid')}
@@ -1714,10 +1749,13 @@ const Billing = () => {
           {!isPlaystationSectionCollapsed && (
             <div className="space-y-3 sm:space-y-4">
               {(() => {
-                // تجميع جميع الفواتير التي تحتوي على جلسات بلايستيشن
-                const allPlaystationBills = bills.filter((bill: Bill) => 
+                // تجميع جميع الفواتير التي تحتوي على جلسات بلايستيشن أو كمبيوتر
+                const allGamingBills = bills.filter((bill: Bill) => 
                   bill.billType === 'playstation' || 
-                  (bill.sessions && bill.sessions.some((s: any) => s.deviceType === 'playstation'))
+                  bill.billType === 'computer' ||
+                  (bill.sessions && bill.sessions.some((s: any) => 
+                    s.deviceType === 'playstation' || s.deviceType === 'computer'
+                  ))
                 );
 
               
@@ -1725,6 +1763,7 @@ const Billing = () => {
                 // تجميع الأجهزة حسب الاسم
                 const deviceMap = new Map<string, { 
                   deviceName: string; 
+                  deviceType: 'playstation' | 'computer';
                   hasActiveSession: boolean;
                   linkedToTable: boolean;
                   tableNumber?: string | number;
@@ -1732,23 +1771,25 @@ const Billing = () => {
                   allBills: Bill[]; // جميع الفواتير (للتحقق من الربط بالطاولة)
                 }>();
               
-                allPlaystationBills.forEach((bill: Bill) => {
-                  const playstationSessions = bill.sessions?.filter((s: any) => 
-                    s.deviceType === 'playstation'
+                allGamingBills.forEach((bill: Bill) => {
+                  const gamingSessions = bill.sessions?.filter((s: any) => 
+                    s.deviceType === 'playstation' || s.deviceType === 'computer'
                   ) || [];
                   
-                  // إذا كانت الفاتورة تحتوي على جلسات بلايستيشن
-                  if (playstationSessions.length > 0) {
-                    playstationSessions.forEach((session: any) => {
+                  // إذا كانت الفاتورة تحتوي على جلسات ألعاب
+                  if (gamingSessions.length > 0) {
+                    gamingSessions.forEach((session: any) => {
                       const deviceKey = session.deviceName || `جهاز ${session.deviceNumber}` || 'غير معروف';
                       const isLinkedToTable = !!bill.table;
                       const hasActiveSession = session.status === 'active';
+                      const deviceType = session.deviceType || 'playstation';
                       
                      
                       
                       if (!deviceMap.has(deviceKey)) {
                         deviceMap.set(deviceKey, {
                           deviceName: deviceKey,
+                          deviceType: deviceType,
                           hasActiveSession: false,
                           linkedToTable: false,
                           bills: [],
@@ -1769,7 +1810,7 @@ const Billing = () => {
                       }
                       
                       // إضافة الفاتورة إلى قائمة bills إذا لم تكن مرتبطة بطاولة
-                      // هذا يضمن ظهور فواتير الجلسات غير المرتبطة بطاولة في قسم أجهزة البلايستيشن
+                      // هذا يضمن ظهور فواتير الجلسات غير المرتبطة بطاولة في قسم أجهزة الألعاب
                       if (!isLinkedToTable) {
                         if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
                           deviceData.bills.push(bill);
@@ -1794,17 +1835,19 @@ const Billing = () => {
                 });
 
                 // إضافة فواتير بلايستيشن بدون جلسات (غير مرتبطة بطاولة)
-                const billsWithoutSessions = allPlaystationBills.filter((bill: Bill) => 
+                const playstationBillsWithoutSessions = allGamingBills.filter((bill: Bill) => 
                   !bill.table && 
+                  bill.billType === 'playstation' &&
                   (!bill.sessions || bill.sessions.length === 0 || 
                    !bill.sessions.some((s: any) => s.deviceType === 'playstation'))
                 );
 
-                if (billsWithoutSessions.length > 0) {
+                if (playstationBillsWithoutSessions.length > 0) {
                   const deviceKey = 'فواتير بلايستيشن بدون جلسات';
                   if (!deviceMap.has(deviceKey)) {
                     deviceMap.set(deviceKey, {
                       deviceName: deviceKey,
+                      deviceType: 'playstation',
                       hasActiveSession: false,
                       linkedToTable: false,
                       bills: [],
@@ -1812,7 +1855,36 @@ const Billing = () => {
                     });
                   }
                   const deviceData = deviceMap.get(deviceKey)!;
-                  billsWithoutSessions.forEach(bill => {
+                  playstationBillsWithoutSessions.forEach(bill => {
+                    if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
+                      deviceData.bills.push(bill);
+                      deviceData.allBills.push(bill);
+                    }
+                  });
+                }
+
+                // إضافة فواتير كمبيوتر بدون جلسات (غير مرتبطة بطاولة)
+                const computerBillsWithoutSessions = allGamingBills.filter((bill: Bill) => 
+                  !bill.table && 
+                  bill.billType === 'computer' &&
+                  (!bill.sessions || bill.sessions.length === 0 || 
+                   !bill.sessions.some((s: any) => s.deviceType === 'computer'))
+                );
+
+                if (computerBillsWithoutSessions.length > 0) {
+                  const deviceKey = 'فواتير كمبيوتر بدون جلسات';
+                  if (!deviceMap.has(deviceKey)) {
+                    deviceMap.set(deviceKey, {
+                      deviceName: deviceKey,
+                      deviceType: 'computer',
+                      hasActiveSession: false,
+                      linkedToTable: false,
+                      bills: [],
+                      allBills: []
+                    });
+                  }
+                  const deviceData = deviceMap.get(deviceKey)!;
+                  computerBillsWithoutSessions.forEach(bill => {
                     if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
                       deviceData.bills.push(bill);
                       deviceData.allBills.push(bill);
@@ -1854,19 +1926,30 @@ const Billing = () => {
                     return deviceData.bills.length > 0;
                   });
 
-                // تطبيق البحث
-                const filteredDevices = visibleDevices.filter(deviceData => 
-                  deviceData.deviceName.toLowerCase().includes(playstationSearchQuery.toLowerCase())
-                );
+                // تطبيق البحث وفلترة نوع الجهاز
+                const filteredDevices = visibleDevices.filter(deviceData => {
+                  // فلترة حسب البحث
+                  const matchesSearch = deviceData.deviceName.toLowerCase().includes(playstationSearchQuery.toLowerCase());
+                  
+                  // فلترة حسب نوع الجهاز
+                  const matchesDeviceType = gamingDeviceTypeFilter === 'all' || deviceData.deviceType === gamingDeviceTypeFilter;
+                  
+                  return matchesSearch && matchesDeviceType;
+                });
 
                 if (filteredDevices.length === 0) {
+                  const deviceTypeText = gamingDeviceTypeFilter === 'playstation' ? 'بلايستيشن' : 
+                                        gamingDeviceTypeFilter === 'computer' ? 'كمبيوتر' : 'ألعاب';
+                  const icon = gamingDeviceTypeFilter === 'computer' ? '💻' : 
+                              gamingDeviceTypeFilter === 'playstation' ? '🎮' : '🎯';
+                  
                   return (
                     <div className="text-center py-6 sm:py-8 text-gray-500 dark:text-gray-400">
                       <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg">
-                        <Gamepad2 className="h-8 w-8 sm:h-10 sm:w-10 text-blue-500 dark:text-blue-400" />
+                        <span className="text-3xl sm:text-4xl">{icon}</span>
                       </div>
                       <p className="text-sm sm:text-base">
-                        {playstationSearchQuery ? 'لا توجد نتائج للبحث' : 'لا توجد أجهزة بلايستيشن نشطة'}
+                        {playstationSearchQuery ? 'لا توجد نتائج للبحث' : `لا توجد أجهزة ${deviceTypeText} نشطة`}
                       </p>
                     </div>
                   );
@@ -1886,27 +1969,29 @@ const Billing = () => {
 
                 return filteredDevices.map((deviceData, index) => {
                   const isDeviceCollapsed = collapsedDevices.has(deviceData.deviceName);
+                  const deviceIcon = deviceData.deviceType === 'computer' ? '💻' : '🎮';
+                  const deviceColor = deviceData.deviceType === 'computer' ? 'indigo' : 'blue';
                   
                   return (
-                    <div key={index} className="border-2 border-blue-200 dark:border-blue-700 rounded-xl p-3 sm:p-5 bg-white dark:bg-gray-800 shadow-md hover:shadow-xl transition-all duration-300">
+                    <div key={index} className={`border-2 border-${deviceColor}-200 dark:border-${deviceColor}-700 rounded-xl p-3 sm:p-5 bg-white dark:bg-gray-800 shadow-md hover:shadow-xl transition-all duration-300`}>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-2">
                         <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                           <button
                             onClick={() => toggleDeviceCollapse(deviceData.deviceName)}
-                            className="p-1.5 sm:p-2 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-lg transition-all duration-200 transform hover:scale-110 flex-shrink-0"
+                            className={`p-1.5 sm:p-2 hover:bg-${deviceColor}-100 dark:hover:bg-${deviceColor}-900 rounded-lg transition-all duration-200 transform hover:scale-110 flex-shrink-0`}
                           >
                             {isDeviceCollapsed ? (
-                              <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                              <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 text-${deviceColor}-600 dark:text-${deviceColor}-400`} />
                             ) : (
-                              <ChevronUp className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                              <ChevronUp className={`h-4 w-4 sm:h-5 sm:w-5 text-${deviceColor}-600 dark:text-${deviceColor}-400`} />
                             )}
                           </button>
-                          <Gamepad2 className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                          <span className="text-2xl sm:text-3xl flex-shrink-0">{deviceIcon}</span>
                           <h3 className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate">{deviceData.deviceName}</h3>
                           <div className="flex flex-wrap gap-1 sm:gap-2">
                             {deviceData.hasActiveSession && (
                               <span className="px-2 sm:px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold rounded-full shadow-md animate-pulse whitespace-nowrap">
-                                🎮 جلسة نشطة
+                                {deviceIcon} جلسة نشطة
                               </span>
                             )}
                             {deviceData.linkedToTable && deviceData.hasActiveSession && (
