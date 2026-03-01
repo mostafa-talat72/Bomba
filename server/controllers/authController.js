@@ -247,6 +247,14 @@ export const login = async (req, res) => {
             };
             return res.status(401).json(msg);
         }
+        // Store organization data before depopulating
+        const organizationData = user.organization;
+        
+        // Depopulate organization to save only the ID
+        if (user.organization && user.organization._id) {
+            user.organization = user.organization._id;
+        }
+        
         await user.updateLastLogin();
         const token = generateToken(user._id);
         const refreshToken = generateRefreshToken(user._id);
@@ -265,7 +273,7 @@ export const login = async (req, res) => {
                     permissions: user.permissions,
                     lastLogin: user.lastLogin,
                     organization: user.organization,
-                    organizationName: user.organization?.name,
+                    organizationName: organizationData?.name,
                     phone: user.phone,
                     address: user.address,
                 },

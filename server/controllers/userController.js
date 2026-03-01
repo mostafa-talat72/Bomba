@@ -195,10 +195,7 @@ export const updateUser = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        const userOrgId = user.organization.toString();
-        const currentUserOrgId = req.user.organization._id ? req.user.organization._id.toString() : req.user.organization.toString();
-        
-        if (userOrgId !== currentUserOrgId) {
+        if (user.organization.toString() !== req.user.organization.toString()) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لتعديل هذا المستخدم",
@@ -225,8 +222,7 @@ export const updateUser = async (req, res) => {
         if (isTargetAdmin && !isEditingSelf) {
             // جلب المنشأة من قاعدة البيانات للتحقق من المالك
             const Organization = (await import('../models/Organization.js')).default;
-            const orgId = req.user.organization._id ? req.user.organization._id : req.user.organization;
-            const organization = await Organization.findById(orgId);
+            const organization = await Organization.findById(req.user.organization);
             
          
             if (!organization) {
@@ -296,10 +292,7 @@ export const deleteUser = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        const userOrgId = user.organization.toString();
-        const currentUserOrgId = req.user.organization._id ? req.user.organization._id.toString() : req.user.organization.toString();
-        
-        if (userOrgId !== currentUserOrgId) {
+        if (user.organization.toString() !== req.user.organization.toString()) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لحذف هذا المستخدم",
@@ -334,8 +327,7 @@ export const deleteUser = async (req, res) => {
         if (isTargetAdmin) {
             // جلب المنشأة من قاعدة البيانات للتحقق من المالك
             const Organization = (await import('../models/Organization.js')).default;
-            const orgId = req.user.organization._id ? req.user.organization._id : req.user.organization;
-            const organization = await Organization.findById(orgId);
+            const organization = await Organization.findById(req.user.organization);
             
          
             if (!organization) {
@@ -528,10 +520,7 @@ export const updateUserPermissions = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        const userOrgId = user.organization.toString();
-        const currentUserOrgId = req.user.organization._id ? req.user.organization._id.toString() : req.user.organization.toString();
-        
-        if (userOrgId !== currentUserOrgId) {
+        if (user.organization.toString() !== req.user.organization.toString()) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لتعديل صلاحيات هذا المستخدم",
@@ -592,10 +581,7 @@ export const updateUserStatus = async (req, res) => {
         }
 
         // Check if user belongs to same organization
-        const userOrgId = user.organization.toString();
-        const currentUserOrgId = req.user.organization._id ? req.user.organization._id.toString() : req.user.organization.toString();
-        
-        if (userOrgId !== currentUserOrgId) {
+        if (user.organization.toString() !== req.user.organization.toString()) {
             return res.status(403).json({
                 success: false,
                 message: "ليس لديك صلاحية لتعديل حالة هذا المستخدم",

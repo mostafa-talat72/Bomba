@@ -35,6 +35,16 @@ export const authenticateToken = async (req, res, next) => {
       });
     }
 
+    // Normalize organization to always be ObjectId for queries
+    // Store the populated data separately if needed
+    if (user.organization && user.organization._id) {
+      user.organizationData = {
+        _id: user.organization._id,
+        name: user.organization.name,
+        owner: user.organization.owner
+      };
+      user.organization = user.organization._id;
+    }
     
     req.user = user;
     next();
