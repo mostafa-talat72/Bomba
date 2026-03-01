@@ -194,6 +194,16 @@ interface AppContextType {
   updateOrganizationPermissions: (permissions: any) => Promise<boolean>;
   canEditOrganization: () => Promise<any>;
   getAvailableManagers: () => Promise<any>;
+  
+  // Report Settings methods
+  getReportSettings: () => Promise<any>;
+  updateReportSettings: (settings: any) => Promise<boolean>;
+  canManageReports: () => Promise<any>;
+  sendReportNow: () => Promise<boolean>;
+  
+  // Payroll Permissions methods
+  canManagePayroll: () => Promise<any>;
+  updatePayrollPermissions: (permissions: any) => Promise<boolean>;
 }
 
 export type Filter = {
@@ -1001,8 +1011,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return response.data;
       }
       // Show validation errors if available
-      if (response.errors && Array.isArray(response.errors)) {
-        const errorMessages = response.errors.map((e: any) => `${e.field}: ${e.message}`).join('\n');
+      const responseWithErrors = response as any;
+      if (responseWithErrors.errors && Array.isArray(responseWithErrors.errors)) {
+        const errorMessages = responseWithErrors.errors.map((e: any) => `${e.field}: ${e.message}`).join('\n');
         showNotification(`${response.message}\n${errorMessages}`, 'error');
       } else {
         showNotification(response.message || 'فشل في إضافة المنتج', 'error');
@@ -1809,8 +1820,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const getSalesReport = async (filter: Filter, groupBy?: string): Promise<any> => {
     try {
       const response = await api.getSalesReport(filter, groupBy);
+
       return response.success ? response.data : null;
     } catch (error) {
+      console.error('❌ Frontend: Error getting sales report:', error);
       return null;
     }
   };
@@ -2258,6 +2271,97 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Report Settings methods
+  const getReportSettings = async (): Promise<any> => {
+    try {
+      const response = await api.getReportSettings();
+      if (response.success) {
+        return response.data;
+      } else {
+        showNotification(response.message || 'فشل في جلب إعدادات التقارير', 'error');
+        return null;
+      }
+    } catch (error) {
+      showNotification('فشل في جلب إعدادات التقارير', 'error');
+      return null;
+    }
+  };
+
+  const updateReportSettings = async (settings: any): Promise<boolean> => {
+    try {
+      const response = await api.updateReportSettings(settings);
+      if (response.success) {
+        showNotification('تم تحديث إعدادات التقارير بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في تحديث إعدادات التقارير', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في تحديث إعدادات التقارير', 'error');
+      return false;
+    }
+  };
+
+  const canManageReports = async (): Promise<any> => {
+    try {
+      const response = await api.canManageReports();
+      if (response.success) {
+        return response;
+      } else {
+        return { canManage: false, isOwner: false };
+      }
+    } catch (error) {
+      return { canManage: false, isOwner: false };
+    }
+  };
+
+  const sendReportNow = async (): Promise<boolean> => {
+    try {
+      const response = await api.sendReportNow();
+      if (response.success) {
+        showNotification(response.message || 'تم إرسال التقرير بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في إرسال التقرير', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في إرسال التقرير', 'error');
+      return false;
+    }
+  };
+
+  // Payroll permissions methods
+  const canManagePayroll = async (): Promise<any> => {
+    try {
+      const response = await api.canManagePayroll();
+      if (response.success) {
+        return response;
+      } else {
+        return { canManage: false, isOwner: false };
+      }
+    } catch (error) {
+      return { canManage: false, isOwner: false };
+    }
+  };
+
+  const updatePayrollPermissions = async (permissions: any): Promise<boolean> => {
+    try {
+      const response = await api.updatePayrollPermissions(permissions);
+      if (response.success) {
+        showNotification(response.message || 'تم تحديث صلاحيات المرتبات بنجاح', 'success');
+        return true;
+      } else {
+        showNotification(response.message || 'فشل في تحديث صلاحيات المرتبات', 'error');
+        return false;
+      }
+    } catch (error) {
+      showNotification('فشل في تحديث صلاحيات المرتبات', 'error');
+      return false;
+    }
+  };
+
   // دالة للتحقق من صلاحيات المستخدم الحالي
   const hasPermission = (permission: string): boolean => {
     if (!user) return false;
@@ -2475,6 +2579,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     updateOrganizationPermissions,
     canEditOrganization,
     getAvailableManagers,
+    
+    // Report Settings methods
+    getReportSettings,
+    updateReportSettings,
+    canManageReports,
+    sendReportNow,
+    
+    // Payroll Permissions methods
+    canManagePayroll,
+    updatePayrollPermissions,
   };
 
   return (

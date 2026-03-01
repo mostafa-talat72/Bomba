@@ -196,17 +196,53 @@ const generateDailyReport = async () => {
 
         const now = new Date();
 
-        // Calculate the report period: from 5 AM yesterday to 5 AM today
+        // Get all organizations with daily reports enabled
+        const organizations = await Organization.find({
+            'reportSettings.dailyReportEnabled': { $ne: false }
+        });
+
+        Logger.info(
+            `Found ${organizations.length} organizations for daily report`
+        );
+
+        for (const organization of organizations) {
+            await generateDailyReportForOrganization(organization);
+        }
+
+        Logger.info("Daily report generation completed for all organizations");
+    } catch (error) {
+        Logger.error("Failed to generate daily report", {
+            error: error.message,
+        });
+    }
+};
+
+// Generate and send daily report for a specific organization
+const generateDailyReportForOrganization = async (organization) => {
+    try {
+        // Check if daily report is enabled for this organization
+        if (organization.reportSettings?.dailyReportEnabled === false) {
+            Logger.info(`Daily report disabled for organization: ${organization.name}`);
+            return;
+        }
+
+        const now = new Date();
+
+        // Get the configured start time for this organization (default: 08:00)
+        const startTimeStr = organization.reportSettings?.dailyReportStartTime || "08:00";
+        const [startHour, startMinute] = startTimeStr.split(':').map(Number);
+
+        // Calculate the report period based on organization's configured time
         const endOfReport = new Date(now);
-        endOfReport.setHours(5, 0, 0, 0); // Today at 5 AM
+        endOfReport.setHours(startHour, startMinute || 0, 0, 0);
         
-        // If it's before 5 AM today, adjust to yesterday's 5 AM
+        // If current time is before the configured time today, use yesterday's time
         if (now < endOfReport) {
             endOfReport.setDate(endOfReport.getDate() - 1);
         }
         
         const startOfReport = new Date(endOfReport);
-        startOfReport.setDate(startOfReport.getDate() - 1); // Yesterday at 5 AM
+        startOfReport.setDate(startOfReport.getDate() - 1); // 24 hours before
 
         // Format dates for logging
         const formatForLog = (date) => {
@@ -218,393 +254,505 @@ const generateDailyReport = async () => {
             };
         };
 
-        Logger.info("📅 Daily report period:", {
+        Logger.info(`📅 Daily report period for ${organization.name}:`, {
+            configuredStartTime: startTimeStr,
             currentTime: formatForLog(now),
             reportStart: formatForLog(startOfReport),
             reportEnd: formatForLog(endOfReport),
             timezone: 'Africa/Cairo (GMT+2)'
         });
 
-        // Get all organizations
-        const organizations = await Organization.find();
-
-        Logger.info(
-            `Found ${organizations.length} organizations for daily report`
-        );
-
-        for (const organization of organizations) {
-            try {
-                // Get daily statistics for this organization
-                Logger.info(`Fetching data for organization: ${organization.name}`, {
-                    startOfReport: startOfReport.toISOString(),
-                    endOfReport: endOfReport.toISOString(),
-                    organizationId: organization._id
-                });
-
-                const [bills, orders, sessions, costs] = await Promise.all([
-                    Bill.find({
-                        createdAt: { $gte: startOfReport, $lt: endOfReport },
-                        status: { $in: ["partial", "paid"] },
-                        organization: organization._id,
-                    }),
-                    Order.find({
-                        createdAt: { $gte: startOfReport, $lt: endOfReport },
-                        organization: organization._id,
-                    }),
-                    Session.find({
-                        startTime: { $gte: startOfReport, $lt: endOfReport },
-                        organization: organization._id,
-                    }),
-                    Cost.find({
-                        date: { $gte: startOfReport, $lt: endOfReport },
-                        organization: organization._id,
-                    }),
-                ]);
-
-                // Calculate totals for this organization
-                const totalRevenue = bills.reduce(
-                    (sum, bill) => sum + bill.paid,
-                    0
-                );
-                const totalCosts = costs.reduce(
-                    (sum, cost) => sum + cost.amount,
-                    0
-                );
-
-                // Get top products for this organization
-                const topProducts = await Order.aggregate([
-                    {
-                        $match: {
-                            createdAt: {
-                                $gte: startOfReport,
-                                $lt: endOfReport,
-                            },
-                            status: "delivered",
-                            organization: organization._id,
-                        },
-                    },
-                    { $unwind: "$items" },
-                    {
-                        $group: {
-                            _id: "$items.name",
-                            quantity: { $sum: "$items.quantity" },
-                            revenue: {
-                                $sum: {
-                                    $multiply: [
-                                        "$items.price",
-                                        "$items.quantity",
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                    { $sort: { quantity: -1 } },
-                    { $limit: 5 },
-                ]);
-
-                // Log the data being used for the report
-                Logger.info(`Data for organization ${organization.name}:`, {
-                    billsCount: bills.length,
-                    ordersCount: orders.length,
-                    sessionsCount: sessions.length,
-                    costsCount: costs.length,
-                    totalRevenue,
-                    totalCosts,
-                    topProducts: topProducts.length
-                });
-
-                const reportData = {
-                    date: startOfReport.toLocaleDateString("ar-EG"),
-                    organizationName: organization.name,
-                    totalRevenue: totalRevenue || 0,
-                    totalCosts: totalCosts || 0,
-                    netProfit: (totalRevenue || 0) - (totalCosts || 0),
-                    totalBills: bills.length || 0,
-                    totalOrders: orders.length || 0,
-                    totalSessions: sessions.length || 0,
-                    topProducts: topProducts.map((p) => ({
-                        name: p._id,
-                        quantity: p.quantity || 0,
-                    })),
-                    startOfReport: startOfReport,
-                    endOfReport: endOfReport,
-                    reportPeriod: `من 5:00 صباحاً يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})} 
-                                 إلى 5:00 صباحاً يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}`,
-                };
-
-                // Get admin emails for this organization
-                const admins = await User.find({
-                    role: "admin",
-                    status: "active",
-                    organization: organization._id,
-                    email: { $exists: true, $ne: "" },
-                }).select("email");
-
-                const adminEmails = admins.map((admin) => admin.email);
-
-                Logger.info(
-                    `Organization "${organization.name}" has ${adminEmails.length} admin emails:`,
-                    {
-                        organizationId: organization._id,
-                        adminEmails: adminEmails,
-                    }
-                );
-
-                if (adminEmails.length > 0) {
-                    await sendDailyReport(reportData, adminEmails);
-                    Logger.info(
-                        `Daily report sent for organization: ${organization.name}`,
-                        {
-                            organizationId: organization._id,
-                            adminCount: adminEmails.length,
-                            emails: adminEmails,
-                        }
-                    );
-                } else {
-                    Logger.warn(
-                        `No admin emails found for organization: ${organization.name}`,
-                        {
-                            organizationId: organization._id,
-                        }
-                    );
+        // Get emails from organization settings
+        const reportEmails = organization.reportSettings?.dailyReportEmails || [];
+        
+        if (reportEmails.length === 0) {
+            Logger.warn(
+                `No report emails configured for organization: ${organization.name}`,
+                {
+                    organizationId: organization._id,
                 }
-            } catch (orgError) {
-                Logger.error(
-                    `Failed to generate daily report for organization: ${organization.name}`,
-                    {
-                        organizationId: organization._id,
-                        error: orgError.message,
-                    }
-                );
-            }
+            );
+            return;
         }
 
-        Logger.info("Daily report generation completed for all organizations");
-    } catch (error) {
-        Logger.error("Failed to generate daily report", {
-            error: error.message,
+        Logger.info(`Fetching data for organization: ${organization.name}`, {
+            startOfReport: startOfReport.toISOString(),
+            endOfReport: endOfReport.toISOString(),
+            organizationId: organization._id,
+            reportEmails: reportEmails
         });
+
+        // Import required modules
+        const { default: MenuItem } = await import('../models/MenuItem.js');
+        const { generateDailyReportPDF } = await import('./pdfGenerator.js');
+
+        const [orders, sessions, costs] = await Promise.all([
+            Order.find({
+                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                organization: organization._id,
+            }).lean(),
+            Session.find({
+                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                status: "completed",
+                organization: organization._id,
+            }).lean(),
+            Cost.find({
+                date: { $gte: startOfReport, $lt: endOfReport },
+                organization: organization._id,
+            }).lean(),
+        ]);
+
+        // Calculate revenues
+        const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
+        
+        const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
+        const computerSessions = sessions.filter(s => s.deviceType === "computer");
+        
+        const playstationRevenue = playstationSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+        const computerRevenue = computerSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+        
+        const totalRevenue = cafeRevenue + playstationRevenue + computerRevenue;
+        const totalCosts = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
+        const netProfit = totalRevenue - totalCosts;
+
+        // Get top products
+        const productSales = {};
+        orders.forEach((order) => {
+            if (!order.items || !Array.isArray(order.items)) return;
+            
+            order.items.forEach((item) => {
+                if (!item.name) return;
+                
+                if (!productSales[item.name]) {
+                    productSales[item.name] = { quantity: 0, revenue: 0 };
+                }
+                
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemPrice = Number(item.price) || 0;
+                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                
+                productSales[item.name].quantity += itemQuantity;
+                productSales[item.name].revenue += itemTotal;
+            });
+        });
+
+        const topProducts = Object.entries(productSales)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 10);
+
+        // Get top products by section
+        const menuItems = await MenuItem.find({ organization: organization._id }).populate({
+            path: 'category',
+            populate: {
+                path: 'section'
+            }
+        }).lean();
+
+        const menuItemMap = {};
+        menuItems.forEach(item => {
+            menuItemMap[item.name] = item;
+        });
+
+        const sectionData = {};
+        orders.forEach(order => {
+            if (!order.items || !Array.isArray(order.items)) return;
+
+            order.items.forEach(item => {
+                if (!item.name) return;
+
+                const menuItem = menuItemMap[item.name];
+                let sectionId = 'other';
+                let sectionName = 'أخرى';
+
+                if (menuItem && menuItem.category && menuItem.category.section) {
+                    const section = menuItem.category.section;
+                    sectionId = section._id ? section._id.toString() : 'other';
+                    sectionName = section.name || 'أخرى';
+                }
+
+                if (!sectionData[sectionId]) {
+                    sectionData[sectionId] = {
+                        sectionId,
+                        sectionName,
+                        products: {},
+                        totalRevenue: 0,
+                        totalQuantity: 0
+                    };
+                }
+
+                const itemPrice = Number(item.price) || 0;
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+
+                if (!sectionData[sectionId].products[item.name]) {
+                    sectionData[sectionId].products[item.name] = {
+                        name: item.name,
+                        quantity: 0,
+                        revenue: 0
+                    };
+                }
+
+                sectionData[sectionId].products[item.name].quantity += itemQuantity;
+                sectionData[sectionId].products[item.name].revenue += itemTotal;
+                sectionData[sectionId].totalRevenue += itemTotal;
+                sectionData[sectionId].totalQuantity += itemQuantity;
+            });
+        });
+
+        const topProductsBySection = Object.values(sectionData).map(section => ({
+            sectionId: section.sectionId,
+            sectionName: section.sectionName,
+            totalRevenue: section.totalRevenue,
+            totalQuantity: section.totalQuantity,
+            products: Object.values(section.products)
+                .sort((a, b) => b.revenue - a.revenue)
+                .slice(0, 10)
+        })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+        const reportData = {
+            date: startOfReport.toLocaleDateString("ar-EG"),
+            organizationName: organization.name,
+            totalRevenue: totalRevenue || 0,
+            totalCosts: totalCosts || 0,
+            netProfit: netProfit || 0,
+            totalBills: orders.length + sessions.length,
+            totalOrders: orders.length || 0,
+            totalSessions: sessions.length || 0,
+            topProducts: topProducts,
+            topProductsBySection: topProductsBySection,
+            revenueByType: {
+                playstation: playstationRevenue || 0,
+                computer: computerRevenue || 0,
+                cafe: cafeRevenue || 0
+            },
+            startOfReport: startOfReport,
+            endOfReport: endOfReport,
+            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})} 
+                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}`,
+        };
+
+        Logger.info(`Organization "${organization.name}" - Report data summary:`, {
+            organizationId: organization._id,
+            totalRevenue: reportData.totalRevenue,
+            totalOrders: reportData.totalOrders,
+            totalSessions: reportData.totalSessions,
+            netProfit: reportData.netProfit,
+            topProductsCount: reportData.topProducts.length,
+            sectionsCount: reportData.topProductsBySection.length
+        });
+
+        // Generate PDF
+        const pdfBuffer = await generateDailyReportPDF(reportData);
+
+        // Send report via email with PDF attachment
+        await sendDailyReport(reportData, reportEmails, pdfBuffer);
+        
+        // Update lastReportSentAt timestamp
+        organization.reportSettings.lastReportSentAt = new Date();
+        await organization.save();
+        
+        Logger.info(
+            `Daily report sent for organization: ${organization.name}`,
+            {
+                organizationId: organization._id,
+                emailCount: reportEmails.length,
+                emails: reportEmails,
+                sentAt: organization.reportSettings.lastReportSentAt
+            }
+        );
+    } catch (error) {
+        Logger.error(
+            `Failed to generate daily report for organization: ${organization.name}`,
+            {
+                organizationId: organization._id,
+                error: error.message,
+                stack: error.stack
+            }
+        );
     }
 };
 
 // Generate and send monthly report
 const generateMonthlyReport = async () => {
     try {
-        const now = new Date();
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastDayOfMonth = new Date(
-            now.getFullYear(),
-            now.getMonth() + 1,
-            0
+        Logger.info("Starting monthly report generation...");
+
+        // Get all organizations with daily reports enabled (monthly uses same settings)
+        const organizations = await Organization.find({
+            'reportSettings.dailyReportEnabled': { $ne: false }
+        });
+
+        Logger.info(
+            `Found ${organizations.length} organizations for monthly report`
         );
 
-        // Get all organizations
-        const organizations = await Organization.find();
-
         for (const organization of organizations) {
-            try {
-                // Get monthly statistics for this organization
-                const [bills, orders, sessions, costs] = await Promise.all([
-                    Bill.find({
-                        createdAt: {
-                            $gte: firstDayOfMonth,
-                            $lte: lastDayOfMonth,
-                        },
-                        status: { $in: ["partial", "paid"] },
-                        organization: organization._id,
-                    }),
-                    Order.find({
-                        createdAt: {
-                            $gte: firstDayOfMonth,
-                            $lte: lastDayOfMonth,
-                        },
-                        organization: organization._id,
-                    }),
-                    Session.find({
-                        startTime: {
-                            $gte: firstDayOfMonth,
-                            $lte: lastDayOfMonth,
-                        },
-                        organization: organization._id,
-                    }),
-                    Cost.find({
-                        date: { $gte: firstDayOfMonth, $lte: lastDayOfMonth },
-                        organization: organization._id,
-                    }),
-                ]);
-
-                // Calculate totals for this organization
-                const totalRevenue = bills.reduce(
-                    (sum, bill) => sum + bill.paid,
-                    0
-                );
-                const totalCosts = costs.reduce(
-                    (sum, cost) => sum + cost.amount,
-                    0
-                );
-
-                // Get top products for this month
-                const topProducts = await Order.aggregate([
-                    {
-                        $match: {
-                            createdAt: {
-                                $gte: firstDayOfMonth,
-                                $lte: lastDayOfMonth,
-                            },
-                            status: "delivered",
-                            organization: organization._id,
-                        },
-                    },
-                    { $unwind: "$items" },
-                    {
-                        $group: {
-                            _id: "$items.name",
-                            quantity: { $sum: "$items.quantity" },
-                            revenue: {
-                                $sum: {
-                                    $multiply: [
-                                        "$items.price",
-                                        "$items.quantity",
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                    { $sort: { quantity: -1 } },
-                    { $limit: 10 },
-                ]);
-
-                // Get daily revenue breakdown
-                const dailyRevenue = await Bill.aggregate([
-                    {
-                        $match: {
-                            createdAt: {
-                                $gte: firstDayOfMonth,
-                                $lte: lastDayOfMonth,
-                            },
-                            status: { $in: ["partial", "paid"] },
-                            organization: organization._id,
-                        },
-                    },
-                    {
-                        $group: {
-                            _id: {
-                                $dateToString: {
-                                    format: "%Y-%m-%d",
-                                    date: "$createdAt",
-                                },
-                            },
-                            revenue: { $sum: "$paid" },
-                            bills: { $sum: 1 },
-                        },
-                    },
-                    { $sort: { _id: 1 } },
-                ]);
-
-                // Get device usage statistics
-                const deviceStats = await Session.aggregate([
-                    {
-                        $match: {
-                            startTime: {
-                                $gte: firstDayOfMonth,
-                                $lte: lastDayOfMonth,
-                            },
-                            organization: organization._id,
-                        },
-                    },
-                    {
-                        $group: {
-                            _id: "$deviceType",
-                            totalSessions: { $sum: 1 },
-                            totalRevenue: { $sum: "$finalCost" },
-                            avgDuration: {
-                                $avg: { $subtract: ["$endTime", "$startTime"] },
-                            },
-                        },
-                    },
-                ]);
-
-                const reportData = {
-                    month: now.toLocaleDateString("ar-EG", {
-                        month: "long",
-                        year: "numeric",
-                    }),
-                    organizationName: organization.name,
-                    totalRevenue,
-                    totalCosts,
-                    netProfit: totalRevenue - totalCosts,
-                    profitMargin:
-                        totalRevenue > 0
-                            ? ((totalRevenue - totalCosts) / totalRevenue) * 100
-                            : 0,
-                    totalBills: bills.length,
-                    totalOrders: orders.length,
-                    totalSessions: sessions.length,
-                    topProducts: topProducts.map((p) => ({
-                        name: p._id,
-                        quantity: p.quantity,
-                        revenue: p.revenue,
-                    })),
-                    dailyRevenue,
-                    deviceStats,
-                    avgDailyRevenue:
-                        dailyRevenue.length > 0
-                            ? totalRevenue / dailyRevenue.length
-                            : 0,
-                    bestDay:
-                        dailyRevenue.length > 0
-                            ? dailyRevenue.reduce((best, current) =>
-                                  current.revenue > best.revenue
-                                      ? current
-                                      : best
-                              )
-                            : null,
-                };
-
-                // Get admin emails for this organization
-                const admins = await User.find({
-                    role: "admin",
-                    status: "active",
-                    organization: organization._id,
-                    email: { $exists: true, $ne: "" },
-                }).select("email");
-
-                const adminEmails = admins.map((admin) => admin.email);
-
-                if (adminEmails.length > 0) {
-                    await sendMonthlyReport(reportData, adminEmails);
-                    Logger.info(
-                        `Monthly report sent for organization: ${organization.name}`,
-                        {
-                            organizationId: organization._id,
-                            adminCount: adminEmails.length,
-                            emails: adminEmails,
-                            month: reportData.month,
-                        }
-                    );
-                } else {
-                    Logger.warn(
-                        `No admin emails found for organization: ${organization.name}`,
-                        {
-                            organizationId: organization._id,
-                            month: reportData.month,
-                        }
-                    );
-                }
-            } catch (orgError) {
-                Logger.error(
-                    `Failed to generate monthly report for organization: ${organization.name}`,
-                    {
-                        organizationId: organization._id,
-                        error: orgError.message,
-                    }
-                );
-            }
+            await generateMonthlyReportForOrganization(organization);
         }
+
+        Logger.info("Monthly report generation completed for all organizations");
     } catch (error) {
         Logger.error("Failed to generate monthly report", {
             error: error.message,
         });
+    }
+};
+
+// Generate and send monthly report for a specific organization
+const generateMonthlyReportForOrganization = async (organization) => {
+    try {
+        // Check if daily report is enabled for this organization
+        if (organization.reportSettings?.dailyReportEnabled === false) {
+            Logger.info(`Reports disabled for organization: ${organization.name}`);
+            return;
+        }
+
+        const now = new Date();
+
+        // Get the configured start time for this organization (default: 08:00)
+        const startTimeStr = organization.reportSettings?.dailyReportStartTime || "08:00";
+        const [startHour, startMinute] = startTimeStr.split(':').map(Number);
+
+        // Calculate the monthly report period based on organization's configured time
+        // End: First day of current month at configured time
+        const endOfReport = new Date(now.getFullYear(), now.getMonth(), 1);
+        endOfReport.setHours(startHour, startMinute || 0, 0, 0);
+        
+        // If we haven't reached the configured time on the 1st yet, use last month
+        if (now < endOfReport) {
+            endOfReport.setMonth(endOfReport.getMonth() - 1);
+        }
+        
+        // Start: First day of previous month at configured time
+        const startOfReport = new Date(endOfReport);
+        startOfReport.setMonth(startOfReport.getMonth() - 1);
+
+        // Format dates for logging
+        const formatForLog = (date) => {
+            return {
+                iso: date.toISOString(),
+                local: date.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
+                date: date.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }),
+                time: date.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo' })
+            };
+        };
+
+        Logger.info(`📅 Monthly report period for ${organization.name}:`, {
+            configuredStartTime: startTimeStr,
+            currentTime: formatForLog(now),
+            reportStart: formatForLog(startOfReport),
+            reportEnd: formatForLog(endOfReport),
+            timezone: 'Africa/Cairo (GMT+2)'
+        });
+
+        // Get emails from organization settings (same as daily report)
+        const reportEmails = organization.reportSettings?.dailyReportEmails || [];
+        
+        if (reportEmails.length === 0) {
+            Logger.warn(
+                `No report emails configured for organization: ${organization.name}`,
+                {
+                    organizationId: organization._id,
+                }
+            );
+            return;
+        }
+
+        Logger.info(`Fetching monthly data for organization: ${organization.name}`, {
+            startOfReport: startOfReport.toISOString(),
+            endOfReport: endOfReport.toISOString(),
+            organizationId: organization._id,
+            reportEmails: reportEmails
+        });
+
+        // Import required modules
+        const { default: MenuItem } = await import('../models/MenuItem.js');
+
+        const [orders, sessions, costs] = await Promise.all([
+            Order.find({
+                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                organization: organization._id,
+            }).lean(),
+            Session.find({
+                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                status: "completed",
+                organization: organization._id,
+            }).lean(),
+            Cost.find({
+                date: { $gte: startOfReport, $lt: endOfReport },
+                organization: organization._id,
+            }).lean(),
+        ]);
+
+        // Calculate revenues
+        const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
+        
+        const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
+        const computerSessions = sessions.filter(s => s.deviceType === "computer");
+        
+        const playstationRevenue = playstationSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+        const computerRevenue = computerSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+        
+        const totalRevenue = cafeRevenue + playstationRevenue + computerRevenue;
+        const totalCosts = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
+        const netProfit = totalRevenue - totalCosts;
+
+        // Get top products
+        const productSales = {};
+        orders.forEach((order) => {
+            if (!order.items || !Array.isArray(order.items)) return;
+            
+            order.items.forEach((item) => {
+                if (!item.name) return;
+                
+                if (!productSales[item.name]) {
+                    productSales[item.name] = { quantity: 0, revenue: 0 };
+                }
+                
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemPrice = Number(item.price) || 0;
+                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                
+                productSales[item.name].quantity += itemQuantity;
+                productSales[item.name].revenue += itemTotal;
+            });
+        });
+
+        const topProducts = Object.entries(productSales)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 10);
+
+        // Get top products by section
+        const menuItems = await MenuItem.find({ organization: organization._id }).populate({
+            path: 'category',
+            populate: {
+                path: 'section'
+            }
+        }).lean();
+
+        const menuItemMap = {};
+        menuItems.forEach(item => {
+            menuItemMap[item.name] = item;
+        });
+
+        const sectionData = {};
+        orders.forEach(order => {
+            if (!order.items || !Array.isArray(order.items)) return;
+
+            order.items.forEach(item => {
+                if (!item.name) return;
+
+                const menuItem = menuItemMap[item.name];
+                let sectionId = 'other';
+                let sectionName = 'أخرى';
+
+                if (menuItem && menuItem.category && menuItem.category.section) {
+                    const section = menuItem.category.section;
+                    sectionId = section._id ? section._id.toString() : 'other';
+                    sectionName = section.name || 'أخرى';
+                }
+
+                if (!sectionData[sectionId]) {
+                    sectionData[sectionId] = {
+                        sectionId,
+                        sectionName,
+                        products: {},
+                        totalRevenue: 0,
+                        totalQuantity: 0
+                    };
+                }
+
+                const itemPrice = Number(item.price) || 0;
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+
+                if (!sectionData[sectionId].products[item.name]) {
+                    sectionData[sectionId].products[item.name] = {
+                        name: item.name,
+                        quantity: 0,
+                        revenue: 0
+                    };
+                }
+
+                sectionData[sectionId].products[item.name].quantity += itemQuantity;
+                sectionData[sectionId].products[item.name].revenue += itemTotal;
+                sectionData[sectionId].totalRevenue += itemTotal;
+                sectionData[sectionId].totalQuantity += itemQuantity;
+            });
+        });
+
+        const topProductsBySection = Object.values(sectionData).map(section => ({
+            sectionId: section.sectionId,
+            sectionName: section.sectionName,
+            totalRevenue: section.totalRevenue,
+            totalQuantity: section.totalQuantity,
+            products: Object.values(section.products)
+                .sort((a, b) => b.revenue - a.revenue)
+                .slice(0, 10)
+        })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+        // Calculate daily averages
+        const daysInPeriod = Math.ceil((endOfReport - startOfReport) / (1000 * 60 * 60 * 24));
+        const avgDailyRevenue = daysInPeriod > 0 ? totalRevenue / daysInPeriod : 0;
+
+        const reportData = {
+            month: startOfReport.toLocaleDateString("ar-EG", { month: "long", year: "numeric" }),
+            organizationName: organization.name,
+            totalRevenue: totalRevenue || 0,
+            totalCosts: totalCosts || 0,
+            netProfit: netProfit || 0,
+            profitMargin: totalRevenue > 0 ? ((netProfit / totalRevenue) * 100) : 0,
+            totalBills: orders.length + sessions.length,
+            totalOrders: orders.length || 0,
+            totalSessions: sessions.length || 0,
+            topProducts: topProducts,
+            topProductsBySection: topProductsBySection,
+            revenueByType: {
+                playstation: playstationRevenue || 0,
+                computer: computerRevenue || 0,
+                cafe: cafeRevenue || 0
+            },
+            avgDailyRevenue: avgDailyRevenue || 0,
+            daysInPeriod: daysInPeriod,
+            startOfReport: startOfReport,
+            endOfReport: endOfReport,
+            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString('ar-EG', {day: 'numeric', month: 'long', year: 'numeric'})} 
+                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString('ar-EG', {day: 'numeric', month: 'long', year: 'numeric'})}`,
+        };
+
+        Logger.info(`Organization "${organization.name}" - Monthly report data summary:`, {
+            organizationId: organization._id,
+            totalRevenue: reportData.totalRevenue,
+            totalOrders: reportData.totalOrders,
+            totalSessions: reportData.totalSessions,
+            netProfit: reportData.netProfit,
+            daysInPeriod: reportData.daysInPeriod,
+            avgDailyRevenue: reportData.avgDailyRevenue
+        });
+
+        // Send report via email (reuse sendMonthlyReport function)
+        await sendMonthlyReport(reportData, reportEmails);
+        
+        Logger.info(
+            `Monthly report sent for organization: ${organization.name}`,
+            {
+                organizationId: organization._id,
+                emailCount: reportEmails.length,
+                emails: reportEmails,
+                month: reportData.month
+            }
+        );
+    } catch (error) {
+        Logger.error(
+            `Failed to generate monthly report for organization: ${organization.name}`,
+            {
+                organizationId: organization._id,
+                error: error.message,
+                stack: error.stack
+            }
+        );
     }
 };
 
@@ -763,6 +911,279 @@ export const scheduleSubscriptionExpiryNotifications = () => {
     }, 24 * 60 * 60 * 1000); // كل 24 ساعة
 };
 
+// Store scheduled tasks for each organization
+const scheduledReportTasks = new Map();
+const scheduledMonthlyReportTasks = new Map();
+
+// Schedule daily report for a specific organization
+const scheduleDailyReportForOrganization = (organization) => {
+    try {
+        const sendTimeStr = organization.reportSettings?.dailyReportSendTime || "09:00";
+        const [hour, minute] = sendTimeStr.split(':').map(Number);
+        
+        // Create cron pattern for this specific time
+        // Format: "minute hour * * *" (every day at specified time)
+        const cronPattern = `${minute} ${hour} * * *`;
+        
+        // Cancel existing task if any
+        const existingTask = scheduledReportTasks.get(organization._id.toString());
+        if (existingTask) {
+            existingTask.stop();
+        }
+        
+        // Schedule new task
+        const task = cron.schedule(cronPattern, async () => {
+            Logger.info(
+                `⏰ Scheduled time reached for organization: ${organization.name}`,
+                {
+                    organizationId: organization._id,
+                    scheduledTime: sendTimeStr,
+                    currentTime: new Date().toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' })
+                }
+            );
+            
+            await generateDailyReportForOrganization(organization);
+        }, {
+            scheduled: true,
+            timezone: "Africa/Cairo"
+        });
+        
+        scheduledReportTasks.set(organization._id.toString(), task);
+        
+        Logger.info(
+            `✅ Scheduled daily report for organization: ${organization.name} at ${sendTimeStr}`,
+            {
+                organizationId: organization._id,
+                cronPattern: cronPattern
+            }
+        );
+    } catch (error) {
+        Logger.error(
+            `Failed to schedule report for organization: ${organization.name}`,
+            {
+                organizationId: organization._id,
+                error: error.message
+            }
+        );
+    }
+};
+
+// Initialize all organization report schedules
+const initializeOrganizationReportSchedules = async () => {
+    try {
+        Logger.info("📅 Initializing organization report schedules...");
+        
+        // Get all organizations with daily reports enabled
+        const organizations = await Organization.find({
+            'reportSettings.dailyReportEnabled': { $ne: false }
+        });
+        
+        Logger.info(`Found ${organizations.length} organizations with reports enabled`);
+        
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentTime = currentHour * 60 + currentMinute; // Convert to minutes since midnight
+        
+        let missedCount = 0;
+        
+        // Schedule report for each organization
+        for (const organization of organizations) {
+            if (organization.reportSettings?.dailyReportEnabled !== false) {
+                // Schedule for future
+                scheduleDailyReportForOrganization(organization);
+                
+                // Check if we missed today's report
+                const sendTimeStr = organization.reportSettings?.dailyReportSendTime || "09:00";
+                const [sendHour, sendMinute] = sendTimeStr.split(':').map(Number);
+                const sendTime = sendHour * 60 + sendMinute; // Convert to minutes since midnight
+                
+                // Check if report was already sent today
+                const lastSent = organization.reportSettings?.lastReportSentAt;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const alreadySentToday = lastSent && new Date(lastSent) >= today;
+                
+                // If scheduled time has passed today AND report wasn't sent yet, send it now
+                if (currentTime > sendTime && !alreadySentToday) {
+                    Logger.info(
+                        `⚠️ Missed report time for organization: ${organization.name}. Sending now...`,
+                        {
+                            organizationId: organization._id,
+                            scheduledTime: sendTimeStr,
+                            currentTime: `${currentHour}:${String(currentMinute).padStart(2, '0')}`,
+                            missedBy: `${Math.floor((currentTime - sendTime) / 60)}h ${(currentTime - sendTime) % 60}m`,
+                            lastSentAt: lastSent ? lastSent.toLocaleString('ar-EG') : 'never'
+                        }
+                    );
+                    
+                    // Send the report immediately (don't await to avoid blocking)
+                    generateDailyReportForOrganization(organization).catch(error => {
+                        Logger.error(
+                            `Failed to send missed report for organization: ${organization.name}`,
+                            {
+                                organizationId: organization._id,
+                                error: error.message
+                            }
+                        );
+                    });
+                    
+                    missedCount++;
+                } else if (alreadySentToday) {
+                    Logger.info(
+                        `✅ Report already sent today for organization: ${organization.name}`,
+                        {
+                            organizationId: organization._id,
+                            sentAt: lastSent.toLocaleString('ar-EG')
+                        }
+                    );
+                }
+            }
+        }
+        
+        Logger.info(
+            `✅ Initialized ${scheduledReportTasks.size} report schedules`,
+            {
+                totalOrganizations: organizations.length,
+                scheduledTasks: scheduledReportTasks.size,
+                missedReports: missedCount
+            }
+        );
+        
+        if (missedCount > 0) {
+            Logger.info(`📧 Sending ${missedCount} missed reports...`);
+        }
+    } catch (error) {
+        Logger.error("Failed to initialize organization report schedules", {
+            error: error.message
+        });
+    }
+};
+
+// Re-schedule report for an organization (call this when settings change)
+export const rescheduleOrganizationReport = async (organizationId) => {
+    try {
+        const organization = await Organization.findById(organizationId);
+        
+        if (!organization) {
+            Logger.warn(`Organization not found for rescheduling: ${organizationId}`);
+            return;
+        }
+        
+        if (organization.reportSettings?.dailyReportEnabled === false) {
+            // Cancel existing task if report is disabled
+            const existingTask = scheduledReportTasks.get(organizationId.toString());
+            if (existingTask) {
+                existingTask.stop();
+                scheduledReportTasks.delete(organizationId.toString());
+                Logger.info(`Cancelled report schedule for organization: ${organization.name}`);
+            }
+            
+            // Also cancel monthly report
+            const existingMonthlyTask = scheduledMonthlyReportTasks.get(organizationId.toString());
+            if (existingMonthlyTask) {
+                existingMonthlyTask.stop();
+                scheduledMonthlyReportTasks.delete(organizationId.toString());
+                Logger.info(`Cancelled monthly report schedule for organization: ${organization.name}`);
+            }
+        } else {
+            // Reschedule with new time
+            scheduleDailyReportForOrganization(organization);
+            scheduleMonthlyReportForOrganization(organization);
+        }
+    } catch (error) {
+        Logger.error("Failed to reschedule organization report", {
+            organizationId,
+            error: error.message
+        });
+    }
+};
+
+// Schedule monthly report for a specific organization
+const scheduleMonthlyReportForOrganization = (organization) => {
+    try {
+        const orgId = organization._id.toString();
+        const sendTimeStr = organization.reportSettings?.dailyReportSendTime || "09:00";
+        const [sendHour, sendMinute] = sendTimeStr.split(':').map(Number);
+        
+        // Cancel existing task if any
+        const existingTask = scheduledMonthlyReportTasks.get(orgId);
+        if (existingTask) {
+            existingTask.stop();
+        }
+        
+        // Create cron expression: run on 1st of every month at specified time
+        const cronExpression = `${sendMinute || 0} ${sendHour} 1 * *`;
+        
+        const task = cron.schedule(cronExpression, () => {
+            Logger.info(
+                `📅 Monthly report scheduled task triggered for organization: ${organization.name}`,
+                {
+                    organizationId: orgId,
+                    scheduledTime: sendTimeStr,
+                    cronExpression
+                }
+            );
+            
+            generateMonthlyReportForOrganization(organization).catch(error => {
+                Logger.error(
+                    `Failed to generate scheduled monthly report for organization: ${organization.name}`,
+                    {
+                        organizationId: orgId,
+                        error: error.message
+                    }
+                );
+            });
+        });
+        
+        scheduledMonthlyReportTasks.set(orgId, task);
+        
+        Logger.info(
+            `✅ Monthly report scheduled for organization: ${organization.name}`,
+            {
+                organizationId: orgId,
+                sendTime: sendTimeStr,
+                cronExpression,
+                nextRun: '1st of next month at ' + sendTimeStr
+            }
+        );
+    } catch (error) {
+        Logger.error(
+            `Failed to schedule monthly report for organization: ${organization.name}`,
+            {
+                organizationId: organization._id,
+                error: error.message
+            }
+        );
+    }
+};
+
+// Initialize monthly report schedules for all organizations
+const initializeOrganizationMonthlyReportSchedules = async () => {
+    try {
+        const organizations = await Organization.find({
+            'reportSettings.dailyReportEnabled': { $ne: false }
+        });
+        
+        Logger.info(
+            `Initializing monthly report schedules for ${organizations.length} organizations...`
+        );
+        
+        for (const organization of organizations) {
+            scheduleMonthlyReportForOrganization(organization);
+        }
+        
+        Logger.info(
+            `✅ Initialized ${scheduledMonthlyReportTasks.size} monthly report schedules`
+        );
+    } catch (error) {
+        Logger.error("Failed to initialize organization monthly report schedules", {
+            error: error.message
+        });
+    }
+};
+
 // Initialize all scheduled tasks
 export const initializeScheduler = () => {
     Logger.info("Initializing scheduled tasks...");
@@ -771,21 +1192,13 @@ export const initializeScheduler = () => {
     cron.schedule("0 */6 * * *", checkLowStock);
     Logger.info("✅ Low stock check scheduled: every 6 hours at minute 0");
 
-    // Generate daily report at 5:00 AM (Egypt time)
-    cron.schedule("0 5 * * *", () => {
-        const now = new Date();
-        Logger.info(
-            "🕐 Daily report scheduled task triggered at 5:00 AM (Egypt time)",
-            {
-                currentTime: now.toLocaleString("ar-EG"),
-                egyptTime: now.toLocaleString("ar-EG", {
-                    timeZone: "Africa/Cairo",
-                }),
-            }
-        );
-        generateDailyReport();
-    });
-    Logger.info("✅ Daily report scheduled: every day at 5:00 AM (Egypt time)");
+    // Initialize organization-specific report schedules
+    initializeOrganizationReportSchedules();
+    Logger.info("✅ Organization report schedules initialized");
+
+    // Initialize organization-specific monthly report schedules
+    initializeOrganizationMonthlyReportSchedules();
+    Logger.info("✅ Organization monthly report schedules initialized");
 
     // For testing: also run daily report every hour (only in development)
     // if (process.env.NODE_ENV === "development") {
@@ -799,17 +1212,6 @@ export const initializeScheduler = () => {
     //         "✅ Development mode: Daily report also scheduled every hour for testing"
     //     );
     // }
-
-    // Generate monthly report at 11:59 PM on the last day of the month
-    cron.schedule("59 23 28-31 * *", () => {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        if (tomorrow.getDate() === 1) {
-            Logger.info("📅 Monthly report scheduled task triggered");
-            generateMonthlyReport();
-        }
-    });
-    Logger.info("✅ Monthly report scheduled: last day of month at 11:59 PM");
 
     // Update overdue items every 6 hours
     cron.schedule("0 */6 * * *", updateOverdueItems);

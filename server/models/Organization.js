@@ -38,6 +38,25 @@ const OrganizationSchema = new mongoose.Schema({
         authorizedManagers: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: "User"
+        }],
+        // صلاحيات إدارة المرتبات
+        allowManagersToManagePayroll: { type: Boolean, default: false },
+        authorizedPayrollManagers: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User"
+        }]
+    },
+    
+    // إعدادات التقارير والإيميلات
+    reportSettings: {
+        dailyReportEnabled: { type: Boolean, default: true },
+        dailyReportStartTime: { type: String, default: "08:00" }, // وقت بداية فترة التقرير (24 ساعة من هذا الوقت)
+        dailyReportSendTime: { type: String, default: "09:00" }, // وقت إرسال التقرير عبر الإيميل
+        dailyReportEmails: [{ type: String }], // قائمة الإيميلات المستقبلة
+        lastReportSentAt: { type: Date }, // آخر مرة تم فيها إرسال التقرير
+        authorizedToManageReports: [{ // المستخدمون المصرح لهم بإدارة إعدادات التقارير
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User"
         }]
     },
     

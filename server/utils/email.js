@@ -1156,11 +1156,12 @@ export const sendLowStockAlert = async ({
     return { success: failureCount === 0, results };
 };
 
-// Send daily report
-export const sendDailyReport = async (reportData, adminEmails) => {
+// Send daily report with PDF attachment
+export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null) => {
     Logger.info("Starting daily report email sending", {
         adminEmailsCount: adminEmails?.length || 0,
         adminEmails: adminEmails,
+        hasPdfBuffer: !!pdfBuffer,
         reportData: {
             organizationName: reportData.organizationName,
             totalRevenue: reportData.totalRevenue,
@@ -1179,43 +1180,87 @@ export const sendDailyReport = async (reportData, adminEmails) => {
         return;
     }
 
-    const template = emailTemplates.dailyReport(reportData);
-
-    Logger.info("Daily report template generated", {
-        subject: template.subject,
-        adminEmailsCount: adminEmails.length,
-    });
-
-    let successCount = 0;
-    let failureCount = 0;
-
-    for (const email of adminEmails) {
-        try {
-            Logger.info("Sending daily report to email", { email });
-
-            await sendEmail({
-                to: email,
-                ...template,
-            });
-
-            successCount++;
-            Logger.info("Daily report sent successfully", { email });
-        } catch (error) {
-            failureCount++;
-            Logger.error("Failed to send daily report", {
-                email,
-                error: error.message,
-                stack: error.stack,
-            });
+    try {
+        // Generate PDF if not provided
+        if (!pdfBuffer) {
+            const { generateDailyReportPDF } = await import('./pdfGenerator.js');
+            pdfBuffer = await generateDailyReportPDF(reportData);
         }
-    }
+        
+        Logger.info("PDF ready for attachment", {
+            pdfSize: pdfBuffer.length,
+            organizationName: reportData.organizationName
+        });
 
-    Logger.info("Daily report sending completed", {
-        totalEmails: adminEmails.length,
-        successCount,
-        failureCount,
-        organizationName: reportData.organizationName,
-    });
+        // Get email template
+        const emailTemplate = emailTemplates.dailyReport(reportData);
+
+        // Send email to each admin with PDF attachment
+        const sendPromises = adminEmails.map(async (email) => {
+            try {
+                const transporter = createTransporter();
+                if (!transporter) {
+                    throw new Error("Email transporter not configured");
+                }
+
+                const mailOptions = {
+                    from: `"Bomba System" <${process.env.EMAIL_USER}>`,
+                    to: email,
+                    subject: emailTemplate.subject,
+                    html: emailTemplate.html,
+                    attachments: [
+                        {
+                            filename: `تقرير-يومي-${reportData.date}.pdf`,
+                            content: pdfBuffer,
+                            contentType: 'application/pdf'
+                        }
+                    ]
+                };
+
+                Logger.info("Sending daily report email", {
+                    to: email,
+                    subject: emailTemplate.subject,
+                    hasAttachment: true,
+                    attachmentSize: pdfBuffer.length
+                });
+
+                const result = await transporter.sendMail(mailOptions);
+
+                Logger.info("Daily report email sent successfully", {
+                    messageId: result.messageId,
+                    to: email,
+                });
+
+                return { email, success: true, messageId: result.messageId };
+            } catch (error) {
+                Logger.error("Failed to send daily report email", {
+                    to: email,
+                    error: error.message,
+                    stack: error.stack,
+                });
+                return { email, success: false, error: error.message };
+            }
+        });
+
+        const results = await Promise.all(sendPromises);
+        const successCount = results.filter(r => r.success).length;
+        const failCount = results.filter(r => !r.success).length;
+
+        Logger.info("Daily report email sending completed", {
+            total: adminEmails.length,
+            success: successCount,
+            failed: failCount,
+            results: results
+        });
+
+        return results;
+    } catch (error) {
+        Logger.error("Failed to send daily report", {
+            error: error.message,
+            stack: error.stack,
+        });
+        throw error;
+    }
 };
 
 // Send monthly report

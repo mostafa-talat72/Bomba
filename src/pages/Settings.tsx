@@ -1,6 +1,8 @@
 import { useState, useEffect, FC } from 'react';
 import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { ReportSettingsSection } from '../components/ReportSettingsSection';
+import { PayrollPermissionsSection } from '../components/PayrollPermissionsSection';
 
 // Type for alert messages
 type AlertType = 'success' | 'error' | 'info' | 'warning';
@@ -97,7 +99,7 @@ interface Manager {
 }
 
 const Settings: FC = () => {
-  const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers } = useApp();
+  const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
   
   // UI State
   const [activeTab, setActiveTab] = useState('profile');
@@ -205,6 +207,31 @@ const Settings: FC = () => {
     workHoursPerDay: 10,
   });
   const [payrollSaving, setPayrollSaving] = useState(false);
+
+  // Report settings state
+  const [reportSettings, setReportSettings] = useState({
+    dailyReportEnabled: true,
+    dailyReportStartTime: '08:00',
+    dailyReportSendTime: '09:00',
+    dailyReportEmails: [],
+    authorizedToManageReports: [],
+  });
+  const [reportPermissions, setReportPermissions] = useState({
+    canManage: false,
+    isOwner: false,
+  });
+  const [reportSettingsLoading, setReportSettingsLoading] = useState(true);
+
+  // Payroll permissions state
+  const [payrollPermissions, setPayrollPermissions] = useState({
+    allowManagersToManagePayroll: false,
+    authorizedPayrollManagers: [],
+  });
+  const [payrollPermissionsData, setPayrollPermissionsData] = useState({
+    canManage: false,
+    isOwner: false,
+  });
+  const [payrollPermissionsLoading, setPayrollPermissionsLoading] = useState(true);
 
   // Show alert function
   const showAlertMessage = (message: string, type: AlertType = 'success') => {
@@ -336,6 +363,76 @@ const Settings: FC = () => {
       loadOrganizationData();
     }
   }, [user, getOrganization, canEditOrganization, getAvailableManagers]);
+
+  // Load report settings
+  useEffect(() => {
+    const loadReportSettings = async () => {
+      setReportSettingsLoading(true);
+      try {
+        // Load report permissions
+        const permissions = await canManageReports();
+        if (permissions) {
+          setReportPermissions({
+            canManage: permissions.canManage || false,
+            isOwner: permissions.isOwner || false,
+          });
+        }
+
+        // Load report settings
+        const settings = await getReportSettings();
+        if (settings) {
+          setReportSettings({
+            dailyReportEnabled: settings.dailyReportEnabled ?? true,
+            dailyReportStartTime: settings.dailyReportStartTime || '08:00',
+            dailyReportSendTime: settings.dailyReportSendTime || '09:00',
+            dailyReportEmails: settings.dailyReportEmails || [],
+            authorizedToManageReports: settings.authorizedToManageReports?.map((m: any) => m._id || m) || [],
+          });
+        }
+      } catch (error) {
+        console.error('Error loading report settings:', error);
+      } finally {
+        setReportSettingsLoading(false);
+      }
+    };
+
+    if (user) {
+      loadReportSettings();
+    }
+  }, [user, canManageReports, getReportSettings]);
+
+  // Load payroll permissions
+  useEffect(() => {
+    const loadPayrollPermissions = async () => {
+      setPayrollPermissionsLoading(true);
+      try {
+        // Load payroll permissions check
+        const permissions = await canManagePayroll();
+        if (permissions) {
+          setPayrollPermissionsData({
+            canManage: permissions.canManage || false,
+            isOwner: permissions.isOwner || false,
+          });
+          
+          // Load payroll permissions settings
+          if (permissions.permissions) {
+            setPayrollPermissions({
+              allowManagersToManagePayroll: permissions.permissions.allowManagersToManagePayroll || false,
+              authorizedPayrollManagers: permissions.permissions.authorizedPayrollManagers?.map((m: any) => m._id || m) || [],
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error loading payroll permissions:', error);
+      } finally {
+        setPayrollPermissionsLoading(false);
+      }
+    };
+
+    if (user) {
+      loadPayrollPermissions();
+    }
+  }, [user, canManagePayroll]);
 
   // Load payroll settings
   useEffect(() => {
@@ -489,6 +586,53 @@ const Settings: FC = () => {
       showAlertMessage('حدث خطأ غير متوقع أثناء تحديث بيانات المنشأة', 'error');
     } finally {
       setOrganizationSaving(false);
+    }
+  };
+
+  const handleSaveReportSettings = async (settings: any) => {
+    try {
+      const success = await updateReportSettings(settings);
+      if (success) {
+        // Reload settings after save
+        const updatedSettings = await getReportSettings();
+        if (updatedSettings) {
+          setReportSettings({
+            dailyReportEnabled: updatedSettings.dailyReportEnabled ?? true,
+            dailyReportStartTime: updatedSettings.dailyReportStartTime || '08:00',
+            dailyReportSendTime: updatedSettings.dailyReportSendTime || '09:00',
+            dailyReportEmails: updatedSettings.dailyReportEmails || [],
+            authorizedToManageReports: updatedSettings.authorizedToManageReports?.map((m: any) => m._id || m) || [],
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error saving report settings:', error);
+    }
+  };
+
+  const handleSendReportNow = async () => {
+    try {
+      await sendReportNow();
+    } catch (error) {
+      console.error('Error sending report now:', error);
+    }
+  };
+
+  const handleSavePayrollPermissions = async (permissions: any) => {
+    try {
+      const success = await updatePayrollPermissions(permissions);
+      if (success) {
+        // Reload permissions after save
+        const updatedPermissions = await canManagePayroll();
+        if (updatedPermissions && updatedPermissions.permissions) {
+          setPayrollPermissions({
+            allowManagersToManagePayroll: updatedPermissions.permissions.allowManagersToManagePayroll || false,
+            authorizedPayrollManagers: updatedPermissions.permissions.authorizedPayrollManagers?.map((m: any) => m._id || m) || [],
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error saving payroll permissions:', error);
     }
   };
 
@@ -1611,37 +1755,86 @@ const Settings: FC = () => {
                     </div>
                   )}
 
-                  {/* Payroll Settings Section */}
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-6">
-                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                      <Clock className="h-5 w-5 ml-2 text-orange-600 dark:text-orange-400" />
-                      إعدادات المرتبات
-                    </h4>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
-                      <p className="text-sm text-blue-800 dark:text-blue-200">
-                        هذه الإعدادات تؤثر على حساب الساعات الإضافية والرواتب لجميع الموظفين
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        عدد ساعات العمل اليومية
-                      </label>
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="number"
-                          min="1"
-                          max="24"
-                          value={payrollSettings.workHoursPerDay}
-                          onChange={(e) => setPayrollSettings({ ...payrollSettings, workHoursPerDay: parseInt(e.target.value) || 10 })}
-                          className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        />
-                        <span className="text-sm text-gray-600 dark:text-gray-400">ساعة</span>
+                  {/* Payroll Settings Section - Only for Owner or Authorized Managers */}
+                  {!payrollPermissionsLoading && (payrollPermissionsData.canManage || payrollPermissionsData.isOwner) && (
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-6">
+                      <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                        <Clock className="h-5 w-5 ml-2 text-orange-600 dark:text-orange-400" />
+                        إعدادات المرتبات
+                      </h4>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          هذه الإعدادات تؤثر على حساب الساعات الإضافية والرواتب لجميع الموظفين
+                        </p>
                       </div>
-                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                        أي ساعات تزيد عن هذا العدد ستُحسب كساعات إضافية
-                      </p>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          عدد ساعات العمل اليومية
+                        </label>
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="number"
+                            min="1"
+                            max="24"
+                            value={payrollSettings.workHoursPerDay}
+                            onChange={(e) => setPayrollSettings({ ...payrollSettings, workHoursPerDay: parseInt(e.target.value) || 10 })}
+                            className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                          <span className="text-sm text-gray-600 dark:text-gray-400">ساعة</span>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                          أي ساعات تزيد عن هذا العدد ستُحسب كساعات إضافية
+                        </p>
+                      </div>
+
+                      {/* Payroll Permissions Section - Inside Payroll Settings */}
+                      <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
+                        <PayrollPermissionsSection
+                          isOwner={payrollPermissionsData.isOwner}
+                          onSave={handleSavePayrollPermissions}
+                          initialPermissions={payrollPermissions}
+                          availableManagers={availableManagers}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* No Permission Message for Payroll Settings */}
+                  {!payrollPermissionsLoading && !payrollPermissionsData.canManage && !payrollPermissionsData.isOwner && (
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-6">
+                      <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                        <Clock className="h-5 w-5 ml-2 text-orange-600 dark:text-orange-400" />
+                        إعدادات المرتبات
+                      </h4>
+                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                        <div className="flex items-start">
+                          <Bell className="h-5 w-5 text-yellow-600 dark:text-yellow-400 ml-3 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                              لا توجد صلاحية
+                            </h4>
+                            <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                              ليس لديك صلاحية لإدارة إعدادات المرتبات. يرجى التواصل مع صاحب المنشأة.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Report Settings Section */}
+                  {!reportSettingsLoading && (
+                    <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                      <ReportSettingsSection
+                        canManage={reportPermissions.canManage}
+                        isOwner={reportPermissions.isOwner}
+                        onSave={handleSaveReportSettings}
+                        onSendNow={handleSendReportNow}
+                        initialSettings={reportSettings}
+                        availableManagers={availableManagers}
+                      />
+                    </div>
+                  )}
 
                   {/* Save Button */}
                   <div className="mt-6">

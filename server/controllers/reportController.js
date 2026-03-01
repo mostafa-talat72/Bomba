@@ -3,6 +3,10 @@ import Session from "../models/Session.js";
 import Bill from "../models/Bill.js";
 import Cost from "../models/Cost.js";
 import InventoryItem from "../models/InventoryItem.js";
+import MenuItem from "../models/MenuItem.js";
+import MenuCategory from "../models/MenuCategory.js";
+import MenuSection from "../models/MenuSection.js";
+import mongoose from "mongoose";
 import { getDateRange } from "../utils/helpers.js";
 import {
     exportToExcel,
@@ -219,7 +223,6 @@ export const getSalesReport = async (req, res) => {
     try {
         const { groupBy = "day", ...filter } = req.query;
         const { startDate, endDate } = getDateRange(filter);
-
         // Calculate previous period for comparison
         const periodDuration = endDate - startDate;
         const previousStartDate = new Date(startDate.getTime() - periodDuration);
@@ -553,8 +556,9 @@ export const getFinancialReport = async (req, res) => {
         const filter = req.query;
         const { startDate, endDate } = getDateRange(filter);
         
-        // FIX: Get organization ID correctly (not the whole object)
+        // Get organization ID correctly
         const organizationId = req.user.organization._id || req.user.organization;
+
         // Check total orders and sessions without date filter
         const totalOrdersInDb = await Order.countDocuments({
             organization: organizationId,
@@ -626,12 +630,12 @@ export const getFinancialReport = async (req, res) => {
                 }
             }
         ]);
-        // Revenue from Orders (Cafe)
+        // Revenue from Orders (Cafe) - ALL orders except cancelled
         const ordersRevenue = await Order.aggregate([
             {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
-                    status: { $in: ["preparing", "ready", "delivered"] }, // الطلبات المكتملة أو قيد التحضير
+                    status: { $ne: "cancelled" }, // جميع الطلبات ما عدا الملغاة
                     organization: organizationId,
                 },
             },
@@ -720,7 +724,7 @@ export const getFinancialReport = async (req, res) => {
                         $gte: previousPeriod.startDate,
                         $lte: previousPeriod.endDate,
                     },
-                    status: { $in: ["preparing", "ready", "delivered"] },
+                    status: { $ne: "cancelled" }, // جميع الطلبات ما عدا الملغاة
                     organization: organizationId,
                 },
             },
@@ -1333,36 +1337,56 @@ export const exportReportToPDF = async (req, res) => {
 
 // Helper functions to get report data
 const getSalesReportData = async (organization, startDate, endDate) => {
-    // Get completed orders (cafe revenue)
+    // Ensure organization is an ObjectId, not an object
+    const organizationId = organization._id || organization;
+    
+
+    // Check total orders in DB for this organization (no date filter)
+    const totalOrdersInOrg = await Order.countDocuments({
+        organization: organizationId,
+    });
+    
+    // Check orders in date range
+    const ordersInRange = await Order.countDocuments({
+        createdAt: { $gte: startDate, $lte: endDate },
+        organization: organizationId,
+    });
+    
+    // Get ALL orders (not just specific statuses)
     const orders = await Order.find({
         createdAt: { $gte: startDate, $lte: endDate },
-        status: { $in: ["preparing", "ready", "delivered"] },
-        organization,
+        organization: organizationId,
     });
+
+    
 
     // Get completed sessions (gaming revenue)
     const sessions = await Session.find({
         createdAt: { $gte: startDate, $lte: endDate },
         status: "completed",
-        organization,
+        organization: organizationId,
     });
 
+
     // Calculate cafe revenue from orders
-    const cafeRevenue = orders.reduce((sum, order) => sum + order.finalAmount, 0);
+    const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
     const totalOrders = orders.length;
+
 
     // Calculate gaming revenue from sessions
     const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
     const computerSessions = sessions.filter(s => s.deviceType === "computer");
     
-    const playstationRevenue = playstationSessions.reduce((sum, session) => sum + session.finalCost, 0);
-    const computerRevenue = computerSessions.reduce((sum, session) => sum + session.finalCost, 0);
+    const playstationRevenue = playstationSessions.reduce((sum, session) => sum + (Number(session.finalCost) || 0), 0);
+    const computerRevenue = computerSessions.reduce((sum, session) => sum + (Number(session.finalCost) || 0), 0);
     const gamingRevenue = playstationRevenue + computerRevenue;
+
 
     // Total revenue
     const totalRevenue = cafeRevenue + gamingRevenue;
     const totalTransactions = totalOrders + sessions.length;
     const avgOrderValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+
 
     const revenueBreakdown = {
         playstation: playstationRevenue,
@@ -1373,12 +1397,21 @@ const getSalesReportData = async (organization, startDate, endDate) => {
     // Top products from orders
     const productSales = {};
     orders.forEach((order) => {
+        if (!order.items || !Array.isArray(order.items)) return;
+        
         order.items.forEach((item) => {
+            if (!item.name) return;
+            
             if (!productSales[item.name]) {
                 productSales[item.name] = { quantity: 0, revenue: 0 };
             }
-            productSales[item.name].quantity += item.quantity;
-            productSales[item.name].revenue += item.itemTotal;
+            
+            const itemQuantity = Number(item.quantity) || 0;
+            const itemPrice = Number(item.price) || 0;
+            const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+            
+            productSales[item.name].quantity += itemQuantity;
+            productSales[item.name].revenue += itemTotal;
         });
     });
 
@@ -1386,6 +1419,7 @@ const getSalesReportData = async (organization, startDate, endDate) => {
         .map(([name, data]) => ({ name, ...data }))
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 10);
+
 
     return {
         totalRevenue,
@@ -1398,16 +1432,19 @@ const getSalesReportData = async (organization, startDate, endDate) => {
 };
 
 const getFinancialReportData = async (organization, startDate, endDate) => {
+    // Ensure organization is an ObjectId, not an object
+    const organizationId = organization._id || organization;
+    
     const bills = await Bill.find({
         createdAt: { $gte: startDate, $lte: endDate },
         status: { $in: ["paid", "partial"] },
-        organization,
+        organization: organizationId,
     });
 
     const costs = await Cost.find({
         date: { $gte: startDate, $lte: endDate },
         status: { $in: ["paid", "partially_paid", "pending"] }, // إضافة فلتر للحالة
-        organization,
+        organization: organizationId,
     });
 
     const totalRevenue = bills.reduce((sum, bill) => sum + bill.total, 0);
@@ -1457,7 +1494,7 @@ const getFinancialReportData = async (organization, startDate, endDate) => {
                     $lte: previousPeriod.endDate,
                 },
                 status: { $in: ["partial", "paid"] },
-                organization,
+                organization: organizationId,
             },
         },
         {
@@ -1492,7 +1529,10 @@ const getFinancialReportData = async (organization, startDate, endDate) => {
 };
 
 const getInventoryReportData = async (organization) => {
-    const items = await InventoryItem.find({ organization });
+    // Ensure organization is an ObjectId, not an object
+    const organizationId = organization._id || organization;
+    
+    const items = await InventoryItem.find({ organization: organizationId });
 
     const totalItems = items.length;
     const totalValue = items.reduce(
@@ -1518,9 +1558,12 @@ const getInventoryReportData = async (organization) => {
 };
 
 const getSessionsReportData = async (organization, startDate, endDate) => {
+    // Ensure organization is an ObjectId, not an object
+    const organizationId = organization._id || organization;
+    
     const sessions = await Session.find({
         startTime: { $gte: startDate, $lte: endDate },
-        organization,
+        organization: organizationId,
     });
 
     const totalSessions = sessions.length;
@@ -1601,33 +1644,54 @@ const getPreviousPeriodString = (startDate, endDate) => {
  */
 const getTopProductsBySection = async (organization, startDate, endDate) => {
     try {
+        // Ensure organization is an ObjectId, not an object
+        const organizationId = organization._id || organization;
+        
+        // Get ALL orders in the date range (not just delivered)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
-            status: 'delivered',
-            organization
-        }).populate({
-            path: 'items.menuItem',
+            organization: organizationId
+        }).lean();
+
+
+        // Get all menu items with their categories and sections
+        const menuItems = await MenuItem.find({ organization: organizationId }).populate({
+            path: 'category',
             populate: {
-                path: 'category',
-                populate: {
-                    path: 'section',
-                    select: 'name'
-                }
+                path: 'section'
             }
         }).lean();
 
+        // Create a map of menu items by name for quick lookup
+        const menuItemMap = {};
+        menuItems.forEach(item => {
+            menuItemMap[item.name] = item;
+        });
+
         const sectionData = {};
 
+        // Process each order
         orders.forEach(order => {
-            order.items.forEach(item => {
-                // Skip items without menu section data
-                if (!item.menuItem || !item.menuItem.category || !item.menuItem.category.section) {
-                    return;
-                }
+            if (!order.items || !Array.isArray(order.items)) return;
 
-                const section = item.menuItem.category.section;
-                const sectionId = section._id.toString();
-                const sectionName = section.name;
+            order.items.forEach(item => {
+                if (!item.name) return;
+
+                // Find the menu item
+                const menuItem = menuItemMap[item.name];
+                
+                // Get section info
+                let sectionId = 'other';
+                let sectionName = 'أخرى';
+
+                if (menuItem && menuItem.category) {
+                    const category = menuItem.category;
+                    if (category.section) {
+                        const section = category.section;
+                        sectionId = section._id ? section._id.toString() : 'other';
+                        sectionName = section.name || 'أخرى';
+                    }
+                }
 
                 // Initialize section if not exists
                 if (!sectionData[sectionId]) {
@@ -1640,6 +1704,11 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
                     };
                 }
 
+                // Calculate item total
+                const itemPrice = Number(item.price) || 0;
+                const itemQuantity = Number(item.quantity) || 0;
+                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+
                 // Initialize product if not exists
                 if (!sectionData[sectionId].products[item.name]) {
                     sectionData[sectionId].products[item.name] = {
@@ -1650,21 +1719,28 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
                 }
 
                 // Accumulate product data
-                sectionData[sectionId].products[item.name].quantity += item.quantity;
-                sectionData[sectionId].products[item.name].revenue += item.itemTotal;
-                sectionData[sectionId].totalRevenue += item.itemTotal;
-                sectionData[sectionId].totalQuantity += item.quantity;
+                sectionData[sectionId].products[item.name].quantity += itemQuantity;
+                sectionData[sectionId].products[item.name].revenue += itemTotal;
+                sectionData[sectionId].totalRevenue += itemTotal;
+                sectionData[sectionId].totalQuantity += itemQuantity;
             });
         });
 
         // Convert to array and sort products within each section
-        return Object.values(sectionData).map(section => ({
-            ...section,
+        const result = Object.values(sectionData).map(section => ({
+            sectionId: section.sectionId,
+            sectionName: section.sectionName,
+            totalRevenue: section.totalRevenue,
+            totalQuantity: section.totalQuantity,
             products: Object.values(section.products)
                 .sort((a, b) => b.revenue - a.revenue)
-                .slice(0, 5)  // Top 5 products per section
+                .slice(0, 10)  // Top 10 products per section
         })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+     
+        return result;
     } catch (error) {
+        console.error('❌ Error in getTopProductsBySection:', error);
         throw error;
     }
 };
@@ -1679,11 +1755,14 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
  */
 const getSessionsDataByType = async (organization, startDate, endDate, deviceType) => {
     try {
+        // Ensure organization is an ObjectId, not an object
+        const organizationId = organization._id || organization;
+        
         const sessions = await Session.find({
             createdAt: { $gte: startDate, $lte: endDate },
             deviceType,
             status: { $in: ['completed', 'active'] },
-            organization
+            organization: organizationId
         }).lean();
 
         const totalSessions = sessions.length;
@@ -1760,19 +1839,22 @@ const getSessionsDataByType = async (organization, startDate, endDate, deviceTyp
  */
 const getPeakHoursData = async (organization, startDate, endDate) => {
     try {
-        // Get orders
+        // Ensure organization is an ObjectId, not an object
+        const organizationId = organization._id || organization;
+        
+        // Get ALL orders (not just specific statuses)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
-            status: { $in: ['preparing', 'ready', 'delivered'] },
-            organization
+            organization: organizationId
         }).lean();
 
-        // Get sessions
+        // Get completed sessions
         const sessions = await Session.find({
             createdAt: { $gte: startDate, $lte: endDate },
             status: 'completed',
-            organization
+            organization: organizationId
         }).lean();
+
 
         // Initialize hourly data (24 hours)
         const hourlyData = Array.from({ length: 24 }, (_, i) => ({
@@ -1786,14 +1868,14 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
         orders.forEach(order => {
             const hour = new Date(order.createdAt).getHours();
             hourlyData[hour].sales++;
-            hourlyData[hour].revenue += order.finalAmount || 0;
+            hourlyData[hour].revenue += Number(order.finalAmount) || 0;
         });
 
         // Process sessions
         sessions.forEach(session => {
             const hour = new Date(session.createdAt).getHours();
             hourlyData[hour].sessions++;
-            hourlyData[hour].revenue += session.finalCost || 0;
+            hourlyData[hour].revenue += Number(session.finalCost) || 0;
         });
 
         // Find top 3 peak hours based on revenue
@@ -1807,6 +1889,7 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
             peakHours
         };
     } catch (error) {
+        console.error('❌ Error in getPeakHoursData:', error);
         throw error;
     }
 };
@@ -1820,17 +1903,22 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
  */
 const getStaffPerformanceData = async (organization, startDate, endDate) => {
     try {
+        // Ensure organization is an ObjectId, not an object
+        const organizationId = organization._id || organization;
+        
+        // Get ALL orders (not just delivered)
         const orders = await Order.find({
             createdAt: { $gte: startDate, $lte: endDate },
-            status: 'delivered',
-            organization
+            organization: organizationId
         }).populate('createdBy', 'name').lean();
 
+        // Get completed sessions
         const sessions = await Session.find({
             startTime: { $gte: startDate, $lte: endDate },
             status: { $in: ['completed', 'active'] },
-            organization
+            organization: organizationId
         }).populate('createdBy', 'name').lean();
+
 
         const staffStats = {};
 
@@ -1850,7 +1938,7 @@ const getStaffPerformanceData = async (organization, startDate, endDate) => {
             }
 
             staffStats[staffId].ordersCount++;
-            staffStats[staffId].totalRevenue += order.finalAmount || 0;
+            staffStats[staffId].totalRevenue += Number(order.finalAmount) || 0;
         });
 
         // Process sessions
@@ -1869,17 +1957,21 @@ const getStaffPerformanceData = async (organization, startDate, endDate) => {
             }
 
             staffStats[staffId].sessionsCount++;
-            staffStats[staffId].totalRevenue += session.finalCost || 0;
+            staffStats[staffId].totalRevenue += Number(session.finalCost) || 0;
         });
 
         // Calculate average order value and sort by total revenue
-        return Object.values(staffStats)
+        const result = Object.values(staffStats)
             .map(staff => ({
                 ...staff,
                 avgOrderValue: staff.ordersCount > 0 ? (staff.totalRevenue / staff.ordersCount).toFixed(2) : 0
             }))
             .sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+
+        return result;
     } catch (error) {
+        console.error('❌ Error in getStaffPerformanceData:', error);
         throw error;
     }
 };

@@ -1,16 +1,36 @@
-import { useState, useEffect, useCallback, useMemo, ReactNode, memo } from 'react';
-import { TrendingUp, TrendingDown, ArrowUp, ArrowDown, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, Filter, ChevronDown, BarChart3 } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { TrendingUp, TrendingDown, ArrowUp, ArrowDown, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, Filter, ChevronDown, BarChart3, Eye, EyeOff } from 'lucide-react';
 import { format, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { DatePicker, TimePicker } from 'antd';
+import { DatePicker, TimePicker, ConfigProvider } from 'antd';
+import arEG from 'antd/locale/ar_EG';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ar';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { exportReportToPDF, generatePDFFilename } from '../utils/pdfExport';
 
 // Configure dayjs
 dayjs.locale('ar');
 dayjs.extend(customParseFormat);
+
+// دالة لتحويل الأرقام إلى العربية
+const toArabicNumbers = (num: number | string): string => {
+  if (num === null || num === undefined) return '';
+  const arabicNumbers = '۰١٢٣٤٥٦٧٨٩';
+  return String(num).replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
+};
+
+// دالة لتنسيق الأرقام مع فواصل الآلاف وتحويلها للعربية
+const formatNumberArabic = (num: number): string => {
+  const rounded = Math.round(num);
+  const formatted = new Intl.NumberFormat('ar-EG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(rounded);
+  
+  return toArabicNumbers(formatted);
+};
 
 // Type definitions
 interface SalesReportData {
@@ -184,9 +204,12 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
 
   if (!data || data.length === 0) {
     return (
-      <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-        لا توجد بيانات متاحة
-      </p>
+      <div className="text-center py-12">
+        <ShoppingCart className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+        <p className="text-gray-500 dark:text-gray-400 text-lg font-medium">
+          لا توجد بيانات مبيعات متاحة
+        </p>
+      </div>
     );
   }
 
@@ -195,66 +218,66 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
       {data.map(section => (
         <div 
           key={section.sectionId} 
-          className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden transition-all duration-200 hover:shadow-md"
+          className="border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-orange-300 dark:hover:border-orange-700"
         >
           <div 
-            className="flex justify-between items-center p-4 cursor-pointer bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="flex justify-between items-center p-5 cursor-pointer bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-700/30 hover:from-gray-100 hover:to-gray-50 dark:hover:from-gray-700 dark:hover:to-gray-700/50 transition-all"
             onClick={() => toggleSection(section.sectionId)}
           >
             <div className="flex items-center gap-3">
-              <ChevronDown 
-                className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${
-                  expandedSections.has(section.sectionId) ? 'rotate-180' : ''
-                }`} 
-              />
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              <div className={`w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center transition-transform duration-200 ${
+                expandedSections.has(section.sectionId) ? 'rotate-180' : ''
+              }`}>
+                <ChevronDown className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                 {section.sectionName}
               </h4>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-8">
               <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400">الكمية الإجمالية</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                  {formatDecimal(section.totalQuantity)} قطعة
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">الكمية الإجمالية</p>
+                <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                  {formatNumberArabic(section.totalQuantity)} قطعة
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400">الإيراد الإجمالي</p>
-                <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                  {formatCurrencyUtil(section.totalRevenue)}
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">الإيراد الإجمالي</p>
+                <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                  {formatNumberArabic(section.totalRevenue)} ج.م
                 </p>
               </div>
             </div>
           </div>
           
           {expandedSections.has(section.sectionId) && (
-            <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+            <div className="p-5 bg-white dark:bg-gray-800 border-t-2 border-gray-200 dark:border-gray-700">
               {section.products && section.products.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {section.products.map((product, index) => (
                     <div 
                       key={`${product.name}-${index}`} 
-                      className="flex justify-between items-center py-3 px-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+                      className="flex justify-between items-center py-4 px-5 bg-gradient-to-r from-gray-50 to-white dark:from-gray-700/30 dark:to-gray-800 rounded-xl hover:from-orange-50 hover:to-orange-50/50 dark:hover:from-orange-900/20 dark:hover:to-orange-900/10 transition-all duration-200 border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-700"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-xs font-bold">
-                          {index + 1}
+                      <div className="flex items-center gap-4">
+                        <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 text-white text-sm font-bold shadow-md">
+                          {toArabicNumbers(index + 1)}
                         </span>
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                        <span className="text-base font-semibold text-gray-800 dark:text-gray-200">
                           {product.name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-8">
                         <div className="text-right">
-                          <p className="text-xs text-gray-500 dark:text-gray-400">الكمية</p>
-                          <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                            {formatDecimal(product.quantity)} قطعة
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">الكمية</p>
+                          <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                            {formatNumberArabic(product.quantity)} قطعة
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs text-gray-500 dark:text-gray-400">الإيراد</p>
-                          <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                            {formatCurrencyUtil(product.revenue)}
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">الإيراد</p>
+                          <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                            {formatNumberArabic(product.revenue)} ج.م
                           </p>
                         </div>
                       </div>
@@ -278,81 +301,84 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
 const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation'] | null }) => {
   if (!data) {
     return (
-      <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-        لا توجد بيانات متاحة
-      </p>
+      <div className="text-center py-8">
+        <Gamepad2 className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+        <p className="text-gray-500 dark:text-gray-400">
+          لا توجد بيانات متاحة
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-blue-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-blue-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <Gamepad2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">عدد الجلسات</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">عدد الجلسات</p>
           <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {formatDecimal(data.totalSessions)}
+            {formatNumberArabic(data.totalSessions)}
           </p>
         </div>
         
-        <div className="bg-green-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-green-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">الإيراد</p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {formatCurrencyUtil(data.totalRevenue)}
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">الإيراد</p>
+          <p className="text-xl font-bold text-green-600 dark:text-green-400">
+            {formatNumberArabic(data.totalRevenue)} ج.م
           </p>
         </div>
         
-        <div className="bg-purple-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-purple-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">متوسط المدة</p>
-          <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-            {formatDecimal(data.avgDuration)} ساعة
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط المدة</p>
+          <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
+            {formatNumberArabic(Number(data.avgDuration))} س
           </p>
         </div>
         
-        <div className="bg-orange-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-orange-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <Target className="w-5 h-5 text-orange-600 dark:text-orange-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">متوسط الإيراد</p>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-            {formatCurrencyUtil(data.avgRevenue)}
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط الإيراد</p>
+          <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
+            {formatNumberArabic(Number(data.avgRevenue))} ج.م
           </p>
         </div>
       </div>
 
       {/* Controller Distribution */}
       {data.controllerDistribution && (
-        <div className="bg-white dark:bg-gray-700/30 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-          <h5 className="text-md font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-            <Gamepad2 className="w-5 h-5 text-blue-500" />
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-200 dark:border-gray-600">
+          <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+            <Gamepad2 className="w-4 h-4 text-blue-500" />
             توزيع الدراعات
           </h5>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-3 bg-blue-50 dark:bg-gray-700 rounded-lg">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">1-2 دراعات</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">١-٢ دراعات</p>
               <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                {formatDecimal(data.controllerDistribution.single)}
+                {formatNumberArabic(data.controllerDistribution.single)}
               </p>
             </div>
             <div className="text-center p-3 bg-purple-50 dark:bg-gray-700 rounded-lg">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">3 دراعات</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">٣ دراعات</p>
               <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
-                {formatDecimal(data.controllerDistribution.triple)}
+                {formatNumberArabic(data.controllerDistribution.triple)}
               </p>
             </div>
             <div className="text-center p-3 bg-orange-50 dark:bg-gray-700 rounded-lg">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">4 دراعات</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">٤ دراعات</p>
               <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                {formatDecimal(data.controllerDistribution.quad)}
+                {formatNumberArabic(data.controllerDistribution.quad)}
               </p>
             </div>
           </div>
@@ -361,42 +387,36 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
 
       {/* Device Usage */}
       {data.deviceUsage && data.deviceUsage.length > 0 && (
-        <div className="bg-white dark:bg-gray-700/30 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-          <h5 className="text-md font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-            <Monitor className="w-5 h-5 text-blue-500" />
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-200 dark:border-gray-600">
+          <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+            <Monitor className="w-4 h-4 text-blue-500" />
             أكثر الأجهزة استخداماً
           </h5>
           <div className="space-y-2">
             {data.deviceUsage.slice(0, 5).map((device, index) => (
               <div 
                 key={device.deviceName} 
-                className="flex justify-between items-center py-3 px-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                className="flex justify-between items-center py-2 px-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors"
               >
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold">
-                    {index + 1}
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-500 text-white text-xs font-bold">
+                    {toArabicNumbers(index + 1)}
                   </span>
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     {device.deviceName}
                   </span>
                 </div>
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-4">
                   <div className="text-right">
                     <p className="text-xs text-gray-500 dark:text-gray-400">الجلسات</p>
                     <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {formatDecimal(device.sessionsCount)}
+                      {formatNumberArabic(device.sessionsCount)}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500 dark:text-gray-400">الإيراد</p>
                     <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                      {formatCurrencyUtil(device.revenue)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">معدل الاستخدام</p>
-                    <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                      {formatDecimal(device.usageRate)}%
+                      {formatNumberArabic(device.revenue)} ج.م
                     </p>
                   </div>
                 </div>
@@ -413,95 +433,92 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
 const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | null }) => {
   if (!data) {
     return (
-      <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-        لا توجد بيانات متاحة
-      </p>
+      <div className="text-center py-8">
+        <Monitor className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+        <p className="text-gray-500 dark:text-gray-400">
+          لا توجد بيانات متاحة
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-green-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-green-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <Monitor className="w-5 h-5 text-green-600 dark:text-green-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">عدد الجلسات</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">عدد الجلسات</p>
           <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {formatDecimal(data.totalSessions)}
+            {formatNumberArabic(data.totalSessions)}
           </p>
         </div>
         
-        <div className="bg-blue-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-blue-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">الإيراد</p>
-          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {formatCurrencyUtil(data.totalRevenue)}
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">الإيراد</p>
+          <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+            {formatNumberArabic(data.totalRevenue)} ج.م
           </p>
         </div>
         
-        <div className="bg-purple-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-purple-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">متوسط المدة</p>
-          <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-            {formatDecimal(data.avgDuration)} ساعة
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط المدة</p>
+          <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
+            {formatNumberArabic(Number(data.avgDuration))} س
           </p>
         </div>
         
-        <div className="bg-orange-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 text-center border border-orange-200 dark:border-gray-600">
           <div className="flex items-center justify-center mb-2">
             <Target className="w-5 h-5 text-orange-600 dark:text-orange-400" />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">متوسط الإيراد</p>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-            {formatCurrencyUtil(data.avgRevenue)}
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط الإيراد</p>
+          <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
+            {formatNumberArabic(Number(data.avgRevenue))} ج.م
           </p>
         </div>
       </div>
 
       {/* Device Usage */}
       {data.deviceUsage && data.deviceUsage.length > 0 && (
-        <div className="bg-white dark:bg-gray-700/30 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-          <h5 className="text-md font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-            <Monitor className="w-5 h-5 text-green-500" />
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-green-200 dark:border-gray-600">
+          <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+            <Monitor className="w-4 h-4 text-green-500" />
             أكثر الأجهزة استخداماً
           </h5>
           <div className="space-y-2">
             {data.deviceUsage.slice(0, 5).map((device, index) => (
               <div 
                 key={device.deviceName} 
-                className="flex justify-between items-center py-3 px-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                className="flex justify-between items-center py-2 px-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-green-50 dark:hover:bg-gray-600 transition-colors"
               >
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs font-bold">
-                    {index + 1}
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-green-500 text-white text-xs font-bold">
+                    {toArabicNumbers(index + 1)}
                   </span>
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     {device.deviceName}
                   </span>
                 </div>
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-4">
                   <div className="text-right">
                     <p className="text-xs text-gray-500 dark:text-gray-400">الجلسات</p>
                     <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {formatDecimal(device.sessionsCount)}
+                      {formatNumberArabic(device.sessionsCount)}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500 dark:text-gray-400">الإيراد</p>
                     <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                      {formatCurrencyUtil(device.revenue)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">معدل الاستخدام</p>
-                    <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                      {formatDecimal(device.usageRate)}%
+                      {formatNumberArabic(device.revenue)} ج.م
                     </p>
                   </div>
                 </div>
@@ -867,7 +884,7 @@ const StaffPerformanceTable = ({ data }: { data: StaffPerformance[] | null }) =>
 };
 
 const Reports = () => {
-  const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, exportReportToExcel, exportReportToPDF, showNotification } = useApp();
+  const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, exportReportToExcel, showNotification } = useApp();
 
   // أنواع الفلاتر وحالاتها
   const [filterType, setFilterType] = useState<'period' | 'daily' | 'monthly' | 'yearly' | 'custom'>('period');
@@ -886,6 +903,11 @@ const Reports = () => {
     dayjs().set('hour', 0).set('minute', 0),
     dayjs().set('hour', 23).set('minute', 59)
   ]);
+
+  // Show/hide states for amounts
+  const [showRevenue, setShowRevenue] = useState(true);
+  const [showProfit, setShowProfit] = useState(true);
+  const [showCosts, setShowCosts] = useState(true);
 
   // الحصول على تاريخ اليوم بتوقيت مصر
   const getEgyptTime = useCallback((): Date => {
@@ -1089,8 +1111,10 @@ const Reports = () => {
       for (const {key, promise} of reportsPromises) {
         try {
           const value = await promise;
+          
           if (key === 'sales') {
             results[key] = value as SalesReportData;
+          
           } else if (key === 'sessions') {
             results[key] = value as SessionsReportData;
           } else {
@@ -1101,10 +1125,11 @@ const Reports = () => {
           if (key === 'financial') {
          }
         } catch (error) {
-          console.error(`Error loading ${key} report:`, error);
+          console.error(`❌ Error loading ${key} report:`, error);
           errors.push({ key, reason: error });
         }
       }
+
 
       // تحديث حالة المكون بالنتائج
       setReports(results);
@@ -1189,12 +1214,61 @@ const Reports = () => {
   }, [reports.financial]);
 
   // تنسيق الأرقام
-  const formatNumber = (num: number) => formatDecimal(num);
-  const formatCurrency = (amount: number) => formatCurrencyUtil(amount);
+  const formatNumber = (num: number) => formatNumberArabic(num);
+  const formatCurrency = (amount: number) => `${formatNumberArabic(amount)} ج.م`;
 
   const totalRevenue = basicStats.revenue;
 
-  // Export functions - Memoized
+  // Export PDF function
+  const handleExportPDF = useCallback(async (reportType: 'sales' | 'financial' | 'sessions' | 'inventory') => {
+    try {
+      const filter = buildFilter();
+      
+      // Get the appropriate data based on report type
+      let data: any;
+      let dateRange = {
+        startDate: filter.startDate as string || new Date().toISOString(),
+        endDate: filter.endDate as string || new Date().toISOString(),
+      };
+
+      switch (reportType) {
+        case 'sales':
+          data = reports.sales;
+          break;
+        case 'financial':
+          data = reports.financial;
+          break;
+        case 'sessions':
+          data = reports.sessions;
+          break;
+        case 'inventory':
+          data = reports.inventory;
+          break;
+      }
+
+      if (!data) {
+        showNotification('لا توجد بيانات للتصدير', 'warning');
+        return;
+      }
+
+      const filename = generatePDFFilename(reportType, dateRange);
+      
+      await exportReportToPDF({
+        reportType,
+        data,
+        dateRange,
+        organizationName: 'Bomba', // يمكنك تغيير هذا ليكون ديناميكي
+        filename,
+      });
+
+      showNotification('تم تصدير PDF بنجاح', 'success');
+    } catch (error) {
+      console.error('PDF Export Error:', error);
+      showNotification('فشل في تصدير PDF', 'error');
+    }
+  }, [reports, buildFilter, showNotification]);
+
+  // Keep old Excel export for backward compatibility
   const handleExport = useCallback(async (
     exportFunc: (reportType: string, filter: Record<string, unknown>) => Promise<void>,
     reportType: string
@@ -1486,149 +1560,268 @@ const Reports = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-6 rtl">
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">التقارير</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {getDateRangeLabel()}
-          </p>
-        </div>
-        <div className="flex items-center space-x-2 space-x-reverse">
-          <button
-            onClick={() => loadReports()}
-            disabled={loading}
-            className="p-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full disabled:opacity-50 transition-colors"
-            title="تحديث البيانات"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={() => handleExport(exportReportToExcel, 'all')}
-            className="px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md flex items-center gap-2 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            <span>تصدير Excel</span>
-          </button>
-          <button
-            onClick={() => handleExport(exportReportToPDF, 'all')}
-            className="px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md flex items-center gap-2 transition-colors"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة PDF</span>
-          </button>
+    <ConfigProvider
+      direction="rtl"
+      locale={arEG}
+      theme={{
+        token: {
+          fontFamily: 'Tajawal, sans-serif',
+        },
+      }}
+    >
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir="rtl">
+      {/* Header Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 rounded-2xl flex items-center justify-center shadow-lg">
+              <BarChart3 className="text-white w-8 h-8" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">التقارير الشاملة</h1>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">تحليل شامل للمبيعات والجلسات والأداء</p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <button
+              onClick={loadReports}
+              disabled={loading}
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              <span>تحديث البيانات</span>
+            </button>
+            <button
+              onClick={() => handleExportPDF('sales')}
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium"
+            >
+              <Printer className="w-5 h-5" />
+              <span>طباعة</span>
+            </button>
+            <button
+              onClick={() => handleExport(exportReportToExcel, 'all')}
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 dark:from-orange-600 dark:to-orange-700 dark:hover:from-orange-700 dark:hover:to-orange-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium border-0"
+            >
+              <Download className="w-5 h-5" />
+              <span>تصدير Excel</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* فلترة البيانات */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <Filter className="w-5 h-5 text-orange-500" />
-          <span>تصفية النتائج</span>
+      {/* Date/Time Picker and Quick Stats Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Date/Time Picker Card */}
+        <div className="lg:col-span-2">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300">
+            <div className="p-6 bg-gradient-to-r from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700">
+              <h3 className="text-xl font-bold text-white flex items-center">
+                <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center ml-3">
+                  <Filter className="text-white text-lg" />
+                </div>
+                نطاق التقرير
+              </h3>
+            </div>
+            <div className="p-6 bg-gray-50 dark:bg-gray-900">
+              {renderFilterControls()}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Stats Cards */}
+        <div className="space-y-4">
+          {/* Total Revenue Card */}
+          <div className="bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-2xl shadow-lg p-6 text-white transition-all duration-300 hover:shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <DollarSign className="w-7 h-7" />
+              </div>
+              <button
+                onClick={() => setShowRevenue(!showRevenue)}
+                title={showRevenue ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors duration-200"
+              >
+                {showRevenue ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            <div className="text-3xl font-bold mb-2">
+              {showRevenue ? formatCurrency(basicStats.revenue) : '••••••'}
+            </div>
+            <div className="text-green-100 text-sm font-medium">إجمالي الإيرادات</div>
+          </div>
+
+          {/* Total Orders Card */}
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-2xl shadow-lg p-6 text-white transition-all duration-300 hover:shadow-xl">
+            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-4">
+              <ShoppingCart className="w-7 h-7" />
+            </div>
+            <div className="text-3xl font-bold mb-2">
+              {formatNumber(basicStats.orders)}
+            </div>
+            <div className="text-blue-100 text-sm font-medium">عدد الطلبات</div>
+          </div>
+
+          {/* Total Sessions Card */}
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 rounded-2xl shadow-lg p-6 text-white transition-all duration-300 hover:shadow-xl">
+            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-4">
+              <Gamepad2 className="w-7 h-7" />
+            </div>
+            <div className="text-3xl font-bold mb-2">
+              {formatNumber(basicStats.sessions)}
+            </div>
+            <div className="text-purple-100 text-sm font-medium">عدد الجلسات</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Detailed Statistics with Comparison */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <BarChart3 className="w-6 h-6 text-orange-500" />
+          <span>الإحصائيات التفصيلية</span>
         </h2>
-        {renderFilterControls()}
-      </div>
-
-      {/* Basic Statistics with Comparison */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCardWithComparison
-          icon={DollarSign}
-          title="إجمالي الإيرادات"
-          current={basicStats.revenue}
-          comparison={reports.sales?.comparison?.revenue || null}
-          color="green"
-          formatValue={formatCurrency}
-        />
-        <StatCardWithComparison
-          icon={ShoppingCart}
-          title="عدد الطلبات"
-          current={basicStats.orders}
-          comparison={reports.sales?.comparison?.orders || null}
-          color="blue"
-          formatValue={formatNumber}
-        />
-        <StatCardWithComparison
-          icon={TrendingUp}
-          title="متوسط الطلب"
-          current={basicStats.avgOrderValue}
-          comparison={reports.sales?.comparison?.avgOrderValue || null}
-          color="purple"
-          formatValue={formatCurrency}
-        />
-        <StatCardWithComparison
-          icon={Users}
-          title="عدد الجلسات"
-          current={basicStats.sessions}
-          comparison={reports.sessions?.comparison?.sessions || null}
-          color="orange"
-          formatValue={formatNumber}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCardWithComparison
+            icon={DollarSign}
+            title="إجمالي الإيرادات"
+            current={basicStats.revenue}
+            comparison={reports.sales?.comparison?.revenue || null}
+            color="green"
+            formatValue={formatCurrency}
+          />
+          <StatCardWithComparison
+            icon={ShoppingCart}
+            title="عدد الطلبات"
+            current={basicStats.orders}
+            comparison={reports.sales?.comparison?.orders || null}
+            color="blue"
+            formatValue={formatNumber}
+          />
+          <StatCardWithComparison
+            icon={TrendingUp}
+            title="متوسط الطلب"
+            current={basicStats.avgOrderValue}
+            comparison={reports.sales?.comparison?.avgOrderValue || null}
+            color="purple"
+            formatValue={formatCurrency}
+          />
+          <StatCardWithComparison
+            icon={Users}
+            title="عدد الجلسات"
+            current={basicStats.sessions}
+            comparison={reports.sessions?.comparison?.sessions || null}
+            color="orange"
+            formatValue={formatNumber}
+          />
+        </div>
       </div>
 
       {/* Revenue Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <RevenueCard
-          icon={Gamepad2}
-          title="البلايستيشن"
-          value={revenueBreakdown.playstation}
-          total={totalRevenue}
-          color="blue"
-        />
-        <RevenueCard
-          icon={Monitor}
-          title="الكمبيوتر"
-          value={revenueBreakdown.computer}
-          total={totalRevenue}
-          color="green"
-        />
-        <RevenueCard
-          icon={ShoppingCart}
-          title="الطلبات"
-          value={revenueBreakdown.cafe}
-          total={totalRevenue}
-          color="orange"
-        />
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <DollarSign className="w-6 h-6 text-green-500" />
+          <span>توزيع الإيرادات</span>
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <RevenueCard
+            icon={Gamepad2}
+            title="البلايستيشن"
+            value={revenueBreakdown.playstation}
+            total={totalRevenue}
+            color="blue"
+          />
+          <RevenueCard
+            icon={Monitor}
+            title="الكمبيوتر"
+            value={revenueBreakdown.computer}
+            total={totalRevenue}
+            color="green"
+          />
+          <RevenueCard
+            icon={ShoppingCart}
+            title="الطلبات"
+            value={revenueBreakdown.cafe}
+            total={totalRevenue}
+            color="orange"
+          />
+        </div>
       </div>
 
       {/* Top Products by Section */}
-      <ReportSection 
-        title="أكثر المنتجات مبيعاً حسب الأقسام" 
-        onExportExcel={() => handleExport(exportReportToExcel, 'sales')} 
-        onExportPDF={() => handleExport(exportReportToPDF, 'sales')}
-      >
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <ShoppingCart className="w-6 h-6 text-orange-500" />
+            <span>أكثر المنتجات مبيعاً حسب الأقسام</span>
+          </h2>
+          <div className="flex gap-2">
+            <button onClick={() => handleExport(exportReportToExcel, 'sales')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير Excel">
+              <Download className="h-5 w-5" />
+            </button>
+            <button onClick={() => handleExportPDF('sales')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير PDF">
+              <Printer className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
         <TopProductsBySection 
           data={reports.sales?.topProductsBySection || []} 
         />
-      </ReportSection>
+      </div>
 
       {/* Gaming Sessions - Separate PlayStation and Computer */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ReportSection 
-          title="تحليل جلسات البلايستيشن" 
-          onExportExcel={() => handleExport(exportReportToExcel, 'sessions')} 
-          onExportPDF={() => handleExport(exportReportToPDF, 'sessions')}
-        >
-          <PlayStationSessionsReport 
-            data={reports.sessions?.playstation || null} 
-          />
-        </ReportSection>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <Gamepad2 className="w-6 h-6 text-blue-500" />
+          <span>تحليل جلسات الألعاب</span>
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-6 border border-blue-200 dark:border-gray-600">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Gamepad2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                البلايستيشن
+              </h3>
+              <div className="flex gap-2">
+                <button onClick={() => handleExport(exportReportToExcel, 'sessions')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-1" title="تصدير Excel">
+                  <Download className="h-5 w-5" />
+                </button>
+                <button onClick={() => handleExportPDF('sessions')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1" title="تصدير PDF">
+                  <Printer className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <PlayStationSessionsReport 
+              data={reports.sessions?.playstation || null} 
+            />
+          </div>
 
-        <ReportSection 
-          title="تحليل جلسات الكمبيوتر" 
-          onExportExcel={() => handleExport(exportReportToExcel, 'sessions')} 
-          onExportPDF={() => handleExport(exportReportToPDF, 'sessions')}
-        >
-          <ComputerSessionsReport 
-            data={reports.sessions?.computer || null} 
-          />
-        </ReportSection>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-6 border border-green-200 dark:border-gray-600">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Monitor className="w-5 h-5 text-green-600 dark:text-green-400" />
+                الكمبيوتر
+              </h3>
+              <div className="flex gap-2">
+                <button onClick={() => handleExport(exportReportToExcel, 'sessions')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-1" title="تصدير Excel">
+                  <Download className="h-5 w-5" />
+                </button>
+                <button onClick={() => handleExportPDF('sessions')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1" title="تصدير PDF">
+                  <Printer className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <ComputerSessionsReport 
+              data={reports.sessions?.computer || null} 
+            />
+          </div>
+        </div>
       </div>
 
       {/* Peak Hours Analysis */}
       <ReportSection 
         title="تحليل ساعات الذروة" 
         onExportExcel={() => handleExport(exportReportToExcel, 'peakHours')} 
-        onExportPDF={() => handleExport(exportReportToPDF, 'peakHours')}
+        onExportPDF={() => handleExportPDF('sales')}
       >
         <PeakHoursChart 
           data={reports.sales?.peakHours || null} 
@@ -1639,7 +1832,7 @@ const Reports = () => {
       <ReportSection 
         title="أداء الموظفين" 
         onExportExcel={() => handleExport(exportReportToExcel, 'staffPerformance')} 
-        onExportPDF={() => handleExport(exportReportToPDF, 'staffPerformance')}
+        onExportPDF={() => handleExportPDF('sales')}
       >
         <StaffPerformanceTable 
           data={reports.sales?.staffPerformance || null} 
@@ -1647,31 +1840,133 @@ const Reports = () => {
       </ReportSection>
 
       {/* Financial Summary */}
-      <ReportSection title="الملخص المالي" onExportExcel={() => handleExport(exportReportToExcel, 'financial')} onExportPDF={() => handleExport(exportReportToPDF, 'financial')}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <DollarSign className="w-6 h-6 text-green-500" />
+            <span>الملخص المالي</span>
+          </h2>
+          <div className="flex gap-2">
+            <button onClick={() => handleExport(exportReportToExcel, 'financial')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير Excel">
+              <Download className="h-5 w-5" />
+            </button>
+            <button onClick={() => handleExportPDF('financial')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير PDF">
+              <Printer className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
         {reports.financial ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <FinancialStat 
-              label="إجمالي الربح" 
-              value={formatCurrency(netProfit)} 
-              color={netProfit >= 0 ? "green" : "red"} 
-              showWarning={netProfit < 0}
-            />
-            <FinancialStat label="إجمالي التكاليف" value={formatCurrency(totalCosts)} color="red" />
-            <FinancialStat 
-              label="هامش الربح" 
-              value={`${formatDecimal(profitMargin)}%`} 
-              color={profitMargin >= 0 ? "purple" : "red"} 
-              showWarning={profitMargin < 0}
-            />
-            <FinancialStat label="عدد المعاملات" value={formatNumber(totalTransactions)} color="orange" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Net Profit Card */}
+            <div className={`rounded-xl p-6 border-2 transition-all duration-200 ${
+              netProfit >= 0 
+                ? 'bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-700' 
+                : 'bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-700'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                  netProfit >= 0 
+                    ? 'bg-green-500 dark:bg-green-600' 
+                    : 'bg-red-500 dark:bg-red-600'
+                }`}>
+                  <DollarSign className="w-6 h-6 text-white" />
+                </div>
+                <button
+                  onClick={() => setShowProfit(!showProfit)}
+                  title={showProfit ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                  className={`p-2 rounded-lg transition-colors ${
+                    netProfit >= 0
+                      ? 'hover:bg-green-200 dark:hover:bg-green-800/30 text-green-700 dark:text-green-400'
+                      : 'hover:bg-red-200 dark:hover:bg-red-800/30 text-red-700 dark:text-red-400'
+                  }`}
+                >
+                  {showProfit ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              <div className={`text-3xl font-bold mb-2 ${
+                netProfit >= 0 
+                  ? 'text-green-700 dark:text-green-400' 
+                  : 'text-red-700 dark:text-red-400'
+              }`}>
+                {showProfit ? formatCurrency(netProfit) : '••••••'}
+              </div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">إجمالي الربح</div>
+              {netProfit < 0 && (
+                <div className="mt-2 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                  <TrendingDown className="w-4 h-4" />
+                  <span>خسارة</span>
+                </div>
+              )}
+            </div>
+
+            {/* Total Costs Card */}
+            <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-6 border-2 border-red-200 dark:border-gray-600">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-12 h-12 bg-red-500 dark:bg-red-600 rounded-xl flex items-center justify-center">
+                  <TrendingDown className="w-6 h-6 text-white" />
+                </div>
+                <button
+                  onClick={() => setShowCosts(!showCosts)}
+                  title={showCosts ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                  className="hover:bg-red-200 dark:hover:bg-red-800/30 p-2 rounded-lg transition-colors text-red-700 dark:text-red-400"
+                >
+                  {showCosts ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              <div className="text-3xl font-bold text-red-700 dark:text-red-400 mb-2">
+                {showCosts ? formatCurrency(totalCosts) : '••••••'}
+              </div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">إجمالي التكاليف</div>
+            </div>
+
+            {/* Profit Margin Card */}
+            <div className={`rounded-xl p-6 border-2 transition-all duration-200 ${
+              profitMargin >= 0 
+                ? 'bg-gradient-to-br from-purple-50 to-purple-100 dark:from-gray-700 dark:to-gray-600 border-purple-200 dark:border-gray-600' 
+                : 'bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-700'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                  profitMargin >= 0 
+                    ? 'bg-purple-500 dark:bg-purple-600' 
+                    : 'bg-red-500 dark:bg-red-600'
+                }`}>
+                  <Target className="w-6 h-6 text-white" />
+                </div>
+                {profitMargin < 0 && (
+                  <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                    <TrendingDown className="w-4 h-4" />
+                  </div>
+                )}
+              </div>
+              <div className={`text-3xl font-bold mb-2 ${
+                profitMargin >= 0 
+                  ? 'text-purple-700 dark:text-purple-400' 
+                  : 'text-red-700 dark:text-red-400'
+              }`}>
+                {formatNumber(profitMargin)}%
+              </div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">هامش الربح</div>
+            </div>
+
+            {/* Total Transactions Card */}
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-6 border-2 border-orange-200 dark:border-gray-600">
+              <div className="w-12 h-12 bg-orange-500 dark:bg-orange-600 rounded-xl flex items-center justify-center mb-3">
+                <ShoppingCart className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-3xl font-bold text-orange-700 dark:text-orange-400 mb-2">
+                {formatNumber(totalTransactions)}
+              </div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">عدد المعاملات</div>
+            </div>
           </div>
         ) : (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-4">لا توجد بيانات مالية متاحة</p>
+          <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد بيانات مالية متاحة</p>
         )}
-      </ReportSection>
+      </div>
 
       {/* Inventory Summary */}
-      <ReportSection title="ملخص المخزون" onExportExcel={() => handleExport(exportReportToExcel, 'inventory')} onExportPDF={() => handleExport(exportReportToPDF, 'inventory')}>
+      <ReportSection title="ملخص المخزون" onExportExcel={() => handleExport(exportReportToExcel, 'inventory')} onExportPDF={() => handleExportPDF('inventory')}>
         {reports.inventory && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <FinancialStat
@@ -1698,35 +1993,54 @@ const Reports = () => {
         )}
       </ReportSection>
     </div>
+    </ConfigProvider>
   );
 };
 
 // Helper Components for cleaner structure
 
 const RevenueCard = ({ icon: Icon, title, value, total, color }: RevenueCardProps) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-    <div className="flex items-center justify-between mb-2">
+  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-200">
+    <div className="flex items-center justify-between mb-4">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-        <Icon className={`h-5 w-5 text-${color}-500`} />
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-${color}-100 dark:bg-${color}-900/30`}>
+          <Icon className={`h-6 w-6 text-${color}-600 dark:text-${color}-400`} />
+        </div>
         {title}
       </h3>
-      <span className={`text-xs font-bold px-2 py-1 rounded-full bg-${color}-100 text-${color}-800 dark:bg-[#2d333a] dark:text-${color}-300`}>
-        {formatDecimal((value / total) * 100 || 0)}%
+      <span className={`text-sm font-bold px-3 py-1.5 rounded-full bg-${color}-100 text-${color}-800 dark:bg-${color}-900/30 dark:text-${color}-300`}>
+        {formatNumberArabic((value / total) * 100 || 0)}%
       </span>
     </div>
-    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-center mt-4">{formatCurrencyUtil(value)}</p>
+    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-center mt-4">
+      {formatNumberArabic(value)} ج.م
+    </p>
+    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+        <span>من الإجمالي</span>
+        <span className="font-semibold">{formatNumberArabic(total)} ج.م</span>
+      </div>
+    </div>
   </div>
 );
 
 const ReportSection = ({ title, onExportExcel, onExportPDF, children }: ReportSectionProps) => (
-  <div className="bg-white dark:bg-[#24292d] rounded-xl shadow-sm border border-gray-200 dark:border-gray-700/50 p-6 hover:shadow-md transition-all duration-200">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-      <div className="flex space-x-2 space-x-reverse">
-        <button onClick={onExportExcel} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-1" title="تصدير Excel">
+  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl transition-all duration-200">
+    <div className="flex items-center justify-between mb-6">
+      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{title}</h3>
+      <div className="flex gap-2">
+        <button 
+          onClick={onExportExcel} 
+          className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" 
+          title="تصدير Excel"
+        >
           <Download className="h-5 w-5" />
         </button>
-        <button onClick={onExportPDF} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1" title="تصدير PDF">
+        <button 
+          onClick={onExportPDF} 
+          className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" 
+          title="تصدير PDF"
+        >
           <Printer className="h-5 w-5" />
         </button>
       </div>
@@ -1736,8 +2050,8 @@ const ReportSection = ({ title, onExportExcel, onExportPDF, children }: ReportSe
 );
 
 const FinancialStat = ({ label, value, color, showWarning = false }: FinancialStatProps) => (
-  <div className={`text-center p-4 bg-${color}-50 dark:bg-[#2d333a] rounded-lg hover:bg-${color}-100 dark:hover:bg-[#374151] transition-colors duration-200`}>
-    <div className="flex items-center justify-center gap-2">
+  <div className={`text-center p-6 bg-gradient-to-br from-${color}-50 to-${color}-100 dark:from-gray-700 dark:to-gray-600 rounded-xl hover:shadow-md transition-all duration-200 border-2 border-${color}-200 dark:border-gray-600`}>
+    <div className="flex items-center justify-center gap-2 mb-3">
       {showWarning && (
         <svg 
           className="w-6 h-6 text-red-600 dark:text-red-400 animate-pulse" 
@@ -1751,9 +2065,9 @@ const FinancialStat = ({ label, value, color, showWarning = false }: FinancialSt
           />
         </svg>
       )}
-      <div className={`text-2xl font-bold text-${color}-600 dark:text-${color}-400`}>{value}</div>
     </div>
-    <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">{label}</div>
+    <div className={`text-3xl font-bold text-${color}-700 dark:text-${color}-400 mb-2`}>{value}</div>
+    <div className="text-sm font-medium text-gray-600 dark:text-gray-300">{label}</div>
   </div>
 );
 

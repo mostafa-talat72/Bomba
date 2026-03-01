@@ -2407,6 +2407,49 @@ class ApiClient {
     return this.request('/organization/available-managers');
   }
 
+  // Report Settings methods
+  async getReportSettings(): Promise<ApiResponse<any>> {
+    return this.request('/organization/report-settings');
+  }
+
+  async updateReportSettings(settings: {
+    dailyReportEnabled?: boolean;
+    dailyReportStartTime?: string;
+    dailyReportSendTime?: string;
+    dailyReportEmails?: string[];
+    authorizedToManageReports?: string[];
+  }): Promise<ApiResponse<any>> {
+    return this.request('/organization/report-settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async canManageReports(): Promise<ApiResponse<any>> {
+    return this.request('/organization/can-manage-reports');
+  }
+
+  async sendReportNow(): Promise<ApiResponse<any>> {
+    return this.request('/organization/send-report-now', {
+      method: 'POST',
+    });
+  }
+
+  // Payroll permissions methods
+  async canManagePayroll(): Promise<ApiResponse<any>> {
+    return this.request('/organization/can-manage-payroll');
+  }
+
+  async updatePayrollPermissions(permissions: {
+    allowManagersToManagePayroll?: boolean;
+    authorizedPayrollManagers?: string[];
+  }): Promise<ApiResponse<any>> {
+    return this.request('/organization/payroll-permissions', {
+      method: 'PUT',
+      body: JSON.stringify(permissions),
+    });
+  }
+
 
 }
 
