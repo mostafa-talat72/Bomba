@@ -1691,7 +1691,10 @@
     "hourlyRateForControllers": "أسعار الساعة حسب عدد الدراعات",
     "unlinkWarningMessage": "سيتم فصل فاتورة الجلسة عن الطاولة ونقلها إلى قسم أجهزة البلايستيشن",
     "selectTableLabel": "اختر الطاولة",
-    "deviceInfo": "معلومات الجهاز"
+    "deviceInfo": "معلومات الجهاز",
+    "defaultCustomerName": "عميل",
+    "playstationCustomer": "عميل بلايستيشن",
+    "computerCustomer": "عميل كمبيوتر"
   },
   "consumptionReport": {
     "title": "تقرير الاستهلاك",

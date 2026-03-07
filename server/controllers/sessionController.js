@@ -7,7 +7,19 @@ import Organization from "../models/Organization.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
-import { getUserLocale } from "../utils/localeHelper.js";
+import { getUserLocale, getUserLanguage } from "../utils/localeHelper.js";
+import { getCustomerNameForDevice, getTableName, getSessionBillNote, getNewSessionBillNote, t } from "../utils/translations.js";
+
+/**
+ * Helper function to translate text based on user language
+ * @param {string} key - Translation key
+ * @param {Object} user - User object with language preference
+ * @returns {string} Translated text
+ */
+const translate = (key, user) => {
+    const language = getUserLanguage(user);
+    return t(key, language);
+};
 
 /**
  * حذف فاتورة من كلا القاعدتين (Local + Atlas)
@@ -164,7 +176,8 @@ const performCleanupHelper = async (organizationId) => {
                                 
                                 // Add merge information to target bill notes
                                 const currentNotes = targetBillForMerge.notes || '';
-                                targetBillForMerge.notes = currentNotes + `\n[تم دمج فاتورة فارغة ${bill.billNumber}]`;
+                                const userLanguage = getUserLanguage(req.user);
+                                targetBillForMerge.notes = currentNotes + `\n[${t('mergedEmptyBill', userLanguage)} ${bill.billNumber}]`;
                                 
                                 // Update target bill
                                 await targetBillForMerge.calculateSubtotal();
@@ -608,13 +621,14 @@ const sessionController = {
 
             // Create new session
             // اسم العميل دائماً "عميل (اسم الجهاز)"
+            const userLanguage = getUserLanguage(req.user);
             const session = new Session({
                 deviceNumber,
                 deviceName,
                 deviceId,
                 deviceType,
                 table: table || null,
-                customerName: `عميل (${deviceName})`,
+                customerName: `${t('customer', userLanguage)} (${deviceName})`,
                 controllers: controllers || 1,
                 createdBy: req.user._id,
                 organization: req.user.organization,
@@ -642,8 +656,8 @@ const sessionController = {
                     tableNumber = tableDoc ? tableDoc.number : table;
                     
                     // إذا كانت الجلسة مرتبطة بطاولة، اسم العميل يكون اسم الطاولة
-                    customerNameForBill = `طاولة ${tableNumber}`;
-                    tableName = `طاولة ${tableNumber}`;
+                    customerNameForBill = getTableName(tableNumber, userLanguage);
+                    tableName = getTableName(tableNumber, userLanguage);
                     
                     // البحث عن فاتورة موجودة للطاولة (غير مدفوعة بالكامل)
                     const existingBill = await Bill.findOne({
@@ -667,13 +681,7 @@ const sessionController = {
                     }
                 } else {
                     // إذا لم تكن مرتبطة بطاولة، اسم العميل يكون عميل + نوع الجهاز
-                    if (deviceType === "playstation") {
-                        customerNameForBill = `عميل بلايستيشن ${deviceName}`;
-                    } else if (deviceType === "computer") {
-                        customerNameForBill = `عميل كمبيوتر ${deviceName}`;
-                    } else {
-                        customerNameForBill = `عميل (${deviceName})`;
-                    }
+                    customerNameForBill = getCustomerNameForDevice(deviceType, deviceName, userLanguage);
                 }
 
                 // إذا لم يتم العثور على فاتورة، أنشئ فاتورة جديدة
@@ -685,9 +693,7 @@ const sessionController = {
                         total: 0, // سيتم تحديثه عند إنهاء الجلسة
                         discount: 0,
                         tax: 0,
-                        notes: `فاتورة جلسة ${tableName} - ${deviceType}${
-                            tableNumber ? ` (طاولة ${tableNumber})` : ""
-                        }`,
+                        notes: getNewSessionBillNote(tableName, deviceType, tableNumber, userLanguage),
                         billType: billType,
                         status: "draft", // فاتورة مسودة حتى تنتهي الجلسة
                         createdBy: req.user._id,
@@ -1256,7 +1262,7 @@ const sessionController = {
             if (!isLinkedToTable && (!customerName || customerName.trim() === '')) {
                 return res.status(400).json({
                     success: false,
-                    message: 'اسم العميل مطلوب للجلسات غير المرتبطة بطاولة',
+                    message: t('customerNameRequiredForNonTable', getUserLanguage(req.user)),
                     error: 'Customer name required'
                 });
             }
@@ -1337,25 +1343,27 @@ const sessionController = {
                     if (updatedBill) {
                         // تحديد اسم العميل فقط إذا لم تكن الفاتورة مرتبطة بطاولة
                         if (!updatedBill.table) {
-                            let customerNameForBill = "";
+                            const userLanguage = getUserLanguage(req.user);
                             const deviceType = updatedSession.deviceType;
                             const deviceNumber = updatedSession.deviceNumber;
                             const custName = updatedSession.customerName;
+                            let customerNameForBill = "";
+                            
                             if (deviceType === "playstation") {
                                 if (!custName || custName.trim() === "") {
-                                    customerNameForBill = `عميل بلايستيشن PS${deviceNumber}`;
+                                    customerNameForBill = `${t('playstationCustomer', userLanguage)} PS${deviceNumber}`;
                                 } else {
                                     customerNameForBill = `${custName.trim()} PS${deviceNumber}`;
                                 }
                             } else if (deviceType === "computer") {
                                 if (!custName || custName.trim() === "") {
-                                    customerNameForBill = `عميل كمبيوتر PC${deviceNumber}`;
+                                    customerNameForBill = `${t('computerCustomer', userLanguage)} PC${deviceNumber}`;
                                 } else {
                                     customerNameForBill = `${custName.trim()} PC${deviceNumber}`;
                                 }
                             } else {
                                 if (!custName || custName.trim() === "") {
-                                    customerNameForBill = "عميل";
+                                    customerNameForBill = t('customer', userLanguage);
                                 } else {
                                     customerNameForBill = custName.trim();
                                 }
@@ -1396,26 +1404,27 @@ const sessionController = {
                 
                 try {
                     // تحديد اسم العميل (هذا الجزء للفواتير الجديدة فقط - غير مرتبطة بطاولة)
-                    let customerNameForBill = "";
+                    const userLanguage = getUserLanguage(req.user);
                     const deviceType = updatedSession.deviceType;
                     const deviceNumber = updatedSession.deviceNumber;
                     const custName = updatedSession.customerName;
+                    let customerNameForBill = "";
                     
                     if (deviceType === "playstation") {
                         if (!custName || custName.trim() === "") {
-                            customerNameForBill = `عميل بلايستيشن PS${deviceNumber}`;
+                            customerNameForBill = `${t('playstationCustomer', userLanguage)} PS${deviceNumber}`;
                         } else {
                             customerNameForBill = `${custName.trim()} PS${deviceNumber}`;
                         }
                     } else if (deviceType === "computer") {
                         if (!custName || custName.trim() === "") {
-                            customerNameForBill = `عميل كمبيوتر PC${deviceNumber}`;
+                            customerNameForBill = `${t('computerCustomer', userLanguage)} PC${deviceNumber}`;
                         } else {
                             customerNameForBill = `${custName.trim()} PC${deviceNumber}`;
                         }
                     } else {
                         if (!custName || custName.trim() === "") {
-                            customerNameForBill = "عميل";
+                            customerNameForBill = t('customer', userLanguage);
                         } else {
                             customerNameForBill = custName.trim();
                         }
@@ -1431,7 +1440,7 @@ const sessionController = {
                         total: updatedSession.finalCost || 0,
                         discount: updatedSession.discount || 0,
                         tax: 0,
-                        notes: `فاتورة جلسة ${updatedSession.deviceName} - ${deviceType}`,
+                        notes: getNewSessionBillNote(updatedSession.deviceName, deviceType, null, userLanguage),
                         billType: deviceType === "playstation" ? "playstation" : deviceType === "computer" ? "computer" : "cafe",
                         status: "partial",
                         createdBy: req.user._id,
@@ -1730,13 +1739,14 @@ const sessionController = {
             const tableNumber = tableDoc ? tableDoc.number : table;
 
             // Update customer name if provided
+            const userLanguage = getUserLanguage(req.user);
             if (customerName && customerName.trim() !== "") {
                 session.customerName = customerName.trim();
-            } else if (!session.customerName || session.customerName.includes("عميل (")) {
+            } else if (!session.customerName || session.customerName.includes(t('customer', userLanguage))) {
                 // If no customer name provided and current name is default, require it
                 return res.status(400).json({
                     success: false,
-                    message: "اسم العميل مطلوب عند فك الربط من الطاولة",
+                    message: t('customerNameRequired', userLanguage),
                     error: "Customer name required",
                 });
             }
@@ -1755,17 +1765,9 @@ const sessionController = {
                 const currentCost = await session.calculateCurrentCost();
                 
                 // تحديد اسم العميل للفاتورة الجديدة (بدون طاولة)
-                let customerNameForBill = "";
                 const deviceType = session.deviceType;
                 const deviceName = session.deviceName;
-                
-                if (deviceType === "playstation") {
-                    customerNameForBill = `عميل بلايستيشن ${deviceName}`;
-                } else if (deviceType === "computer") {
-                    customerNameForBill = `عميل كمبيوتر ${deviceName}`;
-                } else {
-                    customerNameForBill = `عميل (${deviceName})`;
-                }
+                const customerNameForBill = getCustomerNameForDevice(deviceType, deviceName, userLanguage);
 
                 // Create new bill for the session
                 newBill = await Bill.create({
@@ -1775,7 +1777,7 @@ const sessionController = {
                     total: currentCost,
                     discount: session.discount || 0,
                     tax: 0,
-                    notes: `فاتورة جلسة ${session.deviceName} - ${deviceType} (تم فك الربط من طاولة ${tableNumber})`,
+                    notes: getSessionBillNote(session.deviceName, deviceType, tableNumber, userLanguage),
                     billType: deviceType === "playstation" ? "playstation" : deviceType === "computer" ? "computer" : "cafe",
                     status: "draft",
                     createdBy: req.user._id,
@@ -1918,29 +1920,30 @@ const sessionController = {
                 bill.billType = session.deviceType === "playstation" ? "playstation" : session.deviceType === "computer" ? "computer" : "cafe";
                 
                 // Update customer name
-                let customerNameForBill = "";
+                const userLanguage = getUserLanguage(req.user);
                 const deviceType = session.deviceType;
                 const deviceNumber = session.deviceNumber;
                 const custName = session.customerName;
+                let customerNameForBill = "";
                 
                 if (deviceType === "playstation") {
                     if (!custName || custName.trim() === "") {
-                        customerNameForBill = `عميل بلايستيشن PS${deviceNumber}`;
+                        customerNameForBill = `${t('playstationCustomer', userLanguage)} PS${deviceNumber}`;
                     } else {
                         customerNameForBill = `${custName.trim()} PS${deviceNumber}`;
                     }
                 } else if (deviceType === "computer") {
                     if (!custName || custName.trim() === "") {
-                        customerNameForBill = `عميل كمبيوتر PC${deviceNumber}`;
+                        customerNameForBill = `${t('computerCustomer', userLanguage)} PC${deviceNumber}`;
                     } else {
                         customerNameForBill = `${custName.trim()} PC${deviceNumber}`;
                     }
                 } else {
-                    customerNameForBill = custName || "عميل";
+                    customerNameForBill = custName || t('customer', userLanguage);
                 }
                 
                 bill.customerName = customerNameForBill;
-                bill.notes = `فاتورة جلسة ${session.deviceName} - ${deviceType} (تم فك الربط من طاولة ${tableNumber})`;
+                bill.notes = getSessionBillNote(session.deviceName, deviceType, tableNumber, userLanguage);
                 bill.updatedBy = req.user._id;
                 
                 await bill.save();
@@ -2350,14 +2353,17 @@ const sessionController = {
                     sessionBillNumber: sessionBill.billNumber,
                 });
 
+                // Get user language for translations
+                const userLanguage = getUserLanguage(req.user);
+
                 // إضافة الطاولة إلى فاتورة الجلسة الحالية
                 sessionBill.table = tableId;
                 sessionBill.billType = "cafe"; // تغيير نوع الفاتورة إلى كافيه عند الربط بطاولة
-                sessionBill.customerName = `طاولة ${table.number}`; // تحديث اسم العميل
+                sessionBill.customerName = getTableName(table.number, userLanguage); // تحديث اسم العميل
                 sessionBill.updatedBy = req.user._id;
                 
                 // إضافة ملاحظة عن الربط
-                const linkNote = `\n[تم ربط الفاتورة بالطاولة ${table.number}]`;
+                const linkNote = `\n[${t('linkedToTable', userLanguage)} ${table.number}]`;
                 sessionBill.notes = (sessionBill.notes || '') + linkNote;
                 
                 await sessionBill.save();

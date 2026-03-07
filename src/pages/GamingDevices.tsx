@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿﻿import React, { useState, useEffect, useRef } from 'react';
 import { Gamepad2, Monitor, Play, Square, Users, Plus, Table as TableIcon, X, Edit, Trash2, Clock } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +30,75 @@ const formatTimeByLocale = (dateTime: dayjs.Dayjs, locale: string): string => {
   }
   
   return formatted;
+};
+
+// دالة لترجمة اسم العميل الافتراضي بناءً على اللغة الحالية
+const translateDefaultCustomerName = (customerName: string, deviceType: string, deviceNumber: string | number, t: any): string => {
+  // إذا كان الاسم فارغاً، نرجع فارغ
+  if (!customerName || customerName.trim() === '') {
+    return '';
+  }
+
+  // أنماط أسماء العملاء الافتراضية بالعربية
+  const arabicPatterns = {
+    customer: /^عميل\s*\((.+)\)$/i,
+    playstationCustomer: /^عميل بلايستيشن\s+PS/i,
+    computerCustomer: /^عميل كمبيوتر\s+PC/i,
+    table: /^طاولة\s+\d+$/i,
+  };
+
+  // أنماط أسماء العملاء الافتراضية بالإنجليزية
+  const englishPatterns = {
+    customer: /^Customer\s*\((.+)\)$/i,
+    playstationCustomer: /^PlayStation Customer\s+PS/i,
+    computerCustomer: /^Computer Customer\s+PC/i,
+    table: /^Table\s+\d+$/i,
+  };
+
+  // أنماط أسماء العملاء الافتراضية بالفرنسية
+  const frenchPatterns = {
+    customer: /^Client\s*\((.+)\)$/i,
+    playstationCustomer: /^Client PlayStation\s+PS/i,
+    computerCustomer: /^Client Ordinateur\s+PC/i,
+    table: /^Table\s+\d+$/i,
+  };
+
+  // التحقق من النمط وترجمته
+  // نمط "عميل (اسم الجهاز)"
+  let match = customerName.match(arabicPatterns.customer) ||
+              customerName.match(englishPatterns.customer) ||
+              customerName.match(frenchPatterns.customer);
+
+  if (match && match[1]) {
+    // استخراج اسم الجهاز من داخل الأقواس
+    const deviceName = match[1];
+    return `${t('gaming.defaultCustomerName')} (${deviceName})`;
+  }
+
+  if (arabicPatterns.playstationCustomer.test(customerName) ||
+      englishPatterns.playstationCustomer.test(customerName) ||
+      frenchPatterns.playstationCustomer.test(customerName)) {
+    // عميل بلايستيشن
+    return `${t('gaming.playstationCustomer')} PS${deviceNumber}`;
+  }
+
+  if (arabicPatterns.computerCustomer.test(customerName) ||
+      englishPatterns.computerCustomer.test(customerName) ||
+      frenchPatterns.computerCustomer.test(customerName)) {
+    // عميل كمبيوتر
+    return `${t('gaming.computerCustomer')} PC${deviceNumber}`;
+  }
+
+  if (arabicPatterns.table.test(customerName) ||
+      englishPatterns.table.test(customerName) ||
+      frenchPatterns.table.test(customerName)) {
+    // اسم طاولة
+    const tableNumber = customerName.match(/\d+/)?.[0] || '';
+    return `${t('gaming.table')} ${tableNumber}`;
+  }
+
+  // إذا لم يكن اسماً افتراضياً، نرجع الاسم كما هو
+  return customerName;
 };
 
 interface GamingDevicesProps {
@@ -1181,7 +1250,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                 <button
                                   onClick={() => {
                                     setSelectedSessionForUnlink(activeSession);
-                                    setCustomerNameForUnlink(activeSession.customerName || '');
+                                    // ترجمة اسم العميل الافتراضي بناءً على اللغة الحالية
+                                    const translatedName = translateDefaultCustomerName(
+                                      activeSession.customerName || '',
+                                      activeSession.deviceType,
+                                      activeSession.deviceNumber,
+                                      t
+                                    );
+                                    setCustomerNameForUnlink(translatedName);
                                     setShowUnlinkTableModal(true);
                                   }}
                                   className="w-full px-3 py-2 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
@@ -1921,7 +1997,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 type="text"
                 value={customerNameForUnlink}
                 onChange={(e) => setCustomerNameForUnlink(e.target.value)}
-                placeholder="{t('gaming.customerNamePlaceholder')}"
+                placeholder={t('gaming.customerNamePlaceholder')}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:text-gray-100"
                 disabled={unlinkingTable}
               />

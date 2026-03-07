@@ -1696,7 +1696,10 @@
     "hourlyRateForControllers": "Hourly rates by controller count",
     "unlinkWarningMessage": "The session bill will be separated from the table and moved to the PlayStation devices section",
     "selectTableLabel": "Select table",
-    "deviceInfo": "Device Information"
+    "deviceInfo": "Device Information",
+    "defaultCustomerName": "Customer",
+    "playstationCustomer": "PlayStation Customer",
+    "computerCustomer": "Computer Customer"
   },
   "consumptionReport": {
     "title": "Consumption Report",

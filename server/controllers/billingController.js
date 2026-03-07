@@ -14,6 +14,8 @@ import performanceMetrics from "../utils/performanceMetrics.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import syncConfig from "../config/syncConfig.js";
 import { aggregateItemsWithPayments, expandAggregatedItemsForPayment } from "../utils/billAggregation.js";
+import { getUserLanguage } from "../utils/localeHelper.js";
+import { getTableName } from "../utils/translations.js";
 
 // دالة لتحويل الأرقام الإنجليزية إلى العربية
 const convertToArabicNumbers = (str) => {
@@ -908,7 +910,8 @@ export const updateBill = async (req, res) => {
                     const Table = (await import('../models/Table.js')).default;
                     const newTableDoc = await Table.findById(newTableId);
                     if (newTableDoc) {
-                        bill.customerName = `طاولة ${newTableDoc.number}`;
+                        const userLanguage = getUserLanguage(req.user);
+                        bill.customerName = getTableName(newTableDoc.number, userLanguage);
                         Logger.info(`✓ تم تحديث اسم العميل إلى: ${bill.customerName}`);
                     }
                     

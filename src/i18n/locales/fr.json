@@ -1691,7 +1691,10 @@
     "hourlyRateForControllers": "Tarifs horaires par nombre de manettes",
     "unlinkWarningMessage": "La facture de session sera séparée de la table et déplacée vers la section des appareils PlayStation",
     "selectTableLabel": "Sélectionner une table",
-    "deviceInfo": "Informations sur l'appareil"
+    "deviceInfo": "Informations sur l'appareil",
+    "defaultCustomerName": "Client",
+    "playstationCustomer": "Client PlayStation",
+    "computerCustomer": "Client Ordinateur"
   },
   "consumptionReport": {
     "title": "Rapport de consommation",

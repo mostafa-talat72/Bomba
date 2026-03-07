@@ -159,3 +159,4 @@ export const getCurrencySymbol = (currencyCode, language = 'ar') => {
     
     return symbols[currencyCode]?.[language] || currencyCode;
 };
+
