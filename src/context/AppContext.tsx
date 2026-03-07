@@ -875,9 +875,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Add bill to bills list if created
         if (bill) {
           setBills(prev => [...prev, bill]);
-          showNotification(`تم بدء جلسة جديدة على ${session.deviceName} - الفاتورة: ${bill.billNumber}`, 'success');
+          showNotification(t('toast.session.startedWithBill', { deviceName: session.deviceName, billNumber: bill.billNumber }), 'success');
         } else {
-          showNotification(`تم بدء جلسة جديدة على ${session.deviceName}`, 'success');
+          showNotification(t('toast.session.started', { deviceName: session.deviceName }), 'success');
         }
 
         updateNotificationCount(1);
@@ -886,7 +886,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إنشاء الجلسة', 'error');
+      showNotification(err.message || t('toast.session.createError'), 'error');
       return null;
     }
   };
@@ -898,13 +898,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSessions(prev => prev.map(session =>
           session.id === id ? response.data! : session
         ));
-        showNotification('تم تحديث الجلسة بنجاح', 'success');
+        showNotification(t('toast.session.updated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث الجلسة', 'error');
+      showNotification(err.message || t('toast.session.updateError'), 'error');
       return null;
     }
   };
@@ -923,18 +923,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Update bill in bills list if exists
         if (bill) {
           setBills(prev => prev.map(b => b.id === bill.id ? bill : b));
-          showNotification(`تم إنهاء الجلسة على ${session.deviceName} - إجمالي التكلفة: ${session.finalCost}`, 'success');
+          showNotification(t('toast.session.ended', { deviceName: session.deviceName, cost: session.finalCost }), 'success');
         } else {
-          showNotification(`تم إنهاء الجلسة على ${session.deviceName} بنجاح`, 'success');
+          showNotification(t('toast.session.endedSuccess', { deviceName: session.deviceName }), 'success');
         }
 
         return session;
       }
       // If response is not successful, throw error
-      throw new Error(response.message || 'فشل في إنهاء الجلسة');
+      throw new Error(response.message || t('toast.session.endError'));
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إنهاء الجلسة', 'error');
+      showNotification(err.message || t('toast.session.endError'), 'error');
       throw error; // Re-throw error so calling code knows it failed
     }
   };
@@ -945,14 +945,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       // Validate order data
       if (!orderData.customerName || !orderData.items || orderData.items.length === 0) {
-        showNotification('بيانات الطلب غير مكتملة', 'error');
+        showNotification(t('toast.order.incompleteData'), 'error');
         return null;
       }
 
       // Validate each item
       for (const item of orderData.items) {
         if (!item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number') {
-          showNotification('بيانات العناصر غير مكتملة', 'error');
+          showNotification(t('toast.order.incompleteItems'), 'error');
           return null;
         }
       }
@@ -960,7 +960,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // Ensure table is sent as ObjectId (string format)
       // The table field should already be an ObjectId string from the calling component
       if (orderData.table && typeof orderData.table !== 'string') {
-        showNotification('معرف الطاولة غير صحيح', 'error');
+        showNotification(t('toast.order.invalidTable'), 'error');
         return null;
       }
 
@@ -978,17 +978,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           await fetchBills();
         }
         
-        showNotification(`تم إنشاء طلب جديد: ${newOrder.orderNumber}`, 'success');
+        showNotification(t('toast.order.created', { orderNumber: newOrder.orderNumber }), 'success');
         updateNotificationCount(1);
         return newOrder;
       } else {
-        const errorMessage = response.message || 'فشل في إنشاء الطلب';
+        const errorMessage = response.message || t('toast.order.createError');
         showNotification(errorMessage, 'error');
         return null;
       }
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إنشاء الطلب', 'error');
+      showNotification(err.message || t('toast.order.createError'), 'error');
       return null;
     }
   };
@@ -1001,7 +1001,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setOrders(prev => prev.map(order =>
           order.id === id ? response.data! : order
         ));
-        showNotification('تم تحديث الطلب بنجاح', 'success');
+        showNotification(t('toast.order.updated'), 'success');
         return response.data;
       }
 
@@ -1010,13 +1010,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Handle detailed inventory insufficiency messages
         if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
           const detailsMessage = (response.data as any).details
-            .map((d: any) => `• ${d.name}: المطلوب ${d.required} ${d.unit}، المتوفر ${d.available} ${d.unit}`)
+            .map((d: any) => `• ${d.name}: ${t('common.required')} ${d.required} ${d.unit}, ${t('common.available')} ${d.available} ${d.unit}`)
             .join('\n');
-          showNotification(`المخزون غير كافي لتحديث الطلب:\n${detailsMessage}`, 'error');
+          showNotification(`${t('toast.order.insufficientStock')}:\n${detailsMessage}`, 'error');
         } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
-          showNotification(`المخزون غير كافي لتحديث الطلب:\n${(response.data as any).errors.join('\n')}`, 'error');
+          showNotification(`${t('toast.order.insufficientStock')}:\n${(response.data as any).errors.join('\n')}`, 'error');
         } else {
-          showNotification(response.message || 'حدث خطأ أثناء تحديث الطلب', 'error');
+          showNotification(response.message || t('toast.order.updateError'), 'error');
         }
         return null;
       }
@@ -1024,7 +1024,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث الطلب', 'error');
+      showNotification(err.message || t('toast.order.updateError'), 'error');
       return null;
     }
   };
@@ -1037,13 +1037,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setOrders(prev => prev.map(order =>
           order.id === orderId ? response.data! : order
         ));
-        showNotification('تم تحديث حالة التجهيز بنجاح', 'success');
+        showNotification(t('toast.order.preparingUpdated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث حالة التجهيز', 'error');
+      showNotification(err.message || t('toast.order.preparingError'), 'error');
       return null;
     }
   };
@@ -1054,22 +1054,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (response.success && response.data) {
         setOrders(prev => prev.map(order => order.id === orderId ? response.data! : order));
 
-        const statusMessages = {
-          pending: 'تم تحديث حالة الطلب إلى: في الانتظار',
-          preparing: 'تم تحديث حالة الطلب إلى: قيد التحضير',
-          ready: 'تم تحديث حالة الطلب إلى: جاهز',
-          delivered: 'تم تحديث حالة الطلب إلى: تم التسليم',
-          cancelled: 'تم إلغاء الطلب'
-        };
-
-        showNotification(statusMessages[status], 'success');
+        const statusKey = `toast.order.status${status.charAt(0).toUpperCase() + status.slice(1)}`;
+        showNotification(t(statusKey), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث حالة الطلب', 'error');
+      showNotification(err.message || t('toast.order.statusError'), 'error');
       return null;
     }
   };
@@ -1097,7 +1090,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.createInventoryItem(itemData);
       if (response.success && response.data) {
         setInventory(prev => [...prev, response.data!]);
-        showNotification('تم إضافة المنتج بنجاح', 'success');
+        showNotification(t('toast.inventory.added'), 'success');
         updateNotificationCount(1);
         return response.data;
       }
@@ -1107,12 +1100,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const errorMessages = responseWithErrors.errors.map((e: any) => `${e.field}: ${e.message}`).join('\n');
         showNotification(`${response.message}\n${errorMessages}`, 'error');
       } else {
-        showNotification(response.message || 'فشل في إضافة المنتج', 'error');
+        showNotification(response.message || t('toast.inventory.addError'), 'error');
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إضافة المنتج', 'error');
+      showNotification(err.message || t('toast.inventory.addError'), 'error');
       return null;
     }
   };
@@ -1124,13 +1117,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setInventory(prev => prev.map(item =>
           item.id === id ? response.data! : item
         ));
-        showNotification('تم تحديث المنتج بنجاح', 'success');
+        showNotification(t('toast.inventory.updated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث المنتج', 'error');
+      showNotification(err.message || t('toast.inventory.updateError'), 'error');
       return null;
     }
   };
@@ -1143,15 +1136,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setInventoryItems(prev => prev.map(item => item.id === id ? response.data! : item));
 
         const { quantity, operation } = stockData;
-        const operationText = operation === 'add' ? 'إضافة' : operation === 'subtract' ? 'خصم' : 'تحديث';
-        showNotification(`تم ${operationText} ${quantity} وحدة من المخزون بنجاح`, 'success');
+        const operationKey = operation === 'add' ? 'stockAdded' : operation === 'subtract' ? 'stockSubtracted' : 'stockUpdated';
+        showNotification(t(`toast.inventory.${operationKey}`, { quantity }), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث المخزون', 'error');
+      showNotification(err.message || t('toast.inventory.stockError'), 'error');
       return null;
     }
   };
@@ -1162,14 +1155,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await api.createBill(billData);
       if (response.success && response.data) {
         setBills(prev => [...prev, response.data!]);
-        showNotification('تم إنشاء الفاتورة بنجاح', 'success');
+        showNotification(t('toast.bill.created'), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إنشاء الفاتورة', 'error');
+      showNotification(err.message || t('toast.bill.createError'), 'error');
       return null;
     }
   };
@@ -1181,13 +1174,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBills(prev => prev.map(bill =>
           bill.id === id ? response.data! : bill
         ));
-        showNotification('تم تحديث الفاتورة بنجاح', 'success');
+        showNotification(t('toast.bill.updated'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تحديث الفاتورة', 'error');
+      showNotification(err.message || t('toast.bill.updateError'), 'error');
       return null;
     }
   };
@@ -1199,15 +1192,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBills(prev => prev.map(bill => bill.id === id ? response.data! : bill));
 
         const { amount, method } = paymentData;
-        const methodText = method === 'cash' ? 'نقداً' : method === 'card' ? 'بطاقة' : method === 'online' ? 'إلكتروني' : method;
-        showNotification(`تم إضافة دفعة ${amount} ريال ${methodText} بنجاح`, 'success');
+        const methodText = t(`toast.paymentMethods.${method}`, method);
+        showNotification(t('toast.bill.paymentAdded', { amount, method: methodText }), 'success');
         updateNotificationCount(1);
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إضافة الدفعة', 'error');
+      showNotification(err.message || t('toast.bill.paymentError'), 'error');
       return null;
     }
   };
@@ -1225,14 +1218,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           );
           return newBills;
         });
-        showNotification('تم إلغاء الفاتورة بنجاح', 'success');
+        showNotification(t('toast.bill.cancelled'), 'success');
         return true;
       } else {
         return false;
       }
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في إلغاء الفاتورة', 'error');
+      showNotification(err.message || t('toast.bill.cancelError'), 'error');
       return false;
     }
   };
@@ -1253,13 +1246,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBills(prev => prev.map(bill =>
           bill.id === id ? response.data! : bill
         ));
-        showNotification('تم تسجيل الدفع الجزئي بنجاح', 'success');
+        showNotification(t('toast.bill.partialPayment'), 'success');
         return response.data;
       }
       return null;
     } catch (error: unknown) {
       const err = error as { message?: string };
-      showNotification(err.message || 'فشل في تسجيل الدفع الجزئي', 'error');
+      showNotification(err.message || t('toast.bill.partialPaymentError'), 'error');
       return null;
     }
   };

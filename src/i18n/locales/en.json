@@ -55,6 +55,7 @@
     "dark": "Dark",
     "currency": "EGP",
     "required": "Required",
+    "available": "Available",
     "from": "from",
     "selectDate": "Select date"
   },
@@ -3539,6 +3540,63 @@
       "add": "Added",
       "subtract": "Subtracted",
       "update": "Updated"
+    },
+    "paymentMethods": {
+      "cash": "cash",
+      "card": "card",
+      "online": "online"
+    }
+  },
+  "toast": {
+    "session": {
+      "started": "New session started on {{deviceName}}",
+      "startedWithBill": "New session started on {{deviceName}} - Bill: {{billNumber}}",
+      "updated": "Session updated successfully",
+      "ended": "Session ended on {{deviceName}} - Total cost: {{cost}}",
+      "endedSuccess": "Session ended on {{deviceName}} successfully",
+      "createError": "Failed to create session",
+      "updateError": "Failed to update session",
+      "endError": "Failed to end session"
+    },
+    "order": {
+      "created": "New order created: {{orderNumber}}",
+      "updated": "Order updated successfully",
+      "preparingUpdated": "Preparation status updated successfully",
+      "statusPending": "Order status updated to: Pending",
+      "statusPreparing": "Order status updated to: Preparing",
+      "statusReady": "Order status updated to: Ready",
+      "statusDelivered": "Order status updated to: Delivered",
+      "statusCancelled": "Order status updated to: Cancelled",
+      "incompleteData": "Incomplete order data",
+      "incompleteItems": "Incomplete item data",
+      "invalidTable": "Invalid table ID",
+      "insufficientStock": "Insufficient stock to update order",
+      "createError": "Failed to create order",
+      "updateError": "Failed to update order",
+      "preparingError": "Failed to update preparation status",
+      "statusError": "Failed to update order status"
+    },
+    "inventory": {
+      "added": "Product added successfully",
+      "updated": "Product updated successfully",
+      "stockAdded": "Added {{quantity}} units to stock successfully",
+      "stockSubtracted": "Subtracted {{quantity}} units from stock successfully",
+      "stockUpdated": "Updated {{quantity}} units in stock successfully",
+      "addError": "Failed to add product",
+      "updateError": "Failed to update product",
+      "stockError": "Failed to update stock"
+    },
+    "bill": {
+      "created": "Bill created successfully",
+      "updated": "Bill updated successfully",
+      "cancelled": "Bill cancelled successfully",
+      "paymentAdded": "Payment of {{amount}} {{method}} added successfully",
+      "partialPayment": "Partial payment recorded successfully",
+      "createError": "Failed to create bill",
+      "updateError": "Failed to update bill",
+      "cancelError": "Failed to cancel bill",
+      "paymentError": "Failed to add payment",
+      "partialPaymentError": "Failed to record partial payment"
     },
     "paymentMethods": {
       "cash": "cash",

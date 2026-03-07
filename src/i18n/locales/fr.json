@@ -55,6 +55,7 @@
     "dark": "Sombre",
     "currency": "EGP",
     "required": "Requis",
+    "available": "Disponible",
     "from": "de",
     "selectDate": "Sélectionner la date"
   },
@@ -3484,6 +3485,118 @@
       "add": "Ajouter",
       "subtract": "Soustraire",
       "update": "Mettre à jour"
+    }
+  },
+  "toast": {
+    "session": {
+      "started": "Nouvelle session démarrée sur {{deviceName}}",
+      "startedWithBill": "Nouvelle session démarrée sur {{deviceName}} - Facture: {{billNumber}}",
+      "updated": "Session mise à jour avec succès",
+      "ended": "Session terminée sur {{deviceName}} - Coût total: {{cost}}",
+      "endedSuccess": "Session terminée sur {{deviceName}} avec succès",
+      "createError": "Échec de la création de la session",
+      "updateError": "Échec de la mise à jour de la session",
+      "endError": "Échec de la fin de la session"
+    },
+    "order": {
+      "created": "Nouvelle commande créée: {{orderNumber}}",
+      "updated": "Commande mise à jour avec succès",
+      "preparingUpdated": "Statut de préparation mis à jour avec succès",
+      "statusUpdated": "Statut de la commande mis à jour avec succès",
+      "incompleteData": "Données de commande incomplètes",
+      "incompleteItems": "Données d'articles incomplètes",
+      "invalidTable": "ID de table invalide",
+      "insufficientStock": "Stock insuffisant pour mettre à jour la commande",
+      "createError": "Échec de la création de la commande",
+      "updateError": "Échec de la mise à jour de la commande",
+      "statusError": "Échec de la mise à jour du statut de la commande"
+    },
+    "inventory": {
+      "added": "Produit ajouté avec succès",
+      "updated": "Produit mis à jour avec succès",
+      "stockUpdated": "{{operation}} {{quantity}} unités du stock avec succès",
+      "addError": "Échec de l'ajout du produit",
+      "updateError": "Échec de la mise à jour du produit",
+      "stockError": "Échec de la mise à jour du stock"
+    },
+    "bill": {
+      "created": "Facture créée avec succès",
+      "updated": "Facture mise à jour avec succès",
+      "cancelled": "Facture annulée avec succès",
+      "paymentAdded": "Paiement de {{amount}} {{currency}} {{method}} ajouté avec succès",
+      "partialPayment": "Paiement partiel enregistré avec succès",
+      "createError": "Échec de la création de la facture",
+      "updateError": "Échec de la mise à jour de la facture",
+      "cancelError": "Échec de l'annulation de la facture",
+      "paymentError": "Échec de l'ajout du paiement",
+      "partialPaymentError": "Échec de l'enregistrement du paiement partiel"
+    },
+    "stockOperations": {
+      "add": "Ajouté",
+      "subtract": "Soustrait",
+      "update": "Mis à jour"
+    },
+    "paymentMethods": {
+      "cash": "espèces",
+      "card": "carte",
+      "online": "en ligne"
+    }
+  },
+  "toast": {
+    "session": {
+      "started": "Nouvelle session démarrée sur {{deviceName}}",
+      "startedWithBill": "Nouvelle session démarrée sur {{deviceName}} - Facture: {{billNumber}}",
+      "updated": "Session mise à jour avec succès",
+      "ended": "Session terminée sur {{deviceName}} - Coût total: {{cost}}",
+      "endedSuccess": "Session terminée sur {{deviceName}} avec succès",
+      "createError": "Échec de la création de la session",
+      "updateError": "Échec de la mise à jour de la session",
+      "endError": "Échec de la fin de la session"
+    },
+    "order": {
+      "created": "Nouvelle commande créée: {{orderNumber}}",
+      "updated": "Commande mise à jour avec succès",
+      "preparingUpdated": "Statut de préparation mis à jour avec succès",
+      "statusPending": "Statut de la commande mis à jour: En attente",
+      "statusPreparing": "Statut de la commande mis à jour: En préparation",
+      "statusReady": "Statut de la commande mis à jour: Prête",
+      "statusDelivered": "Statut de la commande mis à jour: Livrée",
+      "statusCancelled": "Statut de la commande mis à jour: Annulée",
+      "incompleteData": "Données de commande incomplètes",
+      "incompleteItems": "Données d'articles incomplètes",
+      "invalidTable": "ID de table invalide",
+      "insufficientStock": "Stock insuffisant pour mettre à jour la commande",
+      "createError": "Échec de la création de la commande",
+      "updateError": "Échec de la mise à jour de la commande",
+      "preparingError": "Échec de la mise à jour du statut de préparation",
+      "statusError": "Échec de la mise à jour du statut de la commande"
+    },
+    "inventory": {
+      "added": "Produit ajouté avec succès",
+      "updated": "Produit mis à jour avec succès",
+      "stockAdded": "{{quantity}} unités ajoutées au stock avec succès",
+      "stockSubtracted": "{{quantity}} unités soustraites du stock avec succès",
+      "stockUpdated": "{{quantity}} unités mises à jour dans le stock avec succès",
+      "addError": "Échec de l'ajout du produit",
+      "updateError": "Échec de la mise à jour du produit",
+      "stockError": "Échec de la mise à jour du stock"
+    },
+    "bill": {
+      "created": "Facture créée avec succès",
+      "updated": "Facture mise à jour avec succès",
+      "cancelled": "Facture annulée avec succès",
+      "paymentAdded": "Paiement de {{amount}} {{method}} ajouté avec succès",
+      "partialPayment": "Paiement partiel enregistré avec succès",
+      "createError": "Échec de la création de la facture",
+      "updateError": "Échec de la mise à jour de la facture",
+      "cancelError": "Échec de l'annulation de la facture",
+      "paymentError": "Échec de l'ajout du paiement",
+      "partialPaymentError": "Échec de l'enregistrement du paiement partiel"
+    },
+    "paymentMethods": {
+      "cash": "espèces",
+      "card": "carte",
+      "online": "en ligne"
     }
   },
   "notificationCenter": {
