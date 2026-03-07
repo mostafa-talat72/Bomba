@@ -1,100 +1,49 @@
 import i18n from '../i18n/config';
 
-/**
- * ترجمة رسائل النشاط من العربية إلى اللغة الحالية
- * هذه دالة مؤقتة حتى يتم تحديث الـ backend ليرسل مفاتيح ترجمة
- */
-export const translateActivityMessage = (message: string): string => {
-  const currentLang = i18n.language;
-  
-  // إذا كانت اللغة عربية، أرجع الرسالة كما هي
-  if (currentLang === 'ar') {
-    return message;
-  }
+interface ActivityDetails {
+  deviceName?: string;
+  customerName?: string;
+  tableNumber?: number | string;
+  [key: string]: unknown;
+}
 
-  // قاموس الترجمة للرسائل الشائعة
-  const translations: Record<string, Record<string, string>> = {
-    // رسائل الجلسات
-    'بدء جلسة جديدة': {
-      en: 'New session started',
-      fr: 'Nouvelle session démarrée'
-    },
-    'انتهت جلسة': {
-      en: 'Session ended',
-      fr: 'Session terminée'
-    },
-    'انتهاء جلسة': {
-      en: 'Session ended',
-      fr: 'Session terminée'
-    },
-    'جلسة جديدة': {
-      en: 'New session',
-      fr: 'Nouvelle session'
-    },
-    'إنهاء جلسة': {
-      en: 'End session',
-      fr: 'Fin de session'
-    },
-    
-    // رسائل الطلبات
-    'طلب جديد': {
-      en: 'New order',
-      fr: 'Nouvelle commande'
-    },
-    'تم إنشاء طلب جديد': {
-      en: 'New order created',
-      fr: 'Nouvelle commande créée'
-    },
-    'طلب قيد التحضير': {
-      en: 'Order being prepared',
-      fr: 'Commande en préparation'
-    },
-    'طلب جاهز': {
-      en: 'Order ready',
-      fr: 'Commande prête'
-    },
-    'تم تسليم الطلب': {
-      en: 'Order delivered',
-      fr: 'Commande livrée'
-    },
-    
-    // رسائل الدفع
-    'دفعة جديدة': {
-      en: 'New payment',
-      fr: 'Nouveau paiement'
-    },
-    'تم الدفع': {
-      en: 'Payment completed',
-      fr: 'Paiement effectué'
-    },
-    'دفع جزئي': {
-      en: 'Partial payment',
-      fr: 'Paiement partiel'
-    },
-    
-    // رسائل الفواتير
-    'فاتورة جديدة': {
-      en: 'New bill',
-      fr: 'Nouvelle facture'
-    },
-    'تم إنشاء فاتورة': {
-      en: 'Bill created',
-      fr: 'Facture créée'
-    }
+interface Activity {
+  type: 'session' | 'order' | 'payment';
+  details: ActivityDetails & {
+    status: string;
   };
+}
 
-  // البحث عن ترجمة مطابقة تماماً
-  if (translations[message] && translations[message][currentLang]) {
-    return translations[message][currentLang];
+/**
+ * Translate activity messages based on type and status
+ * Uses translation keys from i18n files
+ */
+export const translateActivityMessage = (activity: Activity | string): string => {
+  // Backward compatibility: if activity is a string (old format), return as is
+  if (typeof activity === 'string') {
+    return activity;
   }
 
-  // البحث عن ترجمة جزئية (إذا كانت الرسالة تحتوي على النص)
-  for (const [arabicText, langs] of Object.entries(translations)) {
-    if (message.includes(arabicText) && langs[currentLang]) {
-      return message.replace(arabicText, langs[currentLang]);
-    }
+  const { type, details } = activity;
+  const status = details.status;
+  const t = i18n.t.bind(i18n);
+
+  // Map payment type to bill for translation keys
+  const translationType = type === 'payment' ? 'bill' : type;
+
+  // Get the base translation key
+  const translationKey = `dashboard.activity.${translationType}.${status}`;
+  let message = t(translationKey);
+
+  // Add entity information based on type
+  if (type === 'session' && details.deviceName) {
+    message = `${message} - ${details.deviceName}`;
+  } else if (type === 'order' || type === 'payment') {
+    // Add customer or table information
+    const entityName = details.customerName || 
+      (details.tableNumber ? `${t('dashboard.activity.table')} ${details.tableNumber}` : t('dashboard.activity.customer'));
+    message = `${message} - ${entityName}`;
   }
 
-  // إذا لم نجد ترجمة، أرجع الرسالة الأصلية
   return message;
 };

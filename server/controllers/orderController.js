@@ -925,10 +925,14 @@ export const createOrder = async (req, res) => {
 
             // Create notification for new order
             try {
+                // Get user language
+                const userLanguage = req.user.preferences?.language || 'ar';
+                
                 await NotificationService.createOrderNotification(
                     "created",
                     populatedOrder,
-                    req.user._id
+                    req.user._id,
+                    userLanguage
                 );
             } catch (notificationError) {
                 //
@@ -2001,17 +2005,22 @@ export const updateOrderStatus = async (req, res) => {
 
         // Create notification for order status change
         try {
+            // Get user language
+            const userLanguage = req.user.preferences?.language || 'ar';
+            
             if (status === "ready") {
                 await NotificationService.createOrderNotification(
                     "ready",
                     updatedOrder,
-                    req.user._id
+                    req.user._id,
+                    userLanguage
                 );
             } else if (status === "cancelled") {
                 await NotificationService.createOrderNotification(
                     "cancelled",
                     updatedOrder,
-                    req.user._id
+                    req.user._id,
+                    userLanguage
                 );
             }
         } catch (notificationError) {
@@ -2166,10 +2175,14 @@ export const updateOrderItemPrepared = async (req, res) => {
         // Create notification for order status change
         try {
             if (order.status === "ready") {
+                // Get user language
+                const userLanguage = req.user.preferences?.language || 'ar';
+                
                 await NotificationService.createOrderNotification(
                     "ready",
                     updatedOrder,
-                    req.user._id
+                    req.user._id,
+                    userLanguage
                 );
             }
         } catch (notificationError) {
@@ -2339,10 +2352,14 @@ export const deductOrderInventory = async (req, res) => {
 
         // Create notification for order status change
         try {
+            // Get user language
+            const userLanguage = req.user.preferences?.language || 'ar';
+            
             await NotificationService.createOrderNotification(
                 "ready",
                 updatedOrder,
-                req.user._id
+                req.user._id,
+                userLanguage
             );
         } catch (notificationError) {
             //

@@ -3,6 +3,7 @@ import { Bell, Filter, Search, Eye, Trash2, X, AlertCircle, Info, CheckCircle } 
 import { useApp } from '../context/AppContext';
 import PermissionGuard from '../components/PermissionGuard';
 import { formatDecimal } from '../utils/formatters';
+import { useTranslation } from 'react-i18next';
 
 interface Notification {
   _id: string;
@@ -14,6 +15,14 @@ interface Notification {
   createdAt: string;
   readBy: Array<{ user: string; readAt: string }>;
   createdBy?: { name: string };
+  metadata?: {
+    translations?: {
+      ar?: { title: string; message: string };
+      en?: { title: string; message: string };
+      fr?: { title: string; message: string };
+    };
+    [key: string]: any;
+  };
 }
 
 interface NotificationStats {
@@ -24,6 +33,7 @@ interface NotificationStats {
 }
 
 const NotificationManagement = () => {
+  const { t, i18n } = useTranslation();
   const { user, getNotifications, getNotificationStats, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, showNotification, isLoggingOut } = useApp();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState<NotificationStats | null>(null);
@@ -33,14 +43,41 @@ const NotificationManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
 
+  // Helper function to format numbers based on language
+  const formatNumber = (num: number) => {
+    const locale = i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+    return new Intl.NumberFormat(locale).format(num);
+  };
+
+  // Helper function to format dates based on language
+  const formatDate = (date: string) => {
+    const locale = i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+    return new Date(date).toLocaleString(locale);
+  };
+
+  // Helper function to get notification text based on current language
+  const getNotificationText = (notification: Notification, field: 'title' | 'message') => {
+    const currentLang = i18n.language;
+    
+    // Check if notification has translations object
+    if (notification.metadata?.translations) {
+      const translations = notification.metadata.translations;
+      // Return translation for current language, fallback to Arabic, then to the field itself
+      return translations[currentLang as 'ar' | 'en' | 'fr']?.[field] || translations['ar']?.[field] || notification[field];
+    }
+    
+    // If no translations, return the original text (for old notifications)
+    return notification[field];
+  };
+
   const categories = [
-    { id: 'all', name: 'جميع الإشعارات', color: 'text-gray-600' },
-    { id: 'session', name: 'الجلسات', color: 'text-blue-600' },
-    { id: 'order', name: 'الطلبات', color: 'text-green-600' },
-    { id: 'inventory', name: 'المخزون', color: 'text-orange-600' },
-    { id: 'billing', name: 'الفواتير', color: 'text-purple-600' },
-    { id: 'system', name: 'النظام', color: 'text-red-600' },
-    { id: 'security', name: 'الأمان', color: 'text-yellow-600' },
+    { id: 'all', name: t('notificationManagement.categories.all'), color: 'text-gray-600' },
+    { id: 'session', name: t('notificationManagement.categories.session'), color: 'text-blue-600' },
+    { id: 'order', name: t('notificationManagement.categories.order'), color: 'text-green-600' },
+    { id: 'inventory', name: t('notificationManagement.categories.inventory'), color: 'text-orange-600' },
+    { id: 'billing', name: t('notificationManagement.categories.billing'), color: 'text-purple-600' },
+    { id: 'system', name: t('notificationManagement.categories.system'), color: 'text-red-600' },
+    { id: 'security', name: t('notificationManagement.categories.security'), color: 'text-yellow-600' },
   ];
 
   const priorityColors = {
@@ -109,7 +146,7 @@ const NotificationManagement = () => {
     } catch {
       // تجاهل الأخطاء إذا لم يكن المستخدم مصادق عليه أو أثناء تسجيل الخروج
       if (!user || isLoggingOut) return;
-      showNotification('خطأ في تحميل الإشعارات', 'error');
+      showNotification(t('notificationManagement.messages.loadError'), 'error');
     } finally {
       setLoading(false);
     }
@@ -135,9 +172,9 @@ const NotificationManagement = () => {
       await markNotificationAsRead(notificationId);
       await loadNotifications();
       await loadStats();
-      showNotification('تم تحديد الإشعار كمقروء', 'success');
+      showNotification(t('notificationManagement.messages.markedAsRead'), 'success');
     } catch {
-      showNotification('خطأ في تحديد الإشعار كمقروء', 'error');
+      showNotification(t('notificationManagement.messages.markAsReadError'), 'error');
     }
   };
 
@@ -149,9 +186,9 @@ const NotificationManagement = () => {
       await markAllNotificationsAsRead();
       await loadNotifications();
       await loadStats();
-      showNotification('تم تحديد جميع الإشعارات كمقروءة', 'success');
+      showNotification(t('notificationManagement.messages.allMarkedAsRead'), 'success');
     } catch {
-      showNotification('خطأ في تحديد الإشعارات كمقروءة', 'error');
+      showNotification(t('notificationManagement.messages.allMarkAsReadError'), 'error');
     } finally {
       setIsMarkingAllAsRead(false);
     }
@@ -162,9 +199,9 @@ const NotificationManagement = () => {
       await deleteNotification(notificationId);
       await loadNotifications();
       await loadStats();
-      showNotification('تم حذف الإشعار بنجاح', 'success');
+      showNotification(t('notificationManagement.messages.deleted'), 'success');
     } catch {
-      showNotification('خطأ في حذف الإشعار', 'error');
+      showNotification(t('notificationManagement.messages.deleteError'), 'error');
     }
   };
 
@@ -204,9 +241,9 @@ const NotificationManagement = () => {
         <div className="flex items-center xs:w-full xs:justify-between">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
             <Bell className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
-            إدارة الإشعارات
+            {t('notificationManagement.title')}
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">إدارة وتنظيم الإشعارات المرسلة للمستخدمين</p>
+          <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">{t('notificationManagement.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 xs:w-full xs:justify-center xs:mt-2">
           {/* ضع هنا أزرار الإجراءات مثل إرسال إشعار */}
@@ -220,8 +257,8 @@ const NotificationManagement = () => {
             <div className="flex items-center">
               <Bell className="h-8 w-8 text-orange-600 dark:text-orange-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">إجمالي الإشعارات</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal(stats.total)}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.total')}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(stats.total)}</p>
               </div>
             </div>
           </div>
@@ -229,8 +266,8 @@ const NotificationManagement = () => {
             <div className="flex items-center">
               <Eye className="h-8 w-8 text-orange-600 dark:text-orange-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">غير مقروءة</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal(stats.unread)}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.unread')}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(stats.unread)}</p>
               </div>
             </div>
           </div>
@@ -238,8 +275,8 @@ const NotificationManagement = () => {
             <div className="flex items-center">
               <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">مقروءة</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal((stats.total || 0) - (stats.unread || 0))}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.read')}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber((stats.total || 0) - (stats.unread || 0))}</p>
               </div>
             </div>
           </div>
@@ -247,8 +284,8 @@ const NotificationManagement = () => {
             <div className="flex items-center">
               <Filter className="h-8 w-8 text-purple-600 dark:text-purple-400" />
               <div className="mr-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">الفئات</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatDecimal(Object.keys(stats.byCategory || {}).length)}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{t('notificationManagement.stats.categories')}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatNumber(Object.keys(stats.byCategory || {}).length)}</p>
               </div>
             </div>
           </div>
@@ -259,20 +296,20 @@ const NotificationManagement = () => {
       <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">البحث</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('notificationManagement.filters.search')}</label>
             <div className="relative">
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="البحث في الإشعارات..."
+                placeholder={t('notificationManagement.filters.searchPlaceholder')}
                 className="w-full pr-10 pl-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('notificationManagement.filters.category')}</label>
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
@@ -293,7 +330,7 @@ const NotificationManagement = () => {
                 onChange={(e) => setFilterUnread(e.target.checked)}
                 className="ml-2 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
               />
-              <span className="text-sm text-gray-700 dark:text-gray-300">غير مقروءة فقط</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">{t('notificationManagement.filters.unreadOnly')}</span>
             </label>
           </div>
         </div>
@@ -304,12 +341,12 @@ const NotificationManagement = () => {
         {loading ? (
           <div className="p-8 text-center">
             <div className="w-8 h-8 border-4 border-orange-600 dark:border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">جاري تحميل الإشعارات...</p>
+            <p className="text-gray-600 dark:text-gray-400">{t('notificationManagement.messages.loading')}</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
           <div className="p-8 text-center">
             <Bell className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-400">لا توجد إشعارات</p>
+            <p className="text-gray-600 dark:text-gray-400">{t('notificationManagement.messages.noNotifications')}</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -328,20 +365,24 @@ const NotificationManagement = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 space-x-reverse mb-1">
                         <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {notification.title}
+                          {getNotificationText(notification, 'title')}
                         </h3>
                         <span className={`text-xs px-2 py-1 rounded-full ${priorityColors[notification.priority as keyof typeof priorityColors] || 'text-gray-500'}`}>
-                          {notification.priority}
+                          {notification.priority === 'low' ? t('notificationManagement.priority.low') :
+                           notification.priority === 'medium' ? t('notificationManagement.priority.medium') :
+                           notification.priority === 'high' ? t('notificationManagement.priority.high') :
+                           notification.priority === 'urgent' ? t('notificationManagement.priority.urgent') :
+                           notification.priority}
                         </span>
                         <span className={`text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300`}>
                           {getCategoryName(notification.category)}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">{notification.message}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">{getNotificationText(notification, 'message')}</p>
                       <div className="flex items-center space-x-4 space-x-reverse text-xs text-gray-500 dark:text-gray-400">
-                        <span>{new Date(notification.createdAt).toLocaleString('ar-EG')}</span>
-                        {notification.createdBy && (
-                          <span>بواسطة: {notification.createdBy.name}</span>
+                        <span>{formatDate(notification.createdAt)}</span>
+                        {notification.createdBy && notification.createdBy.name && (
+                          <span>{t('notificationManagement.createdBy', { name: notification.createdBy.name })}</span>
                         )}
                       </div>
                     </div>
@@ -351,7 +392,7 @@ const NotificationManagement = () => {
                       <button
                         onClick={() => handleMarkAsRead(notification._id)}
                         className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-                        title="تحديد كمقروء"
+                        title={t('notificationManagement.actions.markAsRead')}
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -360,7 +401,7 @@ const NotificationManagement = () => {
                       <button
                         onClick={() => handleDeleteNotification(notification._id)}
                         className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                        title="حذف الإشعار"
+                        title={t('notificationManagement.actions.delete')}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

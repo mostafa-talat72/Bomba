@@ -3,6 +3,7 @@ import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock } from 'l
 import { useApp } from '../context/AppContext';
 import NotificationSound from './NotificationSound';
 import { formatDecimal } from '../utils/formatters';
+import { useTranslation } from 'react-i18next';
 
 interface Notification {
   _id: string;
@@ -18,6 +19,14 @@ interface Notification {
   createdAt: string;
   readBy: Array<{ user: string; readAt: string }>;
   createdBy: { name: string };
+  metadata?: {
+    translations?: {
+      ar?: { title: string; message: string };
+      en?: { title: string; message: string };
+      fr?: { title: string; message: string };
+    };
+    [key: string]: any;
+  };
 }
 
 // عرف نوع read بشكل صحيح
@@ -27,6 +36,7 @@ interface NotificationRead {
 }
 
 const NotificationCenter: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const {
     getNotifications,
     getNotificationStats,
@@ -37,6 +47,33 @@ const NotificationCenter: React.FC = () => {
     notifications, // استخدم notifications من context
     forceRefreshNotifications,
   } = useApp();
+
+  // Helper function to format numbers based on language
+  const formatNumber = (num: number) => {
+    const locale = i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+    return new Intl.NumberFormat(locale).format(num);
+  };
+
+  // Helper function to format dates based on language
+  const formatDate = (date: string) => {
+    const locale = i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+    return new Date(date).toLocaleString(locale);
+  };
+
+  // Helper function to get notification text based on current language
+  const getNotificationText = (notification: Notification, field: 'title' | 'message') => {
+    const currentLang = i18n.language;
+    
+    // Check if notification has translations object
+    if (notification.metadata?.translations) {
+      const translations = notification.metadata.translations;
+      // Return translation for current language, fallback to Arabic, then to the field itself
+      return translations[currentLang as 'ar' | 'en' | 'fr']?.[field] || translations['ar']?.[field] || notification[field];
+    }
+    
+    // If no translations, return the original text (for old notifications)
+    return notification[field];
+  };
 
   const [stats, setStats] = useState<{ total: number; unread: number } | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -354,7 +391,7 @@ const NotificationCenter: React.FC = () => {
           <div className="notification-panel bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl">
           {/* Header */}
           <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">الإشعارات</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">{t('notificationCenter.title')}</h3>
             <div className="flex items-center space-x-2 space-x-reverse">
               {/* زر تحكم سريع في الصوت */}
               <button
@@ -365,7 +402,7 @@ const NotificationCenter: React.FC = () => {
                   setSoundEnabled(newSettings.soundEnabled);
                 }}
                 className="p-1.5 sm:p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                title={soundEnabled ? 'إيقاف الصوت' : 'تشغيل الصوت'}
+                title={soundEnabled ? t('notificationCenter.soundOff') : t('notificationCenter.soundOn')}
               >
                 {soundEnabled ? (
                   <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -383,7 +420,7 @@ const NotificationCenter: React.FC = () => {
                 onClick={handleMarkAllAsRead}
                 className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300"
               >
-                تحديد الكل كمقروء
+                {t('notificationCenter.markAllAsRead')}
               </button>
               <button
                 onClick={async () => {
@@ -412,10 +449,10 @@ const NotificationCenter: React.FC = () => {
           {stats && (
             <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-600 dark:text-gray-300 space-y-1 sm:space-y-0">
-                <span>المجموع: {formatDecimal(stats.total)}</span>
+                <span>{t('notificationCenter.stats.total')}: {formatNumber(stats.total)}</span>
                 <div className="flex flex-wrap space-x-2 sm:space-x-4 space-x-reverse">
-                  <span className="text-orange-600 dark:text-orange-400 font-medium">غير مقروء: {formatDecimal(stats.unread)}</span>
-                  <span className="text-green-600 dark:text-green-400 font-medium">مقروء: {formatDecimal(stats.total - stats.unread)}</span>
+                  <span className="text-orange-600 dark:text-orange-400 font-medium">{t('notificationCenter.stats.unread')}: {formatNumber(stats.unread)}</span>
+                  <span className="text-green-600 dark:text-green-400 font-medium">{t('notificationCenter.stats.read')}: {formatNumber(stats.total - stats.unread)}</span>
                 </div>
               </div>
             </div>
@@ -432,7 +469,7 @@ const NotificationCenter: React.FC = () => {
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                الكل
+                {t('notificationCenter.filters.all')}
               </button>
               <button
                 onClick={() => setFilter('unread')}
@@ -442,7 +479,7 @@ const NotificationCenter: React.FC = () => {
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                غير مقروء
+                {t('notificationCenter.filters.unread')}
               </button>
               <button
                 onClick={() => setFilter('read')}
@@ -452,7 +489,7 @@ const NotificationCenter: React.FC = () => {
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                مقروء
+                {t('notificationCenter.filters.read')}
               </button>
               <button
                 onClick={() => setFilter('high')}
@@ -462,7 +499,7 @@ const NotificationCenter: React.FC = () => {
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                عالية
+                {t('notificationCenter.filters.high')}
               </button>
               <button
                 onClick={() => setFilter('urgent')}
@@ -472,7 +509,7 @@ const NotificationCenter: React.FC = () => {
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                عاجلة
+                {t('notificationCenter.filters.urgent')}
               </button>
             </div>
           </div>
@@ -480,9 +517,9 @@ const NotificationCenter: React.FC = () => {
           {/* Notifications List */}
           <div className="max-h-64 sm:max-h-96 overflow-y-auto">
             {loading ? (
-              <div className="p-4 text-center text-gray-500 dark:text-gray-400">جاري التحميل...</div>
+              <div className="p-4 text-center text-gray-500 dark:text-gray-400">{t('notificationCenter.messages.loading')}</div>
             ) : filteredNotifications.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 dark:text-gray-400">لا توجد إشعارات</div>
+              <div className="p-4 text-center text-gray-500 dark:text-gray-400">{t('notificationCenter.messages.noNotifications')}</div>
             ) : (
               filteredNotifications.map((notification) => (
                 <div
@@ -502,7 +539,7 @@ const NotificationCenter: React.FC = () => {
                         <h4 className={`text-xs sm:text-sm font-medium ${
                           isUnread(notification) ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'
                         }`}>
-                          {notification.title}
+                          {getNotificationText(notification, 'title')}
                           {isUnread(notification) && (
                             <span className="ml-2 text-xs text-orange-600">●</span>
                           )}
@@ -510,7 +547,7 @@ const NotificationCenter: React.FC = () => {
                         <div className="flex items-center space-x-1 sm:space-x-2 space-x-reverse">
                           {notification.actionRequired && (
                             <span className="inline-flex items-center px-1 sm:px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                              يتطلب إجراء
+                              {t('notificationCenter.status.actionRequired')}
                             </span>
                           )}
                           {/* علامة مقروء */}
@@ -520,11 +557,11 @@ const NotificationCenter: React.FC = () => {
                                 ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 animate-pulse'
                                 : 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300'
                             }`}>
-                              {hoveredNotification === (notification.id || notification._id) ? 'سيصبح مقروءاً...' : 'غير مقروء'}
+                              {hoveredNotification === (notification.id || notification._id) ? t('notificationCenter.status.willBeRead') : t('notificationCenter.status.unread')}
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-1 sm:px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
-                              <Check className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" /> مقروء
+                              <Check className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" /> {t('notificationCenter.status.read')}
                             </span>
                           )}
                           <button
@@ -533,7 +570,7 @@ const NotificationCenter: React.FC = () => {
                               if (id) handleMarkAsRead(id);
                             }}
                             className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                            title="تحديد كمقروء"
+                            title={t('notificationCenter.actions.markAsRead')}
                           >
                             <Check className="h-3 w-3 sm:h-4 sm:w-4" />
                           </button>
@@ -543,7 +580,7 @@ const NotificationCenter: React.FC = () => {
                               if (id) handleDelete(id);
                             }}
                             className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
-                            title="حذف"
+                            title={t('notificationCenter.actions.delete')}
                           >
                             <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </button>
@@ -552,7 +589,7 @@ const NotificationCenter: React.FC = () => {
                       <p className={`text-xs sm:text-sm mt-1 ${
                         isUnread(notification) ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-400'
                       }`}>
-                        {notification.message}
+                        {getNotificationText(notification, 'message')}
                       </p>
                       {notification.actionUrl && notification.actionText && (
                         <button
@@ -569,7 +606,7 @@ const NotificationCenter: React.FC = () => {
                         isUnread(notification) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         <span>{notification.createdBy?.name}</span>
-                        <span>{new Date(notification.createdAt).toLocaleString('ar-EG')}</span>
+                        <span>{formatDate(notification.createdAt)}</span>
                       </div>
                     </div>
                   </div>
@@ -598,7 +635,7 @@ const NotificationCenter: React.FC = () => {
               }}
               className="w-full text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
-              إغلاق
+              {t('notificationCenter.close')}
             </button>
           </div>
         </div>

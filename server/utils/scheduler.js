@@ -124,11 +124,18 @@ const checkLowStock = async () => {
 
                     if (adminEmails.length > 0) {
                         try {
+                            // Get organization owner's language and currency preferences
+                            const owner = await User.findById(organization.owner).select('preferences').lean();
+                            const ownerLanguage = owner?.preferences?.language || 'ar';
+                            const organizationCurrency = organization.currency || 'EGP';
+
                             await sendLowStockAlert({
                                 items: lowStockItems,
                                 organizationName: organization.name,
                                 recipientEmails: adminEmails,
-                                adminNames: admins.map(a => a.name)
+                                adminNames: admins.map(a => a.name),
+                                language: ownerLanguage,
+                                currency: organizationCurrency
                             });
                             
                             totalAlertsSent++;
@@ -445,6 +452,15 @@ const generateDailyReportForOrganization = async (organization) => {
         // Generate PDF
         const pdfBuffer = await generateDailyReportPDF(reportData);
 
+        // Get organization owner's language and currency preferences
+        const owner = await User.findById(organization.owner).select('preferences').lean();
+        const ownerLanguage = owner?.preferences?.language || 'ar';
+        const organizationCurrency = organization.currency || 'EGP';
+
+        // Add language and currency to reportData
+        reportData.language = ownerLanguage;
+        reportData.currency = organizationCurrency;
+
         // Send report via email with PDF attachment
         await sendDailyReport(reportData, reportEmails, pdfBuffer);
         
@@ -732,8 +748,13 @@ const generateMonthlyReportForOrganization = async (organization) => {
             avgDailyRevenue: reportData.avgDailyRevenue
         });
 
+        // Get organization owner's language and currency preferences
+        const owner = await User.findById(organization.owner).select('preferences').lean();
+        const ownerLanguage = owner?.preferences?.language || 'ar';
+        const organizationCurrency = organization.currency || 'EGP';
+
         // Send report via email (reuse sendMonthlyReport function)
-        await sendMonthlyReport(reportData, reportEmails);
+        await sendMonthlyReport(reportData, reportEmails, ownerLanguage, organizationCurrency);
         
         Logger.info(
             `Monthly report sent for organization: ${organization.name}`,

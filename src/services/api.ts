@@ -1844,10 +1844,10 @@ class ApiClient {
     return this.request('/settings/general');
   }
 
-  async updateGeneralSettings(settings: any): Promise<ApiResponse<any>> {
+  async updateGeneralSettings(settings: { theme?: string; language?: string }): Promise<ApiResponse<any>> {
     return this.request('/settings/general', {
       method: 'PUT',
-      body: JSON.stringify({ settings }),
+      body: JSON.stringify(settings),
     });
   }
 

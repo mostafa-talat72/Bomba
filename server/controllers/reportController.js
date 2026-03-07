@@ -13,6 +13,7 @@ import {
     exportToPDF,
     generateFilename,
 } from "../utils/exportUtils.js";
+import { getUserLocale } from "../utils/localeHelper.js";
 
 // @desc    Get dashboard statistics
 // @route   GET /api/reports/dashboard
@@ -899,25 +900,21 @@ export const getRecentActivity = async (req, res) => {
 
         // Add session activities
         recentSessions.forEach((session) => {
-            let message = "";
             let type = "session";
+            let status = session.status;
             let color = "text-blue-600";
 
-            if (session.status === "active") {
-                message = `بدء جلسة جديدة - ${session.deviceName}`;
-            } else if (session.status === "completed") {
-                message = `انتهاء جلسة - ${session.deviceName}`;
+            if (session.status === "completed") {
                 color = "text-purple-600";
             } else if (session.status === "cancelled") {
-                message = `إلغاء جلسة - ${session.deviceName}`;
                 color = "text-red-600";
             }
 
             activities.push({
                 id: session._id,
                 type,
-                message,
-                time: new Date(session.createdAt).toLocaleTimeString("ar-EG", {
+                status,
+                time: new Date(session.createdAt).toLocaleTimeString(getUserLocale(req.user), {
                     hour: "2-digit",
                     minute: "2-digit",
                 }),
@@ -935,43 +932,27 @@ export const getRecentActivity = async (req, res) => {
 
         // Add order activities
         recentOrders.forEach((order) => {
-            let message = "";
             let type = "order";
+            let status = order.status;
             let color = "text-orange-600";
 
             const tableNumber = order.table?.number || null;
             
-            if (order.status === "pending") {
-                message = `طلب جديد - ${
-                    order.customerName || (tableNumber ? `طاولة ${tableNumber}` : "عميل")
-                }`;
-            } else if (order.status === "preparing") {
-                message = `جاري تحضير طلب - ${
-                    order.customerName || (tableNumber ? `طاولة ${tableNumber}` : "عميل")
-                }`;
+            if (order.status === "preparing") {
                 color = "text-yellow-600";
             } else if (order.status === "ready") {
-                message = `طلب جاهز - ${
-                    order.customerName || (tableNumber ? `طاولة ${tableNumber}` : "عميل")
-                }`;
                 color = "text-green-600";
             } else if (order.status === "delivered") {
-                message = `تم تسليم طلب - ${
-                    order.customerName || (tableNumber ? `طاولة ${tableNumber}` : "عميل")
-                }`;
                 color = "text-blue-600";
             } else if (order.status === "cancelled") {
-                message = `إلغاء طلب - ${
-                    order.customerName || (tableNumber ? `طاولة ${tableNumber}` : "عميل")
-                }`;
                 color = "text-red-600";
             }
 
             activities.push({
                 id: order._id,
                 type,
-                message,
-                time: new Date(order.createdAt).toLocaleTimeString("ar-EG", {
+                status,
+                time: new Date(order.createdAt).toLocaleTimeString(getUserLocale(req.user), {
                     hour: "2-digit",
                     minute: "2-digit",
                 }),
@@ -989,33 +970,23 @@ export const getRecentActivity = async (req, res) => {
 
         // Add bill activities
         recentBills.forEach((bill) => {
-            let message = "";
-            let type = "payment";
+            let type = "bill";
+            let status = bill.status;
             let color = "text-green-600";
             
             const billTableNumber = bill.table?.number || null;
 
-            if (bill.status === "paid") {
-                message = `دفع فاتورة - ${
-                    bill.customerName || (billTableNumber ? `طاولة ${billTableNumber}` : "عميل")
-                }`;
-            } else if (bill.status === "partial") {
-                message = `دفع جزئي - ${
-                    bill.customerName || (billTableNumber ? `طاولة ${billTableNumber}` : "عميل")
-                }`;
+            if (bill.status === "partial") {
                 color = "text-yellow-600";
             } else if (bill.status === "cancelled") {
-                message = `إلغاء فاتورة - ${
-                    bill.customerName || (billTableNumber ? `طاولة ${billTableNumber}` : "عميل")
-                }`;
                 color = "text-red-600";
             }
 
             activities.push({
                 id: bill._id,
                 type,
-                message,
-                time: new Date(bill.createdAt).toLocaleTimeString("ar-EG", {
+                status,
+                time: new Date(bill.createdAt).toLocaleTimeString(getUserLocale(req.user), {
                     hour: "2-digit",
                     minute: "2-digit",
                 }),
@@ -1024,7 +995,7 @@ export const getRecentActivity = async (req, res) => {
                 icon: "Receipt",
                 details: {
                     customerName: bill.customerName,
-                    tableNumber: bill.tableNumber,
+                    tableNumber: billTableNumber,
                     status: bill.status,
                     total: bill.total,
                     paid: bill.paid,

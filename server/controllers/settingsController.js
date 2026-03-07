@@ -82,27 +82,28 @@ export const updateNotificationSettings = async (req, res) => {
     }
 };
 
-// @desc    Get general settings
+// @desc    Get general settings (user-specific preferences + organization settings)
 // @route   GET /api/settings/general
 // @access  Private
 export const getGeneralSettings = async (req, res) => {
     try {
-        const settings = await Settings.findOne({
-            category: 'general',
-            organization: req.user.organization,
-        });
-
-        // Default general settings if not found
-        const defaultSettings = {
+        // Get user preferences (theme, language)
+        const user = await User.findById(req.user._id).select('preferences');
+        
+        // Default user preferences if not found
+        const defaultPreferences = {
             theme: 'light',
             language: 'ar',
-            timezone: 'Africa/Cairo',
-            currency: 'EGP',
         };
+
+        const userPreferences = user?.preferences || defaultPreferences;
 
         res.json({
             success: true,
-            data: settings ? settings.settings : defaultSettings,
+            data: {
+                theme: userPreferences.theme || defaultPreferences.theme,
+                language: userPreferences.language || defaultPreferences.language,
+            },
         });
     } catch (error) {
         console.error('Error getting general settings:', error);
@@ -114,40 +115,51 @@ export const getGeneralSettings = async (req, res) => {
     }
 };
 
-// @desc    Update general settings
+// @desc    Update general settings (user-specific preferences)
 // @route   PUT /api/settings/general
 // @access  Private
 export const updateGeneralSettings = async (req, res) => {
     try {
-        const { settings } = req.body;
+        const { theme, language } = req.body;
 
-        if (!settings || typeof settings !== 'object') {
+        // Validate theme if provided
+        if (theme && !['light', 'dark', 'auto'].includes(theme)) {
             return res.status(400).json({
                 success: false,
-                message: "بيانات الإعدادات غير صحيحة",
+                message: "قيمة المظهر غير صحيحة",
             });
         }
 
-        const updatedSettings = await Settings.findOneAndUpdate(
-            { category: 'general', organization: req.user.organization },
-            {
-                category: 'general',
-                settings,
-                updatedBy: req.user._id,
-                organization: req.user.organization,
-            },
-            {
-                new: true,
-                upsert: true,
-                runValidators: true,
-            }
-        ).populate("updatedBy", "name");
+        // Validate language if provided
+        if (language && !['ar', 'en', 'fr'].includes(language)) {
+            return res.status(400).json({
+                success: false,
+                message: "قيمة اللغة غير صحيحة",
+            });
+        }
 
+        // Update user preferences
+        const updateData = {};
+        if (theme !== undefined) {
+            updateData['preferences.theme'] = theme;
+        }
+        if (language !== undefined) {
+            updateData['preferences.language'] = language;
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user._id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).select('preferences');
 
         res.json({
             success: true,
-            message: "تم تحديث الإعدادات العامة بنجاح",
-            data: updatedSettings,
+            message: "تم تحديث الإعدادات بنجاح",
+            data: {
+                theme: updatedUser.preferences?.theme || 'light',
+                language: updatedUser.preferences?.language || 'ar',
+            },
         });
     } catch (error) {
         console.error('Error updating general settings:', error);

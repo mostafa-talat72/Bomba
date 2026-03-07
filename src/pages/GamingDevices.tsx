@@ -6,7 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
 import { SessionCostDisplay } from '../components/SessionCostDisplay';
-import { formatDecimal, formatCurrency } from '../utils/formatters';
+import { formatDecimal, formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
@@ -41,6 +41,10 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
   const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, fetchTables, fetchTableSections, fetchSessions } = useApp();
+  
+  // Get currency from localStorage and format it based on language
+  const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
+  const currencySymbol = getCurrencySymbol(organizationCurrency, i18n.language);
   
   // Configuration based on device type
   const config = {
@@ -1376,7 +1380,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                           min="0"
                           step="0.01"
                         />
-                        <span className="text-sm text-gray-600 dark:text-gray-400">EGP</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">{currencySymbol}</span>
                       </div>
                     ))}
                   </div>
@@ -1397,7 +1401,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       min="0"
                       step="0.01"
                     />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">EGP</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">{currencySymbol}</span>
                   </div>
                 </div>
               )}
@@ -1534,7 +1538,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         min="0"
                         step="0.01"
                       />
-                      <span className="text-sm text-gray-600 dark:text-gray-400">{t('common.currency')}</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">{currencySymbol}</span>
                     </div>
                   ))}
                 </div>
@@ -1553,7 +1557,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       min="0"
                       step="0.01"
                     />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">{t('common.currency', 'ج.م')}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">{currencySymbol}</span>
                   </div>
                 </div>
               )}

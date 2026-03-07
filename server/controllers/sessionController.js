@@ -3,9 +3,11 @@ import Session from "../models/Session.js";
 import Device from "../models/Device.js";
 import Bill from "../models/Bill.js";
 import Table from "../models/Table.js";
+import Organization from "../models/Organization.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import { getUserLocale } from "../utils/localeHelper.js";
 
 /**
  * حذف فاتورة من كلا القاعدتين (Local + Atlas)
@@ -369,7 +371,7 @@ const analyzeTimeConflicts = (controllersHistory, editingIndex, newStartTime, ne
             // اقتراح خيارات للحل
             conflicts.suggestedActions.push({
                 action: 'TRUNCATE_PREVIOUS',
-                description: `قص الفترة ${i + 1} (${previousPeriod.controllers} أذرع) لتنتهي عند ${newStartTime.toLocaleTimeString('ar-EG')}`,
+                description: `قص الفترة ${i + 1} (${previousPeriod.controllers} أذرع) لتنتهي عند ${newStartTime.toLocaleTimeString()}`,
                 lostTime: overlapDuration,
                 affectedPeriodIndex: i
             });
@@ -413,7 +415,7 @@ const analyzeTimeConflicts = (controllersHistory, editingIndex, newStartTime, ne
                 // اقتراح خيارات للحل
                 conflicts.suggestedActions.push({
                     action: 'TRUNCATE_NEXT',
-                    description: `قص الفترة ${i + 1} (${nextPeriod.controllers} أذرع) لتبدأ من ${newEndTime.toLocaleTimeString('ar-EG')}`,
+                    description: `قص الفترة ${i + 1} (${nextPeriod.controllers} أذرع) لتبدأ من ${newEndTime.toLocaleTimeString()}`,
                     lostTime: overlapDuration,
                     affectedPeriodIndex: i
                 });
@@ -490,7 +492,7 @@ const sessionController = {
                     Logger.info('📅 Session date filter - start:', {
                         received: startDate,
                         parsed: startDateTime.toISOString(),
-                        local: startDateTime.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' })
+                        local: startDateTime.toLocaleString(getUserLocale(req.user), { timeZone: 'Africa/Cairo' })
                     });
                 }
                 if (endDate) {
@@ -499,7 +501,7 @@ const sessionController = {
                     Logger.info('📅 Session date filter - end:', {
                         received: endDate,
                         parsed: endDateTime.toISOString(),
-                        local: endDateTime.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' })
+                        local: endDateTime.toLocaleString(getUserLocale(req.user), { timeZone: 'Africa/Cairo' })
                     });
                 }
             }
@@ -730,10 +732,17 @@ const sessionController = {
 
                 // Create notification for session start
                 try {
+                    // Get user language and organization currency
+                    const userLanguage = req.user.preferences?.language || 'ar';
+                    const organization = await Organization.findById(req.user.organization).select('currency');
+                    const currency = organization?.currency || 'EGP';
+                    
                     await NotificationService.createSessionNotification(
                         "started",
                         session,
-                        req.user._id
+                        req.user._id,
+                        userLanguage,
+                        currency
                     );
                 } catch (notificationError) {
                     Logger.error(
@@ -1295,10 +1304,17 @@ const sessionController = {
 
             // Create notification for session end
             try {
+                // Get user language and organization currency
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(req.user.organization).select('currency');
+                const currency = organization?.currency || 'EGP';
+                
                 await NotificationService.createSessionNotification(
                     "ended",
                     session,
-                    req.user._id
+                    req.user._id,
+                    userLanguage,
+                    currency
                 );
             } catch (notificationError) {
                 Logger.error(
@@ -1570,10 +1586,17 @@ const sessionController = {
 
             // إرسال إشعار بدء الجلسة
             try {
+                // Get user language and organization currency
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(req.user.organization).select('currency');
+                const currency = organization?.currency || 'EGP';
+                
                 await NotificationService.createSessionNotification(
                     "started",
                     session,
-                    req.user._id
+                    req.user._id,
+                    userLanguage,
+                    currency
                 );
             } catch (notificationError) {
                 Logger.error(
@@ -3321,11 +3344,12 @@ const sessionController = {
             // Create notification
             try {
                 if (req.user && req.user.organization) {
+                    const userLocale = getUserLocale(req.user);
                     await NotificationService.createNotification({
                         type: "session",
                         category: "session",
                         title: "تعديل وقت بدء الجلسة",
-                        message: `تم تعديل وقت بدء جلسة ${session.deviceName} من ${oldStartTime.toLocaleString('ar-EG')} إلى ${newStartTime.toLocaleString('ar-EG')}`,
+                        message: `تم تعديل وقت بدء جلسة ${session.deviceName} من ${oldStartTime.toLocaleString(userLocale)} إلى ${newStartTime.toLocaleString(userLocale)}`,
                         createdBy: req.user._id,
                     }, req.user);
                 }

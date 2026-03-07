@@ -1,4 +1,5 @@
 import Organization from "../models/Organization.js";
+import { getLanguageFromRequest, getLocaleFromLanguage, isLanguageRTL } from "../utils/localeHelper.js";
 
 // @desc    Get organization public page
 // @route   GET /public/organization/:id
@@ -10,9 +11,11 @@ export const getOrganizationPublicPage = async (req, res) => {
         const organization = await Organization.findById(id);
         
         if (!organization) {
+            const language = getLanguageFromRequest(req);
+            const dir = isLanguageRTL(language) ? 'rtl' : 'ltr';
             return res.status(404).send(`
                 <!DOCTYPE html>
-                <html lang="ar" dir="rtl">
+                <html lang="${language}" dir="${dir}">
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -95,14 +98,16 @@ export const getOrganizationPublicPage = async (req, res) => {
         }
 
         // Generate beautiful HTML page
-        const html = generateOrganizationHTML(organization);
+        const html = generateOrganizationHTML(organization, req);
         res.send(html);
         
     } catch (error) {
         console.error('Error getting organization public page:', error);
+        const language = getLanguageFromRequest(req);
+        const dir = isLanguageRTL(language) ? 'rtl' : 'ltr';
         res.status(500).send(`
             <!DOCTYPE html>
-            <html lang="ar" dir="rtl">
+            <html lang="${language}" dir="${dir}">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -185,7 +190,7 @@ export const getOrganizationPublicPage = async (req, res) => {
     }
 };
 
-function generateOrganizationHTML(organization) {
+function generateOrganizationHTML(organization, req) {
     const {
         name,
         description,
@@ -197,6 +202,11 @@ function generateOrganizationHTML(organization) {
         workingHours
     } = organization;
 
+    // Get language from request
+    const language = getLanguageFromRequest(req);
+    const dir = isLanguageRTL(language) ? 'rtl' : 'ltr';
+    const locale = getLocaleFromLanguage(language);
+
     // Generate contact info HTML
     const contactInfoHTML = generateContactInfoHTML(organization);
     
@@ -207,7 +217,7 @@ function generateOrganizationHTML(organization) {
     const workingHoursHTML = generateWorkingHoursHTML(workingHours);
 
     return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="${language}" dir="${dir}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -574,7 +584,7 @@ function generateOrganizationHTML(organization) {
             ${workingHoursHTML}
             
             <div class="footer">
-                <p>تم إنشاء هذه الصفحة تلقائياً • ${new Date().toLocaleDateString('ar-EG')}</p>
+                <p>تم إنشاء هذه الصفحة تلقائياً • ${new Date().toLocaleDateString(locale)}</p>
                 <div class="powered-by">
                     مدعوم بواسطة نظام Bomba لإدارة المنشآت
                 </div>

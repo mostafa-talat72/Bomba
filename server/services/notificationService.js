@@ -20,12 +20,14 @@ class NotificationService {
     }
 
     // إنشاء إشعار للجلسات
-    static async createSessionNotification(type, session, createdBy) {
+    static async createSessionNotification(type, session, createdBy, language = 'ar', currency = 'EGP') {
         try {
             const notification = Notification.createSessionNotification(
                 type,
                 session,
-                createdBy
+                createdBy,
+                language,
+                currency
             );
             if (notification) {
                 await notification.save();
@@ -40,12 +42,13 @@ class NotificationService {
     }
 
     // إنشاء إشعار للطلبات
-    static async createOrderNotification(type, order, createdBy) {
+    static async createOrderNotification(type, order, createdBy, language = 'ar') {
         try {
             const notification = Notification.createOrderNotification(
                 type,
                 order,
-                createdBy
+                createdBy,
+                language
             );
             if (notification) {
                 await notification.save();
@@ -60,12 +63,13 @@ class NotificationService {
     }
 
     // إنشاء إشعار للمخزون
-    static async createInventoryNotification(type, item, createdBy) {
+    static async createInventoryNotification(type, item, createdBy, language = 'ar') {
         try {
             const notification = Notification.createInventoryNotification(
                 type,
                 item,
-                createdBy
+                createdBy,
+                language
             );
             if (notification) {
                 await notification.save();
@@ -80,12 +84,14 @@ class NotificationService {
     }
 
     // إنشاء إشعار للفواتير
-    static async createBillingNotification(type, bill, createdBy) {
+    static async createBillingNotification(type, bill, createdBy, language = 'ar', currency = 'EGP') {
         try {
             const notification = Notification.createBillingNotification(
                 type,
                 bill,
-                createdBy
+                createdBy,
+                language,
+                currency
             );
             if (notification) {
                 await notification.save();

@@ -1,8 +1,24 @@
-import nodemailer from "nodemailer";
 import Logger from "../middleware/logger.js";
+import { emailTranslations } from "./emailTranslations.js";
+import { getCurrencySymbol, getLocaleFromLanguage } from "./localeHelper.js";
+
+// Dynamic import for nodemailer to handle ES modules properly
+let nodemailer;
+try {
+    nodemailer = await import("nodemailer");
+    // Handle both default and named exports
+    nodemailer = nodemailer.default || nodemailer;
+} catch (error) {
+    Logger.error("Failed to import nodemailer:", error);
+}
 
 // Create email transporter
 const createTransporter = () => {
+    if (!nodemailer) {
+        Logger.error("Nodemailer is not available");
+        return null;
+    }
+    
     if (
         !process.env.EMAIL_HOST ||
         !process.env.EMAIL_USER ||
@@ -25,12 +41,12 @@ const createTransporter = () => {
         EMAIL_PORT: process.env.EMAIL_PORT || 587,
     });
 
-    // Try different configurations
-    const configs = [
-        {
+    // Create transporter with Gmail configuration
+    try {
+        const transporter = nodemailer.createTransport({
             service: "gmail",
             host: process.env.EMAIL_HOST,
-            port: process.env.EMAIL_PORT || 587,
+            port: parseInt(process.env.EMAIL_PORT) || 587,
             secure: false,
             auth: {
                 user: process.env.EMAIL_USER,
@@ -39,61 +55,20 @@ const createTransporter = () => {
             tls: {
                 rejectUnauthorized: false,
             },
-        },
-        {
+        });
+        
+        Logger.info(`Email transporter created successfully`, {
             host: process.env.EMAIL_HOST,
-            port: 465,
-            secure: true,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS,
-            },
-        },
-        {
-            host: process.env.EMAIL_HOST,
-            port: 587,
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS,
-            },
-        },
-        // Simple fallback configuration
-        {
-            host: "smtp.gmail.com",
-            port: 587,
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS,
-            },
-        },
-    ];
-
-    for (let i = 0; i < configs.length; i++) {
-        try {
-            const transporter = nodemailer.createTransport(configs[i]);
-            Logger.info(`Trying email config ${i + 1}`, {
-                config: {
-                    host: configs[i].host,
-                    port: configs[i].port,
-                    secure: configs[i].secure,
-                },
-            });
-            return transporter;
-        } catch (error) {
-            Logger.warn(`Email config ${i + 1} failed:`, {
-                error: error.message,
-                config: {
-                    host: configs[i].host,
-                    port: configs[i].port,
-                    secure: configs[i].secure,
-                },
-            });
-            if (i === configs.length - 1) {
-                throw new Error("All email configurations failed");
-            }
-        }
+            port: process.env.EMAIL_PORT || 587,
+        });
+        
+        return transporter;
+    } catch (error) {
+        Logger.error(`Failed to create email transporter:`, {
+            error: error.message,
+            stack: error.stack
+        });
+        throw new Error("Email configuration failed: " + error.message);
     }
 };
 
@@ -101,7 +76,7 @@ const createTransporter = () => {
 export const sendEmail = async (options) => {
     let transporter = createTransporter();
 
-    if (!transporter) {
+    if (!transporter && nodemailer) {
         // Fallback: create simple transporter
         try {
             transporter = nodemailer.createTransport({
@@ -166,11 +141,17 @@ export const sendEmail = async (options) => {
     }
 };
 
-// Email templates
+// Email templates with multi-language support
 export const emailTemplates = {
     // Low stock alert
-    lowStockAlert: ({ items, organizationName, adminNames = [], timestamp = new Date() }) => {
-        const formattedDate = new Date(timestamp).toLocaleString('ar-EG', {
+    lowStockAlert: ({ items, organizationName, adminNames = [], timestamp = new Date(), language = 'ar', currency = 'EGP' }) => {
+        const t = emailTranslations.lowStockAlert[language] || emailTranslations.lowStockAlert.ar;
+        const locale = getLocaleFromLanguage(language);
+        const currencySymbol = getCurrencySymbol(currency, language);
+        const dir = language === 'ar' ? 'rtl' : 'ltr';
+        const lang = language;
+        
+        const formattedDate = new Date(timestamp).toLocaleString(locale, {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
@@ -181,14 +162,14 @@ export const emailTemplates = {
         });
 
         return {
-            subject: `تنبيه: انخفاض المخزون - ${organizationName || 'نظام Bomba'}`,
+            subject: t.subject(organizationName),
             html: `
                 <!DOCTYPE html>
-                <html dir="rtl" lang="ar">
+                <html dir="${dir}" lang="${lang}">
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>تنبيه انخفاض المخزون</title>
+                    <title>${t.title}</title>
                     <style>
                         body {
                             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -224,7 +205,7 @@ export const emailTemplates = {
                             padding: 15px;
                             border-radius: 5px;
                             margin-bottom: 20px;
-                            border-right: 5px solid #f5c6cb;
+                            border-${dir === 'rtl' ? 'right' : 'left'}: 5px solid #f5c6cb;
                         }
                         .items-table {
                             width: 100%;
@@ -233,7 +214,7 @@ export const emailTemplates = {
                         }
                         .items-table th, .items-table td {
                             padding: 12px 15px;
-                            text-align: right;
+                            text-align: ${dir === 'rtl' ? 'right' : 'left'};
                             border-bottom: 1px solid #ddd;
                         }
                         .items-table th {
@@ -261,7 +242,7 @@ export const emailTemplates = {
                             border-radius: 12px;
                             font-size: 12px;
                             font-weight: bold;
-                            margin-right: 5px;
+                            margin-${dir === 'rtl' ? 'right' : 'left'}: 5px;
                         }
                         .critical {
                             background-color: #f8d7da;
@@ -276,37 +257,37 @@ export const emailTemplates = {
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>🚨 تنبيه انخفاض المخزون</h1>
-                            <p>${organizationName || 'نظام إدارة المخزون'}</p>
+                            <h1>${t.title}</h1>
+                            <p>${organizationName || t.systemName}</p>
                         </div>
                         
                         <div class="content">
                             <div class="alert-message">
-                                <p>يوجد <strong>${items.length} منتج</strong> يحتاج إلى إعادة تعبئة فورية!</p>
+                                <p>${t.alertMessage(items.length)}</p>
                             </div>
                             
-                            <h2>تفاصيل المنتجات منخفضة المخزون</h2>
+                            <h2>${t.detailsTitle}</h2>
                             <table class="items-table">
                                 <thead>
                                     <tr>
-                                        <th>المنتج</th>
-                                        <th>الكمية المتوفرة</th>
-                                        <th>الحد الأدنى</th>
-                                        <th>الوحدة</th>
-                                        <th>الحالة</th>
+                                        <th>${t.tableHeaders.product}</th>
+                                        <th>${t.tableHeaders.currentStock}</th>
+                                        <th>${t.tableHeaders.minStock}</th>
+                                        <th>${t.tableHeaders.unit}</th>
+                                        <th>${t.tableHeaders.status}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${items.map(item => {
                                         const isCritical = item.currentStock <= (item.minStock * 0.3);
-                                        const status = isCritical ? 'حرج' : 'تحذير';
+                                        const status = isCritical ? t.statusCritical : t.statusWarning;
                                         const statusClass = isCritical ? 'critical' : 'warning';
                                         return `
                                             <tr>
                                                 <td><strong>${item.name}</strong></td>
                                                 <td class="${isCritical ? 'stock-critical' : ''}">${item.currentStock}</td>
                                                 <td>${item.minStock}</td>
-                                                <td>${item.unit || 'قطعة'}</td>
+                                                <td>${item.unit || t.defaultUnit}</td>
                                                 <td>
                                                     <span class="urgency-badge ${statusClass}">
                                                         ${status}
@@ -319,18 +300,18 @@ export const emailTemplates = {
                             </table>
                             
                             <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
-                                <h3>الإجراء المطلوب:</h3>
-                                <p>يرجى اتخاذ الإجراء اللازم لإعادة تعبئة المخزون في أقرب وقت ممكن لتجنب نفاد المنتجات.</p>
+                                <h3>${t.actionTitle}</h3>
+                                <p>${t.actionText}</p>
                                 ${adminNames.length > 0 ? `
-                                    <p>تم إرسال هذا التنبيه إلى: ${adminNames.join('، ')}</p>
+                                    <p>${t.sentTo(adminNames.join('، '))}</p>
                                 ` : ''}
                             </div>
                         </div>
                         
                         <div class="footer">
-                            <p>⏱️ تم إنشاء هذا التقرير في: ${formattedDate}</p>
-                            <p>📞 للدعم الفني، يرجى التواصل مع فريق الدعم الفني</p>
-                            <p>© ${new Date().getFullYear()} نظام Bomba - جميع الحقوق محفوظة</p>
+                            <p>⏱️ ${t.footerCreated} ${formattedDate}</p>
+                            <p>📞 ${t.footerSupport}</p>
+                            <p>${t.footerCopyright(new Date().getFullYear())}</p>
                         </div>
                     </div>
                 </body>
@@ -339,752 +320,281 @@ export const emailTemplates = {
         };
     },
 
-    // Daily report
-    dailyReport: (data) => ({
-        subject: `📊 التقرير اليومي - ${data.organizationName || "منشأتك"} - ${
-            data.date || new Date().toLocaleDateString("ar-EG")
-        }`,
-        html: `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>التقرير اليومي - ${
-            data.organizationName || "منشأتك"
-        } - نظام Bomba</title>
-        <style>
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
-
-          body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-          }
-
-          .email-container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: #ffffff;
-            border-radius: 20px;
-            overflow: hidden;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-          }
-
-          .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px 30px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-          }
-
-          .header-content {
-            position: relative;
-            z-index: 2;
-          }
-
-          .header-decoration {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 1;
-          }
-
-          .decoration-circle {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            animation: float 6s ease-in-out infinite;
-          }
-
-          .decoration-circle:nth-child(1) {
-            width: 80px;
-            height: 80px;
-            top: 20px;
-            left: 20px;
-            animation-delay: 0s;
-          }
-
-          .decoration-circle:nth-child(2) {
-            width: 60px;
-            height: 60px;
-            top: 60px;
-            right: 40px;
-            animation-delay: 2s;
-          }
-
-          .decoration-circle:nth-child(3) {
-            width: 40px;
-            height: 40px;
-            bottom: 30px;
-            left: 50%;
-            animation-delay: 4s;
-          }
-
-          @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(180deg); }
-          }
-
-          .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
-            opacity: 0.3;
-          }
-
-          .header h1 {
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 10px;
-            position: relative;
-            z-index: 1;
-          }
-
-          .header p {
-            font-size: 16px;
-            opacity: 0.9;
-            position: relative;
-            z-index: 1;
-          }
-
-          .organization-name {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 15px;
-            color: #fff;
-            background: rgba(255,255,255,0.2);
-            padding: 10px 20px;
-            border-radius: 25px;
-            display: inline-block;
-          }
-
-          .date-badge {
-            background: rgba(255,255,255,0.2);
-            padding: 8px 16px;
-            border-radius: 25px;
-            display: inline-block;
-            margin-top: 15px;
-            font-size: 14px;
-            position: relative;
-            z-index: 1;
-          }
-
-          .period-badge {
-            background: rgba(255,255,255,0.15);
-            padding: 6px 12px;
-            border-radius: 20px;
-            display: inline-block;
-            margin-top: 10px;
-            font-size: 12px;
-            position: relative;
-            z-index: 1;
-            border: 1px solid rgba(255,255,255,0.3);
-          }
-
-          .content {
-            padding: 40px 30px;
-          }
-
-          .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
-          }
-
-          .stat-card {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 15px;
-            padding: 25px;
-            text-align: center;
-            border: 1px solid #e9ecef;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-          }
-
-          .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-            transition: left 0.5s ease;
-          }
-
-          .stat-card:hover::before {
-            left: 100%;
-          }
-
-          .stat-card:hover {
-            transform: translateY(-5px);
-          }
-
-          .stat-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 15px;
-            font-size: 24px;
-          }
-
-          .stat-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 5px;
-          }
-
-          .stat-label {
-            font-size: 14px;
-            color: #6c757d;
-            font-weight: 500;
-          }
-
-          .section {
-            margin-bottom: 40px;
-          }
-
-          .section-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-
-          .profit-section {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 20px;
-            text-align: center;
-            margin-bottom: 30px;
-            position: relative;
-            overflow: hidden;
-          }
-
-          .profit-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="profit-grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23profit-grain)"/></svg>');
-            opacity: 0.3;
-          }
-
-          .profit-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            position: relative;
-            z-index: 1;
-          }
-
-          .profit-amount {
-            font-size: 36px;
-            font-weight: 700;
-            margin-bottom: 10px;
-            position: relative;
-            z-index: 1;
-          }
-
-          .profit-subtitle {
-            font-size: 14px;
-            opacity: 0.9;
-            position: relative;
-            z-index: 1;
-          }
-
-          .performance-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-          }
-
-          .performance-item {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            border: 1px solid #e9ecef;
-          }
-
-          .performance-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: white;
-          }
-
-          .performance-content {
-            flex: 1;
-          }
-
-          .performance-title {
-            font-size: 14px;
-            color: #6c757d;
-            margin-bottom: 5px;
-          }
-
-          .performance-value {
-            font-size: 20px;
-            font-weight: 600;
-            color: #2c3e50;
-          }
-
-          .products-list {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 20px;
-            border: 1px solid #e9ecef;
-          }
-
-          .product-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #e9ecef;
-          }
-
-          .product-item:last-child {
-            border-bottom: none;
-          }
-
-          .product-name {
-            font-weight: 500;
-            color: #2c3e50;
-          }
-
-          .product-quantity {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-          }
-
-          .footer {
-            background: #f8f9fa;
-            padding: 30px;
-            text-align: center;
-            border-top: 1px solid #e9ecef;
-          }
-
-          .footer p {
-            color: #6c757d;
-            font-size: 14px;
-            margin-bottom: 10px;
-          }
-
-          .footer-links {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 15px;
-          }
-
-          .footer-link {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s ease;
-          }
-
-          .footer-link:hover {
-            color: #764ba2;
-          }
-
-          @media (max-width: 600px) {
-            .email-container {
-              margin: 10px;
-              border-radius: 15px;
-            }
-
-            .content {
-              padding: 20px;
-            }
-
-            .header {
-              padding: 30px 20px;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="email-container">
-          <div class="header">
-            <div class="header-content">
-              <h1>📊 التقرير اليومي</h1>
-              <p>ملخص شامل لأداء منشأتك اليوم</p>
-              <div class="organization-name">${
-                  data.organizationName || "منشأتك"
-              }</div>
-              <div class="date-badge">
-                ${
-                    data.date ||
-                    new Date().toLocaleDateString("ar-EG", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                    })
-                }
-              </div>
-              <div class="period-badge">
-                ${data.reportPeriod || `
-                  من 5:00 صباحاً يوم ${new Date(data.startOfReport).toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}
-                  إلى 5:00 صباحاً يوم ${new Date(data.endOfReport).toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}
-                `}
-              </div>
-            </div>
-            <div class="header-decoration">
-              <div class="decoration-circle"></div>
-              <div class="decoration-circle"></div>
-              <div class="decoration-circle"></div>
-            </div>
-          </div>
-
-          <div class="content">
-            <!-- Profit Section -->
-            <div class="profit-section">
-              <div class="profit-title">💰 صافي الربح اليوم</div>
-              <div class="profit-amount">${data.netProfit || 0} ج.م</div>
-              <div class="profit-subtitle">إجمالي الإيرادات: ${
-                  data.totalRevenue || 0
-              } ج.م</div>
-            </div>
-
-            <!-- Statistics Grid -->
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-icon revenue">💰</div>
-                <div class="stat-value">${data.totalRevenue || 0}</div>
-                <div class="stat-label">إجمالي الإيرادات (ج.م)</div>
-              </div>
-
-              <div class="stat-card">
-                <div class="stat-icon bills">📄</div>
-                <div class="stat-value">${data.totalBills || 0}</div>
-                <div class="stat-label">عدد الفواتير</div>
-              </div>
-
-              <div class="stat-card">
-                <div class="stat-icon orders">🛒</div>
-                <div class="stat-value">${data.totalOrders || 0}</div>
-                <div class="stat-label">عدد الطلبات</div>
-              </div>
-
-              <div class="stat-card">
-                <div class="stat-icon sessions">🎮</div>
-                <div class="stat-value">${data.totalSessions || 0}</div>
-                <div class="stat-label">عدد الجلسات</div>
-              </div>
-            </div>
-
-            <!-- Performance Summary -->
-            <div class="section">
-              <h2 class="section-title">📈 ملخص الأداء</h2>
-              <div class="performance-summary">
-                <div class="performance-item">
-                  <div class="performance-icon">🎯</div>
-                  <div class="performance-content">
-                    <div class="performance-title">معدل النمو</div>
-                    <div class="performance-value">+${Math.round(
-                        (data.totalRevenue || 0) / 100
-                    )}%</div>
-                  </div>
-                </div>
-                <div class="performance-item">
-                  <div class="performance-icon">⚡</div>
-                  <div class="performance-content">
-                    <div class="performance-title">كفاءة التشغيل</div>
-                    <div class="performance-value">${Math.round(
-                        ((data.totalSessions || 0) / (data.totalOrders || 1)) *
-                            100
-                    )}%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Top Products Section -->
-            <div class="section">
-              <h2 class="section-title">🏆 أكثر المنتجات مبيعاً</h2>
-              <div class="products-list">
-                ${
-                    data.topProducts && data.topProducts.length > 0
-                        ? data.topProducts
-                              .map(
-                                  (product, index) => `
-                    <div class="product-item">
-                      <div class="product-name">${index + 1}. ${
-                                      product.name
-                                  }</div>
-                      <div class="product-quantity">${
-                          product.quantity
-                      } وحدة</div>
+    // Daily report - simplified version with multi-language support
+    dailyReport: (data) => {
+        const language = data.language || 'ar';
+        const currency = data.currency || 'EGP';
+        const t = emailTranslations.dailyReport[language] || emailTranslations.dailyReport.ar;
+        const locale = getLocaleFromLanguage(language);
+        const currencySymbol = getCurrencySymbol(currency, language);
+        const dir = language === 'ar' ? 'rtl' : 'ltr';
+        const lang = language;
+        
+        const formattedDate = data.date || new Date().toLocaleDateString(locale);
+        
+        return {
+            subject: t.subject(data.organizationName || t.defaultOrgName, formattedDate),
+            html: `
+                <!DOCTYPE html>
+                <html dir="${dir}" lang="${lang}">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>${t.title}</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; margin: 0; }
+                        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+                        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 30px; text-align: center; }
+                        .header h1 { margin: 0 0 10px 0; font-size: 28px; }
+                        .header p { margin: 5px 0; opacity: 0.9; }
+                        .org-name { font-size: 20px; font-weight: 600; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px; display: inline-block; margin: 10px 0; }
+                        .content { padding: 40px 30px; }
+                        .profit-section { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px; }
+                        .profit-title { font-size: 18px; font-weight: 600; margin-bottom: 10px; }
+                        .profit-amount { font-size: 36px; font-weight: 700; margin-bottom: 10px; }
+                        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+                        .stat-card { background: #f8f9fa; border-radius: 15px; padding: 25px; text-align: center; border: 1px solid #e9ecef; }
+                        .stat-value { font-size: 28px; font-weight: 700; color: #667eea; margin-bottom: 5px; }
+                        .stat-label { font-size: 14px; color: #6c757d; }
+                        .section-title { font-size: 20px; font-weight: 600; color: #2c3e50; margin-bottom: 20px; }
+                        .products-list { background: #f8f9fa; border-radius: 15px; padding: 20px; border: 1px solid #e9ecef; }
+                        .product-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e9ecef; }
+                        .product-item:last-child { border-bottom: none; }
+                        .product-name { font-weight: 500; }
+                        .product-quantity { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+                        .footer { background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e9ecef; }
+                        .footer p { color: #6c757d; font-size: 14px; margin: 10px 0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>${t.title}</h1>
+                            <p>${t.subtitle}</p>
+                            <div class="org-name">${data.organizationName || t.defaultOrgName}</div>
+                            <p>${formattedDate}</p>
+                        </div>
+                        
+                        <div class="content">
+                            <div class="profit-section">
+                                <div class="profit-title">${t.netProfitTitle}</div>
+                                <div class="profit-amount">${data.netProfit || 0} ${currencySymbol}</div>
+                                <div>${t.totalRevenueLabel} ${data.totalRevenue || 0} ${currencySymbol}</div>
+                            </div>
+                            
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalRevenue || 0}</div>
+                                    <div class="stat-label">${t.stats.totalRevenue} (${currencySymbol})</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalBills || 0}</div>
+                                    <div class="stat-label">${t.stats.totalBills}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalOrders || 0}</div>
+                                    <div class="stat-label">${t.stats.totalOrders}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalSessions || 0}</div>
+                                    <div class="stat-label">${t.stats.totalSessions}</div>
+                                </div>
+                            </div>
+                            
+                            <h2 class="section-title">${t.topProductsTitle}</h2>
+                            <div class="products-list">
+                                ${data.topProducts && data.topProducts.length > 0
+                                    ? data.topProducts.map((product, index) => `
+                                        <div class="product-item">
+                                            <div class="product-name">${index + 1}. ${product.name}</div>
+                                            <div class="product-quantity">${product.quantity} ${t.unit}</div>
+                                        </div>
+                                    `).join('')
+                                    : `<div style="text-align: center; color: #6c757d; padding: 20px;">${t.noDataAvailable}</div>`
+                                }
+                            </div>
+                        </div>
+                        
+                        <div class="footer">
+                            <p>${t.footerSentFrom}</p>
+                            <p>${t.footerMoreDetails}</p>
+                        </div>
                     </div>
-                  `
-                              )
-                              .join("")
-                        : `<div style="text-align: center; color: #6c757d; padding: 20px;">لا توجد بيانات متاحة</div>`
-                }
-              </div>
-            </div>
-          </div>
-
-          <div class="footer">
-            <p>تم إرسال هذا التقرير تلقائياً من نظام Bomba</p>
-            <p>للمزيد من التفاصيل، يرجى تسجيل الدخول إلى لوحة التحكم</p>
-            <div class="footer-links">
-              <a href="#" class="footer-link">لوحة التحكم</a>
-              <a href="#" class="footer-link">التقارير التفصيلية</a>
-              <a href="#" class="footer-link">الإعدادات</a>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `,
-    }),
+                </body>
+                </html>
+            `
+        };
+    },
 
     // Monthly report
-    monthlyReport: (data) => ({
-        subject: `📊 التقرير الشهري - ${data.organizationName || "منشأتك"} - ${
-            data.month
-        }`,
-        html: `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>التقرير الشهري - ${data.organizationName || "منشأتك"}</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-          .container { max-width: 600px; margin: 0 auto; background-color: white; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
-          .header h1 { margin: 0; font-size: 24px; }
-          .header .subtitle { margin-top: 10px; opacity: 0.9; }
-          .content { padding: 30px; }
-          .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
-          .stat-card { background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center; border-left: 4px solid #667eea; }
-          .stat-value { font-size: 28px; font-weight: bold; color: #667eea; margin-bottom: 5px; }
-          .stat-label { color: #6c757d; font-size: 14px; }
-          .section { margin-bottom: 30px; }
-          .section-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 15px; border-bottom: 2px solid #667eea; padding-bottom: 5px; }
-          .product-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
-          .product-name { font-weight: bold; }
-          .product-stats { color: #6c757d; font-size: 14px; }
-          .device-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
-          .device-card { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; }
-          .device-name { font-weight: bold; color: #333; margin-bottom: 5px; }
-          .device-value { color: #667eea; font-size: 16px; }
-          .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; }
-          .footer-logo { font-weight: bold; color: #667eea; margin-bottom: 10px; }
-          .footer-text { font-size: 12px; line-height: 1.5; }
-          .highlight { background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0; }
-          .highlight-title { font-weight: bold; color: #856404; margin-bottom: 10px; }
-          .highlight-content { color: #856404; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>📊 التقرير الشهري</h1>
-            <div class="subtitle">${data.organizationName || "منشأتك"} - ${
-            data.month
-        }</div>
-          </div>
-
-          <div class="content">
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-value">${data.totalRevenue.toLocaleString(
-                    "ar-EG"
-                )} ج.م</div>
-                <div class="stat-label">إجمالي الإيرادات</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value">${data.totalCosts.toLocaleString(
-                    "ar-EG"
-                )} ج.م</div>
-                <div class="stat-label">إجمالي التكاليف</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value">${data.netProfit.toLocaleString(
-                    "ar-EG"
-                )} ج.م</div>
-                <div class="stat-label">صافي الربح</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value">${data.profitMargin.toFixed(1)}%</div>
-                <div class="stat-label">هامش الربح</div>
-              </div>
-            </div>
-
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-value">${data.totalBills}</div>
-                <div class="stat-label">عدد الفواتير</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value">${data.totalOrders}</div>
-                <div class="stat-label">عدد الطلبات</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value">${data.totalSessions}</div>
-                <div class="stat-label">عدد الجلسات</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value">${data.avgDailyRevenue.toLocaleString(
-                    "ar-EG"
-                )} ج.م</div>
-                <div class="stat-label">متوسط الإيرادات اليومية</div>
-              </div>
-            </div>
-
-            ${
-                data.bestDay
-                    ? `
-            <div class="highlight">
-              <div class="highlight-title">🏆 أفضل يوم في الشهر</div>
-              <div class="highlight-content">
-                التاريخ: ${new Date(data.bestDay._id).toLocaleDateString(
-                    "ar-EG"
-                )}<br>
-                الإيرادات: ${data.bestDay.revenue.toLocaleString(
-                    "ar-EG"
-                )} ج.م<br>
-                عدد الفواتير: ${data.bestDay.bills}
-              </div>
-            </div>
-            `
-                    : ""
-            }
-
-            <div class="section">
-              <div class="section-title">📈 إحصائيات الأجهزة</div>
-              <div class="device-stats">
-                ${data.deviceStats
-                    .map(
-                        (device) => `
-                  <div class="device-card">
-                    <div class="device-name">${
-                        device._id === "playstation"
-                            ? "البلايستيشن"
-                            : device._id === "computer"
-                            ? "الكمبيوتر"
-                            : device._id
-                    }</div>
-                    <div class="device-value">${device.totalSessions} جلسة</div>
-                    <div class="device-value">${device.totalRevenue.toLocaleString(
-                        "ar-EG"
-                    )} ج.م</div>
-                    <div class="device-value">${Math.round(
-                        device.avgDuration / (1000 * 60)
-                    )} دقيقة متوسط</div>
-                  </div>
-          `
-                    )
-                    .join("")}
-              </div>
-            </div>
-
-            <div class="section">
-              <div class="section-title">🏆 أفضل المنتجات مبيعاً</div>
-              ${
-                  data.topProducts.length > 0
-                      ? data.topProducts
-                            .map(
-                                (product, index) => `
-                  <div class="product-item">
-                    <div class="product-name">${index + 1}. ${
-                                    product.name
-                                }</div>
-                    <div class="product-stats">
-                      ${
-                          product.quantity
-                      } قطعة - ${product.revenue.toLocaleString("ar-EG")} ج.م
+    monthlyReport: (data) => {
+        const language = data.language || 'ar';
+        const currency = data.currency || 'EGP';
+        const t = emailTranslations.monthlyReport[language] || emailTranslations.monthlyReport.ar;
+        const locale = getLocaleFromLanguage(language);
+        const currencySymbol = getCurrencySymbol(currency, language);
+        const dir = language === 'ar' ? 'rtl' : 'ltr';
+        const lang = language;
+        
+        return {
+            subject: t.subject(data.organizationName || t.defaultOrgName, data.month),
+            html: `
+                <!DOCTYPE html>
+                <html dir="${dir}" lang="${lang}">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>${t.title}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+                        .container { max-width: 600px; margin: 0 auto; background-color: white; }
+                        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+                        .header h1 { margin: 0; font-size: 24px; }
+                        .content { padding: 30px; }
+                        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+                        .stat-card { background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center; border-${dir === 'rtl' ? 'right' : 'left'}: 4px solid #667eea; }
+                        .stat-value { font-size: 28px; font-weight: bold; color: #667eea; margin-bottom: 5px; }
+                        .stat-label { color: #6c757d; font-size: 14px; }
+                        .section-title { font-size: 18px; font-weight: bold; color: #333; margin: 30px 0 15px 0; border-bottom: 2px solid #667eea; padding-bottom: 5px; }
+                        .product-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+                        .product-name { font-weight: bold; }
+                        .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>${t.title}</h1>
+                            <div>${data.organizationName || t.defaultOrgName} - ${data.month}</div>
+                        </div>
+                        
+                        <div class="content">
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalRevenue.toLocaleString(locale)} ${currencySymbol}</div>
+                                    <div class="stat-label">${t.stats.totalRevenue}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalCosts.toLocaleString(locale)} ${currencySymbol}</div>
+                                    <div class="stat-label">${t.stats.totalCosts}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.netProfit.toLocaleString(locale)} ${currencySymbol}</div>
+                                    <div class="stat-label">${t.stats.netProfit}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.profitMargin.toFixed(1)}%</div>
+                                    <div class="stat-label">${t.stats.profitMargin}</div>
+                                </div>
+                            </div>
+                            
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalBills}</div>
+                                    <div class="stat-label">${t.stats.totalBills}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalOrders}</div>
+                                    <div class="stat-label">${t.stats.totalOrders}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.totalSessions}</div>
+                                    <div class="stat-label">${t.stats.totalSessions}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${data.avgDailyRevenue.toLocaleString(locale)} ${currencySymbol}</div>
+                                    <div class="stat-label">${t.stats.avgDailyRevenue}</div>
+                                </div>
+                            </div>
+                            
+                            ${data.bestDay ? `
+                                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-${dir === 'rtl' ? 'right' : 'left'}: 4px solid #ffc107; margin: 20px 0;">
+                                    <div style="font-weight: bold; color: #856404; margin-bottom: 10px;">${t.bestDayTitle}</div>
+                                    <div style="color: #856404;">
+                                        ${t.bestDay.date} ${new Date(data.bestDay._id).toLocaleDateString(locale)}<br>
+                                        ${t.bestDay.revenue} ${data.bestDay.revenue.toLocaleString(locale)} ${currencySymbol}<br>
+                                        ${t.bestDay.bills} ${data.bestDay.bills}
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            <div class="section-title">${t.topProductsTitle}</div>
+                            ${data.topProducts.length > 0
+                                ? data.topProducts.map((product, index) => `
+                                    <div class="product-item">
+                                        <div class="product-name">${index + 1}. ${product.name}</div>
+                                        <div>${product.quantity} ${t.piece} - ${product.revenue.toLocaleString(locale)} ${currencySymbol}</div>
+                                    </div>
+                                `).join('')
+                                : `<div style="text-align: center; color: #6c757d; padding: 20px;">${t.noSalesThisMonth}</div>`
+                            }
+                        </div>
+                        
+                        <div class="footer">
+                            <div style="font-weight: bold; color: #667eea; margin-bottom: 10px;">${t.footerTitle}</div>
+                            <div style="font-size: 12px; line-height: 1.5;">
+                                ${t.footerText}<br>
+                                ${t.footerCreated} ${new Date().toLocaleTimeString(locale)}
+                            </div>
+                        </div>
                     </div>
-                  </div>
-                `
-                            )
-                            .join("")
-                      : '<div style="text-align: center; color: #6c757d; padding: 20px;">لا توجد مبيعات هذا الشهر</div>'
-              }
-            </div>
-          </div>
-
-          <div class="footer">
-            <div class="footer-logo">🎮 Bomba System</div>
-            <div class="footer-text">
-              تقرير شهري تلقائي من نظام إدارة المنشآت<br>
-              تم إنشاؤه في ${new Date().toLocaleTimeString("ar-EG")}
-            </div>
-          </div>
-      </div>
-      </body>
-      </html>
-    `,
-    }),
+                </body>
+                </html>
+            `
+        };
+    },
 
     // User account created
-    userCreated: (user, password) => ({
-        subject: "تم إنشاء حسابك في نظام Bomba",
-        html: `
-      <div dir="rtl" style="font-family: Arial, sans-serif;">
-        <h2>مرحباً ${user.name}</h2>
-                  <p>تم إنشاء حسابك في نظام Bomba بنجاح.</p>
-
-        <h3>بيانات الدخول:</h3>
-        <ul>
-          <li>البريد الإلكتروني: ${user.email}</li>
-          <li>كلمة المرور: ${password}</li>
-          <li>الدور: ${user.role}</li>
-        </ul>
-
-        <p><strong>ملاحظة:</strong> يرجى تغيير كلمة المرور بعد أول تسجيل دخول.</p>
-
-        <hr>
-                  <small>رسالة من نظام Bomba</small>
-      </div>
-    `,
-    }),
+    userCreated: (user, password, language = 'ar') => {
+        const t = emailTranslations.userCreated[language] || emailTranslations.userCreated.ar;
+        const dir = language === 'ar' ? 'rtl' : 'ltr';
+        const lang = language;
+        
+        return {
+            subject: t.subject,
+            html: `
+                <!DOCTYPE html>
+                <html dir="${dir}" lang="${lang}">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; }
+                        .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                        h2 { color: #667eea; margin-bottom: 20px; }
+                        h3 { color: #333; margin-top: 20px; }
+                        ul { list-style: none; padding: 0; }
+                        li { padding: 8px 0; border-bottom: 1px solid #eee; }
+                        .note { background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 20px; border-${dir === 'rtl' ? 'right' : 'left'}: 4px solid #ffc107; }
+                        .note strong { color: #856404; }
+                        hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+                        small { color: #6c757d; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h2>${t.greeting(user.name)}</h2>
+                        <p>${t.message}</p>
+                        
+                        <h3>${t.loginDetailsTitle}</h3>
+                        <ul>
+                            <li><strong>${t.email}</strong> ${user.email}</li>
+                            <li><strong>${t.password}</strong> ${password}</li>
+                            <li><strong>${t.role}</strong> ${user.role}</li>
+                        </ul>
+                        
+                        <div class="note">
+                            <p><strong>${t.note}</strong> ${t.noteText}</p>
+                        </div>
+                        
+                        <hr>
+                        <small>${t.footerText}</small>
+                    </div>
+                </body>
+                </html>
+            `
+        };
+    }
 };
 
 // Send low stock alert
@@ -1092,7 +602,9 @@ export const sendLowStockAlert = async ({
     items,
     organizationName,
     recipientEmails,
-    adminNames = []
+    adminNames = [],
+    language = 'ar',
+    currency = 'EGP'
 }) => {
     if (!recipientEmails || recipientEmails.length === 0) {
         Logger.warn("No recipient emails provided for low stock alert");
@@ -1102,6 +614,8 @@ export const sendLowStockAlert = async ({
     Logger.info(`Sending low stock alert to ${recipientEmails.length} recipients`, {
         organizationName,
         itemCount: items.length,
+        language,
+        currency,
         firstFewItems: items.slice(0, 3).map(i => i.name)
     });
 
@@ -1109,7 +623,9 @@ export const sendLowStockAlert = async ({
         items,
         organizationName,
         adminNames,
-        timestamp: new Date()
+        timestamp: new Date(),
+        language,
+        currency
     });
 
     const results = [];
@@ -1157,11 +673,13 @@ export const sendLowStockAlert = async ({
 };
 
 // Send daily report with PDF attachment
-export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null) => {
+export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null, language = 'ar', currency = 'EGP') => {
     Logger.info("Starting daily report email sending", {
         adminEmailsCount: adminEmails?.length || 0,
         adminEmails: adminEmails,
         hasPdfBuffer: !!pdfBuffer,
+        language: language,
+        currency: currency,
         reportData: {
             organizationName: reportData.organizationName,
             totalRevenue: reportData.totalRevenue,
@@ -1192,8 +710,12 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null)
             organizationName: reportData.organizationName
         });
 
-        // Get email template
-        const emailTemplate = emailTemplates.dailyReport(reportData);
+        // Get email template with language and currency
+        const emailTemplate = emailTemplates.dailyReport({
+            ...reportData,
+            language,
+            currency
+        });
 
         // Send email to each admin with PDF attachment
         const sendPromises = adminEmails.map(async (email) => {
@@ -1210,7 +732,7 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null)
                     html: emailTemplate.html,
                     attachments: [
                         {
-                            filename: `تقرير-يومي-${reportData.date}.pdf`,
+                            filename: `daily-report-${reportData.date}.pdf`,
                             content: pdfBuffer,
                             contentType: 'application/pdf'
                         }
@@ -1264,10 +786,14 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null)
 };
 
 // Send monthly report
-export const sendMonthlyReport = async (reportData, adminEmails) => {
+export const sendMonthlyReport = async (reportData, adminEmails, language = 'ar', currency = 'EGP') => {
     if (!adminEmails || adminEmails.length === 0) return;
 
-    const template = emailTemplates.monthlyReport(reportData);
+    const template = emailTemplates.monthlyReport({
+        ...reportData,
+        language,
+        currency
+    });
 
     for (const email of adminEmails) {
         try {

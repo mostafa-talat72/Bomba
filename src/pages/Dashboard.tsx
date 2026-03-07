@@ -10,12 +10,21 @@ import { translateActivityMessage } from '../utils/activityTranslator';
 interface RecentActivity {
   id: string;
   type: 'session' | 'order' | 'payment';
-  message: string;
   time: string;
   date: string;
   color: string;
   icon: string;
-  details: Record<string, unknown>;
+  details: {
+    deviceName?: string;
+    deviceType?: string;
+    status: string;
+    totalCost?: number;
+    customerName?: string;
+    tableNumber?: number | string;
+    totalAmount?: number;
+    total?: number;
+    paid?: number;
+  };
 }
 
 interface DashboardStats {
@@ -438,7 +447,7 @@ const Dashboard = () => {
               <div className="space-y-4">
                 {recentActivity.slice(0, 5).map((activity) => {
                   const Icon = getActivityIcon(activity.icon);
-                  const translatedMessage = translateActivityMessage(activity.message);
+                  const translatedMessage = translateActivityMessage(activity);
                   return (
                     <div key={activity.id} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-all duration-200 hover:scale-[1.02] group">
                       <div className={`w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center ${isRTL ? 'mr-4' : 'ml-4'} group-hover:scale-110 transition-transform duration-200 ${activity.color}`}>

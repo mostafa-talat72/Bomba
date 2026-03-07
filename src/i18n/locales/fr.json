@@ -93,6 +93,8 @@
     "loginSuccess": "Connexion réussie",
     "loginError": "Erreur de connexion",
     "logoutSuccess": "Déconnexion réussie",
+    "sessionExpired": "Session expirée, veuillez vous reconnecter",
+    "welcome": "Bienvenue {{name}}!",
     "invalidCredentials": "Identifiants invalides",
     "accountInactive": "Compte inactif",
     "loggingIn": "Connexion en cours...",
@@ -206,6 +208,28 @@
       "newOrder": "Nouvelle commande",
       "payment": "Nouveau paiement",
       "sessionEnded": "Session terminée"
+    },
+    "activity": {
+      "session": {
+        "active": "Nouvelle session démarrée",
+        "completed": "Session terminée",
+        "cancelled": "Session annulée"
+      },
+      "order": {
+        "pending": "Nouvelle commande",
+        "preparing": "Commande en préparation",
+        "ready": "Commande prête",
+        "delivered": "Commande livrée",
+        "cancelled": "Commande annulée"
+      },
+      "bill": {
+        "draft": "Nouvelle facture",
+        "paid": "Facture payée",
+        "partial": "Paiement partiel",
+        "cancelled": "Facture annulée"
+      },
+      "table": "Table",
+      "customer": "Client"
     }
   },
   "cafe": {
@@ -3296,5 +3320,251 @@
         "description": "Aucune paie n'a encore été créée"
       }
     }
-  }
+  },
+  "appContext": {
+    "sessionExpired": "Session expirée, veuillez vous reconnecter",
+    "welcome": "Bienvenue {{name}}!",
+    "logoutSuccess": "Déconnexion réussie",
+    "loginFailed": "Identifiants invalides",
+    "loginError": "Échec de la connexion",
+    "session": {
+      "created": "Nouvelle session démarrée sur {{deviceName}} - Facture: {{billNumber}}",
+      "createdNoBill": "Nouvelle session démarrée sur {{deviceName}}",
+      "createFailed": "Échec de la création de la session",
+      "updated": "Session mise à jour avec succès",
+      "updateFailed": "Échec de la mise à jour de la session",
+      "ended": "Session terminée sur {{deviceName}} - Coût total: {{cost}}",
+      "endedSuccess": "Session terminée sur {{deviceName}} avec succès",
+      "endFailed": "Échec de la fin de session"
+    },
+    "order": {
+      "incompleteData": "Les données de la commande sont incomplètes",
+      "incompleteItems": "Les données des articles sont incomplètes",
+      "invalidTableId": "ID de table invalide",
+      "created": "Nouvelle commande créée: {{orderNumber}}",
+      "createFailed": "Échec de la création de la commande",
+      "updated": "Commande mise à jour avec succès",
+      "updateFailed": "Échec de la mise à jour de la commande",
+      "insufficientStock": "Stock insuffisant pour mettre à jour la commande",
+      "updateError": "Erreur lors de la mise à jour de la commande",
+      "preparedUpdated": "Statut de préparation mis à jour avec succès",
+      "preparedUpdateFailed": "Échec de la mise à jour du statut de préparation",
+      "statusUpdated": "Statut de la commande mis à jour avec succès",
+      "statusUpdateFailed": "Échec de la mise à jour du statut de la commande",
+      "deleted": "Commande supprimée avec succès",
+      "deleteFailed": "Échec de la suppression de la commande"
+    },
+    "inventory": {
+      "added": "Produit ajouté avec succès",
+      "addFailed": "Échec de l'ajout du produit",
+      "updated": "Produit mis à jour avec succès",
+      "updateFailed": "Échec de la mise à jour du produit",
+      "stockUpdated": "{{operation}} {{quantity}} unités du stock avec succès",
+      "stockUpdateFailed": "Échec de la mise à jour du stock",
+      "deleted": "Produit supprimé avec succès",
+      "deleteFailed": "Échec de la suppression du produit"
+    },
+    "bill": {
+      "created": "Facture créée avec succès",
+      "createFailed": "Échec de la création de la facture",
+      "updated": "Facture mise à jour avec succès",
+      "updateFailed": "Échec de la mise à jour de la facture",
+      "paymentAdded": "Paiement de {{amount}} {{currency}} {{method}} ajouté avec succès",
+      "paymentAddFailed": "Échec de l'ajout du paiement",
+      "cancelled": "Facture annulée avec succès",
+      "cancelFailed": "Échec de l'annulation de la facture",
+      "partialPaymentAdded": "Paiement partiel enregistré avec succès",
+      "partialPaymentFailed": "Échec de l'enregistrement du paiement partiel"
+    },
+    "cost": {
+      "added": "Coût ajouté avec succès",
+      "addFailed": "Échec de l'ajout du coût",
+      "updated": "Coût mis à jour avec succès",
+      "updateFailed": "Échec de la mise à jour du coût",
+      "deleted": "Coût supprimé avec succès",
+      "deleteFailed": "Échec de la suppression du coût"
+    },
+    "device": {
+      "added": "Appareil ajouté avec succès",
+      "addFailed": "Échec de l'ajout de l'appareil",
+      "updated": "Appareil mis à jour avec succès",
+      "updateFailed": "Échec de la mise à jour de l'appareil",
+      "statusUpdated": "Statut de l'appareil mis à jour avec succès",
+      "statusUpdateFailed": "Échec de la mise à jour du statut de l'appareil",
+      "deleted": "Appareil supprimé avec succès",
+      "deleteFailed": "Échec de la suppression de l'appareil"
+    },
+    "menu": {
+      "itemAdded": "Article de menu ajouté avec succès",
+      "itemAddFailed": "Échec de l'ajout de l'article de menu",
+      "itemUpdated": "Article de menu mis à jour avec succès",
+      "itemUpdateFailed": "Échec de la mise à jour de l'article de menu",
+      "itemDeleted": "Article de menu supprimé avec succès",
+      "itemDeleteFailed": "Échec de la suppression de l'article de menu",
+      "sectionAdded": "Section ajoutée avec succès",
+      "sectionAddFailed": "Échec de l'ajout de la section",
+      "sectionUpdated": "Section mise à jour avec succès",
+      "sectionUpdateFailed": "Échec de la mise à jour de la section",
+      "sectionDeleted": "Section supprimée avec succès",
+      "sectionDeleteFailed": "Échec de la suppression de la section",
+      "categoryAdded": "Catégorie ajoutée avec succès",
+      "categoryAddFailed": "Échec de l'ajout de la catégorie",
+      "categoryUpdated": "Catégorie mise à jour avec succès",
+      "categoryUpdateFailed": "Échec de la mise à jour de la catégorie",
+      "categoryDeleted": "Catégorie supprimée avec succès",
+      "categoryDeleteFailed": "Échec de la suppression de la catégorie"
+    },
+    "table": {
+      "sectionAdded": "Section de table ajoutée avec succès",
+      "sectionAddFailed": "Échec de l'ajout de la section de table",
+      "sectionUpdated": "Section de table mise à jour avec succès",
+      "sectionUpdateFailed": "Échec de la mise à jour de la section de table",
+      "sectionDeleted": "Section de table supprimée avec succès",
+      "sectionDeleteFailed": "Échec de la suppression de la section de table",
+      "added": "Table ajoutée avec succès",
+      "addFailed": "Échec de l'ajout de la table",
+      "updated": "Table mise à jour avec succès",
+      "updateFailed": "Échec de la mise à jour de la table",
+      "deleted": "Table supprimée avec succès",
+      "deleteFailed": "Échec de la suppression de la table"
+    },
+    "user": {
+      "added": "Utilisateur ajouté avec succès",
+      "addFailed": "Échec de l'ajout de l'utilisateur",
+      "updated": "Utilisateur mis à jour avec succès",
+      "updateFailed": "Échec de la mise à jour de l'utilisateur",
+      "deleted": "Utilisateur supprimé avec succès",
+      "deleteFailed": "Échec de la suppression de l'utilisateur",
+      "profileUpdated": "Profil mis à jour avec succès",
+      "profileUpdateFailed": "Échec de la mise à jour du profil",
+      "passwordChanged": "Mot de passe modifié avec succès",
+      "passwordChangeFailed": "Échec de la modification du mot de passe"
+    },
+    "notification": {
+      "settingsUpdated": "Paramètres de notification mis à jour avec succès",
+      "settingsUpdateFailed": "Échec de la mise à jour des paramètres de notification",
+      "markedAsRead": "Notification marquée comme lue",
+      "markAsReadFailed": "Échec du marquage de la notification comme lue",
+      "allMarkedAsRead": "Toutes les notifications marquées comme lues",
+      "allMarkAsReadFailed": "Échec du marquage de toutes les notifications comme lues",
+      "deleted": "Notification supprimée avec succès",
+      "deleteFailed": "Échec de la suppression de la notification",
+      "created": "Notification créée avec succès",
+      "createFailed": "Échec de la création de la notification",
+      "sent": "Notification envoyée avec succès",
+      "sendFailed": "Échec de l'envoi de la notification"
+    },
+    "settings": {
+      "generalUpdated": "Paramètres généraux mis à jour avec succès",
+      "generalUpdateFailed": "Échec de la mise à jour des paramètres généraux",
+      "reportUpdated": "Paramètres de rapport mis à jour avec succès",
+      "reportUpdateFailed": "Échec de la mise à jour des paramètres de rapport",
+      "reportSent": "Rapport envoyé avec succès",
+      "reportSendFailed": "Échec de l'envoi du rapport"
+    },
+    "organization": {
+      "updated": "Données de l'organisation mises à jour avec succès",
+      "updateFailed": "Échec de la mise à jour des données de l'organisation",
+      "permissionsUpdated": "Permissions de l'organisation mises à jour avec succès",
+      "permissionsUpdateFailed": "Échec de la mise à jour des permissions de l'organisation",
+      "payrollPermissionsUpdated": "Permissions de paie mises à jour avec succès",
+      "payrollPermissionsUpdateFailed": "Échec de la mise à jour des permissions de paie"
+    },
+    "export": {
+      "exporting": "Exportation du rapport...",
+      "success": "Rapport exporté avec succès",
+      "failed": "Échec de l'exportation du rapport"
+    },
+    "paymentMethods": {
+      "cash": "Espèces",
+      "card": "Carte",
+      "online": "En ligne"
+    },
+    "stockOperations": {
+      "add": "Ajouter",
+      "subtract": "Soustraire",
+      "update": "Mettre à jour"
+    }
+  },
+  "notificationCenter": {
+    "title": "Notifications",
+    "markAllAsRead": "Tout marquer comme lu",
+    "close": "Fermer",
+    "soundOn": "Activer le son",
+    "soundOff": "Désactiver le son",
+    "stats": {
+      "total": "Total",
+      "unread": "Non lu",
+      "read": "Lu"
+    },
+    "filters": {
+      "all": "Tout",
+      "unread": "Non lu",
+      "read": "Lu",
+      "high": "Élevée",
+      "urgent": "Urgent"
+    },
+    "status": {
+      "unread": "Non lu",
+      "read": "Lu",
+      "willBeRead": "Sera lu...",
+      "actionRequired": "Action requise"
+    },
+    "actions": {
+      "markAsRead": "Marquer comme lu",
+      "delete": "Supprimer"
+    },
+    "messages": {
+      "loading": "Chargement...",
+      "noNotifications": "Aucune notification"
+    }
+  },
+  "notificationManagement": {
+      "title": "Gestion des Notifications",
+      "subtitle": "Gérer et organiser les notifications envoyées aux utilisateurs",
+      "stats": {
+        "total": "Total des Notifications",
+        "unread": "Non lues",
+        "read": "Lues",
+        "categories": "Catégories"
+      },
+      "filters": {
+        "search": "Rechercher",
+        "searchPlaceholder": "Rechercher des notifications...",
+        "category": "Catégorie",
+        "unreadOnly": "Non lues uniquement"
+      },
+      "categories": {
+        "all": "Toutes les Notifications",
+        "session": "Sessions",
+        "order": "Commandes",
+        "inventory": "Inventaire",
+        "billing": "Facturation",
+        "system": "Système",
+        "security": "Sécurité"
+      },
+      "priority": {
+        "low": "Faible",
+        "medium": "Moyenne",
+        "high": "Élevée",
+        "urgent": "Urgente"
+      },
+      "actions": {
+        "markAsRead": "Marquer comme lu",
+        "markAllAsRead": "Tout marquer comme lu",
+        "delete": "Supprimer la notification"
+      },
+      "messages": {
+        "loading": "Chargement des notifications...",
+        "noNotifications": "Aucune notification",
+        "loadError": "Erreur de chargement des notifications",
+        "markedAsRead": "Notification marquée comme lue",
+        "markAsReadError": "Erreur lors du marquage de la notification",
+        "allMarkedAsRead": "Toutes les notifications marquées comme lues",
+        "allMarkAsReadError": "Erreur lors du marquage des notifications",
+        "deleted": "Notification supprimée avec succès",
+        "deleteError": "Erreur lors de la suppression de la notification"
+      },
+      "createdBy": "Par {{name}}"
+    }
 }

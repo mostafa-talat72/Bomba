@@ -93,6 +93,8 @@
     "loginSuccess": "Login successful",
     "loginError": "Login error",
     "logoutSuccess": "Logout successful",
+    "sessionExpired": "Session expired, please login again",
+    "welcome": "Welcome {{name}}!",
     "invalidCredentials": "Invalid credentials",
     "accountInactive": "Account is inactive",
     "loggingIn": "Logging in...",
@@ -206,6 +208,28 @@
       "newOrder": "New order",
       "payment": "New payment",
       "sessionEnded": "Session ended"
+    },
+    "activity": {
+      "session": {
+        "active": "New session started",
+        "completed": "Session completed",
+        "cancelled": "Session cancelled"
+      },
+      "order": {
+        "pending": "New order",
+        "preparing": "Preparing order",
+        "ready": "Order ready",
+        "delivered": "Order delivered",
+        "cancelled": "Order cancelled"
+      },
+      "bill": {
+        "draft": "New bill",
+        "paid": "Bill paid",
+        "partial": "Partial payment",
+        "cancelled": "Bill cancelled"
+      },
+      "table": "Table",
+      "customer": "Customer"
     }
   },
   "cafe": {
@@ -3301,5 +3325,306 @@
         "description": "No payrolls have been created yet"
       }
     }
-  }
+  },
+  "appContext": {
+    "sessionExpired": "Session expired, please login again",
+    "welcome": "Welcome {{name}}!",
+    "logoutSuccess": "Logout successful",
+    "loginFailed": "Invalid credentials",
+    "loginError": "Failed to login",
+    "session": {
+      "created": "New session started on {{deviceName}} - Bill: {{billNumber}}",
+      "createdNoBill": "New session started on {{deviceName}}",
+      "createFailed": "Failed to create session",
+      "updated": "Session updated successfully",
+      "updateFailed": "Failed to update session",
+      "ended": "Session ended on {{deviceName}} - Total cost: {{cost}}",
+      "endedSuccess": "Session ended on {{deviceName}} successfully",
+      "endFailed": "Failed to end session"
+    },
+    "order": {
+      "incompleteData": "Order data is incomplete",
+      "incompleteItems": "Items data is incomplete",
+      "invalidTableId": "Invalid table ID",
+      "created": "New order created: {{orderNumber}}",
+      "createFailed": "Failed to create order",
+      "updated": "Order updated successfully",
+      "updateFailed": "Failed to update order",
+      "insufficientStock": "Insufficient stock to update order",
+      "updateError": "Error occurred while updating order",
+      "preparedUpdated": "Preparation status updated successfully",
+      "preparedUpdateFailed": "Failed to update preparation status",
+      "statusUpdated": "Order status updated successfully",
+      "statusUpdateFailed": "Failed to update order status",
+      "deleted": "Order deleted successfully",
+      "deleteFailed": "Failed to delete order"
+    },
+    "inventory": {
+      "added": "Product added successfully",
+      "addFailed": "Failed to add product",
+      "updated": "Product updated successfully",
+      "updateFailed": "Failed to update product",
+      "stockUpdated": "{{operation}} {{quantity}} units from stock successfully",
+      "stockUpdateFailed": "Failed to update stock",
+      "deleted": "Product deleted successfully",
+      "deleteFailed": "Failed to delete product"
+    },
+    "bill": {
+      "created": "Bill created successfully",
+      "createFailed": "Failed to create bill",
+      "updated": "Bill updated successfully",
+      "updateFailed": "Failed to update bill",
+      "paymentAdded": "Payment of {{amount}} {{currency}} {{method}} added successfully",
+      "paymentAddFailed": "Failed to add payment",
+      "cancelled": "Bill cancelled successfully",
+      "cancelFailed": "Failed to cancel bill",
+      "partialPaymentAdded": "Partial payment recorded successfully",
+      "partialPaymentFailed": "Failed to record partial payment"
+    },
+    "cost": {
+      "added": "Cost added successfully",
+      "addFailed": "Failed to add cost",
+      "updated": "Cost updated successfully",
+      "updateFailed": "Failed to update cost",
+      "deleted": "Cost deleted successfully",
+      "deleteFailed": "Failed to delete cost"
+    },
+    "device": {
+      "added": "Device added successfully",
+      "addFailed": "Failed to add device",
+      "updated": "Device updated successfully",
+      "updateFailed": "Failed to update device",
+      "statusUpdated": "Device status updated successfully",
+      "statusUpdateFailed": "Failed to update device status",
+      "deleted": "Device deleted successfully",
+      "deleteFailed": "Failed to delete device"
+    },
+    "menu": {
+      "itemAdded": "Menu item added successfully",
+      "itemAddFailed": "Failed to add menu item",
+      "itemUpdated": "Menu item updated successfully",
+      "itemUpdateFailed": "Failed to update menu item",
+      "itemDeleted": "Menu item deleted successfully",
+      "itemDeleteFailed": "Failed to delete menu item",
+      "sectionAdded": "Section added successfully",
+      "sectionAddFailed": "Failed to add section",
+      "sectionUpdated": "Section updated successfully",
+      "sectionUpdateFailed": "Failed to update section",
+      "sectionDeleted": "Section deleted successfully",
+      "sectionDeleteFailed": "Failed to delete section",
+      "categoryAdded": "Category added successfully",
+      "categoryAddFailed": "Failed to add category",
+      "categoryUpdated": "Category updated successfully",
+      "categoryUpdateFailed": "Failed to update category",
+      "categoryDeleted": "Category deleted successfully",
+      "categoryDeleteFailed": "Failed to delete category"
+    },
+    "table": {
+      "sectionAdded": "Table section added successfully",
+      "sectionAddFailed": "Failed to add table section",
+      "sectionUpdated": "Table section updated successfully",
+      "sectionUpdateFailed": "Failed to update table section",
+      "sectionDeleted": "Table section deleted successfully",
+      "sectionDeleteFailed": "Failed to delete table section",
+      "added": "Table added successfully",
+      "addFailed": "Failed to add table",
+      "updated": "Table updated successfully",
+      "updateFailed": "Failed to update table",
+      "deleted": "Table deleted successfully",
+      "deleteFailed": "Failed to delete table"
+    },
+    "user": {
+      "added": "User added successfully",
+      "addFailed": "Failed to add user",
+      "updated": "User updated successfully",
+      "updateFailed": "Failed to update user",
+      "deleted": "User deleted successfully",
+      "deleteFailed": "Failed to delete user",
+      "profileUpdated": "Profile updated successfully",
+      "profileUpdateFailed": "Failed to update profile",
+      "passwordChanged": "Password changed successfully",
+      "passwordChangeFailed": "Failed to change password"
+    },
+    "notification": {
+      "settingsUpdated": "Notification settings updated successfully",
+      "settingsUpdateFailed": "Failed to update notification settings",
+      "markedAsRead": "Notification marked as read",
+      "markAsReadFailed": "Failed to mark notification as read",
+      "allMarkedAsRead": "All notifications marked as read",
+      "allMarkAsReadFailed": "Failed to mark all notifications as read",
+      "deleted": "Notification deleted successfully",
+      "deleteFailed": "Failed to delete notification",
+      "created": "Notification created successfully",
+      "createFailed": "Failed to create notification",
+      "sent": "Notification sent successfully",
+      "sendFailed": "Failed to send notification"
+    },
+    "settings": {
+      "generalUpdated": "General settings updated successfully",
+      "generalUpdateFailed": "Failed to update general settings",
+      "reportUpdated": "Report settings updated successfully",
+      "reportUpdateFailed": "Failed to update report settings",
+      "reportSent": "Report sent successfully",
+      "reportSendFailed": "Failed to send report"
+    },
+    "organization": {
+      "updated": "Organization data updated successfully",
+      "updateFailed": "Failed to update organization data",
+      "permissionsUpdated": "Organization permissions updated successfully",
+      "permissionsUpdateFailed": "Failed to update organization permissions",
+      "payrollPermissionsUpdated": "Payroll permissions updated successfully",
+      "payrollPermissionsUpdateFailed": "Failed to update payroll permissions"
+    },
+    "export": {
+      "exporting": "Exporting report...",
+      "success": "Report exported successfully",
+      "failed": "Failed to export report"
+    },
+    "paymentMethods": {
+      "cash": "Cash",
+      "card": "Card",
+      "online": "Online"
+    },
+    "stockOperations": {
+      "add": "Add",
+      "subtract": "Subtract",
+      "update": "Update"
+    }
+  },
+  "toast": {
+    "session": {
+      "started": "New session started on {{deviceName}}",
+      "startedWithBill": "New session started on {{deviceName}} - Bill: {{billNumber}}",
+      "updated": "Session updated successfully",
+      "ended": "Session ended on {{deviceName}} - Total cost: {{cost}}",
+      "endedSuccess": "Session ended on {{deviceName}} successfully",
+      "createError": "Failed to create session",
+      "updateError": "Failed to update session",
+      "endError": "Failed to end session"
+    },
+    "order": {
+      "created": "New order created: {{orderNumber}}",
+      "updated": "Order updated successfully",
+      "preparingUpdated": "Preparation status updated successfully",
+      "statusUpdated": "Order status updated successfully",
+      "incompleteData": "Order data is incomplete",
+      "incompleteItems": "Item data is incomplete",
+      "invalidTable": "Invalid table ID",
+      "insufficientStock": "Insufficient stock to update order",
+      "createError": "Failed to create order",
+      "updateError": "Failed to update order",
+      "statusError": "Failed to update order status"
+    },
+    "inventory": {
+      "added": "Product added successfully",
+      "updated": "Product updated successfully",
+      "stockUpdated": "{{operation}} {{quantity}} units from stock successfully",
+      "addError": "Failed to add product",
+      "updateError": "Failed to update product",
+      "stockError": "Failed to update stock"
+    },
+    "bill": {
+      "created": "Bill created successfully",
+      "updated": "Bill updated successfully",
+      "cancelled": "Bill cancelled successfully",
+      "paymentAdded": "Payment of {{amount}} {{currency}} {{method}} added successfully",
+      "partialPayment": "Partial payment recorded successfully",
+      "createError": "Failed to create bill",
+      "updateError": "Failed to update bill",
+      "cancelError": "Failed to cancel bill",
+      "paymentError": "Failed to add payment",
+      "partialPaymentError": "Failed to record partial payment"
+    },
+    "stockOperations": {
+      "add": "Added",
+      "subtract": "Subtracted",
+      "update": "Updated"
+    },
+    "paymentMethods": {
+      "cash": "cash",
+      "card": "card",
+      "online": "online"
+    }
+  },
+  "notificationCenter": {
+    "title": "Notifications",
+    "markAllAsRead": "Mark All as Read",
+    "close": "Close",
+    "soundOn": "Sound On",
+    "soundOff": "Sound Off",
+    "stats": {
+      "total": "Total",
+      "unread": "Unread",
+      "read": "Read"
+    },
+    "filters": {
+      "all": "All",
+      "unread": "Unread",
+      "read": "Read",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "status": {
+      "unread": "Unread",
+      "read": "Read",
+      "willBeRead": "Will be read...",
+      "actionRequired": "Action Required"
+    },
+    "actions": {
+      "markAsRead": "Mark as Read",
+      "delete": "Delete"
+    },
+    "messages": {
+      "loading": "Loading...",
+      "noNotifications": "No notifications"
+    }
+  },
+  "notificationManagement": {
+      "title": "Notification Management",
+      "subtitle": "Manage and organize notifications sent to users",
+      "stats": {
+        "total": "Total Notifications",
+        "unread": "Unread",
+        "read": "Read",
+        "categories": "Categories"
+      },
+      "filters": {
+        "search": "Search",
+        "searchPlaceholder": "Search notifications...",
+        "category": "Category",
+        "unreadOnly": "Unread only"
+      },
+      "categories": {
+        "all": "All Notifications",
+        "session": "Sessions",
+        "order": "Orders",
+        "inventory": "Inventory",
+        "billing": "Billing",
+        "system": "System",
+        "security": "Security"
+      },
+      "priority": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "urgent": "Urgent"
+      },
+      "actions": {
+        "markAsRead": "Mark as read",
+        "markAllAsRead": "Mark all as read",
+        "delete": "Delete notification"
+      },
+      "messages": {
+        "loading": "Loading notifications...",
+        "noNotifications": "No notifications",
+        "loadError": "Error loading notifications",
+        "markedAsRead": "Notification marked as read",
+        "markAsReadError": "Error marking notification as read",
+        "allMarkedAsRead": "All notifications marked as read",
+        "allMarkAsReadError": "Error marking notifications as read",
+        "deleted": "Notification deleted successfully",
+        "deleteError": "Error deleting notification"
+      },
+      "createdBy": "By {{name}}"
+    }
 }

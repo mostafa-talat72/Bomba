@@ -632,17 +632,22 @@ export const updateStock = async (req, res) => {
 
         // Create notification for low stock or out of stock
         try {
+            // Get user language
+            const userLanguage = req.user.preferences?.language || 'ar';
+            
             if (item.currentStock === 0) {
                 await NotificationService.createInventoryNotification(
                     "out_of_stock",
                     item,
-                    req.user._id
+                    req.user._id,
+                    userLanguage
                 );
             } else if (item.isLowStock) {
                 await NotificationService.createInventoryNotification(
                     "low_stock",
                     item,
-                    req.user._id
+                    req.user._id,
+                    userLanguage
                 );
             }
         } catch (notificationError) {

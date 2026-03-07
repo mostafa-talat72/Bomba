@@ -2,7 +2,7 @@ import Attendance from '../models/Attendance.js';
 import Employee from '../models/Employee.js';
 import Settings from '../models/Settings.js';
 import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { getDateFnsLocale } from '../utils/localeHelper.js';
 
 // Get attendance records
 export const getAttendance = async (req, res) => {
@@ -89,7 +89,7 @@ export const getAttendanceByMonth = async (req, res) => {
       return {
         _id: a._id,
         date: format(a.date, 'yyyy-MM-dd'),
-        day: format(a.date, 'EEEE', { locale: ar }),
+        day: format(a.date, 'EEEE', { locale: getDateFnsLocale(req.user) }),
         status: a.status,
         checkIn: a.checkIn ? format(a.checkIn, 'HH:mm') : null,
         checkOut: a.checkOut ? format(a.checkOut, 'HH:mm') : null,
@@ -164,7 +164,7 @@ export const markAttendance = async (req, res) => {
     }
     
     const attendanceDate = new Date(date);
-    const dayName = format(attendanceDate, 'EEEE', { locale: ar });
+    const dayName = format(attendanceDate, 'EEEE', { locale: getDateFnsLocale(req.user) });
     
     // حساب الساعات
     let totalHours = 0;

@@ -1,6 +1,7 @@
 import Organization from "../models/Organization.js";
 import User from "../models/User.js";
 import organizationWebsiteService from "../services/organizationWebsiteService.js";
+import { getUserLocale } from "../utils/localeHelper.js";
 
 // @desc    Get organization details by ID
 // @route   GET /api/organization/:id
@@ -790,9 +791,10 @@ export const sendReportNow = async (req, res) => {
 
         console.log('📊 ===== SEND REPORT NOW =====');
         console.log('Organization:', organization.name);
+        const userLocale = getUserLocale(req.user);
         console.log('Report Period:', {
-            start: startOfReport.toLocaleString('ar-EG'),
-            end: endOfReport.toLocaleString('ar-EG')
+            start: startOfReport.toLocaleString(userLocale),
+            end: endOfReport.toLocaleString(userLocale)
         });
 
         // Fetch data using the SAME logic as Reports page
@@ -925,7 +927,7 @@ export const sendReportNow = async (req, res) => {
         })).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
         const reportData = {
-            date: startOfReport.toLocaleDateString("ar-EG"),
+            date: startOfReport.toLocaleDateString(userLocale),
             organizationName: organization.name,
             totalRevenue: totalRevenue || 0,
             totalCosts: totalCosts || 0,
@@ -942,15 +944,20 @@ export const sendReportNow = async (req, res) => {
             },
             startOfReport: startOfReport,
             endOfReport: endOfReport,
-            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})} 
-                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}`,
+            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString(userLocale, {weekday: 'long', day: 'numeric', month: 'long'})} 
+                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString(userLocale, {weekday: 'long', day: 'numeric', month: 'long'})}`,
         };
 
         // Generate PDF
         const pdfBuffer = await generateDailyReportPDF(reportData);
 
+        // Get organization owner's language and currency preferences
+        const owner = await User.findById(organization.owner).select('preferences').lean();
+        const ownerLanguage = owner?.preferences?.language || 'ar';
+        const organizationCurrency = organization.currency || 'EGP';
+
         // Send report via email with PDF attachment
-        await sendDailyReport(reportData, reportEmails, pdfBuffer);
+        await sendDailyReport(reportData, reportEmails, pdfBuffer, ownerLanguage, organizationCurrency);
 
         res.json({
             success: true,

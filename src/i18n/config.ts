@@ -48,6 +48,7 @@ i18n.on('languageChanged', (lng) => {
   if (language) {
     document.documentElement.lang = lng;
     document.documentElement.dir = language.dir;
+    document.body.dir = language.dir;
     localStorage.setItem('language', lng);
   }
 });

@@ -128,6 +128,19 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        // User-specific preferences (not organization-wide)
+        preferences: {
+            theme: {
+                type: String,
+                enum: ["light", "dark", "auto"],
+                default: "light",
+            },
+            language: {
+                type: String,
+                enum: ["ar", "en", "fr"],
+                default: "ar",
+            },
+        },
     },
     {
         timestamps: true,

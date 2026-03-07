@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useRe
 import api, { User, Session, Order, InventoryItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useSmartPolling } from '../hooks/useSmartPolling';
+import { useTranslation } from 'react-i18next';
 
 // تعريف Notification (مأخوذ من NotificationCenter)
 interface Notification {
@@ -217,6 +218,8 @@ export type Filter = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
+  
   // تحديد الـ initial loading state بناءً على الصفحة الحالية
   const getInitialLoadingState = () => {
     const currentPath = window.location.pathname;
@@ -258,6 +261,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const navigate = useNavigate();
   const firstLoginRef = useRef(true);
+  const isApplyingSettingsRef = useRef(false); // Prevent infinite loop in loadAndApplySettings
 
   // Force logout and redirect if token is missing (session expired or refresh failed)
   useEffect(() => {
@@ -414,7 +418,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
           
           if (!isBillView) {
-            showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
+            showNotification(t('auth.sessionExpired'), 'error');
             navigate('/login', { replace: true });
           }
         } else {
@@ -441,7 +445,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
       
       if (!isBillView) {
-        showNotification('انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد', 'error');
+        showNotification(t('auth.sessionExpired'), 'error');
         navigate('/login', { replace: true });
       }
     } finally {
@@ -462,7 +466,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Load and apply settings (theme, language, currency, timezone)
   const loadAndApplySettings = async (): Promise<void> => {
+    // Prevent infinite loop - if already applying settings, skip
+    if (isApplyingSettingsRef.current) {
+      return;
+    }
+    
     try {
+      isApplyingSettingsRef.current = true;
+      
       // Load user's general settings (theme, language)
       const generalSettingsResponse = await api.getGeneralSettings();
       if (generalSettingsResponse.success && generalSettingsResponse.data) {
@@ -487,22 +498,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
         }
         
-        // Apply language and direction
-        if (language && window.i18n) {
+        // Apply language and direction ONLY if different from current
+        if (language && window.i18n && window.i18n.language !== language) {
+          // Store language in localStorage first
+          localStorage.setItem('language', language);
+          
+          // Change language (this will trigger languageChanged event)
           await window.i18n.changeLanguage(language);
           
           // Apply language to document
           document.documentElement.lang = language;
           
-          // Apply direction based on language
+          // Apply direction based on language (ar is RTL, en and fr are LTR)
           const isRTL = language === 'ar';
           document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
-          
-          // Also update body direction for better compatibility
           document.body.dir = isRTL ? 'rtl' : 'ltr';
-          
-          // Store language in localStorage
-          localStorage.setItem('language', language);
         }
       }
       
@@ -521,6 +531,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     } catch (error) {
       console.error('Error loading and applying settings:', error);
+    } finally {
+      // Reset flag after a short delay to allow for legitimate subsequent calls
+      setTimeout(() => {
+        isApplyingSettingsRef.current = false;
+      }, 1000);
     }
   };
 
@@ -542,7 +557,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await refreshData();
         // رسالة ترحيب فقط عند تسجيل الدخول وليس عند reload
         if (firstLoginRef.current) {
-          showNotification(`مرحباً بك يا ${user.name}!`, 'success');
+          showNotification(t('auth.welcome', { name: user.name }), 'success');
           firstLoginRef.current = false;
         }
         return { success: true };
@@ -627,7 +642,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // إعادة توجيه إلى صفحة تسجيل الدخول
     navigate('/login', { replace: true });
-    showNotification('تم تسجيل الخروج بنجاح', 'info');
+    showNotification(t('auth.logoutSuccess'), 'info');
 
     setIsLoggingOut(false); // إعادة تعيين العلم
   };

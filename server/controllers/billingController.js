@@ -3,6 +3,7 @@ import Bill from "../models/Bill.js";
 import Order from "../models/Order.js";
 import Session from "../models/Session.js";
 import Table from "../models/Table.js";
+import Organization from "../models/Organization.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import Subscription from "../models/Subscription.js";
@@ -612,10 +613,17 @@ export const createBill = async (req, res) => {
 
         // Create notification for new bill
         try {
+            // Get user language and organization currency
+            const userLanguage = req.user.preferences?.language || 'ar';
+            const organization = await Organization.findById(req.user.organization).select('currency');
+            const currency = organization?.currency || 'EGP';
+            
             await NotificationService.createBillingNotification(
                 "created",
                 bill,
-                req.user._id
+                req.user._id,
+                userLanguage,
+                currency
             );
         } catch (notificationError) {
             Logger.error(
@@ -987,10 +995,16 @@ export const updateBill = async (req, res) => {
 
         if (prevStatus !== "paid" && updatedBill.status === "paid") {
             try {
-                await NotificationService.createBillNotification(
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(req.user.organization).select('currency');
+                const currency = organization?.currency || 'EGP';
+                
+                await NotificationService.createBillingNotification(
                     "paid",
                     updatedBill,
-                    req.user._id
+                    req.user._id,
+                    userLanguage,
+                    currency
                 );
             } catch (notificationError) {
                 Logger.error(
@@ -1298,19 +1312,32 @@ export const addPayment = async (req, res) => {
         }
 
         // Create notification in background (non-blocking)
-        setImmediate(() => {
-            if (bill.status === "paid") {
-                NotificationService.createBillingNotification(
-                    "paid",
-                    bill,
-                    req.user._id
-                ).catch(err => Logger.error("Failed to create payment notification:", err));
-            } else if (bill.paid > 0) {
-                NotificationService.createBillingNotification(
-                    "partial_payment",
-                    bill,
-                    req.user._id
-                ).catch(err => Logger.error("Failed to create payment notification:", err));
+        setImmediate(async () => {
+            try {
+                // Get user language and organization currency
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(req.user.organization).select('currency');
+                const currency = organization?.currency || 'EGP';
+                
+                if (bill.status === "paid") {
+                    NotificationService.createBillingNotification(
+                        "paid",
+                        bill,
+                        req.user._id,
+                        userLanguage,
+                        currency
+                    ).catch(err => Logger.error("Failed to create payment notification:", err));
+                } else if (bill.paid > 0) {
+                    NotificationService.createBillingNotification(
+                        "partial_payment",
+                        bill,
+                        req.user._id,
+                        userLanguage,
+                        currency
+                    ).catch(err => Logger.error("Failed to create payment notification:", err));
+                }
+            } catch (err) {
+                Logger.error("Failed to get user/org data for notification:", err);
             }
         });
 
@@ -2741,10 +2768,17 @@ export const payForItems = async (req, res) => {
 
             // Create notification for item payment
             try {
+                // Get user language and organization currency
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(req.user.organization).select('currency');
+                const currency = organization?.currency || 'EGP';
+                
                 await NotificationService.createBillingNotification(
                     bill.status === "paid" ? "paid" : "partial_payment",
                     bill,
-                    req.user._id
+                    req.user._id,
+                    userLanguage,
+                    currency
                 );
             } catch (notificationError) {
                 Logger.error(
@@ -2891,10 +2925,17 @@ export const paySessionPartial = async (req, res) => {
 
             // Create notification for session payment
             try {
+                // Get user language and organization currency
+                const userLanguage = req.user.preferences?.language || 'ar';
+                const organization = await Organization.findById(req.user.organization).select('currency');
+                const currency = organization?.currency || 'EGP';
+                
                 await NotificationService.createBillingNotification(
                     bill.status === "paid" ? "paid" : "partial_payment",
                     bill,
-                    req.user._id
+                    req.user._id,
+                    userLanguage,
+                    currency
                 );
             } catch (notificationError) {
                 Logger.error(

@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import { getNotificationTranslation, getActionTranslation } from "../utils/notificationTranslations.js";
+import { getCurrencySymbol } from "../utils/localeHelper.js";
 
 const notificationSchema = new mongoose.Schema(
     {
@@ -193,47 +195,58 @@ notificationSchema.methods.shouldReceive = function (user) {
 notificationSchema.statics.createSessionNotification = function (
     type,
     session,
-    createdBy
+    createdBy,
+    language = 'ar',
+    currency = 'EGP'
 ) {
-    const notifications = {
-        started: {
-            title: "جلسة جديدة",
-            message: `تم بدء جلسة جديدة على ${session.deviceName}`,
-            type: "session",
-            category: "session",
-            priority: "medium",
-            targetRoles: ["admin", "staff"],
-            targetPermissions: ["playstation", "computer"],
-        },
-        ended: {
-            title: "انتهاء الجلسة",
-            message: `انتهت الجلسة على ${session.deviceName} - التكلفة: ${session.finalCost} ج.م`,
-            type: "session",
-            category: "session",
-            priority: "medium",
-            targetRoles: ["admin", "staff"],
-            targetPermissions: ["playstation", "computer"],
-        },
-        paused: {
-            title: "إيقاف مؤقت للجلسة",
-            message: `تم إيقاف الجلسة مؤقتاً على ${session.deviceName}`,
-            type: "warning",
-            category: "session",
-            priority: "low",
-            targetRoles: ["admin", "staff"],
-            targetPermissions: ["playstation", "computer"],
-        },
+    const currencySymbol = getCurrencySymbol(currency, language);
+    
+    // Get translations for all languages
+    const translations = {
+        ar: {},
+        en: {},
+        fr: {}
     };
+    
+    if (type === 'started') {
+        translations.ar = getNotificationTranslation('session', 'started', 'ar', session.deviceName);
+        translations.en = getNotificationTranslation('session', 'started', 'en', session.deviceName);
+        translations.fr = getNotificationTranslation('session', 'started', 'fr', session.deviceName);
+    } else if (type === 'ended') {
+        const arSymbol = getCurrencySymbol(currency, 'ar');
+        const enSymbol = getCurrencySymbol(currency, 'en');
+        const frSymbol = getCurrencySymbol(currency, 'fr');
+        translations.ar = getNotificationTranslation('session', 'ended', 'ar', session.deviceName, session.finalCost, arSymbol);
+        translations.en = getNotificationTranslation('session', 'ended', 'en', session.deviceName, session.finalCost, enSymbol);
+        translations.fr = getNotificationTranslation('session', 'ended', 'fr', session.deviceName, session.finalCost, frSymbol);
+    } else if (type === 'paused') {
+        translations.ar = getNotificationTranslation('session', 'paused', 'ar', session.deviceName);
+        translations.en = getNotificationTranslation('session', 'paused', 'en', session.deviceName);
+        translations.fr = getNotificationTranslation('session', 'paused', 'fr', session.deviceName);
+    } else {
+        return null;
+    }
 
-    const notificationData = notifications[type];
-    if (!notificationData) return null;
+    // Use current language for title and message
+    const currentTranslation = translations[language];
 
     return new this({
-        ...notificationData,
-        metadata: { sessionId: session._id, deviceType: session.deviceType },
+        title: currentTranslation.title,
+        message: currentTranslation.message,
+        type: type === 'paused' ? 'warning' : 'session',
+        category: 'session',
+        priority: type === 'paused' ? 'low' : 'medium',
+        targetRoles: ['admin', 'staff'],
+        targetPermissions: ['playstation', 'computer'],
+        metadata: { 
+            sessionId: session._id, 
+            deviceType: session.deviceType,
+            language,
+            currency,
+            translations
+        },
         createdBy,
-        organization:
-            session.organization || (createdBy && createdBy.organization),
+        organization: session.organization || (createdBy && createdBy.organization),
     });
 };
 
@@ -241,98 +254,116 @@ notificationSchema.statics.createSessionNotification = function (
 notificationSchema.statics.createOrderNotification = function (
     type,
     order,
-    createdBy
+    createdBy,
+    language = 'ar'
 ) {
-    const notifications = {
-        created: {
-            title: "طلب جديد",
-            message: `طلب جديد من ${order.customerName} - ${order.items.length} عنصر`,
-            type: "order",
-            category: "order",
-            priority: "high",
-            targetRoles: ["kitchen", "admin"],
-            targetPermissions: ["cafe"],
-            actionRequired: true,
-            actionUrl: `/cafe?tab=orders`,
-            actionText: "عرض الطلب",
+    // Get translations for all languages
+    const translations = {
+        ar: {},
+        en: {},
+        fr: {}
+    };
+    
+    let actionText;
+    
+    if (type === 'created') {
+        translations.ar = getNotificationTranslation('order', 'created', 'ar', order.customerName, order.items.length);
+        translations.en = getNotificationTranslation('order', 'created', 'en', order.customerName, order.items.length);
+        translations.fr = getNotificationTranslation('order', 'created', 'fr', order.customerName, order.items.length);
+        actionText = getActionTranslation('viewOrder', language);
+    } else if (type === 'ready') {
+        translations.ar = getNotificationTranslation('order', 'ready', 'ar', order.orderNumber);
+        translations.en = getNotificationTranslation('order', 'ready', 'en', order.orderNumber);
+        translations.fr = getNotificationTranslation('order', 'ready', 'fr', order.orderNumber);
+        actionText = getActionTranslation('deliverOrder', language);
+    } else if (type === 'cancelled') {
+        translations.ar = getNotificationTranslation('order', 'cancelled', 'ar', order.orderNumber);
+        translations.en = getNotificationTranslation('order', 'cancelled', 'en', order.orderNumber);
+        translations.fr = getNotificationTranslation('order', 'cancelled', 'fr', order.orderNumber);
+        actionText = null;
+    } else {
+        return null;
+    }
+
+    // Use current language for title and message
+    const currentTranslation = translations[language];
+
+    const notificationData = {
+        title: currentTranslation.title,
+        message: currentTranslation.message,
+        type: type === 'cancelled' ? 'error' : type === 'ready' ? 'success' : 'order',
+        category: 'order',
+        priority: type === 'created' ? 'high' : 'medium',
+        targetRoles: type === 'created' ? ['kitchen', 'admin'] : type === 'ready' ? ['staff', 'admin'] : ['admin', 'kitchen'],
+        targetPermissions: ['cafe'],
+        actionRequired: type !== 'cancelled',
+        actionUrl: type !== 'cancelled' ? `/cafe?tab=orders` : null,
+        actionText,
+        metadata: { 
+            orderId: order._id, 
+            orderNumber: order.orderNumber,
+            language,
+            translations
         },
-        ready: {
-            title: "طلب جاهز",
-            message: `الطلب ${order.orderNumber} جاهز للتسليم`,
-            type: "success",
-            category: "order",
-            priority: "medium",
-            targetRoles: ["staff", "admin"],
-            targetPermissions: ["cafe"],
-            actionRequired: true,
-            actionUrl: `/cafe?tab=orders`,
-            actionText: "تسليم الطلب",
-        },
-        cancelled: {
-            title: "طلب ملغي",
-            message: `تم إلغاء الطلب ${order.orderNumber}`,
-            type: "error",
-            category: "order",
-            priority: "medium",
-            targetRoles: ["admin", "kitchen"],
-            targetPermissions: ["cafe"],
-        },
+        createdBy,
+        organization: order.organization || (createdBy && createdBy.organization),
     };
 
-    const notificationData = notifications[type];
-    if (!notificationData) return null;
-
-    return new this({
-        ...notificationData,
-        metadata: { orderId: order._id, orderNumber: order.orderNumber },
-        createdBy,
-        organization:
-            order.organization || (createdBy && createdBy.organization),
-    });
+    return new this(notificationData);
 };
 
 // Static method to create inventory notification
 notificationSchema.statics.createInventoryNotification = function (
     type,
     item,
-    createdBy
+    createdBy,
+    language = 'ar'
 ) {
-    const notifications = {
-        low_stock: {
-            title: "مخزون منخفض",
-            message: `المخزون منخفض للمنتج: ${item.name} (${item.currentStock} ${item.unit})`,
-            type: "warning",
-            category: "inventory",
-            priority: "high",
-            targetRoles: ["admin"],
-            targetPermissions: ["inventory"],
-            actionRequired: true,
-            actionUrl: `/inventory`,
-            actionText: "إدارة المخزون",
-        },
-        out_of_stock: {
-            title: "نفاد المخزون",
-            message: `نفد المخزون للمنتج: ${item.name}`,
-            type: "error",
-            category: "inventory",
-            priority: "urgent",
-            targetRoles: ["admin"],
-            targetPermissions: ["inventory"],
-            actionRequired: true,
-            actionUrl: `/inventory`,
-            actionText: "إعادة التوريد",
-        },
+    // Get translations for all languages
+    const translations = {
+        ar: {},
+        en: {},
+        fr: {}
     };
+    
+    let actionText;
+    
+    if (type === 'low_stock') {
+        translations.ar = getNotificationTranslation('inventory', 'low_stock', 'ar', item.name, item.currentStock, item.unit);
+        translations.en = getNotificationTranslation('inventory', 'low_stock', 'en', item.name, item.currentStock, item.unit);
+        translations.fr = getNotificationTranslation('inventory', 'low_stock', 'fr', item.name, item.currentStock, item.unit);
+        actionText = getActionTranslation('manageInventory', language);
+    } else if (type === 'out_of_stock') {
+        translations.ar = getNotificationTranslation('inventory', 'out_of_stock', 'ar', item.name);
+        translations.en = getNotificationTranslation('inventory', 'out_of_stock', 'en', item.name);
+        translations.fr = getNotificationTranslation('inventory', 'out_of_stock', 'fr', item.name);
+        actionText = getActionTranslation('restock', language);
+    } else {
+        return null;
+    }
 
-    const notificationData = notifications[type];
-    if (!notificationData) return null;
+    // Use current language for title and message
+    const currentTranslation = translations[language];
 
     return new this({
-        ...notificationData,
-        metadata: { itemId: item._id, itemName: item.name },
+        title: currentTranslation.title,
+        message: currentTranslation.message,
+        type: type === 'out_of_stock' ? 'error' : 'warning',
+        category: 'inventory',
+        priority: type === 'out_of_stock' ? 'urgent' : 'high',
+        targetRoles: ['admin'],
+        targetPermissions: ['inventory'],
+        actionRequired: true,
+        actionUrl: `/inventory`,
+        actionText,
+        metadata: { 
+            itemId: item._id, 
+            itemName: item.name,
+            language,
+            translations
+        },
         createdBy,
-        organization:
-            item.organization || (createdBy && createdBy.organization),
+        organization: item.organization || (createdBy && createdBy.organization),
     });
 };
 
@@ -340,50 +371,64 @@ notificationSchema.statics.createInventoryNotification = function (
 notificationSchema.statics.createBillingNotification = function (
     type,
     bill,
-    createdBy
+    createdBy,
+    language = 'ar',
+    currency = 'EGP'
 ) {
-    const notifications = {
-        created: {
-            title: "فاتورة جديدة",
-            message: `فاتورة جديدة ${bill.billNumber} - ${bill.customerName}`,
-            type: "billing",
-            category: "billing",
-            priority: "medium",
-            targetRoles: ["admin", "cashier"],
-            targetPermissions: ["billing"],
-            actionRequired: true,
-            actionUrl: `/billing`,
-            actionText: "عرض الفاتورة",
-        },
-        paid: {
-            title: "دفع مكتمل",
-            message: `تم دفع الفاتورة ${bill.billNumber} بالكامل`,
-            type: "success",
-            category: "billing",
-            priority: "low",
-            targetRoles: ["admin", "cashier"],
-            targetPermissions: ["billing"],
-        },
-        partial_payment: {
-            title: "دفع جزئي",
-            message: `تم دفع جزء من الفاتورة ${bill.billNumber} - المتبقي: ${bill.remaining} ج.م`,
-            type: "info",
-            category: "billing",
-            priority: "medium",
-            targetRoles: ["admin", "cashier"],
-            targetPermissions: ["billing"],
-        },
+    // Get translations for all languages
+    const translations = {
+        ar: {},
+        en: {},
+        fr: {}
     };
+    
+    let actionText;
+    
+    if (type === 'created') {
+        translations.ar = getNotificationTranslation('billing', 'created', 'ar', bill.billNumber, bill.customerName);
+        translations.en = getNotificationTranslation('billing', 'created', 'en', bill.billNumber, bill.customerName);
+        translations.fr = getNotificationTranslation('billing', 'created', 'fr', bill.billNumber, bill.customerName);
+        actionText = getActionTranslation('viewBill', language);
+    } else if (type === 'paid') {
+        translations.ar = getNotificationTranslation('billing', 'paid', 'ar', bill.billNumber);
+        translations.en = getNotificationTranslation('billing', 'paid', 'en', bill.billNumber);
+        translations.fr = getNotificationTranslation('billing', 'paid', 'fr', bill.billNumber);
+        actionText = null;
+    } else if (type === 'partial_payment') {
+        const arSymbol = getCurrencySymbol(currency, 'ar');
+        const enSymbol = getCurrencySymbol(currency, 'en');
+        const frSymbol = getCurrencySymbol(currency, 'fr');
+        translations.ar = getNotificationTranslation('billing', 'partial_payment', 'ar', bill.billNumber, bill.remaining, arSymbol);
+        translations.en = getNotificationTranslation('billing', 'partial_payment', 'en', bill.billNumber, bill.remaining, enSymbol);
+        translations.fr = getNotificationTranslation('billing', 'partial_payment', 'fr', bill.billNumber, bill.remaining, frSymbol);
+        actionText = null;
+    } else {
+        return null;
+    }
 
-    const notificationData = notifications[type];
-    if (!notificationData) return null;
+    // Use current language for title and message
+    const currentTranslation = translations[language];
 
     return new this({
-        ...notificationData,
-        metadata: { billId: bill._id, billNumber: bill.billNumber },
+        title: currentTranslation.title,
+        message: currentTranslation.message,
+        type: type === 'paid' ? 'success' : type === 'partial_payment' ? 'info' : 'billing',
+        category: 'billing',
+        priority: type === 'paid' ? 'low' : 'medium',
+        targetRoles: ['admin', 'cashier'],
+        targetPermissions: ['billing'],
+        actionRequired: type === 'created',
+        actionUrl: type === 'created' ? `/billing` : null,
+        actionText,
+        metadata: { 
+            billId: bill._id, 
+            billNumber: bill.billNumber,
+            language,
+            currency,
+            translations
+        },
         createdBy,
-        organization:
-            bill.organization || (createdBy && createdBy.organization),
+        organization: bill.organization || (createdBy && createdBy.organization),
     });
 };
 

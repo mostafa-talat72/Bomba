@@ -93,6 +93,8 @@
     "loginSuccess": "تم تسجيل الدخول بنجاح",
     "loginError": "خطأ في تسجيل الدخول",
     "logoutSuccess": "تم تسجيل الخروج بنجاح",
+    "sessionExpired": "انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد",
+    "welcome": "مرحباً بك يا {{name}}!",
     "invalidCredentials": "بيانات الدخول غير صحيحة",
     "accountInactive": "الحساب غير نشط",
     "loggingIn": "جاري الدخول...",
@@ -206,6 +208,28 @@
       "newOrder": "طلب جديد",
       "payment": "دفعة جديدة",
       "sessionEnded": "انتهت جلسة"
+    },
+    "activity": {
+      "session": {
+        "active": "بدء جلسة جديدة",
+        "completed": "انتهاء جلسة",
+        "cancelled": "إلغاء جلسة"
+      },
+      "order": {
+        "pending": "طلب جديد",
+        "preparing": "جاري تحضير طلب",
+        "ready": "طلب جاهز",
+        "delivered": "تم تسليم طلب",
+        "cancelled": "إلغاء طلب"
+      },
+      "bill": {
+        "draft": "فاتورة جديدة",
+        "paid": "دفع فاتورة",
+        "partial": "دفع جزئي",
+        "cancelled": "إلغاء فاتورة"
+      },
+      "table": "طاولة",
+      "customer": "عميل"
     }
   },
   "cafe": {
@@ -3296,5 +3320,363 @@
         "description": "لم يتم إنشاء أي كشوف رواتب بعد"
       }
     }
+  },
+  "appContext": {
+    "sessionExpired": "انتهت صلاحية الجلسة، يرجى تسجيل الدخول من جديد",
+    "welcome": "مرحباً بك يا {{name}}!",
+    "logoutSuccess": "تم تسجيل الخروج بنجاح",
+    "loginFailed": "بيانات الدخول غير صحيحة",
+    "loginError": "فشل في تسجيل الدخول",
+    "session": {
+      "created": "تم بدء جلسة جديدة على {{deviceName}} - الفاتورة: {{billNumber}}",
+      "createdNoBill": "تم بدء جلسة جديدة على {{deviceName}}",
+      "createFailed": "فشل في إنشاء الجلسة",
+      "updated": "تم تحديث الجلسة بنجاح",
+      "updateFailed": "فشل في تحديث الجلسة",
+      "ended": "تم إنهاء الجلسة على {{deviceName}} - إجمالي التكلفة: {{cost}}",
+      "endedSuccess": "تم إنهاء الجلسة على {{deviceName}} بنجاح",
+      "endFailed": "فشل في إنهاء الجلسة"
+    },
+    "order": {
+      "incompleteData": "بيانات الطلب غير مكتملة",
+      "incompleteItems": "بيانات العناصر غير مكتملة",
+      "invalidTableId": "معرف الطاولة غير صحيح",
+      "created": "تم إنشاء طلب جديد: {{orderNumber}}",
+      "createFailed": "فشل في إنشاء الطلب",
+      "updated": "تم تحديث الطلب بنجاح",
+      "updateFailed": "فشل في تحديث الطلب",
+      "insufficientStock": "المخزون غير كافي لتحديث الطلب",
+      "updateError": "حدث خطأ أثناء تحديث الطلب",
+      "preparedUpdated": "تم تحديث حالة التجهيز بنجاح",
+      "preparedUpdateFailed": "فشل في تحديث حالة التجهيز",
+      "statusUpdated": "تم تحديث حالة الطلب بنجاح",
+      "statusUpdateFailed": "فشل في تحديث حالة الطلب",
+      "deleted": "تم حذف الطلب بنجاح",
+      "deleteFailed": "فشل في حذف الطلب"
+    },
+    "inventory": {
+      "added": "تم إضافة المنتج بنجاح",
+      "addFailed": "فشل في إضافة المنتج",
+      "updated": "تم تحديث المنتج بنجاح",
+      "updateFailed": "فشل في تحديث المنتج",
+      "stockUpdated": "تم {{operation}} {{quantity}} وحدة من المخزون بنجاح",
+      "stockUpdateFailed": "فشل في تحديث المخزون",
+      "deleted": "تم حذف المنتج بنجاح",
+      "deleteFailed": "فشل في حذف المنتج"
+    },
+    "bill": {
+      "created": "تم إنشاء الفاتورة بنجاح",
+      "createFailed": "فشل في إنشاء الفاتورة",
+      "updated": "تم تحديث الفاتورة بنجاح",
+      "updateFailed": "فشل في تحديث الفاتورة",
+      "paymentAdded": "تم إضافة دفعة {{amount}} {{currency}} {{method}} بنجاح",
+      "paymentAddFailed": "فشل في إضافة الدفعة",
+      "cancelled": "تم إلغاء الفاتورة بنجاح",
+      "cancelFailed": "فشل في إلغاء الفاتورة",
+      "partialPaymentAdded": "تم تسجيل الدفع الجزئي بنجاح",
+      "partialPaymentFailed": "فشل في تسجيل الدفع الجزئي"
+    },
+    "cost": {
+      "added": "تم إضافة التكلفة بنجاح",
+      "addFailed": "فشل في إضافة التكلفة",
+      "updated": "تم تحديث التكلفة بنجاح",
+      "updateFailed": "فشل في تحديث التكلفة",
+      "deleted": "تم حذف التكلفة بنجاح",
+      "deleteFailed": "فشل في حذف التكلفة"
+    },
+    "device": {
+      "added": "تم إضافة الجهاز بنجاح",
+      "addFailed": "فشل في إضافة الجهاز",
+      "updated": "تم تحديث الجهاز بنجاح",
+      "updateFailed": "فشل في تحديث الجهاز",
+      "statusUpdated": "تم تحديث حالة الجهاز بنجاح",
+      "statusUpdateFailed": "فشل في تحديث حالة الجهاز",
+      "deleted": "تم حذف الجهاز بنجاح",
+      "deleteFailed": "فشل في حذف الجهاز"
+    },
+    "menu": {
+      "itemAdded": "تم إضافة عنصر القائمة بنجاح",
+      "itemAddFailed": "فشل في إضافة عنصر القائمة",
+      "itemUpdated": "تم تحديث عنصر القائمة بنجاح",
+      "itemUpdateFailed": "فشل في تحديث عنصر القائمة",
+      "itemDeleted": "تم حذف عنصر القائمة بنجاح",
+      "itemDeleteFailed": "فشل في حذف عنصر القائمة",
+      "sectionAdded": "تم إضافة القسم بنجاح",
+      "sectionAddFailed": "فشل في إضافة القسم",
+      "sectionUpdated": "تم تحديث القسم بنجاح",
+      "sectionUpdateFailed": "فشل في تحديث القسم",
+      "sectionDeleted": "تم حذف القسم بنجاح",
+      "sectionDeleteFailed": "فشل في حذف القسم",
+      "categoryAdded": "تم إضافة الفئة بنجاح",
+      "categoryAddFailed": "فشل في إضافة الفئة",
+      "categoryUpdated": "تم تحديث الفئة بنجاح",
+      "categoryUpdateFailed": "فشل في تحديث الفئة",
+      "categoryDeleted": "تم حذف الفئة بنجاح",
+      "categoryDeleteFailed": "فشل في حذف الفئة"
+    },
+    "table": {
+      "sectionAdded": "تم إضافة قسم الطاولات بنجاح",
+      "sectionAddFailed": "فشل في إضافة قسم الطاولات",
+      "sectionUpdated": "تم تحديث قسم الطاولات بنجاح",
+      "sectionUpdateFailed": "فشل في تحديث قسم الطاولات",
+      "sectionDeleted": "تم حذف قسم الطاولات بنجاح",
+      "sectionDeleteFailed": "فشل في حذف قسم الطاولات",
+      "added": "تم إضافة الطاولة بنجاح",
+      "addFailed": "فشل في إضافة الطاولة",
+      "updated": "تم تحديث الطاولة بنجاح",
+      "updateFailed": "فشل في تحديث الطاولة",
+      "deleted": "تم حذف الطاولة بنجاح",
+      "deleteFailed": "فشل في حذف الطاولة"
+    },
+    "user": {
+      "added": "تم إضافة المستخدم بنجاح",
+      "addFailed": "فشل في إضافة المستخدم",
+      "updated": "تم تحديث المستخدم بنجاح",
+      "updateFailed": "فشل في تحديث المستخدم",
+      "deleted": "تم حذف المستخدم بنجاح",
+      "deleteFailed": "فشل في حذف المستخدم",
+      "profileUpdated": "تم تحديث الملف الشخصي بنجاح",
+      "profileUpdateFailed": "فشل في تحديث الملف الشخصي",
+      "passwordChanged": "تم تغيير كلمة المرور بنجاح",
+      "passwordChangeFailed": "فشل في تغيير كلمة المرور"
+    },
+    "notification": {
+      "settingsUpdated": "تم تحديث إعدادات الإشعارات بنجاح",
+      "settingsUpdateFailed": "فشل في تحديث إعدادات الإشعارات",
+      "markedAsRead": "تم تحديد الإشعار كمقروء",
+      "markAsReadFailed": "فشل في تحديد الإشعار كمقروء",
+      "allMarkedAsRead": "تم تحديد جميع الإشعارات كمقروءة",
+      "allMarkAsReadFailed": "فشل في تحديد جميع الإشعارات كمقروءة",
+      "deleted": "تم حذف الإشعار بنجاح",
+      "deleteFailed": "فشل في حذف الإشعار",
+      "created": "تم إنشاء الإشعار بنجاح",
+      "createFailed": "فشل في إنشاء الإشعار",
+      "sent": "تم إرسال الإشعار بنجاح",
+      "sendFailed": "فشل في إرسال الإشعار"
+    },
+    "settings": {
+      "generalUpdated": "تم تحديث الإعدادات العامة بنجاح",
+      "generalUpdateFailed": "فشل في تحديث الإعدادات العامة",
+      "reportUpdated": "تم تحديث إعدادات التقارير بنجاح",
+      "reportUpdateFailed": "فشل في تحديث إعدادات التقارير",
+      "reportSent": "تم إرسال التقرير بنجاح",
+      "reportSendFailed": "فشل في إرسال التقرير"
+    },
+    "organization": {
+      "updated": "تم تحديث بيانات المنظمة بنجاح",
+      "updateFailed": "فشل في تحديث بيانات المنظمة",
+      "permissionsUpdated": "تم تحديث صلاحيات المنظمة بنجاح",
+      "permissionsUpdateFailed": "فشل في تحديث صلاحيات المنظمة",
+      "payrollPermissionsUpdated": "تم تحديث صلاحيات الرواتب بنجاح",
+      "payrollPermissionsUpdateFailed": "فشل في تحديث صلاحيات الرواتب"
+    },
+    "export": {
+      "exporting": "جاري تصدير التقرير...",
+      "success": "تم تصدير التقرير بنجاح",
+      "failed": "فشل في تصدير التقرير"
+    },
+    "paymentMethods": {
+      "cash": "نقداً",
+      "card": "بطاقة",
+      "online": "إلكتروني"
+    },
+    "stockOperations": {
+      "add": "إضافة",
+      "subtract": "خصم",
+      "update": "تحديث"
+    }
+  },
+  "toast": {
+    "session": {
+      "started": "تم بدء جلسة جديدة على {{deviceName}}",
+      "startedWithBill": "تم بدء جلسة جديدة على {{deviceName}} - الفاتورة: {{billNumber}}",
+      "updated": "تم تحديث الجلسة بنجاح",
+      "ended": "تم إنهاء الجلسة على {{deviceName}} - إجمالي التكلفة: {{cost}}",
+      "endedSuccess": "تم إنهاء الجلسة على {{deviceName}} بنجاح",
+      "createError": "فشل في إنشاء الجلسة",
+      "updateError": "فشل في تحديث الجلسة",
+      "endError": "فشل في إنهاء الجلسة"
+    },
+    "order": {
+      "created": "تم إنشاء طلب جديد: {{orderNumber}}",
+      "updated": "تم تحديث الطلب بنجاح",
+      "preparingUpdated": "تم تحديث حالة التجهيز بنجاح",
+      "statusUpdated": "تم تحديث حالة الطلب بنجاح",
+      "incompleteData": "بيانات الطلب غير مكتملة",
+      "incompleteItems": "بيانات العناصر غير مكتملة",
+      "invalidTable": "معرف الطاولة غير صحيح",
+      "insufficientStock": "المخزون غير كافي لتحديث الطلب",
+      "createError": "فشل في إنشاء الطلب",
+      "updateError": "فشل في تحديث الطلب",
+      "statusError": "فشل في تحديث حالة الطلب"
+    },
+    "inventory": {
+      "added": "تم إضافة المنتج بنجاح",
+      "updated": "تم تحديث المنتج بنجاح",
+      "stockUpdated": "تم {{operation}} {{quantity}} وحدة من المخزون بنجاح",
+      "addError": "فشل في إضافة المنتج",
+      "updateError": "فشل في تحديث المنتج",
+      "stockError": "فشل في تحديث المخزون"
+    },
+    "bill": {
+      "created": "تم إنشاء الفاتورة بنجاح",
+      "updated": "تم تحديث الفاتورة بنجاح",
+      "cancelled": "تم إلغاء الفاتورة بنجاح",
+      "paymentAdded": "تم إضافة دفعة {{amount}} {{currency}} {{method}} بنجاح",
+      "partialPayment": "تم تسجيل الدفع الجزئي بنجاح",
+      "createError": "فشل في إنشاء الفاتورة",
+      "updateError": "فشل في تحديث الفاتورة",
+      "cancelError": "فشل في إلغاء الفاتورة",
+      "paymentError": "فشل في إضافة الدفعة",
+      "partialPaymentError": "فشل في تسجيل الدفع الجزئي"
+    },
+    "stockOperations": {
+      "add": "إضافة",
+      "subtract": "خصم",
+      "update": "تحديث"
+    },
+    "paymentMethods": {
+      "cash": "نقداً",
+      "card": "بطاقة",
+      "online": "إلكتروني"
+    }
+  },
+  "toast": {
+    "session": {
+      "started": "تم بدء جلسة جديدة على {{deviceName}}",
+      "startedWithBill": "تم بدء جلسة جديدة على {{deviceName}} - الفاتورة: {{billNumber}}",
+      "updated": "تم تحديث الجلسة بنجاح",
+      "ended": "تم إنهاء الجلسة على {{deviceName}} - إجمالي التكلفة: {{cost}}",
+      "endedSuccess": "تم إنهاء الجلسة على {{deviceName}} بنجاح",
+      "createError": "فشل في إنشاء الجلسة",
+      "updateError": "فشل في تحديث الجلسة",
+      "endError": "فشل في إنهاء الجلسة"
+    },
+    "order": {
+      "created": "تم إنشاء طلب جديد: {{orderNumber}}",
+      "updated": "تم تحديث الطلب بنجاح",
+      "preparingUpdated": "تم تحديث حالة التجهيز بنجاح",
+      "statusPending": "تم تحديث حالة الطلب إلى: قيد الانتظار",
+      "statusPreparing": "تم تحديث حالة الطلب إلى: قيد التجهيز",
+      "statusReady": "تم تحديث حالة الطلب إلى: جاهز",
+      "statusDelivered": "تم تحديث حالة الطلب إلى: تم التسليم",
+      "statusCancelled": "تم تحديث حالة الطلب إلى: ملغي",
+      "incompleteData": "بيانات الطلب غير مكتملة",
+      "incompleteItems": "بيانات العناصر غير مكتملة",
+      "invalidTable": "معرف الطاولة غير صحيح",
+      "insufficientStock": "المخزون غير كافي لتحديث الطلب",
+      "createError": "فشل في إنشاء الطلب",
+      "updateError": "فشل في تحديث الطلب",
+      "preparingError": "فشل في تحديث حالة التجهيز",
+      "statusError": "فشل في تحديث حالة الطلب"
+    },
+    "inventory": {
+      "added": "تم إضافة المنتج بنجاح",
+      "updated": "تم تحديث المنتج بنجاح",
+      "stockAdded": "تم إضافة {{quantity}} وحدة من المخزون بنجاح",
+      "stockSubtracted": "تم خصم {{quantity}} وحدة من المخزون بنجاح",
+      "stockUpdated": "تم تحديث {{quantity}} وحدة من المخزون بنجاح",
+      "addError": "فشل في إضافة المنتج",
+      "updateError": "فشل في تحديث المنتج",
+      "stockError": "فشل في تحديث المخزون"
+    },
+    "bill": {
+      "created": "تم إنشاء الفاتورة بنجاح",
+      "updated": "تم تحديث الفاتورة بنجاح",
+      "cancelled": "تم إلغاء الفاتورة بنجاح",
+      "paymentAdded": "تم إضافة دفعة {{amount}} {{method}} بنجاح",
+      "partialPayment": "تم تسجيل الدفع الجزئي بنجاح",
+      "createError": "فشل في إنشاء الفاتورة",
+      "updateError": "فشل في تحديث الفاتورة",
+      "cancelError": "فشل في إلغاء الفاتورة",
+      "paymentError": "فشل في إضافة الدفعة",
+      "partialPaymentError": "فشل في تسجيل الدفع الجزئي"
+    },
+    "paymentMethods": {
+      "cash": "نقداً",
+      "card": "بطاقة",
+      "online": "إلكتروني"
+    }
+  },
+  "notificationCenter": {
+    "title": "الإشعارات",
+    "markAllAsRead": "تحديد الكل كمقروء",
+    "close": "إغلاق",
+    "soundOn": "تشغيل الصوت",
+    "soundOff": "إيقاف الصوت",
+    "stats": {
+      "total": "المجموع",
+      "unread": "غير مقروء",
+      "read": "مقروء"
+    },
+    "filters": {
+      "all": "الكل",
+      "unread": "غير مقروء",
+      "read": "مقروء",
+      "high": "عالية",
+      "urgent": "عاجلة"
+    },
+    "status": {
+      "unread": "غير مقروء",
+      "read": "مقروء",
+      "willBeRead": "سيصبح مقروءاً...",
+      "actionRequired": "يتطلب إجراء"
+    },
+    "actions": {
+      "markAsRead": "تحديد كمقروء",
+      "delete": "حذف"
+    },
+    "messages": {
+      "loading": "جاري التحميل...",
+      "noNotifications": "لا توجد إشعارات"
+    }
+  },
+  "notificationManagement": {
+      "title": "إدارة الإشعارات",
+      "subtitle": "إدارة وتنظيم الإشعارات المرسلة للمستخدمين",
+      "stats": {
+        "total": "إجمالي الإشعارات",
+        "unread": "غير مقروءة",
+        "read": "مقروءة",
+        "categories": "الفئات"
+      },
+      "filters": {
+        "search": "البحث",
+        "searchPlaceholder": "البحث في الإشعارات...",
+        "category": "الفئة",
+        "unreadOnly": "غير مقروءة فقط"
+      },
+      "categories": {
+        "all": "جميع الإشعارات",
+        "session": "الجلسات",
+        "order": "الطلبات",
+        "inventory": "المخزون",
+        "billing": "الفواتير",
+        "system": "النظام",
+        "security": "الأمان"
+      },
+      "priority": {
+        "low": "منخفضة",
+        "medium": "متوسطة",
+        "high": "عالية",
+        "urgent": "عاجلة"
+      },
+      "actions": {
+        "markAsRead": "تحديد كمقروء",
+        "markAllAsRead": "تحديد الكل كمقروء",
+        "delete": "حذف الإشعار"
+      },
+      "messages": {
+        "loading": "جاري تحميل الإشعارات...",
+        "noNotifications": "لا توجد إشعارات",
+        "loadError": "خطأ في تحميل الإشعارات",
+        "markedAsRead": "تم تحديد الإشعار كمقروء",
+        "markAsReadError": "خطأ في تحديد الإشعار كمقروء",
+        "allMarkedAsRead": "تم تحديد جميع الإشعارات كمقروءة",
+        "allMarkAsReadError": "خطأ في تحديد الإشعارات كمقروءة",
+        "deleted": "تم حذف الإشعار بنجاح",
+        "deleteError": "خطأ في حذف الإشعار"
+      },
+      "createdBy": "بواسطة {{name}}"
+    }
   }
-}
