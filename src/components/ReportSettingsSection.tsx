@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { Mail, Clock, FileText, Users, Plus, X, AlertCircle, Check, Info, Send } from 'lucide-react';
 import { TimePicker } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 import 'dayjs/locale/ar';
-
-dayjs.locale('ar');
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 
 interface ReportSettingsSectionProps {
   canManage: boolean;
@@ -31,6 +33,9 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
   initialSettings,
   availableManagers
 }) => {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+
   const [settings, setSettings] = useState<ReportSettings>({
     dailyReportEnabled: initialSettings?.dailyReportEnabled ?? true,
     dailyReportStartTime: initialSettings?.dailyReportStartTime || '08:00',
@@ -43,6 +48,10 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
   const [emailError, setEmailError] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    dayjs.locale(language);
+  }, [language]);
 
   useEffect(() => {
     if (initialSettings) {
@@ -63,17 +72,17 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
 
   const handleAddEmail = () => {
     if (!newEmail.trim()) {
-      setEmailError('الرجاء إدخال بريد إلكتروني');
+      setEmailError(t('settings.organization.dailyReports.emailRequired'));
       return;
     }
 
     if (!validateEmail(newEmail)) {
-      setEmailError('البريد الإلكتروني غير صحيح');
+      setEmailError(t('settings.organization.dailyReports.emailInvalid'));
       return;
     }
 
     if (settings.dailyReportEmails.includes(newEmail)) {
-      setEmailError('هذا البريد موجود بالفعل');
+      setEmailError(t('settings.organization.dailyReports.emailExists'));
       return;
     }
 
@@ -138,10 +147,10 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
           <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 ml-3 mt-0.5" />
           <div>
             <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-              لا توجد صلاحية
+              {t('settings.organization.dailyReports.noPermission')}
             </h4>
             <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-              ليس لديك صلاحية لإدارة إعدادات التقارير. يرجى التواصل مع صاحب المنشأة.
+              {t('settings.organization.dailyReports.noPermissionMessage')}
             </p>
           </div>
         </div>
@@ -155,11 +164,11 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
           <FileText className="h-5 w-5 ml-2 text-orange-600" />
-          إعدادات التقارير اليومية
+          {t('settings.organization.dailyReports.title')}
         </h3>
         {isOwner && (
           <span className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs px-2 py-1 rounded-full">
-            مالك المنشأة
+            {t('settings.organization.dailyReports.owner')}
           </span>
         )}
       </div>
@@ -169,10 +178,10 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-1">
-              تفعيل التقرير اليومي
+              {t('settings.organization.dailyReports.enableReport')}
             </h4>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              إرسال تقرير يومي تلقائي عبر البريد الإلكتروني
+              {t('settings.organization.dailyReports.enableReportDesc')}
             </p>
           </div>
           <button
@@ -198,7 +207,7 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
           <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
             <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
               <Clock className="h-5 w-5 ml-2 text-blue-600" />
-              وقت بداية التقرير
+              {t('settings.organization.dailyReports.reportStartTime')}
             </h4>
             <div className="space-y-3">
               <TimePicker
@@ -207,16 +216,16 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                 format="HH:mm"
                 className="w-full"
                 size="large"
-                placeholder="اختر وقت بداية التقرير"
+                placeholder={t('settings.organization.dailyReports.selectStartTime')}
               />
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
                 <div className="flex items-start">
                   <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 ml-2 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-blue-800 dark:text-blue-200">
-                    <p className="font-medium mb-1">وقت بداية حساب البيانات</p>
-                    <p>التقرير سيغطي 24 ساعة تبدأ من هذا الوقت.</p>
+                    <p className="font-medium mb-1">{t('settings.organization.dailyReports.startTimeLabel')}</p>
+                    <p>{t('settings.organization.dailyReports.startTimeDesc')}</p>
                     <p className="mt-1">
-                      <strong>مثال:</strong> إذا اخترت {settings.dailyReportStartTime}، التقرير سيغطي من {settings.dailyReportStartTime} أمس إلى {settings.dailyReportStartTime} اليوم
+                      <strong>{t('settings.organization.dailyReports.example')}:</strong> {t('settings.organization.dailyReports.startTimeExample', { time: settings.dailyReportStartTime })}
                     </p>
                   </div>
                 </div>
@@ -228,7 +237,7 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
           <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
             <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
               <Clock className="h-5 w-5 ml-2 text-green-600" />
-              وقت إرسال التقرير
+              {t('settings.organization.dailyReports.reportSendTime')}
             </h4>
             <div className="space-y-3">
               <TimePicker
@@ -237,16 +246,16 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                 format="HH:mm"
                 className="w-full"
                 size="large"
-                placeholder="اختر وقت الإرسال"
+                placeholder={t('settings.organization.dailyReports.selectSendTime')}
               />
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
                 <div className="flex items-start">
                   <Info className="h-4 w-4 text-green-600 dark:text-green-400 ml-2 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-green-800 dark:text-green-200">
-                    <p className="font-medium mb-1">وقت إرسال الإيميل</p>
-                    <p>سيتم إرسال التقرير تلقائياً عبر البريد الإلكتروني في هذا الوقت كل يوم.</p>
+                    <p className="font-medium mb-1">{t('settings.organization.dailyReports.sendTimeLabel')}</p>
+                    <p>{t('settings.organization.dailyReports.sendTimeDesc')}</p>
                     <p className="mt-1">
-                      <strong>مثال:</strong> إذا اخترت {settings.dailyReportSendTime}، سيُرسل التقرير يومياً في {settings.dailyReportSendTime}
+                      <strong>{t('settings.organization.dailyReports.example')}:</strong> {t('settings.organization.dailyReports.sendTimeExample', { time: settings.dailyReportSendTime })}
                     </p>
                   </div>
                 </div>
@@ -258,7 +267,7 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
           <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
             <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
               <Mail className="h-5 w-5 ml-2 text-green-600" />
-              الإيميلات المستقبلة
+              {t('settings.organization.dailyReports.recipientEmails')}
             </h4>
             
             {/* Add Email Input */}
@@ -272,7 +281,7 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                     setEmailError('');
                   }}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()}
-                  placeholder="أدخل بريد إلكتروني"
+                  placeholder={t('settings.organization.dailyReports.enterEmail')}
                   className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                 />
                 <button
@@ -280,7 +289,7 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                   className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
-                  إضافة
+                  {t('common.add')}
                 </button>
               </div>
               {emailError && (
@@ -312,7 +321,7 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
             ) : (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                 <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>لم يتم إضافة أي إيميلات بعد</p>
+                <p>{t('settings.organization.dailyReports.noEmails')}</p>
               </div>
             )}
           </div>
@@ -322,10 +331,10 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
             <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
               <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
                 <Users className="h-5 w-5 ml-2 text-purple-600" />
-                المديرون المصرح لهم بإدارة التقارير
+                {t('settings.organization.dailyReports.authorizedManagers')}
               </h4>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                اختر المديرين الذين يمكنهم تعديل إعدادات التقارير
+                {t('settings.organization.dailyReports.authorizedManagersDesc')}
               </p>
               <div className="space-y-2">
                 {availableManagers.map((manager) => (
@@ -381,12 +390,12 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>جاري الإرسال...</span>
+                <span>{t('settings.organization.dailyReports.sending')}</span>
               </>
             ) : (
               <>
                 <Send className="h-4 w-4" />
-                <span>إرسال التقرير الآن</span>
+                <span>{t('settings.organization.dailyReports.sendNow')}</span>
               </>
             )}
           </button>
@@ -404,12 +413,12 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <span>جاري الحفظ...</span>
+              <span>{t('common.saving')}</span>
             </>
           ) : (
             <>
               <Check className="h-4 w-4" />
-              <span>حفظ إعدادات التقارير</span>
+              <span>{t('settings.organization.dailyReports.saveSettings')}</span>
             </>
           )}
         </button>

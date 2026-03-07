@@ -2,6 +2,8 @@ import React from 'react';
 import { User, Eye, Edit, Trash2, Calendar, Shield, Crown, UserCheck, UserX } from 'lucide-react';
 import { User as UserType } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 interface RoleInfo {
   id: string;
@@ -43,6 +45,8 @@ const UserCard: React.FC<UserCardProps> = ({
   getStatusText,
   permissions
 }) => {
+  const { t } = useTranslation();
+  const { currentLanguage, isRTL } = useLanguage();
   const { canDeleteUsers, canManageUsers, canEditUser, canDeleteUser } = useApp();
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
@@ -66,12 +70,28 @@ const UserCard: React.FC<UserCardProps> = ({
   };
 
   const formatLastLogin = (date?: Date) => {
-    if (!date) return 'لم يسجل دخول';
-    return new Date(date).toLocaleDateString('ar-EG', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    if (!date) return t('users.noLogin');
+    const dateObj = new Date(date);
+    
+    if (currentLanguage === 'ar') {
+      return dateObj.toLocaleDateString('ar-EG', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } else if (currentLanguage === 'fr') {
+      return dateObj.toLocaleDateString('fr-FR', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } else {
+      return dateObj.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    }
   };
 
   return (
@@ -81,8 +101,8 @@ const UserCard: React.FC<UserCardProps> = ({
       tabIndex={0}
       role="button"
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onView(user); }}
-      aria-label={`تفاصيل المستخدم ${user.name}`}
-      dir="rtl"
+      aria-label={t('users.userDetails', { name: user.name })}
+      dir={isRTL ? 'rtl' : 'ltr'}
     >
       {/* Status Badge */}
       <div className="absolute top-4 left-4 z-10">
@@ -121,7 +141,7 @@ const UserCard: React.FC<UserCardProps> = ({
         <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-4 p-3 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-xl">
           <Calendar className="h-4 w-4 ml-2 text-blue-600 dark:text-blue-400" />
           <span className="font-semibold">
-            آخر دخول: {formatLastLogin(user.lastLogin)}
+            {t('users.lastLogin')}: {formatLastLogin(user.lastLogin)}
           </span>
         </div>
 
@@ -129,13 +149,13 @@ const UserCard: React.FC<UserCardProps> = ({
         <div className="mb-2">
           <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
             <Crown className="w-4 h-4 text-purple-600" />
-            الصلاحيات:
+            {t('users.permissions.title')}:
           </div>
           <div className="flex flex-wrap gap-2">
             {user.permissions?.includes('all') ? (
               <span className="inline-flex items-center px-3 py-2 text-sm bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl font-bold shadow-md">
                 <Crown className="h-4 w-4 ml-2" />
-                جميع الصلاحيات
+                {t('users.permissions.all')}
               </span>
             ) : user.permissions && user.permissions.length > 0 ? (
               <>
@@ -146,13 +166,13 @@ const UserCard: React.FC<UserCardProps> = ({
                 ))}
                 {user.permissions.length > 2 && (
                   <span className="px-3 py-2 text-sm bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl font-semibold shadow-md">
-                    +{user.permissions.length - 2} أخرى
+                    +{user.permissions.length - 2} {t('users.more')}
                   </span>
                 )}
               </>
             ) : (
               <span className="px-3 py-2 text-sm bg-gradient-to-r from-gray-400 to-gray-500 text-white rounded-xl font-semibold">
-                لا توجد صلاحيات
+                {t('users.noPermissions')}
               </span>
             )}
           </div>
@@ -166,7 +186,7 @@ const UserCard: React.FC<UserCardProps> = ({
           <button
             onClick={() => onView(user)}
             className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
-            title="عرض التفاصيل"
+            title={t('users.viewDetails')}
           >
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
             <Eye className="h-4 w-4 relative" />
@@ -178,7 +198,7 @@ const UserCard: React.FC<UserCardProps> = ({
               ? 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white' 
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             } rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold`}
-            title={canEditUser(user) ? "تعديل المستخدم" : "لا يمكن تعديل هذا المستخدم"}
+            title={canEditUser(user) ? t('users.editUser') : t('users.cannotEdit')}
             disabled={!canEditUser(user)}
           >
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
@@ -189,7 +209,7 @@ const UserCard: React.FC<UserCardProps> = ({
             <button
               onClick={() => onManagePermissions(user)}
               className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
-              title="إدارة الصلاحيات"
+              title={t('users.managePermissions')}
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <Crown className="h-4 w-4 relative" />
@@ -200,7 +220,7 @@ const UserCard: React.FC<UserCardProps> = ({
             <button
               onClick={() => onChangeStatus(user)}
               className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
-              title="تغيير الحالة"
+              title={t('users.changeStatus')}
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <Shield className="h-4 w-4 relative" />
@@ -211,7 +231,7 @@ const UserCard: React.FC<UserCardProps> = ({
             <button
               onClick={() => onDelete(user.id)}
               className="group relative overflow-hidden p-2.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-lg transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 font-bold"
-              title="حذف المستخدم"
+              title={t('users.deleteUser')}
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <Trash2 className="h-4 w-4 relative" />

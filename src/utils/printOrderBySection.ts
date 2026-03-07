@@ -265,7 +265,14 @@ const printAllSectionsInOnePage = (
 
         <!-- إجمالي القسم -->
         <div class="total">
-          إجمالي القسم: <strong>${formattedTotal}</strong> ج.م
+          إجمالي القسم: <strong>${formattedTotal}</strong> ${(() => {
+            const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
+            const currencySymbols: { [key: string]: string } = {
+              'EGP': 'ج.م', 'SAR': 'ر.س', 'AED': 'د.إ',
+              'USD': '$', 'EUR': '€', 'GBP': '£'
+            };
+            return currencySymbols[organizationCurrency] || organizationCurrency;
+          })()}
         </div>
 
         <!-- ملاحظات الطلب إذا كانت موجودة -->
@@ -778,10 +785,17 @@ const printSectionOrder = (
           minimumFractionDigits: 0,
           maximumFractionDigits: 2
         });
+        
+        const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
+        const currencySymbols: { [key: string]: string } = {
+          'EGP': 'ج.م', 'SAR': 'ر.س', 'AED': 'د.إ',
+          'USD': '$', 'EUR': '€', 'GBP': '£'
+        };
+        const currencySymbol = currencySymbols[organizationCurrency] || organizationCurrency;
 
         return `
           <div class="total">
-            إجمالي القسم: <strong>${formattedTotal}</strong> ج.م
+            إجمالي القسم: <strong>${formattedTotal}</strong> ${currencySymbol}
           </div>
         `;
       })()}

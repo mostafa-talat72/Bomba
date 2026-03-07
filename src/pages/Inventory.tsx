@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { InventoryItem, MenuItem } from '../services/api';
@@ -8,6 +8,22 @@ import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDecimal, formatQuantity } from '../utils/formatters';
 import { io, Socket } from 'socket.io-client';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+import { formatCurrency as formatCurrencyUtil } from '../utils/formatters';
+import { toast } from 'react-toastify';
+import { DatePicker, ConfigProvider } from 'antd';
+import arEG from 'antd/locale/ar_EG';
+import enUS_antd from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+
+// Configure dayjs
+dayjs.extend(customParseFormat);
 
 // Helper function to get current date/time in Cairo timezone (Egypt)
 // Returns format: YYYY-MM-DDTHH:mm for datetime-local input
@@ -25,14 +41,29 @@ const getCairoDateTime = () => {
 };
 
 const Inventory = () => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const {
     inventoryItems,
     fetchInventoryItems,
     updateStock,
     createInventoryItem,
     updateInventoryItem,
-    showNotification,
   } = useApp();
+
+  // Get Ant Design locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar': return arEG;
+      case 'fr': return frFR;
+      default: return enUS_antd;
+    }
+  };
+
+  // Set dayjs locale based on current language
+  useEffect(() => {
+    dayjs.locale(i18n.language);
+  }, [i18n.language]);
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -67,6 +98,8 @@ const Inventory = () => {
 
   // Edit movement states
   const [showEditMovementModal, setShowEditMovementModal] = useState(false);
+  const [showDeleteMovementModal, setShowDeleteMovementModal] = useState(false);
+  const [deletingMovementId, setDeletingMovementId] = useState<string | null>(null);
   const [editingMovement, setEditingMovement] = useState<any>(null);
   const [editMovementForm, setEditMovementForm] = useState({
     quantity: '',
@@ -102,21 +135,104 @@ const Inventory = () => {
   const [menuCategories, setMenuCategories] = useState<Array<{ id: string; name: string }>>([]);
 
   // القيم المسموحة للوحدة
-  const unitOptions = ['قطعة', 'كيلو', 'جرام', 'لتر', 'مل', 'علبة', 'كيس', 'زجاجة'];
+  const unitOptions = useMemo(() => [
+    t('inventory.units.piece'),
+    t('inventory.units.kilo'),
+    t('inventory.units.gram'),
+    t('inventory.units.liter'),
+    t('inventory.units.ml'),
+    t('inventory.units.box'),
+    t('inventory.units.bag'),
+    t('inventory.units.bottle')
+  ], [t]);
+
+  // دالة لتحويل الوحدة من قاعدة البيانات إلى القيمة المترجمة الحالية
+  const normalizeUnit = useCallback((unit: string): string => {
+    if (!unit) return '';
+    
+    // خريطة الوحدات بجميع اللغات
+    const unitMap: { [key: string]: string } = {
+      // Arabic
+      'قطعة': t('inventory.units.piece'),
+      'كيلو': t('inventory.units.kilo'),
+      'جرام': t('inventory.units.gram'),
+      'لتر': t('inventory.units.liter'),
+      'مل': t('inventory.units.ml'),
+      'علبة': t('inventory.units.box'),
+      'كيس': t('inventory.units.bag'),
+      'زجاجة': t('inventory.units.bottle'),
+      // English
+      'Piece': t('inventory.units.piece'),
+      'Kilo': t('inventory.units.kilo'),
+      'Gram': t('inventory.units.gram'),
+      'Liter': t('inventory.units.liter'),
+      'ML': t('inventory.units.ml'),
+      'Box': t('inventory.units.box'),
+      'Bag': t('inventory.units.bag'),
+      'Bottle': t('inventory.units.bottle'),
+      // French
+      'Pièce': t('inventory.units.piece'),
+      'Gramme': t('inventory.units.gram'),
+      'Litre': t('inventory.units.liter'),
+      'Boîte': t('inventory.units.box'),
+      'Sac': t('inventory.units.bag'),
+      'Bouteille': t('inventory.units.bottle'),
+    };
+
+    return unitMap[unit] || unit;
+  }, [t]);
+
+  // دالة لتحويل الفئة من قاعدة البيانات إلى القيمة المترجمة الحالية
+  const normalizeCategory = useCallback((category: string): string => {
+    if (!category) return '';
+    
+    // خريطة الفئات بجميع اللغات
+    const categoryMap: { [key: string]: string } = {
+      // Arabic
+      'مشروبات ساخنة': t('inventory.categories.hotDrinks'),
+      'مشروبات باردة': t('inventory.categories.coldDrinks'),
+      'طعام': t('inventory.categories.food'),
+      'حلويات': t('inventory.categories.desserts'),
+      'مواد خام': t('inventory.categories.rawMaterials'),
+      'أخرى': t('inventory.categories.other'),
+      // English
+      'Hot Drinks': t('inventory.categories.hotDrinks'),
+      'Cold Drinks': t('inventory.categories.coldDrinks'),
+      'Food': t('inventory.categories.food'),
+      'Desserts': t('inventory.categories.desserts'),
+      'Raw Materials': t('inventory.categories.rawMaterials'),
+      'Other': t('inventory.categories.other'),
+      // French
+      'Boissons chaudes': t('inventory.categories.hotDrinks'),
+      'Boissons froides': t('inventory.categories.coldDrinks'),
+      'Nourriture': t('inventory.categories.food'),
+      'Matières premières': t('inventory.categories.rawMaterials'),
+      'Autre': t('inventory.categories.other'),
+    };
+
+    return categoryMap[category] || category;
+  }, [t]);
   
   // الفئات الافتراضية + الفئات من المنيو
-  const defaultCategories = ['مشروبات ساخنة', 'مشروبات باردة', 'طعام', 'حلويات', 'مواد خام', 'أخرى'];
+  const defaultCategories = useMemo(() => [
+    t('inventory.categories.hotDrinks'),
+    t('inventory.categories.coldDrinks'),
+    t('inventory.categories.food'),
+    t('inventory.categories.desserts'),
+    t('inventory.categories.rawMaterials'),
+    t('inventory.categories.other')
+  ], [t]);
   const categoryOptions = useMemo(() => {
     const menuCategoryNames = menuCategories.map(cat => cat.name);
     const allCategories = [...new Set([...defaultCategories, ...menuCategoryNames])];
     return allCategories.sort();
   }, [menuCategories]);
-  const costStatusOptions = [
-    { value: 'pending', label: 'معلق' },
-    { value: 'paid', label: 'مدفوع' },
-    { value: 'partially_paid', label: 'مدفوع جزئياً' },
-    { value: 'overdue', label: 'متأخر' },
-  ];
+  const costStatusOptions = useMemo(() => [
+    { value: 'pending', label: t('inventory.addModal.pending') },
+    { value: 'paid', label: t('inventory.addModal.paid') },
+    { value: 'partially_paid', label: t('inventory.addModal.partiallyPaid') },
+    { value: 'overdue', label: t('inventory.addModal.overdue') },
+  ], [t]);
 
   // Socket.IO reference
   const socketRef = useRef<Socket | null>(null);
@@ -150,7 +266,7 @@ const Inventory = () => {
     socketRef.current = socket;
 
     // Listen for inventory updates
-    socket.on('inventory-update', async (data: any) => {
+    socket.on('inventory-update', async () => {
       // Refresh inventory list
       await fetchInventoryItems();
       
@@ -164,7 +280,7 @@ const Inventory = () => {
     socket.on('connect', () => {
     });
 
-    socket.on('disconnect', (reason) => {
+    socket.on('disconnect', () => {
     });
 
     return () => {
@@ -209,6 +325,8 @@ const Inventory = () => {
         setShowDeductModal(false);
         setShowProductDropdown(false);
         setShowEditMovementModal(false);
+        setShowDeleteMovementModal(false);
+        setDeletingMovementId(null);
       }
     };
 
@@ -226,6 +344,104 @@ const Inventory = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Helper function to translate category names
+  const translateCategory = (category: string) => {
+    const categoryMap: { [key: string]: string } = {
+      'مشروبات ساخنة': t('inventory.categories.hotDrinks'),
+      'مشروبات باردة': t('inventory.categories.coldDrinks'),
+      'طعام': t('inventory.categories.food'),
+      'حلويات': t('inventory.categories.desserts'),
+      'مواد خام': t('inventory.categories.rawMaterials'),
+      'أخرى': t('inventory.categories.other'),
+      // English versions
+      'Hot Drinks': t('inventory.categories.hotDrinks'),
+      'Cold Drinks': t('inventory.categories.coldDrinks'),
+      'Food': t('inventory.categories.food'),
+      'Desserts': t('inventory.categories.desserts'),
+      'Raw Materials': t('inventory.categories.rawMaterials'),
+      'Other': t('inventory.categories.other'),
+    };
+    return categoryMap[category] || category;
+  };
+
+  // Helper function to translate unit names
+  const translateUnit = (unit: string) => {
+    const unitMap: { [key: string]: string } = {
+      'قطعة': t('inventory.units.piece'),
+      'كيلو': t('inventory.units.kilo'),
+      'جرام': t('inventory.units.gram'),
+      'لتر': t('inventory.units.liter'),
+      'مل': t('inventory.units.ml'),
+      'علبة': t('inventory.units.box'),
+      'كيس': t('inventory.units.bag'),
+      'زجاجة': t('inventory.units.bottle'),
+      // English versions
+      'piece': t('inventory.units.piece'),
+      'kilo': t('inventory.units.kilo'),
+      'gram': t('inventory.units.gram'),
+      'liter': t('inventory.units.liter'),
+      'ml': t('inventory.units.ml'),
+      'box': t('inventory.units.box'),
+      'bag': t('inventory.units.bag'),
+      'bottle': t('inventory.units.bottle'),
+    };
+    return unitMap[unit] || unit;
+  };
+
+  // Helper function to translate reason names from database
+  const translateReason = (reason: string) => {
+    if (!reason) return '-';
+    
+    // Check if reason contains order/invoice reference - don't translate these
+    if (reason.includes('طلب رقم') || reason.includes('فاتورة') || 
+        reason.includes('Order #') || reason.includes('Invoice') ||
+        reason.includes('Commande #') || reason.includes('Facture')) {
+      return reason;
+    }
+    
+    const reasonMap: { [key: string]: string } = {
+      // Arabic - Deduct reasons
+      'بيع': t('inventory.deductModal.reasons.sale'),
+      'استهلاك في الإنتاج': t('inventory.deductModal.reasons.production'),
+      'تالف': t('inventory.deductModal.reasons.damaged'),
+      'منتهي الصلاحية': t('inventory.deductModal.reasons.expired'),
+      'إرجاع للمورد': t('inventory.deductModal.reasons.returnToSupplier'),
+      // Arabic - Adjustment reasons
+      'جرد دوري': t('inventory.deductModal.reasons.periodicInventory'),
+      'تصحيح خطأ': t('inventory.deductModal.reasons.errorCorrection'),
+      'فقدان': t('inventory.deductModal.reasons.loss'),
+      // English - Deduct reasons
+      'Sale': t('inventory.deductModal.reasons.sale'),
+      'Production Consumption': t('inventory.deductModal.reasons.production'),
+      'Damaged': t('inventory.deductModal.reasons.damaged'),
+      'Expired': t('inventory.deductModal.reasons.expired'),
+      'Return to Supplier': t('inventory.deductModal.reasons.returnToSupplier'),
+      // English - Adjustment reasons
+      'Periodic Inventory': t('inventory.deductModal.reasons.periodicInventory'),
+      'Error Correction': t('inventory.deductModal.reasons.errorCorrection'),
+      'Loss': t('inventory.deductModal.reasons.loss'),
+      // French - Deduct reasons
+      'Vente': t('inventory.deductModal.reasons.sale'),
+      'Consommation de production': t('inventory.deductModal.reasons.production'),
+      'Endommagé': t('inventory.deductModal.reasons.damaged'),
+      'Expiré': t('inventory.deductModal.reasons.expired'),
+      'Retour au fournisseur': t('inventory.deductModal.reasons.returnToSupplier'),
+      // French - Adjustment reasons
+      'Inventaire périodique': t('inventory.deductModal.reasons.periodicInventory'),
+      'Correction d\'erreur': t('inventory.deductModal.reasons.errorCorrection'),
+      'Perte': t('inventory.deductModal.reasons.loss'),
+      // Add stock reasons
+      'شراء مخزون جديد': t('inventory.addModal.reason'),
+      'المخزون الأولي': t('inventory.addModal.initialStock'),
+      'New stock purchase': t('inventory.addModal.reason'),
+      'Initial stock': t('inventory.addModal.initialStock'),
+      'Achat de nouveau stock': t('inventory.addModal.reason'),
+      'Stock initial': t('inventory.addModal.initialStock'),
+    };
+    
+    return reasonMap[reason] || reason;
+  };
 
   // حساب المنتجات منخفضة المخزون وقيمة المخزون والفئات
   const lowStockItems = useMemo(() =>
@@ -348,12 +564,12 @@ const Inventory = () => {
     setAddForm({
       productId: item.id || item._id,
       name: item.name,
-      category: item.category,
+      category: normalizeCategory(item.category),
       quantity: '',
       price: String(item.price),
       supplier: item.supplier || '',
       minStock: String(item.minStock || ''),
-      unit: item.unit || '',
+      unit: normalizeUnit(item.unit || ''),
       date: getCairoDateTime(),
       costStatus: 'pending',
       paidAmount: '',
@@ -391,7 +607,7 @@ const Inventory = () => {
     } catch (error) {
       console.error('Error fetching stock movements:', error);
       setItemMovements([]);
-      showNotification('فشل في جلب سجل الحركات', 'error');
+      toast.error(t('inventory.notifications.movementsLoadError'));
     } finally {
       setLoading(false);
       setShowMovementsModal(true);
@@ -442,19 +658,22 @@ const Inventory = () => {
       const quantity = Number(deductForm.quantity);
       
       if (!quantity || quantity <= 0) {
-        setError('يرجى إدخال كمية صحيحة');
+        setError(t('inventory.messages.enterValidQuantity'));
         setLoading(false);
         return;
       }
 
       if (deductForm.type === 'out' && quantity > selectedItem.currentStock) {
-        setError(`الكمية المتوفرة: ${selectedItem.currentStock} ${selectedItem.unit} فقط`);
+        setError(t('inventory.messages.quantityExceedsStock', { 
+          stock: selectedItem.currentStock, 
+          unit: selectedItem.unit 
+        }));
         setLoading(false);
         return;
       }
 
       if (!deductForm.reason) {
-        setError('يرجى إدخال سبب الخصم');
+        setError(t('inventory.messages.enterReason'));
         setLoading(false);
         return;
       }
@@ -467,11 +686,10 @@ const Inventory = () => {
       });
 
       if (res) {
-        showNotification(
+        toast.success(
           deductForm.type === 'adjustment' 
-            ? 'تم تعديل المخزون بنجاح' 
-            : 'تم خصم الكمية بنجاح',
-          'success'
+            ? t('inventory.notifications.stockAdjusted')
+            : t('inventory.notifications.stockDeducted')
         );
         
         // Refresh inventory list
@@ -538,13 +756,13 @@ const Inventory = () => {
       const price = editMovementForm.price ? Number(editMovementForm.price) : undefined;
 
       if (!quantity || quantity <= 0) {
-        setError('يرجى إدخال كمية صحيحة');
+        setError(t('inventory.messages.enterValidQuantity'));
         setLoading(false);
         return;
       }
 
       if (!editMovementForm.reason) {
-        setError('يرجى إدخال السبب');
+        setError(t('inventory.messages.enterReason'));
         setLoading(false);
         return;
       }
@@ -563,7 +781,7 @@ const Inventory = () => {
       const isSuccess = response?.data?.success || response?.success;
       
       if (isSuccess) {
-        showNotification('تم تحديث الحركة بنجاح', 'success');
+        toast.success(t('inventory.notifications.movementUpdated'));
         
         // Close modal immediately
         setShowEditMovementModal(false);
@@ -580,9 +798,9 @@ const Inventory = () => {
         setError('حدث خطأ أثناء تحديث الحركة');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'حدث خطأ أثناء تحديث الحركة';
+      const errorMessage = err.response?.data?.message || err.message || t('inventory.notifications.movementUpdateError');
       setError(errorMessage);
-      showNotification(errorMessage, 'error');
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -591,23 +809,32 @@ const Inventory = () => {
   // حذف الحركة
   const handleDeleteMovement = async (movementId: string) => {
     if (!selectedItem) return;
+    
+    // Open delete confirmation modal
+    setDeletingMovementId(movementId);
+    setShowDeleteMovementModal(true);
+  };
 
-    if (!window.confirm('هل أنت متأكد من حذف هذه الحركة؟ سيتم إعادة حساب المخزون تلقائياً.')) {
-      return;
-    }
+  // تأكيد حذف الحركة
+  const confirmDeleteMovement = async () => {
+    if (!selectedItem || !deletingMovementId) return;
 
     setLoading(true);
 
     try {
       const response = await api.delete(
-        `/inventory/${selectedItem.id || selectedItem._id}/movements/${movementId}`
+        `/inventory/${selectedItem.id || selectedItem._id}/movements/${deletingMovementId}`
       );
 
       // Check for success
       const isSuccess = response?.data?.success || response?.success;
       
       if (isSuccess) {
-        showNotification('تم حذف الحركة بنجاح', 'success');
+        toast.success(t('inventory.notifications.movementDeleted'));
+        
+        // Close modal
+        setShowDeleteMovementModal(false);
+        setDeletingMovementId(null);
         
         // Refresh movements and inventory in parallel (in background)
         Promise.all([
@@ -617,11 +844,11 @@ const Inventory = () => {
           console.error('Error refreshing data:', err);
         });
       } else {
-        showNotification('حدث خطأ أثناء حذف الحركة', 'error');
+        toast.error(t('inventory.notifications.movementDeleteError'));
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'حدث خطأ أثناء حذف الحركة';
-      showNotification(errorMessage, 'error');
+      const errorMessage = err.response?.data?.message || err.message || t('inventory.notifications.movementDeleteError');
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -707,8 +934,8 @@ const Inventory = () => {
     try {
       if (addType === 'existing') {
         if (!addForm.productId || !addForm.quantity || !addForm.price) {
-          setError('يرجى اختيار المنتج وإدخال الكمية والسعر.');
-          showAlertMessage('يرجى تعبئة جميع الحقول المطلوبة', 'error');
+          setError(t('inventory.messages.selectProduct'));
+          showAlertMessage(t('inventory.messages.fillAllFields'), 'error');
           setLoading(false);
           return;
         }
@@ -723,8 +950,8 @@ const Inventory = () => {
           paidAmount: Number(addForm.paidAmount) || 0,
         });
         if (res) {
-          setSuccess('تمت إضافة الكمية بنجاح!');
-          showNotification('تمت إضافة الكمية بنجاح!', 'success');
+          setSuccess(t('inventory.notifications.quantityAdded'));
+          toast.success(t('inventory.notifications.quantityAdded'));
           
           // Refresh inventory list
           await fetchInventoryItems();
@@ -755,7 +982,7 @@ const Inventory = () => {
       } else {
         // إضافة منتج جديد بالكامل
         if (!addForm.name || !addForm.category || !addForm.quantity || !addForm.price || !addForm.unit || !addForm.minStock) {
-          setError('يرجى إدخال جميع الحقول المطلوبة.');
+          setError(t('inventory.messages.enterAllFields'));
           setLoading(false);
           return;
         }
@@ -772,8 +999,8 @@ const Inventory = () => {
           isRawMaterial: addForm.isRawMaterial,
         });
         if (res) {
-          setSuccess('تمت إضافة المنتج بنجاح!');
-          showNotification('تمت إضافة المنتج بنجاح!', 'success');
+          setSuccess(t('inventory.notifications.productAdded'));
+          toast.success(t('inventory.notifications.productAdded'));
           
           // Refresh inventory list
           await fetchInventoryItems();
@@ -827,7 +1054,7 @@ const Inventory = () => {
         return;
       }
       if (!addForm.name || !addForm.category || !addForm.price || !addForm.unit || !addForm.minStock) {
-        const errorMsg = 'يرجى إدخال جميع الحقول المطلوبة';
+        const errorMsg = t('inventory.messages.enterAllFields');
         setError(errorMsg);
         showAlertMessage(errorMsg, 'error');
         setLoading(false);
@@ -843,8 +1070,8 @@ const Inventory = () => {
         isRawMaterial: addForm.isRawMaterial,
       });
       if (res) {
-        setSuccess('تم تعديل المنتج بنجاح!');
-        showNotification('تم تعديل المنتج بنجاح!', 'success');
+        setSuccess(t('inventory.notifications.productUpdated'));
+        toast.success(t('inventory.notifications.productUpdated'));
         
         // Refresh inventory list
         await fetchInventoryItems();
@@ -947,8 +1174,8 @@ const Inventory = () => {
     try {
       const res = await deleteInventoryItemApi(deleteTarget.id || deleteTarget._id);
       if (res) {
-        showNotification('تم حذف المنتج بنجاح', 'success');
-        showAlertMessage('تم حذف المنتج بنجاح', 'success');
+        toast.success(t('inventory.notifications.productDeleted'));
+        showAlertMessage(t('inventory.notifications.productDeleted'), 'success');
         fetchInventoryItems();
         setShowDeleteModal(false);
       } else {
@@ -980,22 +1207,26 @@ const Inventory = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="space-y-6">
+    <ConfigProvider
+      direction={i18n.language === 'ar' ? 'rtl' : 'ltr'}
+      locale={getAntdLocale()}
+    >
+    <div className="space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
         <div className="flex items-center xs:w-full xs:justify-between">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
-            <Package className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
-            إدارة المخزون
+            <Package className={`h-6 w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+            {t('inventory.title')}
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">متابعة المواد الخام والمنتجات</p>
+          <p className={`text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-4' : 'ml-4'} xs:mr-0 xs:w-full xs:text-center`}>{t('inventory.subtitle')}</p>
         </div>
         <button
           onClick={openAddModal}
           className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center xs:mt-2"
         >
-          <Plus className="h-5 w-5 ml-2" />
-          إضافة مخزون
+          <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+          {t('inventory.addStock')}
         </button>
       </div>
 
@@ -1007,8 +1238,8 @@ const Inventory = () => {
               <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">إجمالي المنتجات</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(inventoryItems.length)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.totalProducts')}</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(inventoryItems.length, i18n.language)}</p>
             </div>
           </div>
         </div>
@@ -1018,8 +1249,8 @@ const Inventory = () => {
               <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">منتجات منخفضة</p>
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatDecimal(lowStockItems.length)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.lowStock')}</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatDecimal(lowStockItems.length, i18n.language)}</p>
             </div>
           </div>
         </div>
@@ -1029,7 +1260,7 @@ const Inventory = () => {
               <Package className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">قيمة المخزون</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.inventoryValue')}</p>
               <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalValue)}</p>
             </div>
           </div>
@@ -1040,8 +1271,8 @@ const Inventory = () => {
               <Package className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">الفئات</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{formatDecimal(categoriesCount)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.categories')}</p>
+              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{formatDecimal(categoriesCount, i18n.language)}</p>
             </div>
           </div>
         </div>
@@ -1051,8 +1282,8 @@ const Inventory = () => {
               <Package className="h-6 w-6 text-orange-600 dark:text-orange-400" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">الخامات</p>
-              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatDecimal(rawMaterialsCount)}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('inventory.stats.rawMaterials')}</p>
+              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatDecimal(rawMaterialsCount, i18n.language)}</p>
             </div>
           </div>
         </div>
@@ -1063,14 +1294,14 @@ const Inventory = () => {
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
           <div className="flex items-center mb-3">
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 ml-2" />
-            <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">تنبيه: منتجات منخفضة المخزون</h3>
+            <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">{t('inventory.alerts.lowStockTitle')}</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {lowStockItems.map(item => (
               <div key={item.id || item._id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-red-200 dark:border-red-600">
                 <p className="font-medium text-gray-900 dark:text-gray-100">{item.name}</p>
                 <p className="text-sm text-red-600 dark:text-red-400">
-                  متبقي: {formatQuantity(item.currentStock, item.unit)} (الحد الأدنى: {formatQuantity(item.minStock, item.unit)})
+                  {t('inventory.alerts.remaining')}: {formatQuantity(item.currentStock, translateUnit(item.unit), i18n.language)} ({t('inventory.alerts.minimum')}: {formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)})
                 </p>
               </div>
             ))}
@@ -1081,7 +1312,7 @@ const Inventory = () => {
       {/* Inventory Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6 border-b border-gray-200 dark:border-gray-600">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">جرد المخزون</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('nav.inventory')}</h3>
           
           {/* Search and Filters */}
           <div className="space-y-3">
@@ -1091,7 +1322,7 @@ const Inventory = () => {
                 onClick={() => setShowBasicFilters(!showBasicFilters)}
                 className="w-full bg-gray-50 dark:bg-gray-700 px-4 py-3 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
               >
-                <span className="font-medium text-gray-900 dark:text-gray-100">الفلاتر الأساسية</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{t('inventory.filters.basicFilters')}</span>
                 {showBasicFilters ? (
                   <ChevronUp className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                 ) : (
@@ -1105,11 +1336,11 @@ const Inventory = () => {
                     {/* Search */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        بحث
+                        {t('inventory.filters.search')}
                       </label>
                       <input
                         type="text"
-                        placeholder="ابحث عن منتج..."
+                        placeholder={t('inventory.filters.searchPlaceholder')}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
@@ -1119,14 +1350,14 @@ const Inventory = () => {
                     {/* Category Filter */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        الفئة
+                        {t('inventory.filters.category')}
                       </label>
                       <select
                         value={filterCategory}
                         onChange={(e) => setFilterCategory(e.target.value)}
                         className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                       >
-                        <option value="">جميع الفئات</option>
+                        <option value="">{t('inventory.filters.allCategories')}</option>
                         {categoryOptions.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
@@ -1136,32 +1367,32 @@ const Inventory = () => {
                     {/* Type Filter */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        النوع
+                        {t('inventory.filters.type')}
                       </label>
                       <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
                         className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                       >
-                        <option value="">الكل</option>
-                        <option value="raw">خامات فقط</option>
-                        <option value="product">منتجات فقط</option>
+                        <option value="">{t('inventory.filters.all')}</option>
+                        <option value="raw">{t('inventory.filters.rawOnly')}</option>
+                        <option value="product">{t('inventory.filters.productsOnly')}</option>
                       </select>
                     </div>
 
                     {/* Stock Level Filter */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        حالة المخزون
+                        {t('inventory.filters.stockStatus')}
                       </label>
                       <select
                         value={filterStock}
                         onChange={(e) => setFilterStock(e.target.value)}
                         className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                       >
-                        <option value="">الكل</option>
-                        <option value="low">منخفض فقط</option>
-                        <option value="out">نفذ فقط</option>
+                        <option value="">{t('inventory.filters.all')}</option>
+                        <option value="low">{t('inventory.filters.lowOnly')}</option>
+                        <option value="out">{t('inventory.filters.outOnly')}</option>
                       </select>
                     </div>
                   </div>
@@ -1175,7 +1406,7 @@ const Inventory = () => {
                 onClick={() => setShowDateFilters(!showDateFilters)}
                 className="w-full bg-gray-50 dark:bg-gray-700 px-4 py-3 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
               >
-                <span className="font-medium text-gray-900 dark:text-gray-100">فلترة بالتاريخ</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{t('inventory.filters.dateFilters')}</span>
                 {showDateFilters ? (
                   <ChevronUp className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                 ) : (
@@ -1188,7 +1419,7 @@ const Inventory = () => {
                   {/* Date Filter Type Selector */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      نوع الفلترة
+                      {t('inventory.filters.filterType')}
                     </label>
                     <div className="flex gap-2">
                       <button
@@ -1203,7 +1434,7 @@ const Inventory = () => {
                             : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                         }`}
                       >
-                        من - إلى
+                        {t('inventory.filters.range')}
                       </button>
                       <button
                         onClick={() => {
@@ -1218,7 +1449,7 @@ const Inventory = () => {
                             : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                         }`}
                       >
-                        شهر محدد
+                        {t('inventory.filters.specificMonth')}
                       </button>
                       <button
                         onClick={() => {
@@ -1233,7 +1464,7 @@ const Inventory = () => {
                             : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                         }`}
                       >
-                        سنة محددة
+                        {t('inventory.filters.specificYear')}
                       </button>
                     </div>
                   </div>
@@ -1243,26 +1474,30 @@ const Inventory = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          من تاريخ
+                          {t('inventory.filters.fromDate')}
                         </label>
-                        <input
-                          type="date"
-                          value={filterDateFrom}
-                          onChange={(e) => setFilterDateFrom(e.target.value)}
-                          className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                          max={new Date().toISOString().slice(0, 10)}
+                        <DatePicker
+                          value={filterDateFrom ? dayjs(filterDateFrom) : null}
+                          onChange={(date) => setFilterDateFrom(date ? date.format('YYYY-MM-DD') : '')}
+                          format="YYYY/MM/DD"
+                          className="w-full"
+                          size="large"
+                          placeholder={t('inventory.filters.fromDate')}
+                          disabledDate={(current) => current && current > dayjs().endOf('day')}
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          إلى تاريخ
+                          {t('inventory.filters.toDate')}
                         </label>
-                        <input
-                          type="date"
-                          value={filterDateTo}
-                          onChange={(e) => setFilterDateTo(e.target.value)}
-                          className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                          max={new Date().toISOString().slice(0, 10)}
+                        <DatePicker
+                          value={filterDateTo ? dayjs(filterDateTo) : null}
+                          onChange={(date) => setFilterDateTo(date ? date.format('YYYY-MM-DD') : '')}
+                          format="YYYY/MM/DD"
+                          className="w-full"
+                          size="large"
+                          placeholder={t('inventory.filters.toDate')}
+                          disabledDate={(current) => current && current > dayjs().endOf('day')}
                         />
                       </div>
                     </div>
@@ -1272,14 +1507,17 @@ const Inventory = () => {
                   {dateFilterType === 'month' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        اختر الشهر
+                        {t('inventory.filters.selectMonth')}
                       </label>
-                      <input
-                        type="month"
-                        value={filterMonth}
-                        onChange={(e) => setFilterMonth(e.target.value)}
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                        max={new Date().toISOString().slice(0, 7)}
+                      <DatePicker
+                        picker="month"
+                        value={filterMonth ? dayjs(filterMonth + '-01') : null}
+                        onChange={(date) => setFilterMonth(date ? date.format('YYYY-MM') : '')}
+                        format="MMMM YYYY"
+                        className="w-full"
+                        size="large"
+                        placeholder={t('inventory.filters.selectMonth')}
+                        disabledDate={(current) => current && current > dayjs().endOf('month')}
                       />
                     </div>
                   )}
@@ -1288,18 +1526,18 @@ const Inventory = () => {
                   {dateFilterType === 'year' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        اختر السنة
+                        {t('inventory.filters.selectYear')}
                       </label>
-                      <select
-                        value={filterYear}
-                        onChange={(e) => setFilterYear(e.target.value)}
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                      >
-                        <option value="">كل السنوات</option>
-                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                          <option key={year} value={year}>{year}</option>
-                        ))}
-                      </select>
+                      <DatePicker
+                        picker="year"
+                        value={filterYear ? dayjs(filterYear + '-01-01') : null}
+                        onChange={(date) => setFilterYear(date ? date.format('YYYY') : '')}
+                        format="YYYY"
+                        className="w-full"
+                        size="large"
+                        placeholder={t('inventory.filters.selectYear')}
+                        disabledDate={(current) => current && current > dayjs().endOf('year')}
+                      />
                     </div>
                   )}
                 </div>
@@ -1310,7 +1548,7 @@ const Inventory = () => {
             {(searchTerm || filterCategory || filterType || filterStock || filterDateFrom || filterDateTo || filterMonth || filterYear) && (
               <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg px-4 py-3">
                 <span className="text-sm text-blue-800 dark:text-blue-200">
-                  عرض {filteredItems.length} من {inventoryItems.length} منتج
+                  {t('inventory.filters.showing', { filtered: filteredItems.length, total: inventoryItems.length })}
                 </span>
                 <button
                   onClick={() => {
@@ -1325,7 +1563,7 @@ const Inventory = () => {
                   }}
                   className="text-sm font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 underline"
                 >
-                  إعادة تعيين جميع الفلاتر
+                  {t('inventory.filters.resetAll')}
                 </button>
               </div>
             )}
@@ -1335,16 +1573,16 @@ const Inventory = () => {
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">المنتج</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">النوع</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الفئة</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">المخزون الحالي</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الحد الأدنى</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الوحدة</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">آخر سعر شراء</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">القيمة الإجمالية</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">المورد</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">الإجراءات</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.product')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.type')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.category')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.currentStock')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.minStock')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.unit')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.lastPurchasePrice')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.totalValue')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.supplier')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.actions')}</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1352,8 +1590,8 @@ const Inventory = () => {
                 <tr>
                   <td colSpan={10} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     {searchTerm || filterCategory || filterType || filterStock || filterDateFrom || filterDateTo || filterMonth || filterYear
-                      ? 'لا توجد نتائج مطابقة للبحث'
-                      : 'لا توجد منتجات في المخزون'}
+                      ? t('inventory.table.noResults')
+                      : t('inventory.table.noProducts')}
                   </td>
                 </tr>
               ) : (
@@ -1370,17 +1608,17 @@ const Inventory = () => {
                           ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                           : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
                       }`}>
-                        {item.isRawMaterial ? 'خامة' : 'منتج'}
+                        {item.isRawMaterial ? t('inventory.table.rawMaterial') : t('inventory.table.product')}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.category}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{translateCategory(item.category)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stockStatus.bgColor} ${stockStatus.color}`}>
-                        {formatQuantity(item.currentStock, item.unit)}
+                        {formatQuantity(item.currentStock, translateUnit(item.unit), i18n.language)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatQuantity(item.minStock, item.unit)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.unit}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{translateUnit(item.unit)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatCurrency(item.price)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                       {formatCurrency(item.totalValue || (item.currentStock * item.price))}
@@ -1390,28 +1628,28 @@ const Inventory = () => {
                       <button 
                         className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center" 
                         onClick={() => openMovementsModal(item)}
-                        title="سجل الحركات"
+                        title={t('inventory.table.movementsHistory')}
                       >
                         <History className="h-4 w-4" />
                       </button>
                       <button 
                         className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 inline-flex items-center" 
                         onClick={() => openDeductModal(item)}
-                        title="خصم كمية"
+                        title={t('inventory.table.deductQuantity')}
                       >
                         <Minus className="h-4 w-4" />
                       </button>
                       <button 
                         className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" 
                         onClick={() => openEditModal(item)}
-                        title="تعديل"
+                        title={t('inventory.table.edit')}
                       >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button 
                         className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" 
                         onClick={() => openDeleteModal(item)}
-                        title="حذف"
+                        title={t('inventory.table.delete')}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -1438,7 +1676,7 @@ const Inventory = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg z-10">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">إضافة مخزون</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.addModal.title')}</h2>
                 <button
                   className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => setShowAddModal(false)}
@@ -1448,15 +1686,15 @@ const Inventory = () => {
             <div className="p-6">
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نوع الإضافة</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.addType')}</label>
                 <select name="addType" value={addType} onChange={handleAddTypeChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100">
-                  <option value="existing">إضافة كمية لمنتج موجود (بسعر جديد)</option>
-                  <option value="new">إضافة منتج جديد تماماً</option>
+                  <option value="existing">{t('inventory.addModal.addToExisting')}</option>
+                  <option value="new">{t('inventory.addModal.addNew')}</option>
                 </select>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {addType === 'existing' 
-                    ? '💡 استخدم هذا الخيار لإضافة كمية جديدة بسعر مختلف لمنتج موجود (مثال: شراء سكر بسعر جديد)'
-                    : '💡 استخدم هذا الخيار فقط لإضافة منتج لم يكن موجوداً من قبل'}
+                    ? t('inventory.addModal.existingHint')
+                    : t('inventory.addModal.newHint')}
                 </p>
               </div>
               {addType === 'existing' ? (
@@ -1468,12 +1706,12 @@ const Inventory = () => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <div className="mr-3">
-                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">إضافة كمية بسعر جديد</h3>
+                      <div className={`${isRTL ? 'mr-3' : 'ml-3'}`}>
+                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('inventory.addModal.infoTitle')}</h3>
                         <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-                          <p>• يمكنك إضافة كمية جديدة بسعر مختلف عن السعر السابق</p>
-                          <p>• سيتم حفظ سجل كامل بكل عمليات الشراء والأسعار</p>
-                          <p>• يمكنك مراجعة السجل من زر "سجل الحركات" 📊</p>
+                          <p>{t('inventory.addModal.infoLine1')}</p>
+                          <p>{t('inventory.addModal.infoLine2')}</p>
+                          <p>{t('inventory.addModal.infoLine3')}</p>
                         </div>
                       </div>
                     </div>
@@ -1481,11 +1719,11 @@ const Inventory = () => {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="md:col-span-2 lg:col-span-3">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اختر المنتج</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.selectProduct')}</label>
                     <div className="relative product-dropdown-container">
                       <input
                         type="text"
-                        placeholder="ابحث عن منتج بالكتابة..."
+                        placeholder={t('inventory.addModal.searchProduct')}
                         value={productSearchTerm}
                         onChange={(e) => setProductSearchTerm(e.target.value)}
                         onFocus={() => setShowProductDropdown(true)}
@@ -1495,7 +1733,7 @@ const Inventory = () => {
                         <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                           {filteredProducts.length === 0 ? (
                             <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                              {productSearchTerm ? 'لا توجد منتجات مطابقة للبحث' : 'ابدأ بالكتابة للبحث...'}
+                              {productSearchTerm ? t('inventory.addModal.noResults') : t('inventory.addModal.startTyping')}
                             </div>
                           ) : (
                             filteredProducts.map(item => (
@@ -1511,7 +1749,7 @@ const Inventory = () => {
                               >
                                 <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {item.category} - المخزون: {formatQuantity(item.currentStock, item.unit)}
+                                  {translateCategory(item.category)} - {t('inventory.addModal.stockInfo')}: {formatQuantity(item.currentStock, translateUnit(item.unit), i18n.language)}
                                 </div>
                               </button>
                             ))
@@ -1523,28 +1761,44 @@ const Inventory = () => {
                       )}
                     </div>
                     {!addForm.productId && productSearchTerm && (
-                      <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">يرجى اختيار منتج من القائمة</p>
+                      <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">{t('inventory.addModal.selectFromList')}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الكمية</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.quantity')}</label>
                     <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" required min="0.01" step="0.01" placeholder="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">السعر للوحدة</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.price')}</label>
                     <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" required min="0" step="0.01" placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المورد</label>
-                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" placeholder="اختياري" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.supplier')}</label>
+                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" placeholder={t('inventory.addModal.supplierPlaceholder')} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">تاريخ ووقت الإضافة</label>
-                    <input type="datetime-local" name="date" value={addForm.date} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">💡 يمكنك تحديد تاريخ ووقت سابق للعملية</p>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.date')}</label>
+                    <DatePicker
+                      showTime
+                      value={addForm.date ? dayjs(addForm.date) : null}
+                      onChange={(date) => {
+                        const event = {
+                          target: {
+                            name: 'date',
+                            value: date ? date.format('YYYY-MM-DDTHH:mm') : ''
+                          }
+                        } as React.ChangeEvent<HTMLInputElement>;
+                        handleFormChange(event);
+                      }}
+                      format="YYYY/MM/DD HH:mm"
+                      className="w-full"
+                      size="large"
+                      placeholder={t('inventory.addModal.date')}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">💡 {t('inventory.addModal.dateHint')}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">حالة الدفع</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.costStatus')}</label>
                     <select
                       name="costStatus"
                       value={addForm.costStatus}
@@ -1559,9 +1813,9 @@ const Inventory = () => {
                   {addForm.costStatus !== 'paid' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        المبلغ المدفوع
+                        {t('inventory.addModal.paidAmount')}
                         {addForm.costStatus === 'partially_paid' && (
-                          <span className="text-xs text-gray-500 mr-2">(جزئي)</span>
+                          <span className="text-xs text-gray-500 mr-2">({t('inventory.addModal.partial')})</span>
                         )}
                       </label>
                       <input
@@ -1577,7 +1831,7 @@ const Inventory = () => {
                       />
                       {addForm.paidAmount && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          المتبقي: {formatCurrency(calculateRemainingAmount())}
+                          {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}
                         </div>
                       )}
                     </div>
@@ -1587,20 +1841,20 @@ const Inventory = () => {
                   {/* إظهار ملخص التكلفة */}
                   {addForm.price && addForm.quantity && (
                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-                      <div className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3">ملخص التكلفة</div>
+                      <div className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3">{t('inventory.addModal.costSummary')}</div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-600 dark:text-gray-400">إجمالي التكلفة:</span>
+                          <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.totalCost')}:</span>
                           <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
                         </div>
                         {addForm.paidAmount && (
                           <>
                             <div>
-                              <span className="text-gray-600 dark:text-gray-400">المدفوع:</span>
+                              <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.paid')}:</span>
                               <div className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
                             </div>
                             <div>
-                              <span className="text-gray-600 dark:text-gray-400">المتبقي:</span>
+                              <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.remaining')}:</span>
                               <div className="text-lg font-bold text-red-600 dark:text-red-400">{formatCurrency(calculateRemainingAmount())}</div>
                             </div>
                           </>
@@ -1619,52 +1873,52 @@ const Inventory = () => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <div className="mr-3">
-                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">ملاحظة مهمة</h3>
+                      <div className={`${isRTL ? 'mr-3' : 'ml-3'}`}>
+                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('inventory.addModal.importantNote')}</h3>
                         <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-                          <p>• لا يمكن إضافة منتج بنفس الاسم لمنشأة واحدة</p>
-                          <p>• إذا كان المنتج موجود، استخدم "إضافة كمية لمنتج موجود"</p>
-                          <p>• يمكن إضافة منتجات بنفس الاسم في منشآت مختلفة</p>
+                          <p>{t('inventory.addModal.noteCannotDuplicate')}</p>
+                          <p>{t('inventory.addModal.noteUseExisting')}</p>
+                          <p>{t('inventory.addModal.noteDifferentBranches')}</p>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اسم المنتج</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.productName')}</label>
                     <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الفئة</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.category')}</label>
                     <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
-                      <option value="">اختر الفئة</option>
+                      <option value="">{t('inventory.addModal.selectCategory')}</option>
                       {categoryOptions.map(option => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الكمية</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.quantity')}</label>
                     <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الوحدة</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
                     <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
-                      <option value="">اختر الوحدة</option>
+                      <option value="">{t('inventory.addModal.selectUnit')}</option>
                       {unitOptions.map(option => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الحد الأدنى</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.minStock')}</label>
                     <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">السعر للوحدة</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.price')}</label>
                     <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المورد</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.supplier')}</label>
                     <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
                   </div>
                   <div className="md:col-span-2">
@@ -1676,12 +1930,12 @@ const Inventory = () => {
                         onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
                         className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
                       />
-                      <span className="mr-2 text-sm text-gray-700 dark:text-gray-300">خامة (مادة خام)</span>
+                      <span className={`${isRTL ? 'mr-2' : 'ml-2'} text-sm text-gray-700 dark:text-gray-300`}>{t('inventory.addModal.isRawMaterial')}</span>
                     </label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('inventory.addModal.rawMaterialHint')}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">حالة الدفع</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.costStatus')}</label>
                     <select
                       name="costStatus"
                       value={addForm.costStatus}
@@ -1698,10 +1952,10 @@ const Inventory = () => {
                   {addForm.costStatus !== 'paid' && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          المبلغ المدفوع
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          {t('inventory.addModal.paidAmount')}
                           {addForm.costStatus === 'partially_paid' && (
-                            <span className="text-xs text-gray-500 mr-2">(جزئي)</span>
+                            <span className="text-xs text-gray-500 mr-2">({t('inventory.addModal.partial')})</span>
                           )}
                         </label>
                         <input
@@ -1709,14 +1963,14 @@ const Inventory = () => {
                           name="paidAmount"
                           value={addForm.paidAmount}
                           onChange={handleFormChange}
-                          className="w-full border rounded px-3 py-2"
+                          className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                           min="0"
                           max={parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')}
                           placeholder="0"
                         />
                         {addForm.paidAmount && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            المتبقي: {formatCurrency(calculateRemainingAmount())}
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}
                           </div>
                         )}
                       </div>
@@ -1725,14 +1979,14 @@ const Inventory = () => {
 
                   {/* إظهار ملخص التكلفة */}
                   {addForm.price && addForm.quantity && (
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <div className="text-sm font-medium text-gray-700 mb-2">ملخص التكلفة:</div>
-                      <div className="text-sm text-gray-600">
-                        <div>إجمالي التكلفة: {formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
+                    <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                      <div className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">{t('inventory.addModal.costSummary')}:</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        <div>{t('inventory.addModal.totalCost')}: {formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
                         {addForm.paidAmount && (
                           <>
-                            <div>المدفوع: {formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
-                            <div>المتبقي: {formatCurrency(calculateRemainingAmount())}</div>
+                            <div>{t('inventory.addModal.paid')}: {formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
+                            <div>{t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}</div>
                           </>
                         )}
                       </div>
@@ -1748,12 +2002,12 @@ const Inventory = () => {
               {success !== '' && (
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-600 rounded-lg p-3">
                   <p className="text-sm text-green-800 dark:text-green-200">{success}</p>
-                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">تم تسجيل هذه العملية أيضًا ضمن التكاليف تلقائيًا.</p>
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">{t('inventory.addModal.successMessage')}</p>
                   <button
                     type="button"
                     className="text-sm underline text-blue-700 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mt-2"
                     onClick={() => navigate('/costs')}
-                  >عرض صفحة التكاليف</button>
+                  >{t('inventory.addModal.viewCosts')}</button>
                 </div>
               )}
               <div className="flex gap-3 pt-4">
@@ -1763,7 +2017,7 @@ const Inventory = () => {
                   className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-6 py-3 rounded-lg font-medium transition-colors duration-200"
                   disabled={loading}
                 >
-                  إلغاء
+                  {t('inventory.addModal.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1776,12 +2030,12 @@ const Inventory = () => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      جاري الحفظ...
+                      {t('inventory.addModal.saving')}
                     </>
                   ) : (
                     <>
                       <Plus className="h-5 w-5" />
-                      حفظ
+                      {t('inventory.addModal.save')}
                     </>
                   )}
                 </button>
@@ -1805,7 +2059,7 @@ const Inventory = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">تعديل منتج</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.editModal.title')}</h2>
                 <button
                   className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => setShowEditModal(false)}
@@ -1813,30 +2067,40 @@ const Inventory = () => {
               </div>
             </div>
             <div className="p-6">
-            <h2 className="text-xl font-bold mb-4 text-center text-gray-900 dark:text-gray-100">تعديل منتج</h2>
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اسم المنتج</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.productName')}</label>
                 <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الفئة</label>
-                <input type="text" name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.category')}</label>
+                <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
+                  <option value="">{t('inventory.addModal.selectCategory')}</option>
+                  {categoryOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الوحدة</label>
-                <input type="text" name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
+                <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
+                  <option value="">{t('inventory.addModal.selectUnit')}</option>
+                  {unitOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">الحد الأدنى</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.minStock')}</label>
                 <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">السعر للوحدة</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.editModal.lastPrice')}</label>
                 <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('inventory.editModal.priceNote')}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">المورد</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.supplier')}</label>
                 <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
               </div>
               <div>
@@ -1848,9 +2112,9 @@ const Inventory = () => {
                     onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
                     className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
                   />
-                  <span className="mr-2 text-sm text-gray-700 dark:text-gray-300">خامة (مادة خام)</span>
+                  <span className={`${isRTL ? 'mr-2' : 'ml-2'} text-sm text-gray-700 dark:text-gray-300`}>{t('inventory.addModal.isRawMaterial')}</span>
                 </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">حدد هذا الخيار إذا كان العنصر خامة تستخدم في تحضير المنتجات</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('inventory.addModal.rawMaterialHint')}</p>
               </div>
               {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
               {success && <div className="text-green-600 dark:text-green-400 text-sm">{success}</div>}
@@ -1865,9 +2129,9 @@ const Inventory = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    جاري التحديث...
+                    {t('inventory.editModal.updating')}
                   </>
-                ) : 'حفظ التعديلات'}
+                ) : t('inventory.editModal.update')}
               </button>
             </form>
             </div>
@@ -1905,7 +2169,7 @@ const Inventory = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">تأكيد حذف المنتج</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.deleteModal.title')}</h2>
                 <button
                   className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => setShowDeleteModal(false)}
@@ -1913,8 +2177,10 @@ const Inventory = () => {
               </div>
             </div>
             <div className="p-6 text-center">
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">تأكيد حذف المنتج</h2>
-            <p className="mb-6 text-gray-700 dark:text-gray-300">هل أنت متأكد أنك تريد حذف المنتج <span className="font-bold text-red-600 dark:text-red-400">{deleteTarget?.name}</span>؟ لا يمكن التراجع عن هذه العملية.</p>
+            <p className="mb-6 text-gray-700 dark:text-gray-300">
+              {t('inventory.deleteModal.confirmMessage', { name: deleteTarget?.name })}
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('inventory.deleteModal.cannotUndo')}</p>
             {error && <div className="text-red-600 dark:text-red-400 text-sm mb-2">{error}</div>}
             <div className="flex gap-4 justify-center">
               <button
@@ -1922,7 +2188,7 @@ const Inventory = () => {
                 onClick={() => setShowDeleteModal(false)}
                 disabled={loading}
               >
-                إلغاء
+                {t('inventory.addModal.cancel')}
               </button>
               <button
                 className={`flex items-center justify-center gap-2 ${loading ? 'bg-red-500' : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700'} text-white px-4 py-2 rounded-lg font-bold transition-colors duration-200`}
@@ -1935,9 +2201,9 @@ const Inventory = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    جاري الحذف...
+                    {t('inventory.deleteModal.deleting')}
                   </>
-                ) : 'حذف'}
+                ) : t('inventory.deleteModal.confirm')}
               </button>
             </div>
             </div>
@@ -1958,7 +2224,7 @@ const Inventory = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">خصم كمية</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.deductModal.title')}</h2>
                 <button
                   className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
                   onClick={() => setShowDeductModal(false)}
@@ -1968,36 +2234,36 @@ const Inventory = () => {
             <div className="p-6">
               <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-3">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>المنتج:</strong> {selectedItem.name}
+                  <strong>{t('inventory.deductModal.product')}:</strong> {selectedItem.name}
                 </p>
                 <p className="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>المخزون الحالي:</strong> {formatQuantity(selectedItem.currentStock, selectedItem.unit)}
+                  <strong>{t('inventory.deductModal.currentStock')}:</strong> {formatQuantity(selectedItem.currentStock, translateUnit(selectedItem.unit), i18n.language)}
                 </p>
               </div>
 
               <form onSubmit={handleDeductSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    نوع العملية
+                    {t('inventory.deductModal.deductType')}
                   </label>
                   <select
                     value={deductForm.type}
                     onChange={(e) => setDeductForm({ ...deductForm, type: e.target.value as 'out' | 'adjustment' })}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                   >
-                    <option value="out">خصم (بيع/استهلاك/إرجاع)</option>
-                    <option value="adjustment">تعديل المخزون (جرد)</option>
+                    <option value="out">{t('inventory.deductModal.out')}</option>
+                    <option value="adjustment">{t('inventory.deductModal.adjustment')}</option>
                   </select>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {deductForm.type === 'out' 
-                      ? '💡 يخصم الكمية من المخزون الحالي'
-                      : '💡 يضبط المخزون على الكمية المحددة (للجرد)'}
+                      ? t('inventory.deductModal.deductHint')
+                      : t('inventory.deductModal.adjustmentHint')}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {deductForm.type === 'out' ? 'الكمية المراد خصمها' : 'المخزون الصحيح'}
+                    {deductForm.type === 'out' ? t('inventory.deductModal.quantityToDeduct') : t('inventory.deductModal.correctStock')}
                   </label>
                   <input
                     type="number"
@@ -2007,53 +2273,53 @@ const Inventory = () => {
                     required
                     min="0"
                     step="0.01"
-                    placeholder={deductForm.type === 'out' ? 'مثال: 5' : `الحالي: ${selectedItem.currentStock}`}
+                    placeholder={deductForm.type === 'out' ? t('inventory.deductModal.exampleQuantity') : `${t('inventory.deductModal.currentLabel')}: ${formatDecimal(selectedItem.currentStock, i18n.language)}`}
                   />
                   {deductForm.type === 'out' && deductForm.quantity && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      المتبقي بعد الخصم: {Math.max(0, selectedItem.currentStock - Number(deductForm.quantity))} {selectedItem.unit}
+                      {t('inventory.deductModal.remainingAfterDeduct')}: {formatQuantity(Math.max(0, selectedItem.currentStock - Number(deductForm.quantity)), translateUnit(selectedItem.unit), i18n.language)}
                     </p>
                   )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    السبب
+                    {t('inventory.deductModal.reason')}
                   </label>
                   <select
                     value={deductForm.reason}
                     onChange={(e) => {
                       const value = e.target.value;
-                      setDeductForm({ ...deductForm, reason: value === 'أخرى' ? '' : value });
+                      setDeductForm({ ...deductForm, reason: value === t('inventory.deductModal.reasons.other') ? '' : value });
                     }}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100 mb-2"
                   >
-                    <option value="">اختر السبب</option>
+                    <option value="">{t('inventory.deductModal.selectReason')}</option>
                     {deductForm.type === 'out' ? (
                       <>
-                        <option value="بيع">بيع</option>
-                        <option value="استهلاك في الإنتاج">استهلاك في الإنتاج</option>
-                        <option value="تالف">تالف</option>
-                        <option value="منتهي الصلاحية">منتهي الصلاحية</option>
-                        <option value="إرجاع للمورد">إرجاع للمورد</option>
-                        <option value="أخرى">أخرى (حدد السبب)</option>
+                        <option value={t('inventory.deductModal.reasons.sale')}>{t('inventory.deductModal.reasons.sale')}</option>
+                        <option value={t('inventory.deductModal.reasons.production')}>{t('inventory.deductModal.reasons.production')}</option>
+                        <option value={t('inventory.deductModal.reasons.damaged')}>{t('inventory.deductModal.reasons.damaged')}</option>
+                        <option value={t('inventory.deductModal.reasons.expired')}>{t('inventory.deductModal.reasons.expired')}</option>
+                        <option value={t('inventory.deductModal.reasons.returnToSupplier')}>{t('inventory.deductModal.reasons.returnToSupplier')}</option>
+                        <option value={t('inventory.deductModal.reasons.other')}>{t('inventory.deductModal.reasons.other')}</option>
                       </>
                     ) : (
                       <>
-                        <option value="جرد دوري">جرد دوري</option>
-                        <option value="تصحيح خطأ">تصحيح خطأ</option>
-                        <option value="فقدان">فقدان</option>
-                        <option value="أخرى">أخرى (حدد السبب)</option>
+                        <option value={t('inventory.deductModal.reasons.periodicInventory')}>{t('inventory.deductModal.reasons.periodicInventory')}</option>
+                        <option value={t('inventory.deductModal.reasons.errorCorrection')}>{t('inventory.deductModal.reasons.errorCorrection')}</option>
+                        <option value={t('inventory.deductModal.reasons.loss')}>{t('inventory.deductModal.reasons.loss')}</option>
+                        <option value={t('inventory.deductModal.reasons.other')}>{t('inventory.deductModal.reasons.other')}</option>
                       </>
                     )}
                   </select>
-                  {(!deductForm.reason || deductForm.reason === 'أخرى') && (
+                  {(!deductForm.reason || deductForm.reason === t('inventory.deductModal.reasons.other')) && (
                     <input
                       type="text"
-                      value={deductForm.reason === 'أخرى' ? '' : deductForm.reason}
+                      value={deductForm.reason === t('inventory.deductModal.reasons.other') ? '' : deductForm.reason}
                       onChange={(e) => setDeductForm({ ...deductForm, reason: e.target.value })}
                       className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                      placeholder="اكتب السبب..."
+                      placeholder={t('inventory.deductModal.enterReason')}
                       required
                     />
                   )}
@@ -2061,17 +2327,21 @@ const Inventory = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    التاريخ والوقت
+                    {t('inventory.deductModal.date')}
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={deductForm.date}
-                    onChange={(e) => setDeductForm({ ...deductForm, date: e.target.value })}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                    required
+                  <DatePicker
+                    showTime
+                    value={deductForm.date ? dayjs(deductForm.date) : null}
+                    onChange={(date) => {
+                      setDeductForm({ ...deductForm, date: date ? date.format('YYYY-MM-DDTHH:mm') : '' });
+                    }}
+                    format="YYYY/MM/DD HH:mm"
+                    className="w-full"
+                    size="large"
+                    placeholder={t('inventory.deductModal.date')}
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    💡 يمكنك تحديد تاريخ ووقت سابق للعملية
+                    💡 {t('inventory.addModal.dateHint')}
                   </p>
                 </div>
 
@@ -2088,7 +2358,7 @@ const Inventory = () => {
                     className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg font-medium transition-colors duration-200"
                     disabled={loading}
                   >
-                    إلغاء
+                    {t('inventory.addModal.cancel')}
                   </button>
                   <button
                     type="submit"
@@ -2101,12 +2371,12 @@ const Inventory = () => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        جاري الخصم...
+                        {t('inventory.deductModal.deducting')}
                       </>
                     ) : (
                       <>
                         <Minus className="h-4 w-4" />
-                        {deductForm.type === 'out' ? 'خصم الكمية' : 'تعديل المخزون'}
+                        {deductForm.type === 'out' ? t('inventory.deductModal.deductQuantity') : t('inventory.deductModal.adjustStock')}
                       </>
                     )}
                   </button>
@@ -2131,7 +2401,7 @@ const Inventory = () => {
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg z-10">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">سجل حركات المخزون</h2>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.movementsModal.title')}</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{selectedItem.name}</p>
                 </div>
                 <button
@@ -2144,36 +2414,36 @@ const Inventory = () => {
               {loading ? (
                 <div className="text-center py-8">
                   <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
-                  <p className="mt-2 text-gray-600 dark:text-gray-400">جاري التحميل...</p>
+                  <p className="mt-2 text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.loading')}</p>
                 </div>
               ) : itemMovements.length === 0 ? (
                 <div className="text-center py-8">
                   <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">لا توجد حركات مخزون لهذا المنتج</p>
+                  <p className="text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.noMovements')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* ملخص المنتج */}
                   <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 grid grid-cols-3 gap-4">
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">المخزون الحالي</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.currentStock')}</p>
                       <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                        {formatQuantity(selectedItem.currentStock, selectedItem.unit)}
+                        {formatQuantity(selectedItem.currentStock, translateUnit(selectedItem.unit), i18n.language)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">القيمة الإجمالية</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.totalValue')}</p>
                       <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                        {formatCurrency(selectedItem.totalValue || (selectedItem.currentStock * selectedItem.price))}
+                        {formatCurrency(selectedItem.totalValue || (selectedItem.currentStock * selectedItem.price), i18n.language)}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        محسوبة بناءً على سعر كل دفعة (FIFO)
+                        {t('inventory.movementsModal.totalValueHint')}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">عدد الحركات</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.movementsCount')}</p>
                       <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                        {itemMovements.length}
+                        {formatDecimal(itemMovements.length, i18n.language)}
                       </p>
                     </div>
                   </div>
@@ -2183,14 +2453,14 @@ const Inventory = () => {
                     <table className="w-full">
                       <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">التاريخ</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">النوع</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">الكمية</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">السعر/الوحدة</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">الإجمالي</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">السبب</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">المخزون بعد</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">إجراءات</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.date')}</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.type')}</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.quantity')}</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.pricePerUnit')}</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.total')}</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.reason')}</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.balanceAfter')}</th>
+                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.actions')}</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -2211,14 +2481,17 @@ const Inventory = () => {
                           <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {movement.timestamp || movement.date 
-                                ? new Date(movement.timestamp || movement.date).toLocaleDateString('ar-EG', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })
-                                : 'غير محدد'}
+                                ? new Date(movement.timestamp || movement.date).toLocaleDateString(
+                                    i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US',
+                                    {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    }
+                                  )
+                                : t('inventory.movementsModal.notSpecified')}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -2228,59 +2501,59 @@ const Inventory = () => {
                                   ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
                                   : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                               }`}>
-                                {movement.type === 'in' ? 'إضافة' : movement.type === 'out' ? 'خصم' : 'تعديل'}
+                                {t(`inventory.movementsModal.types.${movement.type}`)}
                               </span>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`font-medium ${
                                 movement.type === 'in' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                               }`}>
-                                {movement.type === 'in' ? '+' : '-'}{formatQuantity(movement.quantity, selectedItem.unit)}
+                                {movement.type === 'in' ? '+' : '-'}{formatQuantity(movement.quantity, translateUnit(selectedItem.unit), i18n.language)}
                               </span>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {displayPrice ? (
                                 <span className={(movement.type === 'out' || movement.type === 'adjustment') ? 'text-gray-500 dark:text-gray-400' : ''}>
-                                  {formatCurrency(displayPrice)}
+                                  {formatCurrency(displayPrice, i18n.language)}
                                 </span>
                               ) : '-'}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                               {displayTotal ? (
                                 <span className={(movement.type === 'out' || movement.type === 'adjustment') ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>
-                                  {formatCurrency(displayTotal)}
+                                  {formatCurrency(displayTotal, i18n.language)}
                                 </span>
                               ) : '-'}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                              {movement.reason || '-'}
+                              {translateReason(movement.reason)}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {formatQuantity(movement.balanceAfter, selectedItem.unit)}
+                              {formatQuantity(movement.balanceAfter, translateUnit(selectedItem.unit), i18n.language)}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <div className="flex gap-2 justify-end">
+                              <div className={`flex gap-2 ${isRTL ? 'justify-start' : 'justify-end'}`}>
                                 {/* لا يمكن تعديل أو حذف الحركات المرتبطة بالطلبات */}
                                 {!movement.reason?.includes('طلب رقم') && !movement.reason?.includes('فاتورة') ? (
                                   <>
                                     <button
                                       onClick={() => openEditMovementModal(movement)}
                                       className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                      title="تعديل"
+                                      title={t('inventory.movementsModal.edit')}
                                     >
                                       <Edit2 className="w-4 h-4" />
                                     </button>
                                     <button
                                       onClick={() => handleDeleteMovement(movement._id)}
                                       className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                                      title="حذف"
+                                      title={t('inventory.movementsModal.delete')}
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </>
                                 ) : (
                                   <span className="text-xs text-gray-500 dark:text-gray-400 italic">
-                                    مرتبط بطلب
+                                    {t('inventory.movementsModal.linkedToOrder')}
                                   </span>
                                 )}
                               </div>
@@ -2303,7 +2576,7 @@ const Inventory = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-                تعديل الحركة
+                {t('inventory.editMovementModal.title')}
               </h2>
 
               {/* نوع الحركة والتحذير */}
@@ -2315,7 +2588,7 @@ const Inventory = () => {
                   : 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-600'
               }`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-bold text-base">نوع الحركة:</span>
+                  <span className="font-bold text-base">{t('inventory.editMovementModal.movementType')}:</span>
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${
                     editingMovement.type === 'in'
                       ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
@@ -2323,44 +2596,44 @@ const Inventory = () => {
                       ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
                       : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                   }`}>
-                    {editingMovement.type === 'in' ? '➕ إضافة' : editingMovement.type === 'out' ? '➖ خصم' : '🔄 تعديل'}
+                    {editingMovement.type === 'in' ? '➕ ' : editingMovement.type === 'out' ? '➖ ' : '🔄 '}{t(`inventory.movementsModal.types.${editingMovement.type}`)}
                   </span>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    ⚠️ تحذير هام:
+                    {t('inventory.editMovementModal.warningTitle')}
                   </p>
                   {editingMovement.type === 'in' ? (
                     <>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • هذه حركة <strong>إضافة</strong> - تعديل الكمية سيؤثر على المخزون الحالي
+                        {t('inventory.editMovementModal.inWarning1')}
                       </p>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • زيادة الكمية = زيادة المخزون | تقليل الكمية = تقليل المخزون
+                        {t('inventory.editMovementModal.inWarning2')}
                       </p>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • تعديل السعر سيؤثر على حسابات FIFO للحركات اللاحقة
+                        {t('inventory.editMovementModal.inWarning3')}
                       </p>
                     </>
                   ) : editingMovement.type === 'out' ? (
                     <>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • هذه حركة <strong>خصم</strong> - تعديل الكمية سيؤثر على المخزون الحالي
+                        {t('inventory.editMovementModal.outWarning1')}
                       </p>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • زيادة الكمية = تقليل المخزون أكثر | تقليل الكمية = زيادة المخزون
+                        {t('inventory.editMovementModal.outWarning2')}
                       </p>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • السعر محسوب تلقائياً بطريقة FIFO من أقدم الدفعات
+                        {t('inventory.editMovementModal.outWarning3')}
                       </p>
                     </>
                   ) : (
                     <>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • هذه حركة <strong>تعديل</strong> - تعديل الكمية سيضبط المخزون للقيمة الجديدة
+                        {t('inventory.editMovementModal.adjustmentWarning1')}
                       </p>
                       <p className="text-sm text-gray-700 dark:text-gray-300">
-                        • الكمية الجديدة ستحل محل المخزون الحالي في هذه النقطة الزمنية
+                        {t('inventory.editMovementModal.adjustmentWarning2')}
                       </p>
                     </>
                   )}
@@ -2377,7 +2650,7 @@ const Inventory = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      الكمية <span className="text-red-500">*</span>
+                      {t('inventory.editMovementModal.quantity')} <span className="text-red-500">{t('inventory.editMovementModal.required')}</span>
                     </label>
                     <input
                       type="number"
@@ -2386,13 +2659,14 @@ const Inventory = () => {
                       onChange={(e) => setEditMovementForm({ ...editMovementForm, quantity: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
                       required
+                      placeholder={t('inventory.editMovementModal.quantityPlaceholder')}
                     />
                   </div>
 
                   {editingMovement.type === 'in' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        السعر/الوحدة
+                        {t('inventory.editMovementModal.price')}
                       </label>
                       <input
                         type="number"
@@ -2400,13 +2674,14 @@ const Inventory = () => {
                         value={editMovementForm.price}
                         onChange={(e) => setEditMovementForm({ ...editMovementForm, price: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                        placeholder={t('inventory.editMovementModal.pricePlaceholder')}
                       />
                     </div>
                   )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      السبب <span className="text-red-500">*</span>
+                      {t('inventory.editMovementModal.reason')} <span className="text-red-500">{t('inventory.editMovementModal.required')}</span>
                     </label>
                     <input
                       type="text"
@@ -2414,18 +2689,24 @@ const Inventory = () => {
                       onChange={(e) => setEditMovementForm({ ...editMovementForm, reason: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
                       required
+                      placeholder={t('inventory.editMovementModal.reasonPlaceholder')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      التاريخ والوقت
+                      {t('inventory.editMovementModal.date')}
                     </label>
-                    <input
-                      type="datetime-local"
-                      value={editMovementForm.date}
-                      onChange={(e) => setEditMovementForm({ ...editMovementForm, date: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                    <DatePicker
+                      showTime
+                      value={editMovementForm.date ? dayjs(editMovementForm.date) : null}
+                      onChange={(date) => {
+                        setEditMovementForm({ ...editMovementForm, date: date ? date.format('YYYY-MM-DDTHH:mm') : '' });
+                      }}
+                      format="YYYY/MM/DD HH:mm"
+                      className="w-full"
+                      size="large"
+                      placeholder={t('inventory.editMovementModal.date')}
                     />
                   </div>
                 </div>
@@ -2440,14 +2721,14 @@ const Inventory = () => {
                     className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     disabled={loading}
                   >
-                    إلغاء
+                    {t('inventory.editMovementModal.cancel')}
                   </button>
                   <button
                     type="submit"
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
                     disabled={loading}
                   >
-                    {loading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+                    {loading ? t('inventory.editMovementModal.updating') : t('inventory.editMovementModal.update')}
                   </button>
                 </div>
               </form>
@@ -2455,7 +2736,85 @@ const Inventory = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Movement Modal */}
+      {showDeleteMovementModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteMovementModal(false);
+              setDeletingMovementId(null);
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.deleteMovementModal.title')}</h2>
+                <button
+                  className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
+                  onClick={() => {
+                    setShowDeleteMovementModal(false);
+                    setDeletingMovementId(null);
+                  }}
+                >×</button>
+              </div>
+            </div>
+            <div className="p-6 text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="rounded-full bg-red-100 dark:bg-red-900/20 p-3">
+                  <Trash2 className="h-8 w-8 text-red-600 dark:text-red-400" />
+                </div>
+              </div>
+              <p className="mb-4 text-gray-700 dark:text-gray-300 text-lg font-medium">
+                {t('inventory.deleteMovementModal.confirmMessage')}
+              </p>
+              <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600 rounded-lg p-3">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  ⚠️ {t('inventory.deleteMovementModal.warning')}
+                </p>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{t('inventory.deleteMovementModal.cannotUndo')}</p>
+              
+              <div className="flex gap-3 justify-center">
+                <button
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 rounded-lg font-medium transition-colors duration-200"
+                  onClick={() => {
+                    setShowDeleteMovementModal(false);
+                    setDeletingMovementId(null);
+                  }}
+                  disabled={loading}
+                >
+                  {t('inventory.deleteMovementModal.cancel')}
+                </button>
+                <button
+                  className={`flex items-center justify-center gap-2 px-4 py-2 ${loading ? 'bg-red-500' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg font-medium transition-colors duration-200`}
+                  onClick={confirmDeleteMovement}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {t('inventory.deleteMovementModal.deleting')}
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      {t('inventory.deleteMovementModal.confirm')}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    </ConfigProvider>
   );
 };
 

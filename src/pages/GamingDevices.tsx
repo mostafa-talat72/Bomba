@@ -1,29 +1,35 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Gamepad2, Monitor, Play, Square, Users, Plus, Table as TableIcon, X, Edit, Trash2, Clock } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
 import { SessionCostDisplay } from '../components/SessionCostDisplay';
+import { formatDecimal, formatCurrency } from '../utils/formatters';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 import utc from 'dayjs/plugin/utc';
 
 // Configure dayjs
-dayjs.locale('ar');
 dayjs.extend(utc);
 
-// دالة لتحويل الأرقام الإنجليزية إلى العربية
-const toArabicNumbers = (str: string): string => {
-  const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-  return str.replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
-};
-
-// دالة لتنسيق الوقت بالعربية (يوم/شهر/سنة)
-const formatTimeInArabic = (dateTime: dayjs.Dayjs): string => {
+// دالة لتنسيق الوقت حسب اللغة
+const formatTimeByLocale = (dateTime: dayjs.Dayjs, locale: string): string => {
+  dayjs.locale(locale);
   const formatted = dateTime.format('DD/MM/YYYY - hh:mm A');
-  return toArabicNumbers(formatted)
-    .replace('AM', 'ص')
-    .replace('PM', 'م');
+  
+  if (locale === 'ar') {
+    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return formatted
+      .replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)])
+      .replace('AM', 'ص')
+      .replace('PM', 'م');
+  }
+  
+  return formatted;
 };
 
 interface GamingDevicesProps {
@@ -32,14 +38,16 @@ interface GamingDevicesProps {
 
 const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const location = useLocation();
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, fetchTables, fetchTableSections, fetchSessions } = useApp();
   
   // Configuration based on device type
   const config = {
     playstation: {
       icon: Gamepad2,
-      title: 'إدارة أجهزة البلايستيشن',
-      subtitle: 'متابعة وإدارة جلسات البلايستيشن',
+      title: t('gaming.playstation.title'),
+      subtitle: t('gaming.playstation.subtitle'),
       colors: {
         primary: 'from-blue-600 to-indigo-600',
         primaryDark: 'from-blue-700 to-indigo-700',
@@ -53,8 +61,8 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     },
     computer: {
       icon: Monitor,
-      title: 'إدارة أجهزة الكمبيوتر',
-      subtitle: 'متابعة وإدارة جلسات الكمبيوتر',
+      title: t('gaming.computer.title'),
+      subtitle: t('gaming.computer.subtitle'),
       colors: {
         primary: 'from-orange-600 to-red-600',
         primaryDark: 'from-orange-700 to-red-700',
@@ -128,6 +136,11 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const [showControllersConfirm, setShowControllersConfirm] = useState(false);
   const [controllersChangeData, setControllersChangeData] = useState<{sessionId: string, newCount: number, oldCount: number, deviceName: string} | null>(null);
 
+  // نافذة تأكيد إنهاء الجلسة
+  const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false);
+  const [sessionToEnd, setSessionToEnd] = useState<Session | null>(null);
+  const [customerNameForEnd, setCustomerNameForEnd] = useState('');
+
   // Loading states
   const [isInitialLoading, setIsInitialLoading] = useState(sessions.length === 0);
   const [loadingError, setLoadingError] = useState<string | null>(null);
@@ -147,7 +160,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         setDevices(response.data);
       }
     } catch {
-      showNotification('خطأ في تحميل الأجهزة', 'error');
+      showNotification(t('gaming.deviceAddedError'), 'error');
     }
   };
 
@@ -196,9 +209,9 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         ]).catch(() => {});
 
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'حدث خطأ في تحميل البيانات';
+        const errorMessage = err instanceof Error ? err.message : t('gaming.loadingError');
         setLoadingError(errorMessage);
-        showNotification('فشل في تحميل البيانات. يرجى إعادة تحميل الصفحة.', 'error');
+        showNotification(t('gaming.loadingError'), 'error');
         setIsInitialLoading(false);
       }
     };
@@ -239,7 +252,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     );
     
     if (activeSession) {
-      showNotification('لا يمكن تعديل الجهاز أثناء وجود جلسة نشطة عليه', 'error');
+      showNotification(t('gaming.cannotEditActiveDevice'), 'error');
       return;
     }
     
@@ -278,7 +291,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         await loadDevices();
       }
     } catch (error) {
-      showNotification('حدث خطأ أثناء حذف الجهاز', 'error');
+      showNotification(t('gaming.deviceDeletedError'), 'error');
     } finally {
       setIsDeletingDevice(false);
     }
@@ -289,14 +302,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     e.preventDefault();
     setAddDeviceError(null);
     if (!newDevice.name || !newDevice.number) {
-      setAddDeviceError('اسم الجهاز ورقمه مطلوبان');
+      setAddDeviceError(t('gaming.deviceNameRequired'));
       setIsAddingDevice(false);
       return;
     }
 
     const deviceNumber = parseInt(newDevice.number);
     if (isNaN(deviceNumber) || deviceNumber <= 0) {
-      setAddDeviceError('رقم الجهاز يجب أن يكون رقم صحيح أكبر من 0');
+      setAddDeviceError(t('gaming.deviceNumberInvalid'));
       setIsAddingDevice(false);
       return;
     }
@@ -307,7 +320,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       return existingNumber === deviceNumber;
     });
     if (existingDevice) {
-      setAddDeviceError(`رقم الجهاز ${toArabicNumbers(String(deviceNumber))} مستخدم بالفعل`);
+      setAddDeviceError(t('gaming.deviceNumberExists', { number: formatDecimal(deviceNumber, i18n.language) }));
       setIsAddingDevice(false);
       return;
     }
@@ -324,7 +337,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       for (let i = 1; i <= 4; i++) {
         const rate = parseFloat(newDevice.playstationRates[i as keyof typeof newDevice.playstationRates]);
         if (isNaN(rate) || rate < 0) {
-          setAddDeviceError(`سعر الساعة للدراعات (${i}) يجب أن يكون رقم موجب`);
+          setAddDeviceError(t('gaming.hourlyRateForControllersInvalid', { count: i }));
           setIsAddingDevice(false);
           return;
         }
@@ -335,7 +348,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     } else {
       const hourlyRate = parseFloat(newDevice.hourlyRate);
       if (isNaN(hourlyRate) || hourlyRate < 0) {
-        setAddDeviceError('سعر الساعة يجب أن يكون رقم موجب');
+        setAddDeviceError(t('gaming.hourlyRateInvalid'));
         setIsAddingDevice(false);
         return;
       }
@@ -352,15 +365,15 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             ? { name: '', number: '', controllers: 2, playstationRates: config.defaultRate }
             : { name: '', number: '', hourlyRate: String(config.defaultRate) }
         );
-        showNotification('تمت إضافة الجهاز بنجاح', 'success');
+        showNotification(t('gaming.deviceAddedSuccess'), 'success');
       } else {
-        setAddDeviceError('حدث خطأ أثناء إضافة الجهاز.');
+        setAddDeviceError(t('gaming.deviceAddedError'));
       }
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { error?: string } }; message?: string };
-      const errorMessage = apiError?.response?.data?.error || apiError?.message || 'حدث خطأ غير متوقع';
+      const errorMessage = apiError?.response?.data?.error || apiError?.message || t('gaming.deviceAddedError');
       setAddDeviceError(errorMessage);
-      showNotification(`خطأ في إضافة الجهاز: ${errorMessage}`, 'error');
+      showNotification(`${t('gaming.deviceAddedError')}: ${errorMessage}`, 'error');
     } finally {
       setIsAddingDevice(false);
     }
@@ -427,7 +440,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             fetchTables() // تحديث حالة الطاولات
           ]);
           
-          showNotification(`✅ تم بدء الجلسة بنجاح`, 'success');
+          showNotification(t('gaming.sessionStartedSuccess'), 'success');
           
           setShowNewSession(false);
           setSelectedDevice(null);
@@ -435,24 +448,24 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
           setSessionError(null);
           setSelectedTable(null);
         } catch (updateError) {
-          showNotification('تم بدء الجلسة ولكن حدث خطأ في تحديث حالة الجهاز', 'warning');
+          showNotification(t('gaming.sessionStartedError'), 'warning');
           setShowNewSession(false);
         }
       } else {
-        setSessionError('حدث خطأ أثناء بدء الجلسة.');
-        showNotification('حدث خطأ أثناء بدء الجلسة.', 'error');
+        setSessionError(t('gaming.sessionStartedError'));
+        showNotification(t('gaming.sessionStartedError'), 'error');
       }
     } catch (err: unknown) {
       const apiError = err as { message?: string; response?: { data?: { message?: string, error?: string } } };
-      const errorMessage = apiError?.response?.data?.error || apiError?.response?.data?.message || apiError?.message || 'حدث خطأ غير متوقع';
+      const errorMessage = apiError?.response?.data?.error || apiError?.response?.data?.message || apiError?.message || t('gaming.sessionStartedError');
       
       let userFriendlyMessage = errorMessage;
       if (errorMessage.includes('in use') || errorMessage.includes('مستخدم')) {
-        userFriendlyMessage = '❌ الجهاز مستخدم حالياً. يرجى اختيار جهاز آخر.';
+        userFriendlyMessage = t('gaming.deviceInUse');
       } else if (errorMessage.includes('not found') || errorMessage.includes('غير موجود')) {
-        userFriendlyMessage = '❌ الجهاز غير موجود. يرجى تحديث الصفحة والمحاولة مرة أخرى.';
+        userFriendlyMessage = t('gaming.deviceNotFound');
       } else {
-        userFriendlyMessage = `❌ ${errorMessage}`;
+        userFriendlyMessage = errorMessage;
       }
       
       setSessionError(userFriendlyMessage);
@@ -465,7 +478,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // تعديل وقت بدء الجلسة
   const handleEditStartTime = async () => {
     if (!selectedSessionForEditTime || !newStartTime) {
-      showNotification('يرجى تحديد الوقت الجديد', 'error');
+      showNotification(t('gaming.newStartTime') + ' ' + t('gaming.required'), 'error');
       return;
     }
 
@@ -476,13 +489,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       const currentTime = dayjs();
       
       if (localDateTime.isAfter(currentTime)) {
-        showNotification('لا يمكن تعديل وقت البدء إلى وقت في المستقبل', 'error');
+        showNotification(t('gaming.cannotEditFutureTime'), 'error');
         return;
       }
 
       const twentyFourHoursAgo = currentTime.subtract(24, 'hour');
       if (localDateTime.isBefore(twentyFourHoursAgo)) {
-        showNotification('لا يمكن تعديل وقت البدء إلى أكثر من ٢٤ ساعة في الماضي', 'error');
+        showNotification(t('gaming.cannotEditFutureTime'), 'error');
         return;
       }
 
@@ -501,15 +514,15 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       await fetchSessions();
       await fetchBills();
 
-      showNotification('✅ تم تعديل وقت بدء الجلسة بنجاح', 'success');
+      showNotification(t('gaming.startTimeUpdatedSuccess'), 'success');
       
       setShowEditStartTimeModal(false);
       setSelectedSessionForEditTime(null);
       setNewStartTime('');
 
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء تعديل وقت البدء';
-      showNotification(`❌ ${errorMessage}`, 'error');
+      const errorMessage = error?.response?.data?.message || error?.message || t('gaming.startTimeUpdatedError');
+      showNotification(errorMessage, 'error');
     } finally {
       setIsUpdatingStartTime(false);
     }
@@ -533,15 +546,60 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
   // إنهاء الجلسة
   const handleEndSession = async (sessionId: string) => {
+    // Find the session
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) {
+      showNotification(t('gaming.sessionNotFound'), 'error');
+      return;
+    }
+
+    // Check if session is linked to a table
+    const bill = typeof session.bill === 'object' ? session.bill : null;
+    const isLinkedToTable = bill ? !!(bill as any)?.table : false;
+
+    // If not linked to a table, show confirmation modal
+    if (!isLinkedToTable) {
+      setSessionToEnd(session);
+      setCustomerNameForEnd(session.customerName || `عميل (${session.deviceName})`);
+      setShowEndSessionConfirm(true);
+      return;
+    }
+
+    // Session is linked to a table, end directly
     try {
       setEndingSessions(prev => ({ ...prev, [sessionId]: true }));
       await endSession(sessionId);
       await loadDevices();
       await fetchSessions();
     } catch (error) {
-      showNotification('حدث خطأ أثناء إنهاء الجلسة', 'error');
+      showNotification(t('gaming.sessionEndedError'), 'error');
     } finally {
       setEndingSessions(prev => ({ ...prev, [sessionId]: false }));
+    }
+  };
+
+  // تأكيد إنهاء الجلسة
+  const confirmEndSession = async () => {
+    if (!sessionToEnd) return;
+
+    if (!customerNameForEnd.trim()) {
+      showNotification(t('gaming.customerNameRequired'), 'error');
+      return;
+    }
+
+    try {
+      setEndingSessions(prev => ({ ...prev, [sessionToEnd.id]: true }));
+      await endSession(sessionToEnd.id, customerNameForEnd.trim());
+      await loadDevices();
+      await fetchSessions();
+      
+      setShowEndSessionConfirm(false);
+      setSessionToEnd(null);
+      setCustomerNameForEnd('');
+    } catch (error) {
+      showNotification(t('gaming.sessionEndedError'), 'error');
+    } finally {
+      setEndingSessions(prev => ({ ...prev, [sessionToEnd.id]: false }));
     }
   };
 
@@ -579,13 +637,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       await fetchSessions();
       await fetchBills();
       
-      showNotification(`✅ تم تعديل عدد الأذرع إلى ${toArabicNumbers(String(newCount))} بنجاح`, 'success');
+      const message = t('gaming.controllersUpdatedSuccess', { count: newCount }).replace(newCount.toString(), formatDecimal(newCount, i18n.language));
+      showNotification(message, 'success');
       
       setShowControllersConfirm(false);
       setControllersChangeData(null);
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء تعديل عدد الأذرع';
-      showNotification(`❌ ${errorMessage}`, 'error');
+      const errorMessage = error?.response?.data?.message || error?.message || t('gaming.controllersUpdatedError');
+      showNotification(errorMessage, 'error');
     } finally {
       setUpdatingControllers(prev => ({ ...prev, [sessionId]: false }));
     }
@@ -599,7 +658,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     // الحصول على الفترة المحددة
     const period = session.controllersHistory?.[periodIndex];
     if (!period) {
-      showNotification('الفترة غير موجودة', 'error');
+      showNotification(t('gaming.periodTimeUpdatedError'), 'error');
       return;
     }
 
@@ -634,14 +693,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // دالة تعديل وقت فترة الدراعات
   const handleEditPeriodTime = async () => {
     if (!selectedSessionForPeriodEdit || !newPeriodStartTime) {
-      showNotification('يرجى تحديد وقت البداية', 'error');
+      showNotification(t('gaming.newPeriodStartTime') + ' ' + t('gaming.required'), 'error');
       return;
     }
 
     // التحقق من الفترة المحددة
     const period = selectedSessionForPeriodEdit.controllersHistory?.[selectedPeriodIndex];
     if (!period) {
-      showNotification('الفترة غير موجودة', 'error');
+      showNotification(t('gaming.periodTimeUpdatedError'), 'error');
       return;
     }
 
@@ -649,7 +708,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
     // للفترات المنتهية، التحقق من وجود وقت النهاية
     if (!isActivePeriod && !newPeriodEndTime) {
-      showNotification('يرجى تحديد وقت النهاية للفترة المنتهية', 'error');
+      showNotification(t('gaming.newPeriodEndTime') + ' ' + t('gaming.required'), 'error');
       return;
     }
 
@@ -662,13 +721,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       // التحقق من أن وقت البداية ليس قبل بداية الجلسة
       const sessionStartTime = dayjs(selectedSessionForPeriodEdit.startTime);
       if (localStartDateTime.isBefore(sessionStartTime)) {
-        showNotification('❌ لا يمكن تعديل وقت البداية إلى ما قبل بداية الجلسة', 'error');
+        showNotification(t('gaming.periodTimeUpdatedError'), 'error');
         return;
       }
 
       // التحقق من أن وقت النهاية بعد وقت البداية
       if (localEndDateTime && localEndDateTime.isBefore(localStartDateTime)) {
-        showNotification('❌ وقت النهاية يجب أن يكون بعد وقت البداية', 'error');
+        showNotification(t('gaming.periodTimeUpdatedError'), 'error');
         return;
       }
 
@@ -680,7 +739,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         localEndDateTime ? localEndDateTime.toISOString() : undefined
       );
 
-      showNotification('✅ تم تحديث أوقات فترة الدراعات والفترات المجاورة بنجاح', 'success');
+      showNotification(t('gaming.periodTimeUpdatedSuccess'), 'success');
 
       // إعادة تحميل الجلسات لتحديث البيانات
       await fetchSessions();
@@ -694,8 +753,8 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       setNewPeriodEndTime('');
 
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء التحقق من البيانات';
-      showNotification(`❌ ${errorMessage}`, 'error');
+      const errorMessage = error?.response?.data?.message || error?.message || t('gaming.periodTimeUpdatedError');
+      showNotification(errorMessage, 'error');
     } finally {
       setIsUpdatingPeriodTime(false);
     }
@@ -704,7 +763,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   // ربط الجلسة بطاولة
   const handleLinkTableToSession = async (session: Session, tableId: string | null) => {
     if (!tableId) {
-      showNotification('⚠️ يرجى اختيار طاولة', 'warning');
+      showNotification(t('gaming.pleaseSelectTable'), 'warning');
       return;
     }
 
@@ -730,13 +789,17 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         
         if (isCurrentlyLinkedToTable && result.data && 'oldTable' in result.data && 'newTable' in result.data) {
           const changeData = result.data as any;
-          message = `✅ تم نقل الجلسة من طاولة ${toArabicNumbers(String(changeData.oldTable))} إلى طاولة ${toArabicNumbers(String(changeData.newTable))} بنجاح`;
+          message = t('gaming.tableChangedSuccess', { 
+            oldTable: formatDecimal(changeData.oldTable, i18n.language), 
+            newTable: formatDecimal(changeData.newTable, i18n.language) 
+          });
         } else {
           const billData = result.data?.bill;
-          message = `✅ تم ربط الجلسة بالطاولة ${toArabicNumbers(String(tableNumber))} بنجاح`;
+          message = t('gaming.tableLinkedSuccess', { table: formatDecimal(tableNumber, i18n.language) });
           
           if (billData && billData.sessionsCount > 1) {
-            message += ` (تم دمج الفواتير - ${toArabicNumbers(String(billData.sessionsCount))} جلسات)`;
+            const mergedMessage = t('gaming.billsMerged', { count: billData.sessionsCount }).replace(billData.sessionsCount.toString(), formatDecimal(billData.sessionsCount, i18n.language));
+            message += ` (${mergedMessage})`;
           }
         }
         
@@ -746,13 +809,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         setShowLinkTableModal(false);
         setSelectedSessionForLink(null);
       } else {
-        const errorMessage = result.message || (isCurrentlyLinkedToTable ? '❌ فشل في تغيير طاولة الجلسة' : '❌ فشل في ربط الجلسة بالطاولة');
+        const errorMessage = result.message || (isCurrentlyLinkedToTable ? t('gaming.tableChangeError') : t('gaming.tableLinkError'));
         showNotification(errorMessage, 'error');
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
-      const actionText = isCurrentlyLinkedToTable ? 'تغيير طاولة الجلسة' : 'ربط الجلسة بالطاولة';
-      showNotification(`❌ خطأ في ${actionText}: ${errorMsg}`, 'error');
+      const errorMsg = error instanceof Error ? error.message : t('gaming.tableLinkError');
+      const actionText = isCurrentlyLinkedToTable ? t('gaming.changeTable') : t('gaming.linkTable');
+      showNotification(`${actionText}: ${errorMsg}`, 'error');
     } finally {
       setLinkingTable(false);
     }
@@ -773,7 +836,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       if (response && response.success) {
         const tableNumber = response.data?.unlinkedFromTable;
         showNotification(
-          `✅ تم فك ربط الجلسة من الطاولة ${toArabicNumbers(String(tableNumber))} بنجاح`,
+          t('gaming.tableUnlinkedSuccess', { table: formatDecimal(tableNumber, i18n.language) }),
           'success'
         );
 
@@ -783,14 +846,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         setSelectedSessionForUnlink(null);
         setCustomerNameForUnlink('');
       } else {
-        showNotification('❌ فشل في فك ربط الجلسة من الطاولة', 'error');
+        showNotification(t('gaming.tableUnlinkError'), 'error');
       }
     } catch (error: any) {
       const errorMsg =
         error?.response?.data?.message ||
         error?.message ||
-        'حدث خطأ غير متوقع';
-      showNotification(`❌ خطأ في فك الربط: ${errorMsg}`, 'error');
+        t('gaming.tableUnlinkError');
+      showNotification(errorMsg, 'error');
     } finally {
       setUnlinkingTable(false);
     }
@@ -821,8 +884,8 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-6 py-3 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-bold"
                 style={{ color: deviceType === 'playstation' ? '#2563eb' : '#ea580c' }}
               >
-                <Plus className="h-5 w-5 ml-2" />
-                إضافة جهاز
+                <Plus className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
+                {t('gaming.addDevice')}
               </button>
             )}
           </div>
@@ -841,10 +904,10 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             }}></div>
           </div>
           <p className="font-medium" style={{ color: deviceType === 'playstation' ? '#1e40af' : '#c2410c' }}>
-            جاري تحميل البيانات...
+            {t('gaming.loading')}
           </p>
           <p className="text-sm mt-1" style={{ color: deviceType === 'playstation' ? '#2563eb' : '#ea580c' }}>
-            يرجى الانتظار قليلاً
+            {t('gaming.pleaseWait')}
           </p>
         </div>
       )}
@@ -854,22 +917,22 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <svg className="w-5 h-5 text-red-600 dark:text-red-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-5 h-5 text-red-600 dark:text-red-400 ${isRTL ? 'ml-2' : 'mr-2'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <div>
                 <p className="text-red-800 dark:text-red-200 font-medium">{loadingError}</p>
-                <p className="text-red-600 dark:text-red-400 text-sm mt-1">تأكد من اتصالك بالإنترنت وحاول مرة أخرى</p>
+                <p className="text-red-600 dark:text-red-400 text-sm mt-1">{t('gaming.checkConnection')}</p>
               </div>
             </div>
             <button
               onClick={() => window.location.reload()}
               className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center"
             >
-              <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              إعادة المحاولة
+              {t('gaming.retry')}
             </button>
           </div>
         </div>
@@ -896,11 +959,11 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   <div className="absolute -top-2 -right-2">
                     {isActive ? (
                       <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
-                        نشط
+                        {t('gaming.active')}
                       </span>
                     ) : (
                       <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-500 to-slate-500 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
-                        متاح
+                        {t('gaming.available')}
                       </span>
                     )}
                   </div>
@@ -932,7 +995,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                           <>
                             <div className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
                               <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                              <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{toArabicNumbers(String(activeSession.controllers ?? 1))} دراع</span>
+                              <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{formatDecimal(activeSession.controllers ?? 1, i18n.language)} {t('gaming.controllers')}</span>
                             </div>
 
                             {/* تاريخ الدراعات */}
@@ -940,7 +1003,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                               <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-xl border-2 border-purple-300 dark:border-purple-700 shadow-sm">
                                 <h4 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
                                   <Users className="h-4 w-4" />
-                                  تاريخ تغيير الدراعات
+                                  {t('gaming.controllersHistory')}
                                 </h4>
                                 <div className="space-y-2 max-h-32 overflow-y-auto">
                                   {activeSession.controllersHistory.map((period, index) => {
@@ -960,18 +1023,18 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                                 ? 'bg-green-500 text-white'
                                                 : 'bg-purple-500 text-white'
                                             }`}>
-                                              {toArabicNumbers(String(period.controllers))} دراع
+                                              {formatDecimal(period.controllers, i18n.language)} {t('gaming.controllers')}
                                             </span>
                                             {isCurrentPeriod && (
                                               <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full animate-pulse">
-                                                نشط
+                                                {t('gaming.active')}
                                               </span>
                                             )}
                                           </div>
                                           <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                            من: {formatTimeInArabic(startTime)}
+                                            {t('gaming.from')}: {formatTimeByLocale(startTime, i18n.language)}
                                             {endTime && (
-                                              <span> - إلى: {formatTimeInArabic(endTime)}</span>
+                                              <span> - {t('gaming.to')}: {formatTimeByLocale(endTime, i18n.language)}</span>
                                             )}
                                           </div>
                                         </div>
@@ -980,7 +1043,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                         <button
                                           onClick={() => openEditPeriodTimeModal(activeSession, index)}
                                           className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105 flex items-center justify-center"
-                                          title="تعديل وقت بداية هذه الفترة"
+                                          title={t('gaming.editStartTime')}
                                         >
                                           <Edit className="h-3 w-3" />
                                         </button>
@@ -993,13 +1056,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
                             {/* أزرار تعديل عدد الأذرع */}
                             <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 p-4 rounded-xl border-2 border-orange-300 dark:border-orange-700">
-                              <p className="text-xs font-bold text-orange-900 dark:text-orange-100 mb-3 text-center">تعديل عدد الأذرع</p>
+                              <p className="text-xs font-bold text-orange-900 dark:text-orange-100 mb-3 text-center">{t('gaming.editControllers')}</p>
                               <div className="flex items-center justify-center gap-3">
                                 <button
                                   className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-bold text-white transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110"
                                   disabled={(activeSession.controllers ?? 1) <= 1 || updatingControllers[activeSession.id]}
                                   onClick={() => openControllersEditor(activeSession)}
-                                  title="تقليل عدد الأذرع"
+                                  title={t('gaming.editControllers')}
                                 >
                                   {updatingControllers[activeSession.id] ? (
                                     <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1011,18 +1074,18 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                   className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm min-w-[80px] hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                                   onClick={() => openControllersEditor(activeSession)}
                                   disabled={updatingControllers[activeSession.id]}
-                                  title="تعديل عدد الأذرع"
+                                  title={t('gaming.editControllers')}
                                 >
                                   <span className="font-bold text-xl text-orange-600 dark:text-orange-400 block text-center">
-                                    {toArabicNumbers(String(activeSession.controllers ?? 1))}
+                                    {formatDecimal(activeSession.controllers ?? 1, i18n.language)}
                                   </span>
-                                  <span className="text-xs text-gray-600 dark:text-gray-400 block text-center">دراع</span>
+                                  <span className="text-xs text-gray-600 dark:text-gray-400 block text-center">{t('gaming.controllers')}</span>
                                 </button>
                                 <button
                                   className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-bold text-white transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110"
                                   disabled={(activeSession.controllers ?? 1) >= 4 || updatingControllers[activeSession.id]}
                                   onClick={() => openControllersEditor(activeSession)}
-                                  title="زيادة عدد الأذرع"
+                                  title={t('gaming.editControllers')}
                                 >
                                   {updatingControllers[activeSession.id] ? (
                                     <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1054,13 +1117,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                             <div className="flex items-center text-sm justify-center p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
                               {billTableNumber ? (
                                 <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
-                                  <TableIcon className="h-4 w-4 ml-1" />
-                                  مرتبطة بطاولة: {toArabicNumbers(String(billTableNumber))}
+                                  <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
+                                  {t('gaming.linkedToTable')}: {formatDecimal(billTableNumber, i18n.language)}
                                 </div>
                               ) : (
                                 <div className="flex items-center text-gray-500 dark:text-gray-400">
-                                  <TableIcon className="h-4 w-4 ml-1" />
-                                  غير مرتبطة بطاولة
+                                  <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
+                                  {t('gaming.notLinkedToTable')}
                                 </div>
                               )}
                             </div>
@@ -1069,11 +1132,11 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       </div>
                     ) : device.status === 'maintenance' ? (
                       <div className="text-center py-4">
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">الجهاز في الصيانة</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">{t('gaming.maintenance')}</p>
                       </div>
                     ) : device.status === 'unavailable' ? (
                       <div className="text-center py-4">
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">غير متاح</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">{t('gaming.unavailable')}</p>
                       </div>
                     ) : null}
                   </div>
@@ -1095,7 +1158,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                   className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                                 >
                                   <Edit className="h-4 w-4" />
-                                  تعديل الوقت
+                                  {t('gaming.editStartTime')}
                                 </button>
 
                                 <button
@@ -1106,7 +1169,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                   className="px-3 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                                 >
                                   <TableIcon className="h-4 w-4" />
-                                  تغيير الطاولة
+                                  {t('gaming.changeTable')}
                                 </button>
                               </div>
 
@@ -1120,7 +1183,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                   className="w-full px-3 py-2 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                                 >
                                   <X className="h-4 w-4" />
-                                  فك ربط الطاولة
+                                  {t('gaming.unlinkTable')}
                                 </button>
                               </div>
                             </>
@@ -1131,7 +1194,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                 className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                               >
                                 <Edit className="h-4 w-4" />
-                                تعديل الوقت
+                                {t('gaming.editStartTime')}
                               </button>
 
                               <button
@@ -1142,7 +1205,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                 className="px-3 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
                               >
                                 <TableIcon className="h-4 w-4" />
-                                ربط طاولة
+                                {t('gaming.linkTable')}
                               </button>
                             </div>
                           );
@@ -1155,16 +1218,16 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         >
                           {endingSessions[activeSession.id] ? (
                             <>
-                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <svg className={`animate-spin h-5 w-5 text-white ${isRTL ? 'ml-2' : 'mr-2'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                               </svg>
-                              جاري الإنهاء...
+                              {t('gaming.ending')}
                             </>
                           ) : (
                             <>
-                              <Square className="h-5 w-5 ml-2" />
-                              إنهاء الجلسة
+                              <Square className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
+                              {t('gaming.endSession')}
                             </>
                           )}
                         </button>
@@ -1174,12 +1237,12 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         onClick={() => openSessionModal(device)}
                         className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
                       >
-                        <Play className="h-5 w-5 ml-2" />
-                        بدء الجلسة
+                        <Play className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
+                        {t('gaming.startSession')}
                       </button>
                     ) : (
                       <div className="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm font-semibold">
-                        غير متاح
+                        {t('gaming.unavailable')}
                       </div>
                     )}
                   </div>
@@ -1195,10 +1258,10 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                             ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                             : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white'
                         }`}
-                        title={isActive ? 'لا يمكن تعديل جهاز نشط' : 'تعديل الجهاز'}
+                        title={isActive ? t('gaming.cannotEditActiveDevice') : t('gaming.editDevice')}
                       >
                         <Edit className="h-4 w-4" />
-                        تعديل
+                        {t('common.edit')}
                       </button>
                       <button
                         onClick={() => handleDeleteDevice(device)}
@@ -1208,10 +1271,10 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                             ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                             : 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white'
                         }`}
-                        title={isActive ? 'لا يمكن حذف جهاز نشط' : 'حذف الجهاز'}
+                        title={isActive ? t('gaming.cannotDeleteActiveDevice') : t('gaming.deleteDevice')}
                       >
                         <Trash2 className="h-4 w-4" />
-                        حذف
+                        {t('common.delete')}
                       </button>
                     </div>
                   )}
@@ -1227,7 +1290,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">إضافة جهاز جديد</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.addNewDevice')}</h2>
               <button
                 onClick={() => {
                   setShowAddDevice(false);
@@ -1247,28 +1310,28 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             <form onSubmit={handleAddDevice} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  اسم الجهاز <span className="text-red-500">*</span>
+                  {t('gaming.deviceName')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={newDevice.name}
                   onChange={(e) => setNewDevice({ ...newDevice, name: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="مثال: جهاز 1"
+                  placeholder={t('gaming.deviceNamePlaceholder')}
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  رقم الجهاز <span className="text-red-500">*</span>
+                  {t('gaming.deviceNumber')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   value={newDevice.number}
                   onChange={(e) => setNewDevice({ ...newDevice, number: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="1"
+                  placeholder={t('gaming.deviceNumberPlaceholder')}
                   required
                   min="1"
                 />
@@ -1278,7 +1341,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      عدد الدراعات الافتراضي
+                      {t('gaming.defaultControllers')}
                     </label>
                     <select
                       value={newDevice.controllers}
@@ -1286,19 +1349,19 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
                     >
                       {[1, 2, 3, 4].map(num => (
-                        <option key={num} value={num}>{toArabicNumbers(String(num))} دراع</option>
+                        <option key={num} value={num}>{formatDecimal(num, i18n.language)} {t('gaming.controllers')}</option>
                       ))}
                     </select>
                   </div>
 
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      أسعار الساعة حسب عدد الدراعات
+                      {t('gaming.hourlyRateFor')} {t('gaming.controllers')}
                     </label>
                     {[1, 2, 3, 4].map(num => (
                       <div key={num} className="flex items-center gap-3">
                         <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-24">
-                          {toArabicNumbers(String(num))} دراع:
+                          {formatDecimal(num, i18n.language)} {t('gaming.controllers')}:
                         </span>
                         <input
                           type="number"
@@ -1313,7 +1376,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                           min="0"
                           step="0.01"
                         />
-                        <span className="text-sm text-gray-600 dark:text-gray-400">ج.م</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">EGP</span>
                       </div>
                     ))}
                   </div>
@@ -1321,7 +1384,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               ) : (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    سعر الساعة <span className="text-red-500">*</span>
+                    {t('gaming.hourlyRate')} <span className="text-red-500">*</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1334,7 +1397,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       min="0"
                       step="0.01"
                     />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">ج.م</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">EGP</span>
                   </div>
                 </div>
               )}
@@ -1359,7 +1422,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   }}
                   className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors duration-200"
                 >
-                  إلغاء
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1370,7 +1433,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       : 'bg-green-600 hover:bg-green-700'
                   }`}
                 >
-                  {isAddingDevice ? 'جاري الإضافة...' : 'إضافة'}
+                  {isAddingDevice ? t('common.adding') : t('common.add')}
                 </button>
               </div>
             </form>
@@ -1383,7 +1446,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">تعديل الجهاز</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.editDevice')}</h2>
               <button
                 onClick={() => {
                   setShowEditDevice(false);
@@ -1417,14 +1480,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 await loadDevices();
                 setShowEditDevice(false);
                 setEditingDevice(null);
-                showNotification('تم تعديل الجهاز بنجاح', 'success');
+                showNotification(t('gaming.deviceUpdatedSuccess'), 'success');
               } catch (error) {
-                showNotification('حدث خطأ أثناء تعديل الجهاز', 'error');
+                showNotification(t('gaming.deviceUpdatedError'), 'error');
               }
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  اسم الجهاز <span className="text-red-500">*</span>
+                  {t('gaming.deviceName')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -1437,7 +1500,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  رقم الجهاز <span className="text-red-500">*</span>
+                  {t('gaming.deviceNumber')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -1452,12 +1515,12 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               {deviceType === 'playstation' ? (
                 <div className="space-y-3">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    أسعار الساعة حسب عدد الدراعات
+                    {t('gaming.hourlyRateForControllers')}
                   </label>
                   {[1, 2, 3, 4].map(num => (
                     <div key={num} className="flex items-center gap-3">
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-24">
-                        {toArabicNumbers(String(num))} دراع:
+                        {formatDecimal(num, i18n.language)} {t('gaming.controllers')}:
                       </span>
                       <input
                         type="number"
@@ -1471,14 +1534,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         min="0"
                         step="0.01"
                       />
-                      <span className="text-sm text-gray-600 dark:text-gray-400">ج.م</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">{t('common.currency')}</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    سعر الساعة <span className="text-red-500">*</span>
+                    {t('gaming.hourlyRate')} <span className="text-red-500">*</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1490,7 +1553,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       min="0"
                       step="0.01"
                     />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">ج.م</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">{t('common.currency', 'ج.م')}</span>
                   </div>
                 </div>
               )}
@@ -1504,13 +1567,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   }}
                   className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors duration-200"
                 >
-                  إلغاء
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors duration-200"
                 >
-                  حفظ التعديلات
+                  {t('common.saveChanges')}
                 </button>
               </div>
             </form>
@@ -1522,9 +1585,9 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       {showDeleteConfirm && deviceToDelete && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">تأكيد الحذف</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">{t('gaming.confirmDeleteDevice')}</h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              هل أنت متأكد من حذف الجهاز "{deviceToDelete.name}"؟ لا يمكن التراجع عن هذا الإجراء.
+              {t('gaming.confirmDeleteDevice')} "{deviceToDelete.name}"؟ {t('common.cannotUndo')}.
             </p>
             <div className="flex gap-3">
               <button
@@ -1535,7 +1598,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 disabled={isDeletingDevice}
                 className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors duration-200"
               >
-                إلغاء
+                {t('gaming.cancel')}
               </button>
               <button
                 onClick={confirmDeleteDevice}
@@ -1546,7 +1609,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                     : 'bg-red-600 hover:bg-red-700'
                 }`}
               >
-                {isDeletingDevice ? 'جاري الحذف...' : 'حذف'}
+                {isDeletingDevice ? t('gaming.deleting') : t('gaming.delete')}
               </button>
             </div>
           </div>
@@ -1563,7 +1626,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   <Play className="h-6 w-6 text-white" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  بدء جلسة جديدة
+                  {t('gaming.startSession')}
                 </h2>
               </div>
               <button
@@ -1587,7 +1650,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               <div className="flex items-center gap-3">
                 <Icon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 <div>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">الجهاز المختار</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{t('gaming.selectedDevice')}</p>
                   <p className="text-lg font-bold text-blue-900 dark:text-blue-100">{selectedDevice.name}</p>
                 </div>
               </div>
@@ -1597,19 +1660,19 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             <div className="mb-4">
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                 <TableIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                ربط بطاولة (اختياري)
+                {t('gaming.linkTableOptional')}
               </label>
               <select
                 value={selectedTable || ''}
                 onChange={(e) => setSelectedTable(e.target.value || null)}
                 className="w-full px-4 py-3 border-2 border-purple-300 dark:border-purple-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-gray-100 transition-all shadow-sm hover:shadow-md"
               >
-                <option value="">بدون طاولة</option>
+                <option value="">{t('gaming.noTable')}</option>
                 {tables.filter((t: any) => t.isActive).sort((a: any, b: any) => {
                   return String(a.number).localeCompare(String(b.number), 'ar', { numeric: true });
                 }).map((table: any) => (
                   <option key={table.id || table._id} value={table._id}>
-                    🪑 طاولة {table.number}
+                    🪑 {t('gaming.table', 'طاولة')} {table.number}
                   </option>
                 ))}
               </select>
@@ -1620,7 +1683,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               <div className="mb-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-4 rounded-xl border-2 border-green-200 dark:border-green-800">
                 <label className="block text-sm font-bold text-green-900 dark:text-green-100 mb-3 flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  عدد الدراعات <span className="text-red-500">*</span>
+                  {t('gaming.selectControllers')} <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[1, 2, 3, 4].map(num => (
@@ -1636,16 +1699,16 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       } ${loadingSession ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <Users className={`h-6 w-6 mx-auto mb-2 ${selectedControllers === num ? 'text-white' : 'text-green-600 dark:text-green-400'}`} />
-                      <span className="text-lg font-bold block">{toArabicNumbers(String(num))}</span>
+                      <span className="text-lg font-bold block">{formatDecimal(num, i18n.language)}</span>
                       <div className={`text-xs mt-1 font-semibold ${selectedControllers === num ? 'text-green-100' : 'text-gray-600 dark:text-gray-400'}`}>
-                        {selectedDevice.playstationRates && selectedDevice.playstationRates[num] ? `${toArabicNumbers(String(selectedDevice.playstationRates[num]))} ج.م/س` : '-'}
+                        {selectedDevice.playstationRates && selectedDevice.playstationRates[num] ? `${formatCurrency(selectedDevice.playstationRates[num], i18n.language)}/${t('dashboard.hours')}` : '-'}
                       </div>
                     </button>
                   ))}
                 </div>
                 {!selectedControllers && (
                   <p className="text-xs text-green-700 dark:text-green-300 mt-3 text-center font-semibold">
-                    ⚠️ يرجى اختيار عدد الأذرع لبدء الجلسة
+                    ⚠️ {t('gaming.pleaseSelectControllers')}
                   </p>
                 )}
               </div>
@@ -1672,7 +1735,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-bold shadow-md hover:shadow-lg transform hover:scale-105"
                 disabled={loadingSession}
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -1690,12 +1753,12 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    جاري البدء...
+                    {t('gaming.starting')}
                   </>
                 ) : (
                   <>
                     <Play className="h-5 w-5 ml-2" />
-                    بدء الجلسة
+                    {t('gaming.startSession')}
                   </>
                 )}
               </button>
@@ -1717,7 +1780,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   {(() => {
                     const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
                     const isCurrentlyLinkedToTable = bill ? !!(bill as any)?.table : false;
-                    return isCurrentlyLinkedToTable ? 'تغيير طاولة الجلسة' : 'ربط الجلسة بطاولة';
+                    return isCurrentlyLinkedToTable ? t('gaming.changeTableTitle') : t('gaming.linkTableTitle');
                   })()}
                 </h2>
               </div>
@@ -1737,7 +1800,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 <div className="flex items-center gap-2">
                   <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                   <div>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">الجهاز</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{t('gaming.device')}</p>
                     <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
                       {devices.find(d => d.number === selectedSessionForLink.deviceNumber)?.name || selectedSessionForLink.deviceName}
                     </p>
@@ -1752,9 +1815,9 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     <div>
-                      <p className="text-xs text-green-600 dark:text-green-400 font-semibold">الفاتورة</p>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-semibold">{t('gaming.bill')}</p>
                       <p className="text-sm font-bold text-green-900 dark:text-green-100">
-                        #{typeof selectedSessionForLink.bill === 'object' ? (selectedSessionForLink.bill as any)?.billNumber : 'غير معروف'}
+                        #{typeof selectedSessionForLink.bill === 'object' ? (selectedSessionForLink.bill as any)?.billNumber : t('gaming.unknown')}
                       </p>
                     </div>
                   </div>
@@ -1765,7 +1828,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             <div className="mb-6">
               <label className="block text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
                 <TableIcon className="h-5 w-5" />
-                اختر الطاولة
+                {t('gaming.selectTableLabel')}
               </label>
               <select
                 value={(() => {
@@ -1781,12 +1844,12 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="w-full px-4 py-3 border-2 border-purple-300 dark:border-purple-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-gray-100 transition-all shadow-sm hover:shadow-md font-medium"
                 disabled={linkingTable}
               >
-                <option value="">بدون طاولة</option>
+                <option value="">{t('gaming.noTable')}</option>
                 {tables.filter((t: any) => t.isActive).sort((a: any, b: any) => {
                   return String(a.number).localeCompare(String(b.number), 'ar', { numeric: true });
                 }).map((table: any) => (
                   <option key={table.id || table._id} value={table._id}>
-                    🪑 طاولة {table.number}
+                    🪑 {t('gaming.table', 'طاولة')} {table.number}
                   </option>
                 ))}
               </select>
@@ -1801,7 +1864,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-bold shadow-md hover:shadow-lg transform hover:scale-105"
                 disabled={linkingTable}
               >
-                إغلاق
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -1813,7 +1876,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 md:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">فك ربط الجلسة من الطاولة</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.unlinkTableTitle')}</h2>
               <button
                 onClick={() => {
                   setShowUnlinkTableModal(false);
@@ -1829,37 +1892,37 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
             <div className="mb-4">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                الجهاز: {devices.find(d => d.number === selectedSessionForUnlink.deviceNumber)?.name || selectedSessionForUnlink.deviceName}
+                {t('gaming.device')}: {devices.find(d => d.number === selectedSessionForUnlink.deviceNumber)?.name || selectedSessionForUnlink.deviceName}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                الطاولة الحالية: {(() => {
+                {t('gaming.currentTable')}: {(() => {
                   const bill = typeof selectedSessionForUnlink.bill === 'object' ? selectedSessionForUnlink.bill : null;
                   const billTable = bill ? (bill as any)?.table : null;
-                  return billTable?.number || 'غير معروف';
+                  return billTable?.number || t('gaming.unknown');
                 })()}
               </p>
             </div>
 
             <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ سيتم فصل فاتورة الجلسة عن الطاولة ونقلها إلى قسم أجهزة البلايستيشن.
+                ⚠️ {t('gaming.unlinkWarningMessage')}
               </p>
             </div>
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                اسم العميل <span className="text-red-500">*</span>
+                {t('gaming.customerName')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={customerNameForUnlink}
                 onChange={(e) => setCustomerNameForUnlink(e.target.value)}
-                placeholder="أدخل اسم العميل"
+                placeholder="{t('gaming.customerNamePlaceholder')}"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:text-gray-100"
                 disabled={unlinkingTable}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                سيتم استخدام هذا الاسم في الفاتورة الجديدة
+                {t('gaming.newBillNameNote')}
               </p>
             </div>
 
@@ -1873,7 +1936,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="w-full sm:w-auto px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors duration-200"
                 disabled={unlinkingTable}
               >
-                إلغاء
+                {t('gaming.cancel')}
               </button>
               <button
                 onClick={handleUnlinkTableFromSession}
@@ -1886,16 +1949,16 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               >
                 {unlinkingTable ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className={`animate-spin h-5 w-5 text-white ${isRTL ? 'ml-2' : 'mr-2'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    جاري فك الربط...
+                    {t('gaming.unlinking')}
                   </>
                 ) : (
                   <>
-                    <X className="h-5 w-5 ml-2" />
-                    فك الربط
+                    <X className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                    {t('gaming.unlink')}
                   </>
                 )}
               </button>
@@ -1909,7 +1972,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 md:p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">تعديل وقت بدء الجلسة</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.editStartTimeTitle')}</h2>
               <button
                 onClick={() => {
                   setShowEditStartTimeModal(false);
@@ -1925,13 +1988,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
             <div className="mb-4">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                الجهاز: {devices.find(d => d.number === selectedSessionForEditTime.deviceNumber)?.name || selectedSessionForEditTime.deviceName}
+                {t('gaming.device')}: {devices.find(d => d.number === selectedSessionForEditTime.deviceNumber)?.name || selectedSessionForEditTime.deviceName}
               </p>
             </div>
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                وقت البدء الجديد <span className="text-red-500">*</span>
+                {t('gaming.newStartTime')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="datetime-local"
@@ -1941,7 +2004,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 disabled={isUpdatingStartTime}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                لا يمكن تعديل الوقت إلى المستقبل أو أكثر من ٢٤ ساعة في الماضي
+                {t('gaming.cannotEditFutureTime')}
               </p>
             </div>
 
@@ -1955,7 +2018,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="w-full sm:w-auto px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors duration-200"
                 disabled={isUpdatingStartTime}
               >
-                إلغاء
+                {t('gaming.cancel')}
               </button>
               <button
                 onClick={handleEditStartTime}
@@ -1968,16 +2031,16 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               >
                 {isUpdatingStartTime ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className={`animate-spin h-5 w-5 text-white ${isRTL ? 'ml-2' : 'mr-2'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    جاري التعديل...
+                    {t('gaming.updating')}
                   </>
                 ) : (
                   <>
-                    <Edit className="h-5 w-5 ml-2" />
-                    حفظ التعديل
+                    <Edit className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                    {t('gaming.saveChanges')}
                   </>
                 )}
               </button>
@@ -1995,7 +2058,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
                   <Users className="h-6 w-6 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">تعديل عدد الأذرع</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.confirmControllersChange')}</h2>
               </div>
               <button
                 onClick={() => {
@@ -2010,23 +2073,23 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             </div>
 
             <div className="mb-6 space-y-4">
-              {/* معلومات الجهاز */}
+              {/* {t('gaming.deviceInfo')} */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-4 shadow-sm">
                 <p className="text-blue-900 dark:text-blue-100 font-bold mb-2 flex items-center gap-2">
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  جلسة {controllersChangeData.deviceName}
+                  {t('gaming.sessionInfo', { device: controllersChangeData.deviceName })}
                 </p>
                 <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">العدد الحالي:</span>
-                  <span className="font-bold text-blue-600 dark:text-blue-400">{toArabicNumbers(String(controllersChangeData.oldCount))} دراع</span>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">{t('gaming.currentCount')}:</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400">{formatDecimal(controllersChangeData.oldCount, i18n.language)} {t('gaming.controllers')}</span>
                 </div>
               </div>
 
               {/* اختيار عدد الأذرع */}
               <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 border-2 border-orange-300 dark:border-orange-700 rounded-xl p-4 shadow-sm">
-                <p className="text-orange-900 dark:text-orange-100 font-bold mb-3 text-center">اختر العدد الجديد</p>
+                <p className="text-orange-900 dark:text-orange-100 font-bold mb-3 text-center">{t('gaming.selectNewCount')}</p>
                 <div className="grid grid-cols-4 gap-3">
                   {[1, 2, 3, 4].map((count) => {
                     const isSelected = count === controllersChangeData.newCount;
@@ -2045,7 +2108,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                           }
                         `}
                       >
-                        {toArabicNumbers(String(count))}
+                        {formatDecimal(count, i18n.language)}
                       </button>
                     );
                   })}
@@ -2053,11 +2116,11 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 {controllersChangeData.newCount !== controllersChangeData.oldCount && (
                   <div className="mt-3 bg-white dark:bg-gray-800 p-3 rounded-lg border border-orange-200 dark:border-orange-600">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">التغيير:</span>
+                      <span className="text-gray-600 dark:text-gray-400">{t('gaming.change')}:</span>
                       <span className="font-bold text-orange-600 dark:text-orange-400">
                         {controllersChangeData.newCount > controllersChangeData.oldCount
-                          ? `+${controllersChangeData.newCount - controllersChangeData.oldCount} دراع`
-                          : `${controllersChangeData.newCount - controllersChangeData.oldCount} دراع`
+                          ? `+${formatDecimal(controllersChangeData.newCount - controllersChangeData.oldCount, i18n.language)} ${t('gaming.controllers')}`
+                          : `${formatDecimal(controllersChangeData.newCount - controllersChangeData.oldCount, i18n.language)} ${t('gaming.controllers')}`
                         }
                       </span>
                     </div>
@@ -2072,7 +2135,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
-                    سيتم إعادة حساب التكلفة بناءً على العدد الجديد من الأذرع
+                    {t('gaming.recalculateWarning')}
                   </p>
                 </div>
               )}
@@ -2087,7 +2150,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-bold shadow-md hover:shadow-lg transform hover:scale-105"
                 disabled={updatingControllers[controllersChangeData.sessionId]}
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
               <button
                 onClick={confirmUpdateControllers}
@@ -2096,13 +2159,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               >
                 {updatingControllers[controllersChangeData.sessionId] ? (
                   <>
-                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin ml-2"></div>
-                    جاري التعديل...
+                    <div className={`h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin ${isRTL ? 'ml-2' : 'mr-2'}`}></div>
+                    {t('gaming.updating')}
                   </>
                 ) : (
                   <>
-                    <Users className="h-5 w-5 ml-2" />
-                    تأكيد التعديل
+                    <Users className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                    {t('gaming.confirmChange')}
                   </>
                 )}
               </button>
@@ -2123,7 +2186,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   <Users className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">تعديل وقت فترة الدراعات</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('gaming.editPeriodTimeTitle')}</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">{selectedSessionForPeriodEdit.deviceName}</p>
                 </div>
               </div>
@@ -2144,7 +2207,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
             {/* معلومات الفترة الحالية */}
             <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-700">
-              <h4 className="font-bold text-purple-900 dark:text-purple-100 mb-2">معلومات الفترة</h4>
+              <h4 className="font-bold text-purple-900 dark:text-purple-100 mb-2">{t('gaming.periodInfo')}</h4>
               {selectedSessionForPeriodEdit.controllersHistory && selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] && (() => {
                 const period = selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex];
                 const isActivePeriod = !period.to;
@@ -2153,46 +2216,46 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 return (
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600 dark:text-gray-400">عدد الدراعات:</span>
+                      <span className="text-gray-600 dark:text-gray-400">{t('gaming.controllersCount')}:</span>
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {toArabicNumbers(String(period.controllers))} دراع
+                        {formatDecimal(period.controllers, i18n.language)} {t('gaming.controllers')}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600 dark:text-gray-400">الحالة:</span>
+                      <span className="text-gray-600 dark:text-gray-400">{t('gaming.periodStatus')}:</span>
                       <span className={`font-medium ${isActivePeriod ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                        {isActivePeriod ? 'نشطة' : 'منتهية'}
+                        {isActivePeriod ? t('gaming.activePeriod') : t('gaming.endedPeriod')}
                       </span>
                     </div>
                     {!isActivePeriod && (
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-600 dark:text-gray-400">وقت النهاية الحالي:</span>
+                        <span className="text-gray-600 dark:text-gray-400">{t('gaming.currentEndTime')}:</span>
                         <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {formatTimeInArabic(dayjs(period.to).utc().add(2, 'hour'))}
+                          {formatTimeByLocale(dayjs(period.to).utc().add(2, 'hour'), i18n.language)}
                         </span>
                       </div>
                     )}
 
                     {/* معلومات الفترات المجاورة */}
                     <div className="mt-4 pt-3 border-t border-purple-200 dark:border-purple-600">
-                      <h5 className="text-sm font-bold text-purple-800 dark:text-purple-200 mb-2">الفترات المجاورة:</h5>
+                      <h5 className="text-sm font-bold text-purple-800 dark:text-purple-200 mb-2">{t('gaming.adjacentPeriods')}:</h5>
                       <div className="space-y-1 text-xs">
                         {selectedPeriodIndex > 0 && (
                           <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/30 rounded">
-                            <span>الفترة السابقة ({toArabicNumbers(String(controllersHistory[selectedPeriodIndex - 1].controllers))} دراع):</span>
+                            <span>{t('gaming.previousPeriod')} ({formatDecimal(controllersHistory[selectedPeriodIndex - 1].controllers, i18n.language)} {t('gaming.controllers')}):</span>
                             <span className="font-medium">
                               {controllersHistory[selectedPeriodIndex - 1].to
-                                ? `تنتهي: ${formatTimeInArabic(dayjs(controllersHistory[selectedPeriodIndex - 1].to).utc().add(2, 'hour'))}`
-                                : 'نشطة'
+                                ? `${t('gaming.ends')}: ${formatTimeByLocale(dayjs(controllersHistory[selectedPeriodIndex - 1].to).utc().add(2, 'hour'), i18n.language)}`
+                                : t('gaming.activePeriod')
                               }
                             </span>
                           </div>
                         )}
                         {selectedPeriodIndex < controllersHistory.length - 1 && (
                           <div className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/30 rounded">
-                            <span>الفترة التالية ({toArabicNumbers(String(controllersHistory[selectedPeriodIndex + 1].controllers))} دراع):</span>
+                            <span>{t('gaming.nextPeriod')} ({formatDecimal(controllersHistory[selectedPeriodIndex + 1].controllers, i18n.language)} {t('gaming.controllers')}):</span>
                             <span className="font-medium">
-                              تبدأ: {formatTimeInArabic(dayjs(controllersHistory[selectedPeriodIndex + 1].from).utc().add(2, 'hour'))}
+                              {t('gaming.starts')}: {formatTimeByLocale(dayjs(controllersHistory[selectedPeriodIndex + 1].from).utc().add(2, 'hour'), i18n.language)}
                             </span>
                           </div>
                         )}
@@ -2208,7 +2271,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               {/* وقت البداية */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                  وقت البداية الجديد
+                  {t('gaming.newPeriodStartTime')}
                 </label>
                 <input
                   type="datetime-local"
@@ -2220,7 +2283,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 {newPeriodStartTime && (
                   <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
                     <p className="text-sm text-purple-800 dark:text-purple-200 font-medium">
-                      📅 وقت البداية: {formatTimeInArabic(dayjs(newPeriodStartTime))}
+                      📅 {t('gaming.newPeriodStartTime')}: {formatTimeByLocale(dayjs(newPeriodStartTime), i18n.language)}
                     </p>
                   </div>
                 )}
@@ -2232,7 +2295,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex].to && (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                    وقت النهاية الجديد
+                    {t('gaming.newPeriodEndTime')}
                   </label>
                   <input
                     type="datetime-local"
@@ -2244,7 +2307,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   {newPeriodEndTime && (
                     <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
                       <p className="text-sm text-purple-800 dark:text-purple-200 font-medium">
-                        📅 وقت النهاية: {formatTimeInArabic(dayjs(newPeriodEndTime))}
+                        📅 {t('gaming.newPeriodEndTime')}: {formatTimeByLocale(dayjs(newPeriodEndTime), i18n.language)}
                       </p>
                     </div>
                   )}
@@ -2255,23 +2318,23 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
             {/* تحذير */}
             <div className="mb-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ تعديل أوقات فترة الدراعات سيؤثر على حساب التكلفة الإجمالية للجلسة
+                ⚠️ {t('gaming.periodTimeWarning')}
               </p>
               {selectedSessionForPeriodEdit.controllersHistory &&
                 selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] &&
                 !selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex].to && (
                 <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                  ℹ️ هذه فترة نشطة - يمكن تعديل وقت بدايتها فقط
+                  ℹ️ {t('gaming.activePeriodInfo')}
                 </p>
               )}
               <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 rounded border border-blue-200 dark:border-blue-600">
                 <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
-                  � التعديل التلقائي للفترات المجاورة:
+                  {t('gaming.autoAdjustTitle')}:
                 </p>
                 <ul className="text-xs text-blue-700 dark:text-blue-300 mt-1 space-y-1">
-                  <li>• عند تعديل وقت البداية → سيتم تعديل وقت نهاية الفترة السابقة تلقائياً</li>
-                  <li>• عند تعديل وقت النهاية → سيتم تعديل وقت بداية الفترة التالية تلقائياً</li>
-                  <li>• هذا يضمن عدم وجود فجوات أو تداخلات بين الفترات</li>
+                  <li>• {t('gaming.autoAdjustStart')}</li>
+                  <li>• {t('gaming.autoAdjustEnd')}</li>
+                  <li>• {t('gaming.autoAdjustNoGaps')}</li>
                 </ul>
               </div>
             </div>
@@ -2289,7 +2352,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-medium"
                 disabled={isUpdatingPeriodTime}
               >
-                إلغاء
+                {t('gaming.cancel')}
               </button>
               <button
                 onClick={handleEditPeriodTime}
@@ -2302,16 +2365,118 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               >
                 {isUpdatingPeriodTime ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className={`animate-spin h-5 w-5 text-white ${isRTL ? 'ml-2' : 'mr-2'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    جاري التحديث...
+                    {t('gaming.updating')}
                   </>
                 ) : (
                   <>
-                    <Clock className="h-5 w-5 ml-2" />
-                    تحديث الوقت
+                    <Clock className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                    {t('gaming.updateTime')}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تأكيد إنهاء الجلسة */}
+      {showEndSessionConfirm && sessionToEnd && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-red-200 dark:border-red-800 animate-bounce-in">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Square className="h-6 w-6 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {t('gaming.confirmEndSession')}
+                </h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEndSessionConfirm(false);
+                  setSessionToEnd(null);
+                  setCustomerNameForEnd('');
+                }}
+                className="w-10 h-10 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-all duration-200 flex items-center justify-center text-gray-700 dark:text-gray-300 hover:scale-110 transform shadow-md"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{t('gaming.device')}</p>
+                </div>
+                <p className="text-lg font-bold text-blue-900 dark:text-blue-100">{sessionToEnd.deviceName}</p>
+              </div>
+
+              <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 border-2 border-purple-300 dark:border-purple-700 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  <label className="text-sm text-purple-600 dark:text-purple-400 font-semibold">
+                    {t('gaming.customerName')} <span className="text-red-500">*</span>
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={customerNameForEnd}
+                  onChange={(e) => setCustomerNameForEnd(e.target.value)}
+                  className="w-full px-4 py-2 border-2 border-purple-300 dark:border-purple-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-gray-100 font-medium"
+                  placeholder={t('gaming.customerNamePlaceholder')}
+                  disabled={endingSessions[sessionToEnd.id]}
+                />
+                <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
+                  {t('gaming.customerNameNote')}
+                </p>
+              </div>
+
+              <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-700 rounded-xl">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200 text-center">
+                  ⚠️ {t('gaming.endSessionWarning')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowEndSessionConfirm(false);
+                  setSessionToEnd(null);
+                  setCustomerNameForEnd('');
+                }}
+                disabled={endingSessions[sessionToEnd.id]}
+                className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-600 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-all duration-200 font-bold shadow-md hover:shadow-lg transform hover:scale-105"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={confirmEndSession}
+                disabled={endingSessions[sessionToEnd.id] || !customerNameForEnd.trim()}
+                className={`flex-1 px-4 py-3 rounded-xl text-white transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 ${
+                  endingSessions[sessionToEnd.id] || !customerNameForEnd.trim()
+                    ? 'bg-red-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'
+                }`}
+              >
+                {endingSessions[sessionToEnd.id] ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {t('gaming.ending')}
+                  </>
+                ) : (
+                  <>
+                    <Square className="h-5 w-5" />
+                    {t('gaming.endSession')}
                   </>
                 )}
               </button>

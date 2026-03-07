@@ -12,6 +12,8 @@ import '../styles/billing-animations.css';
 import PartialPaymentModal from '../components/PartialPaymentModal';
 import { useBillAggregation } from '../hooks/useBillAggregation';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -40,6 +42,7 @@ const PlaystationBillItem = memo(({
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
 }) => {
+  const { t } = useTranslation();
   const isUnpaid = ['draft', 'partial', 'overdue'].includes(bill.status);
   
   return (
@@ -65,12 +68,12 @@ const PlaystationBillItem = memo(({
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           {bill.table?.number ? (
             <span className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
-              🪑 طاولة: {bill.table.number}
+              🪑 {t('billing.tableWithNumber', { number: bill.table.number })}
             </span>
           ) : (
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
               <span className="flex items-center text-gray-500 dark:text-gray-400">
-                ⚠️ غير مرتبطة بطاولة
+                ⚠️ {t('billing.notLinkedToTable')}
               </span>
               {bill.customerName && (
                 <span className="flex items-center text-purple-600 dark:text-purple-400 font-medium">
@@ -87,7 +90,7 @@ const PlaystationBillItem = memo(({
           <div className={`text-sm sm:text-base font-bold ${isUnpaid ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
             {formatCurrency(bill.remaining || 0)}
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">متبقي</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{t('billing.remainingAmount')}</div>
         </div>
         {onChangeTableClick && (
           <button
@@ -96,10 +99,10 @@ const PlaystationBillItem = memo(({
               onChangeTableClick(bill);
             }}
             className="px-2 sm:px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center gap-1 shadow-md hover:shadow-lg whitespace-nowrap"
-            title="تغيير الطاولة"
+            title={t('billing.changeTable')}
           >
             <TableIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span className="hidden sm:inline">تغيير</span>
+            <span className="hidden sm:inline">{t('billing.change')}</span>
           </button>
         )}
       </div>
@@ -117,7 +120,8 @@ const TableBillItem = memo(({
   onPayFullBill,
   getStatusColor, 
   getStatusText, 
-  formatCurrency 
+  formatCurrency,
+  getCustomerDisplay
 }: { 
   bill: Bill; 
   onPaymentClick: (bill: Bill) => void;
@@ -128,7 +132,9 @@ const TableBillItem = memo(({
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
+  getCustomerDisplay: (bill: Bill) => string;
 }) => {
+  const { t, i18n } = useTranslation();
   const isUnpaid = ['draft', 'partial', 'overdue'].includes(bill.status);
   
   return (
@@ -160,12 +166,12 @@ const TableBillItem = memo(({
           <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {bill.createdAt ? new Date(bill.createdAt).toLocaleDateString('ar-EG') : '-'}
+              {bill.createdAt ? new Date(bill.createdAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US') : '-'}
             </span>
             {bill.customerName && (
               <span className="flex items-center gap-1">
                 <User className="h-3 w-3" />
-                {bill.customerName}
+                {getCustomerDisplay(bill)}
               </span>
             )}
           </div>
@@ -177,8 +183,8 @@ const TableBillItem = memo(({
             {formatCurrency(bill.total || 0)}
           </div>
           <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
-            <div>مدفوع: <span className="text-green-600 font-medium">{formatCurrency(bill.paid || 0)}</span></div>
-            <div>متبقي: <span className={`font-medium ${(bill.remaining || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(bill.remaining || 0)}</span></div>
+            <div>{t('billing.paidAmount')}: <span className="text-green-600 font-medium">{formatCurrency(bill.paid || 0)}</span></div>
+            <div>{t('billing.remainingAmount')}: <span className={`font-medium ${(bill.remaining || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(bill.remaining || 0)}</span></div>
           </div>
         </div>
         
@@ -191,10 +197,10 @@ const TableBillItem = memo(({
                 onViewClick(bill);
               }}
               className="flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors flex items-center justify-center gap-1"
-              title="عرض الفاتورة"
+              title={t('billing.view')}
             >
               <Eye className="h-3 w-3" />
-              <span>عرض</span>
+              <span>{t('billing.view')}</span>
             </button>
             <button
               onClick={(e) => {
@@ -202,10 +208,10 @@ const TableBillItem = memo(({
                 onPrintClick(bill);
               }}
               className="flex-1 px-2 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-md transition-colors flex items-center justify-center gap-1"
-              title="طباعة"
+              title={t('billing.print')}
             >
               <Printer className="h-3 w-3" />
-              <span>طباعة</span>
+              <span>{t('billing.print')}</span>
             </button>
           </div>
           
@@ -217,10 +223,10 @@ const TableBillItem = memo(({
                 onPayFullBill(bill);
               }}
               className="w-full px-2 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg transform hover:scale-105"
-              title="دفع الفاتورة بالكامل"
+              title={t('billing.payFull')}
             >
               <DollarSign className="h-3.5 w-3.5" />
-              <span>دفع بالكامل</span>
+              <span>{t('billing.payFull')}</span>
             </button>
           )}
           
@@ -230,10 +236,10 @@ const TableBillItem = memo(({
               onEditClick(bill);
             }}
             className="w-full px-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-md transition-colors flex items-center justify-center gap-1"
-            title="إدارة الدفع"
+            title={t('billing.paymentManagement')}
           >
             <DollarSign className="h-3 w-3" />
-            <span>إدارة الدفع</span>
+            <span>{t('billing.paymentManagement')}</span>
           </button>
         </div>
       </div>
@@ -242,6 +248,8 @@ const TableBillItem = memo(({
 });
 
 const Billing = () => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const location = useLocation();
   const { bills, fetchBills, cancelBill, addPartialPayment, showNotification, user, tables, fetchTables, fetchTableSections, tableSections, getTableStatus } = useApp();
 
@@ -373,13 +381,13 @@ const Billing = () => {
         
         // Show notification about which table we're managing
         if (state.tableNumber) {
-          showNotification(`تم فتح إدارة الدفع لطاولة ${state.tableNumber}`, 'info');
+          showNotification(t('billing.notifications.paymentManagementOpened', { tableNumber: state.tableNumber }), 'info');
         }
         
         // Clear the state immediately to prevent reopening
         navigate(location.pathname, { replace: true, state: {} });
       } else {
-        showNotification('لم يتم العثور على الفاتورة المطلوبة', 'error');
+        showNotification(t('billing.notifications.billNotFound'), 'error');
         // Clear the state even if bill not found
         navigate(location.pathname, { replace: true, state: {} });
       }
@@ -682,13 +690,13 @@ const Billing = () => {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'draft': return 'مسودة';
-      case 'partial': return 'مدفوع جزئياً';
-      case 'paid': return 'مدفوع بالكامل';
-      case 'overdue': return 'متأخر';
-      case 'cancelled': return 'ملغية';
-      case 'unpaid': return 'غير مدفوع';
-      default: return 'غير معروف';
+      case 'draft': return t('billing.status.draft');
+      case 'partial': return t('billing.status.partial');
+      case 'paid': return t('billing.status.paid');
+      case 'overdue': return t('billing.status.overdue');
+      case 'cancelled': return t('billing.status.cancelled');
+      case 'unpaid': return t('billing.status.unpaid');
+      default: return t('billing.status.unknown');
     }
   };
 
@@ -783,7 +791,7 @@ const Billing = () => {
 
     // التحقق من وجود جلسات نشطة
     if (selectedBill && hasActiveSession(selectedBill)) {
-      showNotification('لا يمكن الدفع - هذه الفاتورة تحتوي على جلسة نشطة. يرجى إنهاء الجلسة أولاً.');
+      showNotification(t('billing.notifications.cannotPayActiveSession'), 'error');
       return;
     }
 
@@ -807,7 +815,7 @@ const Billing = () => {
 
     // Validate discount percentage if provided
     if (discountPercentage && (isNaN(parseFloat(discountPercentage)) || parseFloat(discountPercentage) < 0 || parseFloat(discountPercentage) > 100)) {
-      showNotification('يجب أن تكون نسبة الخصم بين 0 و 100', 'error');
+      showNotification(t('billing.notifications.invalidDiscountPercentage'), 'error');
       return;
     }
 
@@ -884,10 +892,10 @@ const Billing = () => {
           fetchBills()
         ]);
 
-        showNotification('تم تسجيل الدفع بنجاح!');
+        showNotification(t('billing.notifications.paymentSuccess'), 'success');
       }
     } catch (error) {
-      showNotification('فشل في تسجيل الدفع');
+      showNotification(t('billing.notifications.paymentError'), 'error');
     } finally {
       setIsProcessingPayment(false);
     }
@@ -897,13 +905,13 @@ const Billing = () => {
   const handlePayFullBill = async (bill: Bill) => {
     // التحقق من وجود جلسات نشطة
     if (bill && hasActiveSession(bill)) {
-      showNotification('لا يمكن الدفع - هذه الفاتورة تحتوي على جلسة نشطة. يرجى إنهاء الجلسة أولاً.', 'error');
+      showNotification(t('billing.notifications.cannotPayActiveSession'), 'error');
       return;
     }
 
     // التحقق من أن الفاتورة غير مدفوعة بالكامل
     if (bill.status === 'paid') {
-      showNotification('هذه الفاتورة مدفوعة بالكامل بالفعل', 'info');
+      showNotification(t('billing.notifications.billAlreadyPaid'), 'info');
       return;
     }
 
@@ -911,7 +919,7 @@ const Billing = () => {
     const remainingAmount = bill.remaining || 0;
     
     if (remainingAmount <= 0) {
-      showNotification('لا يوجد مبلغ متبقي للدفع', 'info');
+      showNotification(t('billing.notifications.noRemainingAmount'), 'info');
       return;
     }
 
@@ -965,7 +973,7 @@ const Billing = () => {
         setIsProcessingPayment(false);
 
         // إظهار رسالة نجاح فوراً
-        showNotification('تم دفع الفاتورة بالكامل بنجاح! ✅', 'success');
+        showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
         // إعادة تحميل البيانات في الخلفية
         Promise.all([
@@ -974,17 +982,29 @@ const Billing = () => {
         ]).catch(err => console.error('Error refreshing data:', err));
       }
     } catch (error) {
-      showNotification('فشل في دفع الفاتورة', 'error');
+      showNotification(t('billing.notifications.payFullBillError'), 'error');
       setIsProcessingPayment(false);
     }
   };
 
   const formatCurrency = (amount: number) => {
-    return formatCurrencyUtil(amount);
+    const currency = localStorage.getItem('organizationCurrency') || 'EGP';
+    return formatCurrencyUtil(amount, i18n.language, currency);
   };
 
   const getCustomerDisplay = (bill: Bill) => {
-    return bill.customerName || 'عميل';
+    if (!bill.customerName) {
+      return t('billing.defaultCustomer');
+    }
+    
+    // التحقق إذا كان اسم العميل يحتوي على رقم طاولة (مثل "طاولة 4" أو "Table 4")
+    const tableMatch = bill.customerName.match(/^(?:طاولة|Table|table)\s+(\d+)$/i);
+    if (tableMatch) {
+      const tableNumber = tableMatch[1];
+      return t('billing.tableWithNumber', { number: tableNumber });
+    }
+    
+    return bill.customerName;
   };
 
   // عرض جميع الفواتير بدون فلترة بالتاريخ
@@ -1065,7 +1085,7 @@ const Billing = () => {
       
       return newStatus;
     } catch (error) {
-      showNotification('فشل في تحديث حالة الفاتورة');
+      showNotification(t('billing.notifications.updateBillStatusError'), 'error');
       return null;
     }
   };
@@ -1095,7 +1115,7 @@ const Billing = () => {
         
         // إظهار رسالة النجاح فوراً (بدون إغلاق النافذة)
         setIsProcessingPartialPayment(false);
-        showNotification(`تم دفع ${formatCurrency(totalPaid)} بنجاح!`, 'success');
+        showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(totalPaid) }), 'success');
 
         // إعادة تحميل البيانات في الخلفية
         Promise.all([
@@ -1111,18 +1131,18 @@ const Billing = () => {
             // إذا أصبحت الفاتورة مدفوعة بالكامل، إغلاق النافذة
             if (updatedBill.status === 'paid' && (updatedBill.remaining === 0 || updatedBill.paid >= updatedBill.total)) {
               setShowPartialPaymentModal(false);
-              showNotification('الفاتورة مكتملة! ✅', 'success');
+              showNotification(t('billing.notifications.billCompleted'), 'success');
             }
           }
         }).catch(err => console.error('Error refreshing data:', err));
       } else {
-        const errorMessage = response.message || 'فشل في تسجيل الدفع الجزئي';
+        const errorMessage = response.message || t('billing.notifications.partialPaymentError');
         showNotification(errorMessage, 'error');
         setIsProcessingPartialPayment(false);
       }
     } catch (error) {
       console.error('Error in partial payment:', error);
-      showNotification('فشل في تسجيل الدفع الجزئي', 'error');
+      showNotification(t('billing.notifications.partialPaymentError'), 'error');
       setIsProcessingPartialPayment(false);
     }
   };
@@ -1137,7 +1157,7 @@ const Billing = () => {
     const amount = parseFloat(sessionPaymentAmount);
     
     if (isNaN(amount) || amount <= 0) {
-      showNotification('يرجى إدخال مبلغ صحيح', 'error');
+      showNotification(t('billing.notifications.invalidAmount'), 'error');
       return;
     }
 
@@ -1179,7 +1199,13 @@ const Billing = () => {
     
     
     if (amount > sessionRemaining) {
-      showNotification(`المبلغ المدخل (${formatCurrency(amount)}) أكبر من المبلغ المتبقي (${formatCurrency(sessionRemaining)})`, 'error');
+      showNotification(
+        t('billing.notifications.amountExceedsRemaining', { 
+          amount: formatCurrency(amount), 
+          remaining: formatCurrency(sessionRemaining) 
+        }), 
+        'error'
+      );
       return;
     }
 
@@ -1219,7 +1245,7 @@ const Billing = () => {
         setSelectedSession(null);
 
         // إظهار رسالة نجاح فوراً
-        showNotification('تم تسجيل الدفع الجزئي للجلسة بنجاح!', 'success');
+        showNotification(t('billing.notifications.sessionPaymentSuccess'), 'success');
 
         // إعادة تحميل البيانات في الخلفية
         Promise.all([
@@ -1237,11 +1263,11 @@ const Billing = () => {
           }
         }).catch(err => console.error('Error refreshing data:', err));
       } else {
-        showNotification(result.message || 'فشل في تسجيل الدفع الجزئي للجلسة', 'error');
+        showNotification(result.message || t('billing.notifications.sessionPaymentError'), 'error');
         setIsProcessingSessionPayment(false);
       }
     } catch (error) {
-      showNotification('فشل في تسجيل الدفع الجزئي للجلسة', 'error');
+      showNotification(t('billing.notifications.sessionPaymentError'), 'error');
       setIsProcessingSessionPayment(false);
     }
   };
@@ -1264,7 +1290,7 @@ const Billing = () => {
       const targetTable = tables.find((t: any) => t._id === newTableNumber);
       
       if (!targetTable) {
-        showNotification('❌ الطاولة المحددة غير موجودة', 'error');
+        showNotification(t('billing.notifications.tableNotFound'), 'error');
         return;
       }
       
@@ -1294,7 +1320,10 @@ const Billing = () => {
           if (result.message && result.message.includes('دمج')) {
             showNotification(`✅ ${result.message}`, 'success');
           } else {
-            showNotification(`✅ تم نقل الفاتورة إلى الطاولة ${targetTable?.number || newTableNumber} بنجاح`, 'success');
+            showNotification(
+              t('billing.notifications.tableChangeSuccess', { tableNumber: targetTable?.number || newTableNumber }), 
+              'success'
+            );
           }
         }
         
@@ -1302,11 +1331,11 @@ const Billing = () => {
         setShowChangeTableModal(false);
         setNewTableNumber(null);
       } else {
-        showNotification('❌ فشل في تغيير الطاولة', 'error');
+        showNotification(t('billing.notifications.tableChangeError'), 'error');
       }
     } catch (error: any) {
-      const errorMsg = error?.response?.data?.message || error?.message || 'حدث خطأ غير متوقع';
-      showNotification(`❌ خطأ في تغيير الطاولة: ${errorMsg}`, 'error');
+      const errorMsg = error?.response?.data?.message || error?.message || t('billing.notifications.unexpectedError');
+      showNotification(`❌ ${errorMsg}`, 'error');
     } finally {
       setIsChangingTable(false);
     }
@@ -1343,7 +1372,7 @@ const Billing = () => {
     
     // If not linked to table and no customer name, show error
     if (!isLinkedToTable && !customerNameForEndSession.trim()) {
-      showNotification('يرجى إدخال اسم العميل', 'error');
+      showNotification(t('billing.notifications.customerNameRequired'), 'error');
       return;
     }
     
@@ -1357,7 +1386,7 @@ const Billing = () => {
         setSessionToEnd(null);
         setCustomerNameForEndSession('');
         setIsEndingSession(false);
-        showNotification('تم إنهاء الجلسة بنجاح!');
+        showNotification(t('billing.notifications.endSessionSuccess'), 'success');
 
         // إعادة تعيين بيانات الدفع
         setPaymentAmount('');
@@ -1379,11 +1408,11 @@ const Billing = () => {
         }).catch(err => console.error('Error refreshing data:', err));
 
       } else {
-        showNotification('فشل في إنهاء الجلسة');
+        showNotification(t('billing.notifications.endSessionError'), 'error');
         setIsEndingSession(false);
       }
     } catch (error) {
-      showNotification('حدث خطأ في إنهاء الجلسة');
+      showNotification(t('billing.notifications.endSessionUnexpectedError'), 'error');
       setIsEndingSession(false);
     }
   };
@@ -1418,16 +1447,16 @@ const Billing = () => {
         setShowCancelConfirmModal(false);
         handleClosePaymentModal();
         setIsCancelingBill(false);
-        showNotification('تم حذف الفاتورة بنجاح', 'success');
+        showNotification(t('billing.notifications.deleteBillSuccess'), 'success');
         
         // إعادة تحميل البيانات في الخلفية
         Promise.all([fetchBills(), fetchTables()]).catch(err => console.error('Error refreshing data:', err));
       } else {
-        showNotification('فشل في حذف الفاتورة', 'error');
+        showNotification(t('billing.notifications.deleteBillError'), 'error');
         setIsCancelingBill(false);
       }
     } catch (error) {
-      showNotification('حدث خطأ أثناء حذف الفاتورة', 'error');
+      showNotification(t('billing.notifications.deleteBillUnexpectedError'), 'error');
       setIsCancelingBill(false);
     }
   };
@@ -1519,9 +1548,9 @@ const Billing = () => {
         <div className="flex items-center flex-1 min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center truncate">
             <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ml-2 flex-shrink-0" />
-            إدارة الفواتير
+            {t('billing.pageTitle')}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mr-2 sm:mr-4 text-sm sm:text-base hidden sm:block">متابعة الفواتير والمدفوعات</p>
+          <p className="text-gray-600 dark:text-gray-400 mr-2 sm:mr-4 text-sm sm:text-base hidden sm:block">{t('billing.pageSubtitle')}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Bill Type Filter */}
@@ -1530,10 +1559,10 @@ const Billing = () => {
             onChange={(e) => setBillTypeFilter(e.target.value as 'all' | 'cafe' | 'playstation' | 'computer')}
             className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
-            <option value="all">جميع الفواتير</option>
-            <option value="cafe">فواتير الكافيه</option>
-            <option value="playstation">فواتير البلايستيشن</option>
-            <option value="computer">فواتير الكمبيوتر</option>
+            <option value="all">{t('billing.filters.allBills')}</option>
+            <option value="cafe">{t('billing.filters.cafeBills')}</option>
+            <option value="playstation">{t('billing.filters.playstationBills')}</option>
+            <option value="computer">{t('billing.filters.computerBills')}</option>
           </select>
         </div>
       </div>
@@ -1548,10 +1577,10 @@ const Billing = () => {
               </div>
               <div className="mr-3 sm:mr-4">
                 <p className="text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-300">
-                  إجمالي الفواتير
+                  {t('billing.statistics.totalBills')}
                 </p>
                 <p className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {formatDecimal(billStats.totalBills)}
+                  {formatDecimal(billStats.totalBills, i18n.language)}
                 </p>
               </div>
             </div>
@@ -1565,7 +1594,7 @@ const Billing = () => {
                 </div>
                 <div className="mr-3 sm:mr-4">
                   <p className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
-                    المبلغ المحصل
+                    {t('billing.statistics.collectedAmount')}
                   </p>
                   <p className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400">
                     {showPaidAmount ? formatCurrency(billStats.totalPaid) : '••••••'}
@@ -1575,7 +1604,7 @@ const Billing = () => {
               <button
                 onClick={() => setShowPaidAmount(!showPaidAmount)}
                 className="p-2 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg transition-all duration-200 transform hover:scale-110"
-                title={showPaidAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                title={showPaidAmount ? t('billing.hideAmount') : t('billing.showAmount')}
               >
                 {showPaidAmount ? (
                   <EyeOff className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -1594,7 +1623,7 @@ const Billing = () => {
                 </div>
                 <div className="mr-3 sm:mr-4">
                   <p className="text-xs sm:text-sm font-semibold text-orange-700 dark:text-orange-300">
-                    المبلغ المتبقي
+                    {t('billing.statistics.remainingAmount')}
                   </p>
                   <p className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400">
                     {showRemainingAmount ? formatCurrency(billStats.totalRemaining) : '••••••'}
@@ -1604,7 +1633,7 @@ const Billing = () => {
               <button
                 onClick={() => setShowRemainingAmount(!showRemainingAmount)}
                 className="p-2 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all duration-200 transform hover:scale-110"
-                title={showRemainingAmount ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                title={showRemainingAmount ? t('billing.hideAmount') : t('billing.showAmount')}
               >
                 {showRemainingAmount ? (
                   <EyeOff className="h-5 w-5 text-orange-600 dark:text-orange-400" />
@@ -1622,10 +1651,10 @@ const Billing = () => {
               </div>
               <div className="mr-3 sm:mr-4">
                 <p className="text-xs sm:text-sm font-semibold text-purple-700 dark:text-purple-300">
-                  فواتير جزئية
+                  {t('billing.statistics.partialBills')}
                 </p>
                 <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">
-                  {formatDecimal(billStats.partialBills)}
+                  {formatDecimal(billStats.partialBills, i18n.language)}
                 </p>
                 </div>
             </div>
@@ -1650,7 +1679,7 @@ const Billing = () => {
               </button>
               <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center truncate">
                 <span className="text-2xl ml-2">🎯</span>
-                أجهزة الألعاب (بلايستيشن وكمبيوتر)
+                {t('billing.gamingDevices.title')}
               </h2>
             </div>
             {!isPlaystationSectionCollapsed && (
@@ -1665,7 +1694,7 @@ const Billing = () => {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    🎯 الكل
+                    🎯 {t('billing.filters.all')}
                   </button>
                   <button
                     onClick={() => setGamingDeviceTypeFilter('playstation')}
@@ -1675,7 +1704,7 @@ const Billing = () => {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    🎮 بلايستيشن
+                    🎮 {t('billing.gamingDevices.playstation')}
                   </button>
                   <button
                     onClick={() => setGamingDeviceTypeFilter('computer')}
@@ -1685,7 +1714,7 @@ const Billing = () => {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    💻 كمبيوتر
+                    💻 {t('billing.gamingDevices.computer')}
                   </button>
                 </div>
                 
@@ -1699,7 +1728,7 @@ const Billing = () => {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    غير مدفوع
+                    {t('billing.filters.unpaid')}
                   </button>
                   <button
                     onClick={() => setPlaystationStatusFilter('paid')}
@@ -1709,7 +1738,7 @@ const Billing = () => {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    مدفوع
+                    {t('billing.filters.paid')}
                   </button>
                   <button
                     onClick={() => setPlaystationStatusFilter('all')}
@@ -1719,7 +1748,7 @@ const Billing = () => {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    الكل
+                    {t('billing.filters.all')}
                   </button>
                 </div>
                 
@@ -1728,7 +1757,7 @@ const Billing = () => {
                   <Search className="absolute right-2 sm:right-3 top-1/2 transform -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="بحث عن جهاز..."
+                    placeholder={t('billing.searchDevice')}
                     value={playstationSearchQuery}
                     onChange={(e) => setPlaystationSearchQuery(e.target.value)}
                     className="pr-8 sm:pr-10 pl-3 sm:pl-4 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 text-xs sm:text-sm w-full sm:w-auto min-w-0"
@@ -1779,7 +1808,7 @@ const Billing = () => {
                   // إذا كانت الفاتورة تحتوي على جلسات ألعاب
                   if (gamingSessions.length > 0) {
                     gamingSessions.forEach((session: any) => {
-                      const deviceKey = session.deviceName || `جهاز ${session.deviceNumber}` || 'غير معروف';
+                      const deviceKey = session.deviceName || `${t('billing.device')} ${session.deviceNumber}` || t('common.unknown');
                       const isLinkedToTable = !!bill.table;
                       const hasActiveSession = session.status === 'active';
                       const deviceType = session.deviceType || 'playstation';
@@ -1843,7 +1872,7 @@ const Billing = () => {
                 );
 
                 if (playstationBillsWithoutSessions.length > 0) {
-                  const deviceKey = 'فواتير بلايستيشن بدون جلسات';
+                  const deviceKey = t('billing.playstationBillsWithoutSessions');
                   if (!deviceMap.has(deviceKey)) {
                     deviceMap.set(deviceKey, {
                       deviceName: deviceKey,
@@ -1872,7 +1901,7 @@ const Billing = () => {
                 );
 
                 if (computerBillsWithoutSessions.length > 0) {
-                  const deviceKey = 'فواتير كمبيوتر بدون جلسات';
+                  const deviceKey = t('billing.computerBillsWithoutSessions');
                   if (!deviceMap.has(deviceKey)) {
                     deviceMap.set(deviceKey, {
                       deviceName: deviceKey,
@@ -1938,8 +1967,8 @@ const Billing = () => {
                 });
 
                 if (filteredDevices.length === 0) {
-                  const deviceTypeText = gamingDeviceTypeFilter === 'playstation' ? 'بلايستيشن' : 
-                                        gamingDeviceTypeFilter === 'computer' ? 'كمبيوتر' : 'ألعاب';
+                  const deviceTypeText = gamingDeviceTypeFilter === 'playstation' ? t('billing.gamingDevices.playstation') : 
+                                        gamingDeviceTypeFilter === 'computer' ? t('billing.gamingDevices.computer') : t('billing.gamingDevices.gaming');
                   const icon = gamingDeviceTypeFilter === 'computer' ? '💻' : 
                               gamingDeviceTypeFilter === 'playstation' ? '🎮' : '🎯';
                   
@@ -1949,7 +1978,7 @@ const Billing = () => {
                         <span className="text-3xl sm:text-4xl">{icon}</span>
                       </div>
                       <p className="text-sm sm:text-base">
-                        {playstationSearchQuery ? 'لا توجد نتائج للبحث' : `لا توجد أجهزة ${deviceTypeText} نشطة`}
+                        {playstationSearchQuery ? t('billing.noSearchResults') : t('billing.noActiveDevices', { deviceType: deviceTypeText })}
                       </p>
                     </div>
                   );
@@ -1991,19 +2020,19 @@ const Billing = () => {
                           <div className="flex flex-wrap gap-1 sm:gap-2">
                             {deviceData.hasActiveSession && (
                               <span className="px-2 sm:px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold rounded-full shadow-md animate-pulse whitespace-nowrap">
-                                {deviceIcon} جلسة نشطة
+                                {deviceIcon} {t('billing.activeSession')}
                               </span>
                             )}
                             {deviceData.linkedToTable && deviceData.hasActiveSession && (
                               <span className="px-2 sm:px-3 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-bold rounded-full shadow-md whitespace-nowrap">
-                                🪑 طاولة {deviceData.tableNumber}
+                                🪑 {t('billing.table')} {deviceData.tableNumber}
                               </span>
                             )}
                           </div>
                         </div>
                         {deviceData.bills.length > 0 && (
                           <div className="text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900 px-2 sm:px-3 py-1 rounded-full whitespace-nowrap">
-                            {deviceData.bills.length} {deviceData.bills.length === 1 ? 'فاتورة' : 'فواتير'}
+                            {formatDecimal(deviceData.bills.length, i18n.language)} {deviceData.bills.length === 1 ? t('billing.bill') : t('billing.bills')}
                           </div>
                         )}
                       </div>
@@ -2044,7 +2073,7 @@ const Billing = () => {
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
             <TableIcon className="h-5 w-5 sm:h-6 sm:w-6 ml-2 text-orange-600 dark:text-orange-400" />
-            الطاولات
+            {t('billing.tables')}
           </h2>
         </div>
         
@@ -2088,11 +2117,11 @@ const Billing = () => {
                       <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2">
                         {hasUnpaid ? (
                           <span className="flex items-center justify-center w-10 h-10 sm:w-16 sm:h-16 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
-                            محجوزة
+                            {t('cafe.occupied')}
                           </span>
                         ) : (
                           <span className="flex items-center justify-center w-10 h-10 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500 to-green-600 text-white text-xs font-bold rounded-full shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
-                            فارغة
+                            {t('cafe.empty')}
                           </span>
                         )}
                       </div>
@@ -2112,7 +2141,7 @@ const Billing = () => {
                           {table.number}
                         </span>
                         <span className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          طاولة
+                          {t('billing.table')}
                         </span>
                       </div>
 
@@ -2157,11 +2186,11 @@ const Billing = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2 truncate">
-                    فواتير الطاولة رقم {selectedTable.number}
+                    {t('billing.tableBills', { number: selectedTable.number })}
                   </h2>
                   <p className="text-xs sm:text-sm text-orange-100 mt-1 flex items-center gap-2">
                     <Receipt className="h-3 w-3 sm:h-4 sm:w-4" />
-                    {tableBillsMap[selectedTable.number]?.bills.length || 0} {tableBillsMap[selectedTable.number]?.bills.length === 1 ? 'فاتورة' : 'فواتير'}
+                    {formatDecimal(tableBillsMap[selectedTable.number]?.bills.length || 0, i18n.language)} {(tableBillsMap[selectedTable.number]?.bills.length || 0) === 1 ? t('billing.bill') : t('billing.bills')}
                   </p>
                 </div>
               </div>
@@ -2188,10 +2217,10 @@ const Billing = () => {
                     });
                   }}
                   className="hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white hover:scale-105 transform"
-                  title={`إدارة طلبات طاولة ${selectedTable.number}`}
+                  title={t('billing.manageTableOrders', { number: selectedTable.number })}
                 >
                   <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-xs sm:text-sm font-medium">إدارة الطلبات</span>
+                  <span className="text-xs sm:text-sm font-medium">{t('billing.manageOrders')}</span>
                 </button>
                 
                 {/* زر الذهاب إلى إدارة طلبات الطاولة - نسخة مبسطة للشاشات الصغيرة */}
@@ -2216,7 +2245,7 @@ const Billing = () => {
                     });
                   }}
                   className="sm:hidden w-8 h-8 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
-                  title={`إدارة طلبات طاولة ${selectedTable.number}`}
+                  title={t('billing.manageTableOrders', { number: selectedTable.number })}
                 >
                   <ShoppingCart className="h-4 w-4" />
                 </button>
@@ -2240,19 +2269,19 @@ const Billing = () => {
               <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                 <label className="text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
                   <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
-                  فلترة حسب الحالة:
+                  {t('billing.filterByStatus')}:
                 </label>
                 <select
                   value={tableBillsFilter}
                   onChange={(e) => setTableBillsFilter(e.target.value)}
                   className="border-2 border-orange-300 dark:border-orange-700 rounded-xl px-2 sm:px-4 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:shadow-md transition-all"
                 >
-                  <option value="all">🔍 جميع الفواتير</option>
-                  <option value="unpaid">💰 غير مدفوع</option>
-                  <option value="paid">✅ مدفوع بالكامل</option>
-                  <option value="partial">⚡ مدفوع جزئياً</option>
-                  <option value="overdue">⚠️ متأخر</option>
-                  <option value="cancelled">❌ ملغية</option>
+                  <option value="all">🔍 {t('billing.filters.allBills')}</option>
+                  <option value="unpaid">💰 {t('billing.filters.unpaid')}</option>
+                  <option value="paid">✅ {t('billing.status.paid')}</option>
+                  <option value="partial">⚡ {t('billing.status.partial')}</option>
+                  <option value="overdue">⚠️ {t('billing.status.overdue')}</option>
+                  <option value="cancelled">❌ {t('billing.status.cancelled')}</option>
                 </select>
               </div>
               {/* Search Section */}
@@ -2261,7 +2290,7 @@ const Billing = () => {
                   <Search className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
                   <input
                     type="text"
-                    placeholder="🔎 بحث عن فاتورة برقمها أو معرفها..."
+                    placeholder={t('billing.searchBillPlaceholder')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pr-10 sm:pr-12 pl-3 sm:pl-4 py-2 sm:py-3 border-2 border-orange-300 dark:border-orange-700 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm hover:shadow-md transition-all font-medium text-sm sm:text-base"
@@ -2305,9 +2334,9 @@ const Billing = () => {
                       <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 shadow-lg">
                         <Receipt className="h-10 w-10 sm:h-12 sm:w-12 text-orange-500 dark:text-orange-400" />
                       </div>
-                      <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3">لا توجد فواتير</h3>
+                      <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3">{t('billing.noBills')}</h3>
                       <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg px-4">
-                        {tableBillsFilter === 'all' ? 'لا توجد فواتير لهذه الطاولة' : `لا توجد فواتير بحالة "${getStatusText(tableBillsFilter)}"`}
+                        {tableBillsFilter === 'all' ? t('billing.noBillsForTable') : t('billing.noBillsWithStatus', { status: getStatusText(tableBillsFilter) })}
                       </p>
                     </div>
                   );
@@ -2333,19 +2362,20 @@ const Billing = () => {
                             // جلب بيانات الفاتورة الكاملة قبل الطباعة
                             const response = await api.getBill(bill.id || bill._id);
                             if (response.success && response.data) {
-                              await printBill(response.data, user?.organizationName);
+                              await printBill(response.data, user?.organizationName, i18n.language, t);
                             } else {
-                              showNotification('فشل في جلب بيانات الفاتورة للطباعة', 'error');
+                              showNotification(t('billing.notifications.fetchBillForPrintError'), 'error');
                             }
                           } catch (error) {
                             console.error('Error fetching bill for printing:', error);
-                            showNotification('حدث خطأ أثناء جلب بيانات الفاتورة للطباعة', 'error');
+                            showNotification(t('billing.notifications.fetchBillForPrintUnexpectedError'), 'error');
                           }
                         }}
                         onPayFullBill={handlePayFullBill}
                         getStatusColor={getStatusColor}
                         getStatusText={getStatusText}
                         formatCurrency={formatCurrency}
+                        getCustomerDisplay={getCustomerDisplay}
                       />
                     ))}
                   </div>
@@ -2367,8 +2397,8 @@ const Billing = () => {
                   <DollarSign className="h-5 w-5 sm:h-8 sm:w-8 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-lg sm:text-2xl font-bold text-white truncate">إدارة الدفع</h3>
-                  <p className="text-xs sm:text-sm text-blue-100 mt-1 truncate">فاتورة #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</p>
+                  <h3 className="text-lg sm:text-2xl font-bold text-white truncate">{t('billing.paymentManagementTitle')}</h3>
+                  <p className="text-xs sm:text-sm text-blue-100 mt-1 truncate">{t('billing.bill')} #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
@@ -2377,10 +2407,10 @@ const Billing = () => {
                   <button
                     onClick={handleGoToTableOrders}
                     className="hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white hover:scale-105 transform"
-                    title={`تعديل طلبات طاولة ${selectedBill.table.number}`}
+                    title={t('billing.editTableOrders', { number: selectedBill.table.number })}
                   >
                     <TableIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                    <span className="text-xs sm:text-sm font-medium">تعديل الطلبات</span>
+                    <span className="text-xs sm:text-sm font-medium">{t('billing.editOrders')}</span>
                   </button>
                 )}
                 <button
@@ -2398,38 +2428,38 @@ const Billing = () => {
                 <div>
                   <h4 className="font-bold text-xl text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
                     <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    معلومات الدفع
+                    {t('billing.paymentInfo')}
                   </h4>
 
                   {/* معلومات الفاتورة */}
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-5 rounded-xl mb-6 border-2 border-blue-200 dark:border-blue-800 shadow-md">
                     <h5 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
                       <Receipt className="h-5 w-5" />
-                      معلومات الفاتورة
+                      {t('billing.billInfo')}
                     </h5>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">رقم الفاتورة</span>
+                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">{t('billing.billNumber')}</span>
                         <span className="font-bold text-gray-900 dark:text-gray-100">#{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</span>
                       </div>
                       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">العميل</span>
+                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">{t('billing.customer')}</span>
                         <span className="font-bold text-gray-900 dark:text-gray-100">{selectedBill && (getCustomerDisplay(selectedBill) as string)}</span>
                       </div>
                       <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-3 rounded-lg shadow-sm border border-green-200 dark:border-green-800">
-                        <span className="text-green-700 dark:text-green-300 text-xs block mb-1">المبلغ الكلي</span>
+                        <span className="text-green-700 dark:text-green-300 text-xs block mb-1">{t('billing.totalAmount')}</span>
                         <span className="font-bold text-xl text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.total || 0)}</span>
                       </div>
                       <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 p-3 rounded-lg shadow-sm border border-blue-200 dark:border-blue-800">
-                        <span className="text-blue-700 dark:text-blue-300 text-xs block mb-1">المدفوع مسبقاً</span>
+                        <span className="text-blue-700 dark:text-blue-300 text-xs block mb-1">{t('billing.paidPreviously')}</span>
                         <span className="font-bold text-xl text-blue-600 dark:text-blue-400">{formatCurrency(selectedBill?.paid || 0)}</span>
                       </div>
                       <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/30 dark:to-orange-900/30 p-3 rounded-lg shadow-sm border border-red-200 dark:border-red-800">
-                        <span className="text-red-700 dark:text-red-300 text-xs block mb-1">المتبقي</span>
+                        <span className="text-red-700 dark:text-red-300 text-xs block mb-1">{t('billing.remaining')}</span>
                         <span className="font-bold text-xl text-red-600 dark:text-red-400">{formatCurrency(selectedBill?.remaining || 0)}</span>
                       </div>
                       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">الحالة</span>
+                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">{t('common.status')}</span>
                         <span className={`px-3 py-1.5 text-xs font-bold rounded-full inline-block shadow-sm ${getStatusColor(selectedBill?.status || 'draft')}`}>
                           {getStatusText(selectedBill?.status || 'draft')}
                         </span>
@@ -2440,8 +2470,8 @@ const Billing = () => {
                             <div className="flex items-center gap-3">
                               <TableIcon className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                               <div>
-                                <span className="text-purple-700 dark:text-purple-300 text-xs block">الطاولة</span>
-                                <span className="font-bold text-lg text-purple-900 dark:text-purple-100">طاولة {selectedBill.table.number}</span>
+                                <span className="text-purple-700 dark:text-purple-300 text-xs block">{t('billing.table')}</span>
+                                <span className="font-bold text-lg text-purple-900 dark:text-purple-100">{t('billing.tableWithNumber', { number: selectedBill.table.number })}</span>
                               </div>
                             </div>
                             <button
@@ -2451,7 +2481,7 @@ const Billing = () => {
                               }}
                               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-bold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-md"
                             >
-                              تغيير الطاولة
+                              {t('billing.changeTable')}
                             </button>
                           </div>
                         </div>
@@ -2465,7 +2495,7 @@ const Billing = () => {
                       <h5 className="font-bold text-lg text-red-900 dark:text-red-100 mb-4 flex items-center gap-3">
                         <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse shadow-lg"></div>
                         <Gamepad2 className="h-6 w-6" />
-                        الجهاز النشط
+                        {t('billing.activeDevice')}
                       </h5>
                       <div className="space-y-2 text-sm">
                         {selectedBill.sessions?.filter(s => {
@@ -2478,21 +2508,23 @@ const Billing = () => {
                             <div className="flex justify-between items-center mb-2">
                               <span className="font-medium text-red-800 dark:text-red-200">{session.deviceName}</span>
                               <span className="text-xs text-red-600 dark:text-red-300 bg-red-100 dark:bg-red-800 px-2 py-1 rounded">
-                                {session.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
+                                {session.deviceType === 'playstation' ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}
                               </span>
                             </div>
                             <div className="text-xs text-red-700 dark:text-red-300 mb-3">
-                              <div>وقت البداية: {new Date(session.startTime).toLocaleTimeString('ar-EG')}</div>
-                              <div>المدة: {(() => {
+                              <div>{t('billing.startTime')}: {new Date(session.startTime).toLocaleTimeString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}</div>
+                              <div>{t('billing.duration')}: {(() => {
                                 const start = new Date(session.startTime);
                                 const now = new Date();
                                 const durationMs = now.getTime() - start.getTime();
                                 const hours = Math.floor(durationMs / (1000 * 60 * 60));
                                 const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-                                return `${hours > 0 ? hours + ' ساعة' : ''} ${minutes > 0 ? minutes + ' دقيقة' : ''}`;
+                                const hourText = hours > 0 ? `${formatDecimal(hours, i18n.language)} ${hours === 1 ? t('billing.hour') : t('billing.hours')}` : '';
+                                const minuteText = minutes > 0 ? `${formatDecimal(minutes, i18n.language)} ${minutes === 1 ? t('billing.minute') : t('billing.minutes')}` : '';
+                                return `${hourText} ${minuteText}`.trim();
                               })()}</div>
                               {session.deviceType === 'playstation' && (
-                                <div>عدد الدراعات: {session.controllers || 1}</div>
+                                <div>{t('billing.controllers')}: {formatDecimal(session.controllers || 1, i18n.language)}</div>
                               )}
                             </div>
                             <div className="flex justify-end">
@@ -2500,7 +2532,7 @@ const Billing = () => {
                                 onClick={() => handleEndSession(session._id || session.id)}
                                 className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors duration-200"
                               >
-                                إنهاء الجلسة
+                                {t('billing.endSession')}
                               </button>
                             </div>
                           </div>
@@ -2517,7 +2549,7 @@ const Billing = () => {
                     >
                       <h5 className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-4 flex items-center gap-2">
                         <Receipt className="h-5 w-5" />
-                        تفاصيل الأصناف
+                        {t('billing.itemDetails')}
                       </h5>
                       <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
                         {(() => {
@@ -2548,7 +2580,7 @@ const Billing = () => {
                           if (items.length === 0) {
                             return (
                               <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-                                لا توجد أصناف في هذه الفاتورة
+                                {t('billing.noItemsInBill')}
                               </div>
                             );
                           }
@@ -2561,16 +2593,16 @@ const Billing = () => {
                               </div>
                               <div className="grid grid-cols-3 gap-3 text-xs">
                                 <div className="text-center p-3 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-lg shadow-sm">
-                                  <div className="text-gray-600 dark:text-gray-400 font-semibold mb-1">الكمية الكلية</div>
-                                  <div className="font-bold text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</div>
+                                  <div className="text-gray-600 dark:text-gray-400 font-semibold mb-1">{t('billing.totalQuantity')}</div>
+                                  <div className="font-bold text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity, i18n.language)}</div>
                                 </div>
                                 <div className="text-center p-3 bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/50 dark:to-emerald-900/50 rounded-lg shadow-sm">
-                                  <div className="text-green-700 dark:text-green-300 font-semibold mb-1">المدفوع</div>
-                                  <div className="font-bold text-lg text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity)}</div>
+                                  <div className="text-green-700 dark:text-green-300 font-semibold mb-1">{t('billing.paidQuantity')}</div>
+                                  <div className="font-bold text-lg text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity, i18n.language)}</div>
                                 </div>
                                 <div className="text-center p-3 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/50 dark:to-red-900/50 rounded-lg shadow-sm">
-                                  <div className="text-orange-700 dark:text-orange-300 font-semibold mb-1">المتبقي</div>
-                                  <div className="font-bold text-lg text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity)}</div>
+                                  <div className="text-orange-700 dark:text-orange-300 font-semibold mb-1">{t('billing.remainingQuantity')}</div>
+                                  <div className="font-bold text-lg text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity, i18n.language)}</div>
                                 </div>
                               </div>
                               {item.addons && item.addons.length > 0 && (
@@ -2599,7 +2631,7 @@ const Billing = () => {
                     <>
                       {/* أزرار الدفع - معطل إذا كانت هناك جلسات نشطة */}
                       <div className="mb-6">
-                        <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">خيارات الدفع</h5>
+                        <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">{t('billing.paymentOptions')}</h5>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           {/* زر دفع الفاتورة بالكامل */}
                           <button
@@ -2620,12 +2652,12 @@ const Billing = () => {
                             }`}
                           >
                             <div className="text-2xl mb-2">💰</div>
-                            <div className="font-medium dark:text-gray-100">دفع الفاتورة بالكامل</div>
+                            <div className="font-medium dark:text-gray-100">{t('billing.payFullBillOption')}</div>
                             <div className="text-sm text-gray-600 dark:text-gray-300">
-                              {selectedBill?.remaining ? `دفع ${formatCurrency(selectedBill.remaining)}` : 'دفع المبلغ المتبقي بالكامل'}
+                              {selectedBill?.remaining ? t('billing.payFullBillOptionDesc', { amount: formatCurrency(selectedBill.remaining) }) : t('billing.payFullBillOptionDescAlt')}
                             </div>
                             {selectedBill && hasActiveSession(selectedBill) && (
-                              <div className="text-xs text-red-500 dark:text-red-400 mt-1">غير متاح - جلسة نشطة</div>
+                              <div className="text-xs text-red-500 dark:text-red-400 mt-1">{t('billing.unavailableActiveSession')}</div>
                             )}
                           </button>
 
@@ -2639,8 +2671,8 @@ const Billing = () => {
                             className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500`}
                           >
                             <div className="text-2xl mb-2">🍹</div>
-                            <div className="font-medium dark:text-gray-100">دفع صنف معين</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">اختيار أصناف محددة للدفع</div>
+                            <div className="font-medium dark:text-gray-100">{t('billing.paySpecificItem')}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-300">{t('billing.paySpecificItemDesc')}</div>
                           </button>
 
                           {/* زر دفع جزئي للجلسات */}
@@ -2651,9 +2683,21 @@ const Billing = () => {
                               }}
                               className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500`}
                             >
-                              <div className="text-2xl mb-2">🎮</div>
-                              <div className="font-medium dark:text-gray-100">دفع جزئي للجلسات</div>
-                              <div className="text-sm text-gray-600 dark:text-gray-300">دفع مبالغ جزئية لجلسات البلايستيشن</div>
+                              <div className="text-2xl mb-2">
+                                {(() => {
+                                  const hasPlaystation = selectedBill.sessions.some((s: any) => s.deviceType === 'playstation');
+                                  const hasComputer = selectedBill.sessions.some((s: any) => s.deviceType === 'computer');
+                                  if (hasPlaystation && hasComputer) {
+                                    return '🎮💻'; // كلاهما
+                                  } else if (hasComputer) {
+                                    return '💻'; // كمبيوتر فقط
+                                  } else {
+                                    return '🎮'; // بلايستيشن فقط
+                                  }
+                                })()}
+                              </div>
+                              <div className="font-medium dark:text-gray-100">{t('billing.partialPaymentForSessions')}</div>
+                              <div className="text-sm text-gray-600 dark:text-gray-300">{t('billing.partialPaymentForSessionsDesc')}</div>
                             </button>
                           )}
                         </div>
@@ -2663,7 +2707,7 @@ const Billing = () => {
                       {paymentAmount && (
                         <div className="space-y-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">مبلغ الدفع</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('billing.paymentAmount')}</label>
                             <input
                               type="text"
                               value={formatCurrency(parseFloat(paymentAmount))}
@@ -2673,7 +2717,7 @@ const Billing = () => {
                           </div>
 
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">نسبة الخصم %</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('billing.discountPercentageLabel')}</label>
                             <input
                               type="number"
                               value={discountPercentage}
@@ -2699,11 +2743,11 @@ const Billing = () => {
                               placeholder="0"
                               className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">أدخل نسبة الخصم من 0 إلى 100%</p>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t('billing.discountHint')}</p>
                           </div>
 
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">المبلغ المتبقي بعد الدفع</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('billing.remainingAfterPayment')}</label>
                             <input
                               type="text"
                               value={(() => {
@@ -2769,8 +2813,8 @@ const Billing = () => {
                                         : 'text-yellow-800 dark:text-yellow-200'
                                     }`}>
                                       {willBePaidInFull 
-                                        ? 'ستصبح الفاتورة مدفوعة بالكامل!'
-                                        : 'ستصبح الفاتورة مدفوعة جزئياً'
+                                        ? t('billing.billPaidInFull')
+                                        : t('billing.billPartiallyPaid')
                                       }
                                     </p>
                                     <p className={`text-sm ${
@@ -2779,13 +2823,16 @@ const Billing = () => {
                                         : 'text-yellow-600 dark:text-yellow-300'
                                     }`}>
                                       {willBePaidInFull 
-                                        ? 'المبلغ المتبقي سيكون صفر'
-                                        : `المبلغ المتبقي سيكون ${formatCurrency(remaining)}`
+                                        ? t('billing.remainingWillBeZero')
+                                        : t('billing.remainingWillBe', { amount: formatCurrency(remaining) })
                                       }
                                     </p>
                                     {discountPercentage && parseFloat(discountPercentage) > 0 && (
                                       <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                                        تم تطبيق خصم {discountPercentage}% - وفرت {formatCurrency((selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100))}
+                                        {t('billing.discountApplied', { 
+                                          percent: discountPercentage, 
+                                          amount: formatCurrency((selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100))
+                                        })}
                                       </p>
                                     )}
                                   </div>
@@ -2804,21 +2851,21 @@ const Billing = () => {
                   {selectedBill?.status === 'paid' && (
                     <div className="bg-green-50 dark:bg-green-900 p-6 rounded-lg text-center">
                       <div className="text-6xl mb-4">✅</div>
-                      <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">الفاتورة مدفوعة بالكامل!</h5>
+                      <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">{t('billing.billFullyPaidMessage')}</h5>
                       <p className="text-green-700 dark:text-green-300 mb-4">
-                        تم دفع جميع المبالغ المطلوبة لهذه الفاتورة
+                        {t('billing.allAmountsPaid')}
                       </p>
                       <div className="bg-white dark:bg-gray-800 p-4 rounded-lg">
                         <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-600 dark:text-gray-300">المبلغ الكلي:</span>
+                          <span className="text-gray-600 dark:text-gray-300">{t('billing.totalAmount')}:</span>
                           <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.total || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-600 dark:text-gray-300">المدفوع:</span>
+                          <span className="text-gray-600 dark:text-gray-300">{t('billing.paidAmount')}:</span>
                           <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.paid || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                          <span className="text-gray-600 dark:text-gray-300">المتبقي:</span>
+                          <span className="text-gray-600 dark:text-gray-300">{t('billing.remaining')}:</span>
                           <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.remaining || 0)}</span>
                         </div>
                       </div>
@@ -2828,7 +2875,7 @@ const Billing = () => {
 
                 {/* QR Code Section */}
                 <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">رمز QR للعميل</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">{t('billing.qrCodeForCustomer')}</h4>
 
                   <div className="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg text-center">
                     <div>
@@ -2844,12 +2891,12 @@ const Billing = () => {
                         </div>
                       )}
                       <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                        يمكن للعميل مسح هذا الرمز لمعرفة تفاصيل فاتورته
+                        {t('billing.scanQRInstruction')}
                       </p>
                       <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1 mb-4">
-                        <p>• عرض جميع الطلبات والجلسات</p>
-                        <p>• معرفة المبلغ المدفوع والمتبقي</p>
-                        <p>• مراقبة حالة الفاتورة</p>
+                        <p>{t('billing.qrFeature1')}</p>
+                        <p>{t('billing.qrFeature2')}</p>
+                        <p>{t('billing.qrFeature3')}</p>
                       </div>
                       <div className="flex justify-center space-x-2 space-x-reverse">
                           <button
@@ -2859,7 +2906,7 @@ const Billing = () => {
                                 newWindow.document.write(`
                                   <html dir="rtl">
                                     <head>
-                                      <title>QR Code - فاتورة #${selectedBill?.billNumber}</title>
+                                      <title>QR Code - ${t('billing.billNumber')} #${selectedBill?.billNumber}</title>
                                       <style>
                                         body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
                                         .qr-container { margin: 20px auto; max-width: 400px; }
@@ -2871,14 +2918,14 @@ const Billing = () => {
                                     </head>
                                     <body>
                                       <div class="qr-container">
-                                        <h2>رمز QR للفاتورة</h2>
-                                        <div class="bill-number">فاتورة #${selectedBill?.billNumber}</div>
+                                        <h2>${t('billing.qrCodeForCustomer')}</h2>
+                                        <div class="bill-number">${t('billing.billNumber')} #${selectedBill?.billNumber}</div>
                                         <img src="${selectedBill?.qrCode}" alt="QR Code" class="qr-code" />
                                         <div class="info">
-                                          <p>يمكن للعميل مسح هذا الرمز لمعرفة تفاصيل فاتورته</p>
-                                          <p class="instructions">• عرض جميع الطلبات والجلسات</p>
-                                          <p class="instructions">• معرفة المبلغ المدفوع والمتبقي</p>
-                                          <p class="instructions">• مراقبة حالة الفاتورة</p>
+                                          <p>${t('billing.scanQRInstruction')}</p>
+                                          <p class="instructions">${t('billing.qrFeature1')}</p>
+                                          <p class="instructions">${t('billing.qrFeature2')}</p>
+                                          <p class="instructions">${t('billing.qrFeature3')}</p>
                                         </div>
                                       </div>
                                     </body>
@@ -2891,7 +2938,7 @@ const Billing = () => {
                             className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors duration-200"
                           >
                             <Printer className="h-4 w-4 ml-1 inline" />
-                            طباعة QR
+                            {t('billing.printQR')}
                           </button>
                           <button
                             onClick={() => {
@@ -2902,14 +2949,14 @@ const Billing = () => {
                             }}
                             className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors duration-200"
                           >
-                            تحميل QR
+                            {t('billing.downloadQR')}
                           </button>
                           <button
-                            onClick={() => selectedBill && printBill(selectedBill, user?.organizationName).catch(console.error)}
+                            onClick={() => selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error)}
                             className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors duration-200 flex items-center"
                           >
                             <Printer className="h-4 w-4 ml-1 inline" />
-                            طباعة الفاتورة
+                            {t('billing.printBill')}
                           </button>
                         </div>
                       </div>
@@ -2917,30 +2964,30 @@ const Billing = () => {
 
                   {/* Bill Summary */}
                   <div className="mt-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">ملخص الفاتورة</h5>
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">{t('billing.billSummary')}</h5>
                     <table className="w-full text-sm">
                       <tbody>
                         <tr>
                           <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
-                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">عدد الطلبات</div>
-                            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatDecimal(selectedBill?.orders?.length || 0)}</div>
+                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">{t('billing.ordersCount')}</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatDecimal(selectedBill?.orders?.length || 0, i18n.language)}</div>
                           </td>
                           <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
-                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">عدد الجلسات</div>
+                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">{t('billing.sessionsCount')}</div>
                             <div className="text-lg font-bold flex items-center justify-center gap-1 text-gray-900 dark:text-gray-100">
-                              {formatDecimal(selectedBill?.sessions?.length || 0)}
+                              {formatDecimal(selectedBill?.sessions?.length || 0, i18n.language)}
                               {selectedBill && hasActiveSession(selectedBill) && (
                                 <>
                                   <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                                  <span className="text-xs text-red-600 dark:text-red-400 font-bold">نشط</span>
+                                  <span className="text-xs text-red-600 dark:text-red-400 font-bold">{t('billing.active')}</span>
                                 </>
                               )}
                             </div>
                           </td>
                           <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
-                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">تاريخ الإنشاء</div>
+                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">{t('billing.creationDate')}</div>
                             <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                              {selectedBill?.createdAt ? new Date(selectedBill.createdAt).toLocaleDateString('ar-EG') : '-'}
+                              {selectedBill?.createdAt ? new Date(selectedBill.createdAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US') : '-'}
                             </div>
                           </td>
                         </tr>
@@ -2948,7 +2995,7 @@ const Billing = () => {
                     </table>
 
                     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <h6 className="font-medium text-gray-900 dark:text-gray-100 mb-2">رابط الفاتورة للعميل:</h6>
+                      <h6 className="font-medium text-gray-900 dark:text-gray-100 mb-2">{t('billing.customerLink')}</h6>
                       <div className="flex items-center space-x-2 space-x-reverse mb-3">
                         <input
                           type="text"
@@ -2961,12 +3008,12 @@ const Billing = () => {
                             const url = selectedBill?.qrCodeUrl || `http://localhost:3000/bill/${selectedBill?.id || selectedBill?._id}`;
                             if (url) {
                               navigator.clipboard.writeText(url);
-                              showNotification('تم نسخ الرابط إلى الحافظة');
+                              showNotification(t('billing.linkCopied'));
                             }
                           }}
                           className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors duration-200"
                         >
-                          نسخ
+                          {t('billing.copy')}
                         </button>
                         <button
                           onClick={() => {
@@ -2975,7 +3022,7 @@ const Billing = () => {
                           }}
                           className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors duration-200"
                         >
-                          فتح
+                          {t('billing.open')}
                         </button>
                       </div>
                     </div>
@@ -2991,7 +3038,7 @@ const Billing = () => {
                   onClick={() => setShowCancelConfirmModal(true)}
                   className="px-4 py-2 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-colors duration-200"
                 >
-                  حذف الفاتورة
+                  {t('billing.deleteBill')}
                 </button>
               )}
 
@@ -2999,7 +3046,7 @@ const Billing = () => {
               {selectedBill?.status === 'paid' && (
                 <div className="flex items-center text-green-700 dark:text-green-300">
                   <CheckCircle className="h-5 w-5 mr-2" />
-                  <span className="text-sm font-medium">الفاتورة مدفوعة بالكامل</span>
+                  <span className="text-sm font-medium">{t('billing.billFullyPaid')}</span>
                 </div>
               )}
 
@@ -3008,7 +3055,7 @@ const Billing = () => {
                   onClick={handleClosePaymentModal}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
                 >
-                  إغلاق
+                  {t('common.close')}
                 </button>
 
                 {/* زر دفع الفاتورة بالكامل - يظهر فقط إذا لم تكن الفاتورة مدفوعة بالكامل */}
@@ -3028,12 +3075,12 @@ const Billing = () => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        جاري الدفع...
+                        {t('billing.processingPayment')}
                       </>
                     ) : selectedBill && hasActiveSession(selectedBill) ? (
-                      'لا يمكن الدفع - جلسة نشطة'
+                      t('billing.cannotPayActiveSession')
                     ) : (
-                      'دفع الفاتورة بالكامل'
+                      t('billing.payFullBillButton')
                     )}
                   </button>
                 )}
@@ -3058,10 +3105,10 @@ const Billing = () => {
         isOpen={showCancelConfirmModal}
         onClose={() => !isCancelingBill && setShowCancelConfirmModal(false)}
         onConfirm={handleCancelBill}
-        title="تأكيد حذف الفاتورة"
-        message={`هل أنت متأكد من حذف فاتورة رقم #${selectedBill?.billNumber}؟\n\n⚠️ هذا الإجراء لا يمكن التراجع عنه.`}
-        confirmText={isCancelingBill ? 'جاري الحذف...' : 'نعم، حذف الفاتورة'}
-        cancelText="تراجع"
+        title={t('billing.confirmModals.deleteBillTitle')}
+        message={t('billing.confirmModals.deleteBillMessage', { billNumber: selectedBill?.billNumber || selectedBill?.id || selectedBill?._id })}
+        confirmText={isCancelingBill ? t('billing.confirmModals.deleteBillProcessing') : t('billing.confirmModals.deleteBillConfirm')}
+        cancelText={t('billing.confirmModals.deleteBillCancel')}
         confirmColor="bg-red-600 hover:bg-red-700"
         loading={isCancelingBill}
       />
@@ -3071,10 +3118,14 @@ const Billing = () => {
         isOpen={showPayFullBillConfirmModal}
         onClose={() => !isProcessingPayment && setShowPayFullBillConfirmModal(false)}
         onConfirm={confirmPayFullBill}
-        title="تأكيد دفع الفاتورة بالكامل"
-        message={`هل تريد دفع الفاتورة بالكامل؟\n\nرقم الفاتورة: #${billToPayFull?.billNumber || billToPayFull?.id || billToPayFull?._id}\nالمبلغ المتبقي: ${formatCurrency(billToPayFull?.remaining || 0)}\nطريقة الدفع: ${paymentMethod === 'cash' ? 'نقدي' : paymentMethod === 'card' ? 'بطاقة' : 'تحويل'}`}
-        confirmText={isProcessingPayment ? 'جاري الدفع...' : 'نعم، دفع بالكامل'}
-        cancelText="تراجع"
+        title={t('billing.confirmModals.payFullBillTitle')}
+        message={t('billing.confirmModals.payFullBillMessage', {
+          billNumber: billToPayFull?.billNumber || billToPayFull?.id || billToPayFull?._id,
+          amount: formatCurrency(billToPayFull?.remaining || 0),
+          method: t(`billing.paymentMethod${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}`)
+        })}
+        confirmText={isProcessingPayment ? t('billing.confirmModals.payFullBillProcessing') : t('billing.confirmModals.payFullBillConfirm')}
+        cancelText={t('billing.confirmModals.payFullBillCancel')}
         confirmColor="bg-green-600 hover:bg-green-700"
         loading={isProcessingPayment}
       />
@@ -3084,10 +3135,14 @@ const Billing = () => {
         isOpen={showSessionPaymentConfirmModal}
         onClose={() => !isProcessingSessionPayment && setShowSessionPaymentConfirmModal(false)}
         onConfirm={confirmSessionPayment}
-        title="تأكيد دفع الجلسة"
-        message={`هل تريد دفع مبلغ للجلسة؟\n\nالجهاز: ${sessionToPayData?.session?.deviceName || sessionToPayData?.session?.deviceNumber || 'غير معروف'}\nالمبلغ: ${formatCurrency(parseFloat(sessionToPayData?.amount || '0'))}\nطريقة الدفع: ${sessionToPayData?.method === 'cash' ? 'نقدي' : sessionToPayData?.method === 'card' ? 'بطاقة' : 'تحويل'}`}
-        confirmText={isProcessingSessionPayment ? 'جاري الدفع...' : 'نعم، تأكيد الدفع'}
-        cancelText="تراجع"
+        title={t('billing.confirmModals.sessionPaymentTitle')}
+        message={t('billing.confirmModals.sessionPaymentMessage', {
+          device: sessionToPayData?.session?.deviceName || sessionToPayData?.session?.deviceNumber || t('common.unknown'),
+          amount: formatCurrency(parseFloat(sessionToPayData?.amount || '0')),
+          method: t(`billing.paymentMethod${sessionToPayData?.method ? sessionToPayData.method.charAt(0).toUpperCase() + sessionToPayData.method.slice(1) : 'Cash'}`)
+        })}
+        confirmText={isProcessingSessionPayment ? t('billing.confirmModals.sessionPaymentProcessing') : t('billing.confirmModals.sessionPaymentConfirm')}
+        cancelText={t('billing.confirmModals.sessionPaymentCancel')}
         confirmColor="bg-blue-600 hover:bg-blue-700"
         loading={isProcessingSessionPayment}
       />
@@ -3099,30 +3154,30 @@ const Billing = () => {
         return (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
             <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto p-3 sm:p-6 mx-2 sm:mx-0">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">تأكيد إنهاء الجلسة</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.confirmModals.endSessionTitle')}</h3>
               
               {!isLinkedToTable && (
                 <div className="mb-3 sm:mb-4 p-2 sm:p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
                   <p className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-200">
-                    ⚠️ هذه الجلسة غير مرتبطة بطاولة. يرجى إدخال اسم العميل قبل الإنهاء.
+                    {t('billing.confirmModals.endSessionWarningNoTable')}
                   </p>
                 </div>
               )}
               
               <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mb-3 sm:mb-4">
-                هل أنت متأكد من إنهاء هذه الجلسة؟ سيتم حساب التكلفة النهائية وإغلاق الجلسة.
+                {t('billing.confirmModals.endSessionMessage')}
               </p>
               
               {!isLinkedToTable && (
                 <div className="mb-3 sm:mb-4">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    اسم العميل <span className="text-red-500">*</span>
+                    {t('billing.confirmModals.endSessionCustomerName')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={customerNameForEndSession}
                     onChange={(e) => setCustomerNameForEndSession(e.target.value)}
-                    placeholder="أدخل اسم العميل"
+                    placeholder={t('billing.confirmModals.endSessionCustomerNamePlaceholder')}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:text-gray-100 text-sm sm:text-base"
                     disabled={isEndingSession}
                   />
@@ -3142,7 +3197,7 @@ const Billing = () => {
                 }`}
                 disabled={isEndingSession}
               >
-                إلغاء
+                {t('billing.confirmModals.endSessionCancel')}
               </button>
               <button
                 onClick={confirmSessionEnd}
@@ -3159,11 +3214,11 @@ const Billing = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span className="hidden sm:inline">جاري إنهاء الجلسة...</span>
-                    <span className="sm:hidden">جاري...</span>
+                    <span className="hidden sm:inline">{t('billing.confirmModals.endSessionProcessing')}</span>
+                    <span className="sm:hidden">{t('billing.confirmModals.endSessionProcessingShort')}</span>
                   </>
                 ) : (
-                  'تأكيد الإنهاء'
+                  t('billing.confirmModals.endSessionConfirm')
                 )}
               </button>
             </div>
@@ -3180,15 +3235,15 @@ const Billing = () => {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex-1 min-w-0">
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
-                      دفع جزئي للجلسات
+                      {t('billing.sessionPaymentModal.title')}
                     </h3>
                     <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 mt-1">
-                      اختر الجلسات وحدد المبلغ المطلوب دفعه لكل جلسة
+                      {t('billing.sessionPaymentModal.subtitle')}
                     </p>
                   </div>
                   {selectedBill.sessions?.some((s: any) => s.status === 'active') && (
                     <span className="px-2 sm:px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full whitespace-nowrap">
-                      🔄 تحديث تلقائي
+                      🔄 {t('billing.sessionPaymentModal.autoUpdate')}
                     </span>
                   )}
                 </div>
@@ -3261,27 +3316,29 @@ const Billing = () => {
                               ? 'bg-gradient-to-br from-blue-500 to-cyan-500 animate-pulse'
                               : 'bg-gradient-to-br from-orange-500 to-red-500'
                           }`}>
-                            <span className="text-lg sm:text-2xl">🎮</span>
+                            <span className="text-lg sm:text-2xl">
+                              {session.deviceType === 'playstation' ? '🎮' : '💻'}
+                            </span>
                           </div>
                           <div className="min-w-0 flex-1">
                             <h4 className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate">
                               {session.deviceName}
                             </h4>
                             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                              {session.deviceType === 'playstation' ? 'بلايستيشن' : 'كمبيوتر'}
-                              {session.deviceType === 'playstation' && ` - ${session.controllers || 1} دراع`}
+                              {session.deviceType === 'playstation' ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}
+                              {session.deviceType === 'playstation' && ` - ${formatDecimal(session.controllers || 1, i18n.language)} ${t('billing.controllers')}`}
                             </p>
                           </div>
                         </div>
                         <div className="flex flex-col gap-1 items-end">
                           {isFullyPaid && (
                             <span className="px-2 sm:px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full">
-                              ✓ مدفوعة
+                              ✓ {t('billing.sessionPaymentModal.fullyPaid')}
                             </span>
                           )}
                           {isActive && (
                             <span className="px-2 sm:px-3 py-1 bg-blue-500 text-white text-xs font-bold rounded-full animate-pulse">
-                              ⚡ نشطة
+                              ⚡ {t('billing.sessionPaymentModal.activeSession')}
                             </span>
                           )}
                         </div>
@@ -3290,18 +3347,18 @@ const Billing = () => {
                       {/* المبالغ */}
                       <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
                         <div className={`text-center p-2 bg-white dark:bg-gray-700 rounded-lg ${isActive ? 'ring-2 ring-blue-400 animate-pulse' : ''}`}>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">الإجمالي</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.totalCost')}</p>
                           <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">{formatCurrency(totalCost)}</p>
-                          {isActive && <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">⚡ يتحدث</p>}
+                          {isActive && <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">⚡ {t('billing.sessionPaymentModal.updating')}</p>}
                         </div>
                         <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg">
-                          <p className="text-xs text-gray-600 dark:text-gray-400">المدفوع</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.paid')}</p>
                           <p className="font-bold text-sm sm:text-base text-blue-600 dark:text-blue-400">{formatCurrency(paidAmount)}</p>
                         </div>
                         <div className={`text-center p-2 bg-white dark:bg-gray-700 rounded-lg ${isActive ? 'ring-2 ring-orange-400 animate-pulse' : ''}`}>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">المتبقي</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.remaining')}</p>
                           <p className="font-bold text-sm sm:text-base text-red-600 dark:text-red-400">{formatCurrency(remainingAmount)}</p>
-                          {isActive && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">⚡ يتحدث</p>}
+                          {isActive && <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">⚡ {t('billing.sessionPaymentModal.updating')}</p>}
                         </div>
                       </div>
 
@@ -3310,7 +3367,7 @@ const Billing = () => {
                         <div className="mb-3 p-2 sm:p-3 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg">
                           <p className="text-xs text-blue-800 dark:text-blue-200 flex items-center gap-2">
                             <span>⚠️</span>
-                            <span>الجلسة نشطة - السعر يتغير تلقائياً. يمكنك الدفع جزئياً والمبلغ المتبقي سيتحدث عند انتهاء الجلسة.</span>
+                            <span>{t('billing.sessionPaymentModal.activeWarning')}</span>
                           </p>
                         </div>
                       )}
@@ -3322,7 +3379,7 @@ const Billing = () => {
                             <input
                               type="text"
                               inputMode="numeric"
-                              placeholder="المبلغ"
+                              placeholder={t('billing.sessionPaymentModal.amountPlaceholder')}
                               value={selectedSession?._id === sessionId || selectedSession?.id === sessionId ? sessionPaymentAmount : ''}
                               onChange={(e) => {
                                 const value = e.target.value;
@@ -3335,7 +3392,7 @@ const Billing = () => {
                                 const value = parseInt(e.target.value);
                                 if (!isNaN(value) && value > remainingAmount) {
                                   setSessionPaymentAmount(Math.floor(remainingAmount).toString());
-                                  showNotification(`الحد الأقصى للدفع هو ${formatCurrency(remainingAmount)}`, 'warning');
+                                  showNotification(t('billing.sessionPaymentModal.errorExceedsRemaining', { amount: formatCurrency(remainingAmount) }), 'warning');
                                 }
                               }}
                               className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base"
@@ -3344,16 +3401,16 @@ const Billing = () => {
                             {selectedSession?._id === sessionId || selectedSession?.id === sessionId ? (
                               <>
                                 {sessionPaymentAmount && parseInt(sessionPaymentAmount) <= 0 && (
-                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">⚠️ المبلغ يجب أن يكون أكبر من صفر</p>
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t('billing.sessionPaymentModal.errorZero')}</p>
                                 )}
                                 {sessionPaymentAmount && parseInt(sessionPaymentAmount) > remainingAmount && (
-                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">⚠️ المبلغ يتجاوز المتبقي ({formatCurrency(remainingAmount)})</p>
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t('billing.sessionPaymentModal.errorExceedsRemaining')} ({formatCurrency(remainingAmount)})</p>
                                 )}
                                 {sessionPaymentAmount && /[^\d]/.test(sessionPaymentAmount) && (
-                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">⚠️ يجب إدخال أرقام صحيحة فقط</p>
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t('billing.sessionPaymentModal.errorInvalidNumber')}</p>
                                 )}
                                 {!sessionPaymentAmount && (
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">الحد الأقصى: {formatCurrency(remainingAmount)}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('billing.sessionPaymentModal.maxAmount')}: {formatCurrency(remainingAmount)}</p>
                                 )}
                               </>
                             ) : null}
@@ -3382,7 +3439,7 @@ const Billing = () => {
                             })()}
                             className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm sm:text-base whitespace-nowrap"
                           >
-                            دفع
+                            {t('billing.sessionPaymentModal.payButton')}
                           </button>
                         </div>
                       )}
@@ -3390,15 +3447,15 @@ const Billing = () => {
                       {/* عرض الدفعات السابقة */}
                       {sessionPayment?.payments && sessionPayment.payments.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
-                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">الدفعات السابقة:</p>
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">{t('billing.sessionPaymentModal.previousPayments')}:</p>
                           <div className="space-y-1">
                             {sessionPayment.payments.map((payment: any, idx: number) => (
                               <div key={idx} className="flex justify-between items-center text-xs bg-white dark:bg-gray-700 p-2 rounded">
                                 <span className="text-gray-600 dark:text-gray-400 truncate flex-1 pr-2">
-                                  {formatCurrency(payment.amount)} - {payment.method === 'cash' ? 'نقداً' : payment.method === 'card' ? 'بطاقة' : 'تحويل'}
+                                  {formatCurrency(payment.amount)} - {t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`)}
                                 </span>
                                 <span className="text-gray-500 dark:text-gray-500 text-xs whitespace-nowrap">
-                                  {new Date(payment.paidAt).toLocaleString('ar-EG')}
+                                  {new Date(payment.paidAt).toLocaleString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
                                 </span>
                               </div>
                             ))}
@@ -3422,7 +3479,7 @@ const Billing = () => {
                 }}
                 className="px-4 sm:px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-lg transition-colors text-sm sm:text-base"
               >
-                إغلاق
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -3434,12 +3491,12 @@ const Billing = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-3 sm:p-6 mx-2 sm:mx-0">
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">
-              تغيير الطاولة
+              {t('billing.changeTableTitle')}
             </h3>
             
             <div className="mb-3 sm:mb-4">
               <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-2">
-                الفاتورة الحالية: <span className="font-semibold text-gray-900 dark:text-gray-100">#{selectedBill.billNumber}</span>
+                {t('billing.currentBill')}: <span className="font-semibold text-gray-900 dark:text-gray-100">#{selectedBill.billNumber}</span>
               </p>
               {(() => {
                 const currentTableId = selectedBill.table?._id || selectedBill.table;
@@ -3449,7 +3506,7 @@ const Billing = () => {
                   return (
                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-2 sm:p-3 mt-3">
                       <p className="text-xs sm:text-sm font-medium text-blue-900 dark:text-blue-100">
-                        📍 الطاولة الحالية: <span className="font-bold">طاولة {currentTable.number}</span>
+                        📍 {t('billing.currentTableWithNumber', { number: currentTable.number })}
                       </p>
                     </div>
                   );
@@ -3460,7 +3517,7 @@ const Billing = () => {
             
             <div className="mb-4 sm:mb-6">
               <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                اختر الطاولة الجديدة
+                {t('billing.selectNewTable')}
               </label>
               <select
                 value={newTableNumber || ''}
@@ -3468,15 +3525,15 @@ const Billing = () => {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 text-sm sm:text-base"
                 disabled={isChangingTable}
               >
-                <option value="">اختر طاولة...</option>
+                <option value="">{t('billing.selectTablePlaceholder')}</option>
                 {tables
                   .filter((t: any) => t.isActive && t._id !== selectedBill.table?._id)
                   .sort((a: any, b: any) => {
-                    return String(a.number).localeCompare(String(b.number), 'ar', { numeric: true });
+                    return String(a.number).localeCompare(String(b.number), i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en', { numeric: true });
                   })
                   .map((table: any) => (
                     <option key={table._id} value={table._id}>
-                      طاولة {table.number}
+                      {t('billing.tableWithNumber', { number: table.number })}
                     </option>
                   ))}
               </select>
@@ -3484,7 +3541,7 @@ const Billing = () => {
             
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-2 sm:p-3 mb-4 sm:mb-6">
               <p className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ سيتم نقل جميع الطلبات والجلسات المرتبطة بهذه الفاتورة إلى الطاولة الجديدة.
+                {t('billing.changeTableWarning')}
               </p>
             </div>
             
@@ -3497,7 +3554,7 @@ const Billing = () => {
                 className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors text-sm sm:text-base order-2 sm:order-1"
                 disabled={isChangingTable}
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleChangeTable}
@@ -3514,11 +3571,11 @@ const Billing = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span className="hidden sm:inline">جاري التغيير...</span>
-                    <span className="sm:hidden">جاري...</span>
+                    <span className="hidden sm:inline">{t('billing.changing')}</span>
+                    <span className="sm:hidden">{t('billing.changingShort')}</span>
                   </>
                 ) : (
-                  'تأكيد التغيير'
+                  t('billing.confirmChange')
                 )}
               </button>
             </div>

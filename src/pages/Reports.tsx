@@ -1,36 +1,25 @@
 import { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { TrendingUp, TrendingDown, ArrowUp, ArrowDown, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, Filter, ChevronDown, BarChart3, Eye, EyeOff } from 'lucide-react';
 import { format, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { ar, enUS, fr } from 'date-fns/locale';
 import { DatePicker, TimePicker, ConfigProvider } from 'antd';
 import arEG from 'antd/locale/ar_EG';
+import enUS_antd from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { exportReportToPDF, generatePDFFilename } from '../utils/pdfExport';
+import { useTranslation } from 'react-i18next';
+import { formatDecimal, formatCurrency as formatCurrencyUtil } from '../utils/formatters';
+import { useCurrency } from '../hooks/useCurrency';
+import { useOrganization } from '../context/OrganizationContext';
 
 // Configure dayjs
-dayjs.locale('ar');
 dayjs.extend(customParseFormat);
-
-// دالة لتحويل الأرقام إلى العربية
-const toArabicNumbers = (num: number | string): string => {
-  if (num === null || num === undefined) return '';
-  const arabicNumbers = '۰١٢٣٤٥٦٧٨٩';
-  return String(num).replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
-};
-
-// دالة لتنسيق الأرقام مع فواصل الآلاف وتحويلها للعربية
-const formatNumberArabic = (num: number): string => {
-  const rounded = Math.round(num);
-  const formatted = new Intl.NumberFormat('ar-EG', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(rounded);
-  
-  return toArabicNumbers(formatted);
-};
 
 // Type definitions
 interface SalesReportData {
@@ -73,6 +62,8 @@ interface RevenueCardProps {
   value: number;
   total: number;
   color: string;
+  i18n: any;
+  t: any;
 }
 
 interface ReportSectionProps {
@@ -80,6 +71,7 @@ interface ReportSectionProps {
   onExportExcel: () => void;
   onExportPDF: () => void;
   children: ReactNode;
+  t: any;
 }
 
 interface FinancialStatProps {
@@ -149,6 +141,7 @@ interface StatCardWithComparisonProps {
   comparison?: ComparisonData | null;
   color: string;
   formatValue?: (value: number) => string;
+  t: any;
 }
 
 interface PeakHoursData {
@@ -184,10 +177,9 @@ interface RevenueBreakdown {
 }
 
 import { useApp } from '../context/AppContext';
-import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
 // TopProductsBySection Component
-const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
+const TopProductsBySection = ({ data, t, i18n, formatCurrency }: { data: ProductSalesBySection[], t: any, i18n: any, formatCurrency: (amount: number) => string }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   const toggleSection = (sectionId: string) => {
@@ -207,7 +199,7 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
       <div className="text-center py-12">
         <ShoppingCart className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
         <p className="text-gray-500 dark:text-gray-400 text-lg font-medium">
-          لا توجد بيانات مبيعات متاحة
+          {t('reports.labels.noSalesData')}
         </p>
       </div>
     );
@@ -236,15 +228,15 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
             </div>
             <div className="flex items-center gap-8">
               <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">الكمية الإجمالية</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{t('reports.labels.totalQuantity')}</p>
                 <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                  {formatNumberArabic(section.totalQuantity)} قطعة
+                  {formatDecimal(section.totalQuantity, i18n.language)} {t('reports.labels.pieces')}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">الإيراد الإجمالي</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{t('reports.labels.totalRevenue')}</p>
                 <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                  {formatNumberArabic(section.totalRevenue)} ج.م
+                  {formatCurrency(section.totalRevenue)}
                 </p>
               </div>
             </div>
@@ -261,7 +253,7 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
                     >
                       <div className="flex items-center gap-4">
                         <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 text-white text-sm font-bold shadow-md">
-                          {toArabicNumbers(index + 1)}
+                          {formatDecimal(index + 1, i18n.language)}
                         </span>
                         <span className="text-base font-semibold text-gray-800 dark:text-gray-200">
                           {product.name}
@@ -269,15 +261,15 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
                       </div>
                       <div className="flex items-center gap-8">
                         <div className="text-right">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">الكمية</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('reports.labels.quantity')}</p>
                           <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                            {formatNumberArabic(product.quantity)} قطعة
+                            {formatDecimal(product.quantity, i18n.language)} {t('reports.labels.pieces')}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">الإيراد</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('reports.labels.revenue')}</p>
                           <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                            {formatNumberArabic(product.revenue)} ج.م
+                            {formatCurrency(product.revenue)}
                           </p>
                         </div>
                       </div>
@@ -286,7 +278,7 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
                 </div>
               ) : (
                 <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                  لا توجد مبيعات في هذا القسم
+                  {t('reports.labels.noSalesInSection')}
                 </p>
               )}
             </div>
@@ -298,13 +290,13 @@ const TopProductsBySection = ({ data }: { data: ProductSalesBySection[] }) => {
 };
 
 // PlayStation Sessions Report Component
-const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation'] | null }) => {
+const PlayStationSessionsReport = ({ data, t, i18n, formatCurrency }: { data: SessionsData['playstation'] | null, t: any, i18n: any, formatCurrency: (amount: number) => string }) => {
   if (!data) {
     return (
       <div className="text-center py-8">
         <Gamepad2 className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
         <p className="text-gray-500 dark:text-gray-400">
-          لا توجد بيانات متاحة
+          {t('reports.labels.noDataAvailable')}
         </p>
       </div>
     );
@@ -318,9 +310,9 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
           <div className="flex items-center justify-center mb-2">
             <Gamepad2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">عدد الجلسات</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.sessionsCount')}</p>
           <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {formatNumberArabic(data.totalSessions)}
+            {formatDecimal(data.totalSessions, i18n.language)}
           </p>
         </div>
         
@@ -328,9 +320,9 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
           <div className="flex items-center justify-center mb-2">
             <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">الإيراد</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.revenue')}</p>
           <p className="text-xl font-bold text-green-600 dark:text-green-400">
-            {formatNumberArabic(data.totalRevenue)} ج.م
+            {formatCurrency(data.totalRevenue)}
           </p>
         </div>
         
@@ -338,9 +330,9 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
           <div className="flex items-center justify-center mb-2">
             <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط المدة</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.avgDuration')}</p>
           <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
-            {formatNumberArabic(Number(data.avgDuration))} س
+            {formatDecimal(Number(data.avgDuration), i18n.language)} {t('reports.labels.hours')}
           </p>
         </div>
         
@@ -348,9 +340,9 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
           <div className="flex items-center justify-center mb-2">
             <Target className="w-5 h-5 text-orange-600 dark:text-orange-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط الإيراد</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.avgRevenue')}</p>
           <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
-            {formatNumberArabic(Number(data.avgRevenue))} ج.م
+            {formatCurrency(Number(data.avgRevenue))}
           </p>
         </div>
       </div>
@@ -360,25 +352,25 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-200 dark:border-gray-600">
           <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
             <Gamepad2 className="w-4 h-4 text-blue-500" />
-            توزيع الدراعات
+            {t('reports.labels.controllerDistribution')}
           </h5>
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-3 bg-blue-50 dark:bg-gray-700 rounded-lg">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">١-٢ دراعات</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.controllers.single')}</p>
               <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                {formatNumberArabic(data.controllerDistribution.single)}
+                {formatDecimal(data.controllerDistribution.single, i18n.language)}
               </p>
             </div>
             <div className="text-center p-3 bg-purple-50 dark:bg-gray-700 rounded-lg">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">٣ دراعات</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.controllers.triple')}</p>
               <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
-                {formatNumberArabic(data.controllerDistribution.triple)}
+                {formatDecimal(data.controllerDistribution.triple, i18n.language)}
               </p>
             </div>
             <div className="text-center p-3 bg-orange-50 dark:bg-gray-700 rounded-lg">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">٤ دراعات</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.controllers.quad')}</p>
               <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                {formatNumberArabic(data.controllerDistribution.quad)}
+                {formatDecimal(data.controllerDistribution.quad, i18n.language)}
               </p>
             </div>
           </div>
@@ -390,7 +382,7 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-200 dark:border-gray-600">
           <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
             <Monitor className="w-4 h-4 text-blue-500" />
-            أكثر الأجهزة استخداماً
+            {t('reports.labels.mostUsedDevices')}
           </h5>
           <div className="space-y-2">
             {data.deviceUsage.slice(0, 5).map((device, index) => (
@@ -400,7 +392,7 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
               >
                 <div className="flex items-center gap-2">
                   <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-500 text-white text-xs font-bold">
-                    {toArabicNumbers(index + 1)}
+                    {formatDecimal(index + 1, i18n.language)}
                   </span>
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     {device.deviceName}
@@ -408,15 +400,15 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">الجلسات</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('reports.labels.sessions')}</p>
                     <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {formatNumberArabic(device.sessionsCount)}
+                      {formatDecimal(device.sessionsCount, i18n.language)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">الإيراد</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('reports.labels.revenue')}</p>
                     <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                      {formatNumberArabic(device.revenue)} ج.م
+                      {formatCurrency(device.revenue)}
                     </p>
                   </div>
                 </div>
@@ -430,13 +422,13 @@ const PlayStationSessionsReport = ({ data }: { data: SessionsData['playstation']
 };
 
 // Computer Sessions Report Component
-const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | null }) => {
+const ComputerSessionsReport = ({ data, t, i18n, formatCurrency }: { data: SessionsData['computer'] | null, t: any, i18n: any, formatCurrency: (amount: number) => string }) => {
   if (!data) {
     return (
       <div className="text-center py-8">
         <Monitor className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
         <p className="text-gray-500 dark:text-gray-400">
-          لا توجد بيانات متاحة
+          {t('reports.labels.noDataAvailable')}
         </p>
       </div>
     );
@@ -450,9 +442,9 @@ const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | nul
           <div className="flex items-center justify-center mb-2">
             <Monitor className="w-5 h-5 text-green-600 dark:text-green-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">عدد الجلسات</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.sessionsCount')}</p>
           <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {formatNumberArabic(data.totalSessions)}
+            {formatDecimal(data.totalSessions, i18n.language)}
           </p>
         </div>
         
@@ -460,9 +452,9 @@ const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | nul
           <div className="flex items-center justify-center mb-2">
             <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">الإيراد</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.revenue')}</p>
           <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-            {formatNumberArabic(data.totalRevenue)} ج.م
+            {formatCurrency(data.totalRevenue)}
           </p>
         </div>
         
@@ -470,9 +462,9 @@ const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | nul
           <div className="flex items-center justify-center mb-2">
             <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط المدة</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.avgDuration')}</p>
           <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
-            {formatNumberArabic(Number(data.avgDuration))} س
+            {formatDecimal(Number(data.avgDuration), i18n.language)} {t('reports.labels.hours')}
           </p>
         </div>
         
@@ -480,9 +472,9 @@ const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | nul
           <div className="flex items-center justify-center mb-2">
             <Target className="w-5 h-5 text-orange-600 dark:text-orange-400" />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">متوسط الإيراد</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.avgRevenue')}</p>
           <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
-            {formatNumberArabic(Number(data.avgRevenue))} ج.م
+            {formatCurrency(Number(data.avgRevenue))}
           </p>
         </div>
       </div>
@@ -492,7 +484,7 @@ const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | nul
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-green-200 dark:border-gray-600">
           <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
             <Monitor className="w-4 h-4 text-green-500" />
-            أكثر الأجهزة استخداماً
+            {t('reports.labels.mostUsedDevices')}
           </h5>
           <div className="space-y-2">
             {data.deviceUsage.slice(0, 5).map((device, index) => (
@@ -502,7 +494,7 @@ const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | nul
               >
                 <div className="flex items-center gap-2">
                   <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-green-500 text-white text-xs font-bold">
-                    {toArabicNumbers(index + 1)}
+                    {formatDecimal(index + 1, i18n.language)}
                   </span>
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     {device.deviceName}
@@ -510,15 +502,15 @@ const ComputerSessionsReport = ({ data }: { data: SessionsData['computer'] | nul
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">الجلسات</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('reports.labels.sessions')}</p>
                     <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {formatNumberArabic(device.sessionsCount)}
+                      {formatDecimal(device.sessionsCount, i18n.language)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">الإيراد</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('reports.labels.revenue')}</p>
                     <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                      {formatNumberArabic(device.revenue)} ج.م
+                      {formatCurrency(device.revenue)}
                     </p>
                   </div>
                 </div>
@@ -538,7 +530,8 @@ const StatCardWithComparison = ({
   current, 
   comparison,
   color,
-  formatValue = (val) => formatCurrencyUtil(val)
+  formatValue = (val) => val.toString(),
+  t
 }: StatCardWithComparisonProps) => {
   const isIncrease = comparison ? comparison.change >= 0 : null;
   const hasComparison = comparison && comparison.previous !== undefined;
@@ -579,17 +572,17 @@ const StatCardWithComparison = ({
               {Math.abs(comparison.changePercent).toFixed(1)}%
             </span>
             <span className="text-gray-500 dark:text-gray-400 text-xs">
-              مقارنة بالفترة السابقة
+              {t('reports.labels.vsLastPeriod')}
             </span>
           </div>
           <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            الفترة السابقة: {formatValue(comparison.previous)}
+            {t('reports.labels.previousPeriod')} {formatValue(comparison.previous)}
           </div>
         </div>
       ) : (
         <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-            لا توجد بيانات للمقارنة
+            {t('reports.labels.noComparisonData')}
           </p>
         </div>
       )}
@@ -598,23 +591,23 @@ const StatCardWithComparison = ({
 };
 
 // PeakHoursChart Component
-const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
+const PeakHoursChart = ({ data, t, i18n, formatCurrency }: { data: PeakHoursData | null, t: any, i18n: any, formatCurrency: (amount: number) => string }) => {
   const [viewMode, setViewMode] = useState<'sales' | 'sessions'>('sales');
 
   if (!data || !data.hourlyData || data.hourlyData.length === 0) {
     return (
       <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-        لا توجد بيانات متاحة
+        {t('reports.labels.noDataAvailable')}
       </p>
     );
   }
 
-  // Format hour for display (12-hour format with AM/PM in Arabic)
+  // Format hour for display (12-hour format with AM/PM)
   const formatHour = (hour: number) => {
-    if (hour === 0) return '12 ص';
-    if (hour === 12) return '12 م';
-    if (hour < 12) return `${hour} ص`;
-    return `${hour - 12} م`;
+    if (hour === 0) return `12 ${t('reports.timeLabels.am')}`;
+    if (hour === 12) return `12 ${t('reports.timeLabels.pm')}`;
+    if (hour < 12) return `${hour} ${t('reports.timeLabels.am')}`;
+    return `${hour - 12} ${t('reports.timeLabels.pm')}`;
   };
 
   // Prepare chart data with formatted hours
@@ -634,19 +627,19 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
             {data.hourLabel}
             {data.isPeak && (
               <span className="mr-2 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-full">
-                ذروة
+                {t('reports.labels.peak')}
               </span>
             )}
           </p>
           <div className="space-y-1 text-xs">
             <p className="text-gray-600 dark:text-gray-400">
-              الإيراد: <span className="font-bold text-green-600 dark:text-green-400">{formatCurrencyUtil(data.revenue)}</span>
+              {t('reports.labels.revenue')}: <span className="font-bold text-green-600 dark:text-green-400">{formatCurrency(data.revenue)}</span>
             </p>
             <p className="text-gray-600 dark:text-gray-400">
-              المبيعات: <span className="font-bold text-blue-600 dark:text-blue-400">{formatDecimal(data.sales)}</span>
+              {t('reports.labels.sales')}: <span className="font-bold text-blue-600 dark:text-blue-400">{formatDecimal(data.sales, i18n.language)}</span>
             </p>
             <p className="text-gray-600 dark:text-gray-400">
-              الجلسات: <span className="font-bold text-purple-600 dark:text-purple-400">{formatDecimal(data.sessions)}</span>
+              {t('reports.labels.sessions')}: <span className="font-bold text-purple-600 dark:text-purple-400">{formatDecimal(data.sessions, i18n.language)}</span>
             </p>
           </div>
         </div>
@@ -661,7 +654,7 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
       <div className="flex justify-between items-center">
         <h5 className="text-md font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-orange-500" />
-          ساعات الذروة
+          {t('reports.peakHours')}
         </h5>
         <div className="flex gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
           <button
@@ -672,7 +665,7 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
-            المبيعات
+            {t('reports.labels.sales')}
           </button>
           <button
             onClick={() => setViewMode('sessions')}
@@ -682,7 +675,7 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
-            الجلسات
+            {t('reports.labels.sessions')}
           </button>
         </div>
       </div>
@@ -690,7 +683,7 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
       {/* Peak Hours Summary */}
       <div className="bg-orange-50 dark:bg-gray-700/30 rounded-lg p-4 border border-orange-100 dark:border-gray-600">
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-          ساعات الذروة (أعلى 3 ساعات):
+          {t('reports.labels.peakHoursTop3')}
         </p>
         <div className="flex flex-wrap gap-2">
           {data.peakHours.map(hour => (
@@ -722,7 +715,7 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
             <YAxis
               tick={{ fill: '#6b7280', fontSize: 12 }}
               label={{
-                value: viewMode === 'sales' ? 'عدد المبيعات' : 'عدد الجلسات',
+                value: viewMode === 'sales' ? t('reports.chartLabels.salesCount') : t('reports.chartLabels.sessionsCount'),
                 angle: -90,
                 position: 'insideLeft',
                 style: { fill: '#6b7280', fontSize: 12 }
@@ -733,7 +726,7 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
               wrapperStyle={{ paddingTop: '20px' }}
               formatter={(value) => (
                 <span className="text-gray-700 dark:text-gray-300">
-                  {value === 'value' ? (viewMode === 'sales' ? 'المبيعات' : 'الجلسات') : value}
+                  {value === 'value' ? (viewMode === 'sales' ? t('reports.chartLabels.salesLabel') : t('reports.chartLabels.sessionsLabel')) : value}
                 </span>
               )}
             />
@@ -755,26 +748,28 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
       {/* Average Revenue per Hour */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
         <div className="bg-blue-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">متوسط الإيراد/ساعة</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.avgRevenuePerHour')}</p>
           <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-            {formatCurrencyUtil(
+            {formatCurrency(
               data.hourlyData.reduce((sum, item) => sum + item.revenue, 0) / data.hourlyData.length
             )}
           </p>
         </div>
         <div className="bg-green-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">متوسط المبيعات/ساعة</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.avgSalesPerHour')}</p>
           <p className="text-xl font-bold text-green-600 dark:text-green-400">
             {formatDecimal(
-              data.hourlyData.reduce((sum, item) => sum + item.sales, 0) / data.hourlyData.length
+              data.hourlyData.reduce((sum, item) => sum + item.sales, 0) / data.hourlyData.length,
+              i18n.language
             )}
           </p>
         </div>
         <div className="bg-purple-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">متوسط الجلسات/ساعة</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.avgSessionsPerHour')}</p>
           <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
             {formatDecimal(
-              data.hourlyData.reduce((sum, item) => sum + item.sessions, 0) / data.hourlyData.length
+              data.hourlyData.reduce((sum, item) => sum + item.sessions, 0) / data.hourlyData.length,
+              i18n.language
             )}
           </p>
         </div>
@@ -784,11 +779,11 @@ const PeakHoursChart = ({ data }: { data: PeakHoursData | null }) => {
 };
 
 // StaffPerformanceTable Component
-const StaffPerformanceTable = ({ data }: { data: StaffPerformance[] | null }) => {
+const StaffPerformanceTable = ({ data, t, i18n, formatCurrency }: { data: StaffPerformance[] | null, t: any, i18n: any, formatCurrency: (amount: number) => string }) => {
   if (!data || data.length === 0) {
     return (
       <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-        لا توجد بيانات متاحة
+        {t('reports.labels.noDataAvailable')}
       </p>
     );
   }
@@ -800,19 +795,19 @@ const StaffPerformanceTable = ({ data }: { data: StaffPerformance[] | null }) =>
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
               <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                الموظف
+                {t('reports.labels.staff')}
               </th>
               <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                عدد الطلبات
+                {t('reports.labels.ordersCount')}
               </th>
               <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                عدد الجلسات
+                {t('reports.labels.sessionsCount')}
               </th>
               <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                الإيراد الإجمالي
+                {t('reports.labels.totalRevenue')}
               </th>
               <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                متوسط قيمة الطلب
+                {t('reports.labels.avgOrderValue')}
               </th>
             </tr>
           </thead>
@@ -834,22 +829,22 @@ const StaffPerformanceTable = ({ data }: { data: StaffPerformance[] | null }) =>
                 </td>
                 <td className="py-3 px-4 text-center">
                   <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                    {formatDecimal(staff.ordersCount)}
+                    {formatDecimal(staff.ordersCount, i18n.language)}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center">
                   <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
-                    {formatDecimal(staff.sessionsCount)}
+                    {formatDecimal(staff.sessionsCount, i18n.language)}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center">
                   <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                    {formatCurrencyUtil(staff.totalRevenue)}
+                    {formatCurrency(staff.totalRevenue)}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center">
                   <span className="text-sm font-bold text-orange-600 dark:text-orange-400">
-                    {formatCurrencyUtil(staff.avgOrderValue)}
+                    {formatCurrency(staff.avgOrderValue)}
                   </span>
                 </td>
               </tr>
@@ -861,21 +856,21 @@ const StaffPerformanceTable = ({ data }: { data: StaffPerformance[] | null }) =>
       {/* Summary Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
         <div className="bg-blue-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">إجمالي الطلبات</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.totalOrders')}</p>
           <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-            {formatDecimal(data.reduce((sum, staff) => sum + staff.ordersCount, 0))}
+            {formatDecimal(data.reduce((sum, staff) => sum + staff.ordersCount, 0), i18n.language)}
           </p>
         </div>
         <div className="bg-purple-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">إجمالي الجلسات</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.totalSessions')}</p>
           <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
-            {formatDecimal(data.reduce((sum, staff) => sum + staff.sessionsCount, 0))}
+            {formatDecimal(data.reduce((sum, staff) => sum + staff.sessionsCount, 0), i18n.language)}
           </p>
         </div>
         <div className="bg-green-50 dark:bg-gray-700/30 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">إجمالي الإيراد</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('reports.labels.totalRevenue')}</p>
           <p className="text-xl font-bold text-green-600 dark:text-green-400">
-            {formatCurrencyUtil(data.reduce((sum, staff) => sum + staff.totalRevenue, 0))}
+            {formatCurrency(data.reduce((sum, staff) => sum + staff.totalRevenue, 0))}
           </p>
         </div>
       </div>
@@ -884,7 +879,36 @@ const StaffPerformanceTable = ({ data }: { data: StaffPerformance[] | null }) =>
 };
 
 const Reports = () => {
+  const { t, i18n } = useTranslation();
   const { getSalesReport, getSessionsReport, getInventoryReport, getFinancialReport, exportReportToExcel, showNotification } = useApp();
+  const { currency: orgCurrency } = useOrganization();
+
+  // Helper function to format currency with organization settings
+  const formatCurrency = useCallback((amount: number) => {
+    return formatCurrencyUtil(amount, i18n.language, orgCurrency);
+  }, [i18n.language, orgCurrency]);
+
+  // Get locale based on current language
+  const getDateFnsLocale = () => {
+    switch (i18n.language) {
+      case 'ar': return ar;
+      case 'fr': return fr;
+      default: return enUS;
+    }
+  };
+
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar': return arEG;
+      case 'fr': return frFR;
+      default: return enUS_antd;
+    }
+  };
+
+  // Set dayjs locale based on current language
+  useEffect(() => {
+    dayjs.locale(i18n.language);
+  }, [i18n.language]);
 
   // أنواع الفلاتر وحالاتها
   const [filterType, setFilterType] = useState<'period' | 'daily' | 'monthly' | 'yearly' | 'custom'>('period');
@@ -1039,7 +1063,7 @@ const Reports = () => {
   }, [filterType, selectedPeriod, customDay, customMonth, customYear, getEgyptTime, dateRange]);
 
   const getDateRangeLabel = useCallback(() => {
-    const formatDate = (date: Date) => format(date, 'dd/MM/yyyy', { locale: ar });
+    const formatDate = (date: Date) => format(date, 'dd/MM/yyyy', { locale: getDateFnsLocale() });
 
     try {
       const filter = buildFilter();
@@ -1047,26 +1071,26 @@ const Reports = () => {
       const end = new Date(filter.endDate);
 
       if (filterType === 'custom') {
-        // Format with time for custom filter
-        const startFormatted = dateRange[0].format('dddd، D MMMM YYYY [عند] hh:mm A');
-        const endFormatted = dateRange[1].format('dddd، D MMMM YYYY [عند] hh:mm A');
-        return `من ${startFormatted} إلى ${endFormatted}`;
+        // Format with time for custom filter - use locale explicitly
+        const startFormatted = dateRange[0].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`);
+        const endFormatted = dateRange[1].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`);
+        return `${t('reports.from')} ${startFormatted} ${t('reports.to')} ${endFormatted}`;
       } else if (filterType === 'daily') {
-        return `يوم ${formatDate(start)}`;
+        return `${t('reports.day')} ${formatDate(start)}`;
       } else if (filterType === 'monthly') {
-        return `شهر ${format(start, 'MMMM yyyy', { locale: ar })}`;
+        return `${t('reports.month')} ${format(start, 'MMMM yyyy', { locale: getDateFnsLocale() })}`;
       } else if (filterType === 'yearly') {
-        return `سنة ${start.getFullYear()}`;
+        return `${t('reports.year')} ${start.getFullYear()}`;
       } else {
         if (start.toDateString() === end.toDateString()) {
-          return `يوم ${formatDate(start)}`;
+          return `${t('reports.day')} ${formatDate(start)}`;
         }
-        return `من ${formatDate(start)} إلى ${formatDate(end)}`;
+        return `${t('reports.from')} ${formatDate(start)} ${t('reports.to')} ${formatDate(end)}`;
       }
     } catch {
-      return 'تحديد النطاق الزمني';
+      return t('reports.selectDateRange');
     }
-  }, [buildFilter, filterType, dateRange]);
+  }, [buildFilter, filterType, dateRange, t, getDateFnsLocale, i18n.language]);
 
   const loadReports = useCallback(async () => {
     const filter = buildFilter();
@@ -1141,7 +1165,7 @@ const Reports = () => {
 
     } catch (error) {
       console.error('Failed to load reports:', error);
-      showNotification('خطأ في تحميل التقارير', 'error');
+      showNotification(t('reports.errors.loadReports'), 'error');
     } finally {
       setLoading(false);
     }
@@ -1214,8 +1238,7 @@ const Reports = () => {
   }, [reports.financial]);
 
   // تنسيق الأرقام
-  const formatNumber = (num: number) => formatNumberArabic(num);
-  const formatCurrency = (amount: number) => `${formatNumberArabic(amount)} ج.م`;
+  const formatNumber = (num: number) => formatDecimal(num, i18n.language);
 
   const totalRevenue = basicStats.revenue;
 
@@ -1247,11 +1270,11 @@ const Reports = () => {
       }
 
       if (!data) {
-        showNotification('لا توجد بيانات للتصدير', 'warning');
+        showNotification(t('reports.errors.noDataToExport'), 'warning');
         return;
       }
 
-      const filename = generatePDFFilename(reportType, dateRange);
+      const filename = generatePDFFilename(reportType, dateRange, i18n.language);
       
       await exportReportToPDF({
         reportType,
@@ -1259,14 +1282,16 @@ const Reports = () => {
         dateRange,
         organizationName: 'Bomba', // يمكنك تغيير هذا ليكون ديناميكي
         filename,
+        language: i18n.language,
+        translations: t,
       });
 
-      showNotification('تم تصدير PDF بنجاح', 'success');
+      showNotification(t('reports.success.exportPDF'), 'success');
     } catch (error) {
       console.error('PDF Export Error:', error);
-      showNotification('فشل في تصدير PDF', 'error');
+      showNotification(t('reports.errors.exportPDF'), 'error');
     }
-  }, [reports, buildFilter, showNotification]);
+  }, [reports, buildFilter, showNotification, t, i18n.language]);
 
   // Keep old Excel export for backward compatibility
   const handleExport = useCallback(async (
@@ -1276,49 +1301,23 @@ const Reports = () => {
     try {
       const filter = buildFilter();
       await exportFunc(reportType, filter);
-      showNotification('تم التصدير بنجاح', 'success');
+      showNotification(t('reports.success.exportExcel'), 'success');
     } catch {
-      showNotification('فشل في تصدير التقرير', 'error');
+      showNotification(t('reports.errors.exportExcel'), 'error');
     }
-  }, [buildFilter, showNotification]);
+  }, [buildFilter, showNotification, t]);
 
   const renderFilterControls = () => {
-    const inputClasses = "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 rounded-md px-3 py-2 text-sm w-full";
-
-    // تحويل التاريخ إلى تنسيق عربي
-    const formatArabicDate = (dateString: string) => {
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('ar-EG', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          timeZone: 'Africa/Cairo'
-        });
-      } catch {
-        return dateString;
-      }
-    };
-
-    // إنشاء قائمة بالسنوات (10 سنوات سابقة وحالية)
-    const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
-
-    // إنشاء قائمة بالأشهر بالعربية
-    const months = [
-      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
-    ];
-
     return (
       <div className="space-y-4">
         {/* شريط التبويب لنوع الفلتر */}
         <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
           {[
-            { value: 'period', label: 'فترات زمنية' },
-            { value: 'custom', label: 'فلتر مخصص' },
-            { value: 'daily', label: 'يوم محدد' },
-            { value: 'monthly', label: 'شهري' },
-            { value: 'yearly', label: 'سنوي' }
+            { value: 'period', label: t('reports.filterTypes.period') },
+            { value: 'custom', label: t('reports.filterTypes.custom') },
+            { value: 'daily', label: t('reports.filterTypes.daily') },
+            { value: 'monthly', label: t('reports.filterTypes.monthly') },
+            { value: 'yearly', label: t('reports.filterTypes.yearly') }
           ].map((tab) => (
             <button
               key={tab.value}
@@ -1339,12 +1338,12 @@ const Reports = () => {
           {filterType === 'period' && (
             <div className="flex flex-wrap gap-2">
               {[
-                { value: 'today', label: 'اليوم' },
-                { value: 'yesterday', label: 'أمس' },
-                { value: 'thisWeek', label: 'هذا الأسبوع' },
-                { value: 'thisMonth', label: 'هذا الشهر' },
-                { value: 'lastMonth', label: 'الشهر الماضي' },
-                { value: 'thisYear', label: 'هذه السنة' }
+                { value: 'today', label: t('reports.periods.today') },
+                { value: 'yesterday', label: t('reports.periods.yesterday') },
+                { value: 'thisWeek', label: t('reports.periods.thisWeek') },
+                { value: 'thisMonth', label: t('reports.periods.thisMonth') },
+                { value: 'lastMonth', label: t('reports.periods.lastMonth') },
+                { value: 'thisYear', label: t('reports.periods.thisYear') }
               ].map((period) => (
                 <button
                   key={period.value}
@@ -1367,7 +1366,7 @@ const Reports = () => {
               <div className="space-y-3">
                 <div className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
                   <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
-                  <span>وقت البدء</span>
+                  <span>{t('reports.startTime')}</span>
                 </div>
                 <div className="space-y-3">
                   <DatePicker
@@ -1376,7 +1375,7 @@ const Reports = () => {
                     className="w-full"
                     format="YYYY/MM/DD"
                     allowClear={false}
-                    placeholder="تاريخ البدء"
+                    placeholder={t('reports.placeholders.startDate')}
                     size="large"
                   />
                   <TimePicker
@@ -1385,7 +1384,7 @@ const Reports = () => {
                     className="w-full"
                     format="hh:mm A"
                     minuteStep={15}
-                    placeholder="وقت البدء"
+                    placeholder={t('reports.placeholders.startTime')}
                     size="large"
                   />
                 </div>
@@ -1395,7 +1394,7 @@ const Reports = () => {
               <div className="space-y-3">
                 <div className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
                   <div className="w-2 h-2 bg-red-500 rounded-full ml-2"></div>
-                  <span>وقت الانتهاء</span>
+                  <span>{t('reports.endTime')}</span>
                 </div>
                 <div className="space-y-3">
                   <DatePicker
@@ -1404,7 +1403,7 @@ const Reports = () => {
                     className="w-full"
                     format="YYYY/MM/DD"
                     allowClear={false}
-                    placeholder="تاريخ الانتهاء"
+                    placeholder={t('reports.placeholders.endDate')}
                     size="large"
                   />
                   <TimePicker
@@ -1413,7 +1412,7 @@ const Reports = () => {
                     className="w-full"
                     format="hh:mm A"
                     minuteStep={15}
-                    placeholder="وقت الانتهاء"
+                    placeholder={t('reports.placeholders.endTime')}
                     size="large"
                   />
                 </div>
@@ -1423,15 +1422,15 @@ const Reports = () => {
               <div className="col-span-2 p-4 bg-blue-50 dark:bg-gray-700 rounded-lg border border-blue-100 dark:border-gray-600">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="flex flex-col">
-                    <span className="text-sm text-blue-600 dark:text-blue-400 mb-1">من</span>
+                    <span className="text-sm text-blue-600 dark:text-blue-400 mb-1">{t('reports.from')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {dateRange[0].format('dddd، D MMMM YYYY [عند] hh:mm A')}
+                      {dateRange[0].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`)}
                     </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-sm text-blue-600 dark:text-blue-400 mb-1">إلى</span>
+                    <span className="text-sm text-blue-600 dark:text-blue-400 mb-1">{t('reports.to')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {dateRange[1].format('dddd، D MMMM YYYY [عند] hh:mm A')}
+                      {dateRange[1].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`)}
                     </span>
                   </div>
                 </div>
@@ -1442,109 +1441,71 @@ const Reports = () => {
           {filterType === 'daily' && (
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                اختر تاريخ
+                {t('reports.selectDate')}
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={customDay}
-                  onChange={(e) => setCustomDay(e.target.value)}
-                  className={`${inputClasses} pr-10`}
-                  dir="ltr"
-                />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm pointer-events-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </span>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">
-                  {formatArabicDate(customDay)}
-                </span>
-              </div>
+              <DatePicker
+                value={dayjs(customDay)}
+                onChange={(date) => {
+                  if (date) {
+                    setCustomDay(date.format('YYYY-MM-DD'));
+                  }
+                }}
+                className="w-full"
+                format="YYYY/MM/DD"
+                allowClear={false}
+                placeholder={t('reports.selectDate')}
+                size="large"
+              />
             </div>
           )}
 
           {filterType === 'monthly' && (
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                اختر الشهر
+                {t('reports.selectMonth')}
               </label>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative">
-                  <select
-                    value={customMonth.split('-')[1]}
-                    onChange={(e) => {
-                      const month = e.target.value.padStart(2, '0');
-                      setCustomMonth(`${customMonth.split('-')[0]}-${month}`);
-                    }}
-                    className={`${inputClasses} appearance-none`}
-                  >
-                    {months.map((month, index) => (
-                      <option key={index} value={(index + 1).toString().padStart(2, '0')}>
-                        {month}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="relative">
-                  <select
-                    value={customMonth.split('-')[0]}
-                    onChange={(e) => {
-                      const year = e.target.value;
-                      setCustomMonth(`${year}-${customMonth.split('-')[1]}`);
-                    }}
-                    className={`${inputClasses} appearance-none`}
-                  >
-                    {years.map((year) => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
+              <DatePicker
+                value={dayjs(customMonth + '-01')}
+                onChange={(date) => {
+                  if (date) {
+                    setCustomMonth(date.format('YYYY-MM'));
+                  }
+                }}
+                picker="month"
+                className="w-full"
+                format="MMMM YYYY"
+                allowClear={false}
+                placeholder={t('reports.selectMonth')}
+                size="large"
+              />
             </div>
           )}
 
           {filterType === 'yearly' && (
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                اختر السنة
+                {t('reports.selectYear')}
               </label>
-              <div className="relative">
-                <select
-                  value={customYear}
-                  onChange={(e) => setCustomYear(e.target.value)}
-                  className={`${inputClasses} appearance-none`}
-                >
-                  {years.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+              <DatePicker
+                value={dayjs(customYear + '-01-01')}
+                onChange={(date) => {
+                  if (date) {
+                    setCustomYear(date.format('YYYY'));
+                  }
+                }}
+                picker="year"
+                className="w-full"
+                format="YYYY"
+                allowClear={false}
+                placeholder={t('reports.selectYear')}
+                size="large"
+              />
             </div>
           )}
 
-          {/* عرض النطاق الزمني المحدد */}
+          {/* Display selected date range */}
           <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">النطاق الزمني:</span> {getDateRangeLabel()}
+            <span className="font-medium">{t('reports.dateRange')}:</span> {getDateRangeLabel()}
           </div>
         </div>
       </div>
@@ -1561,15 +1522,15 @@ const Reports = () => {
 
   return (
     <ConfigProvider
-      direction="rtl"
-      locale={arEG}
+      direction={i18n.language === 'ar' ? 'rtl' : 'ltr'}
+      locale={getAntdLocale()}
       theme={{
         token: {
           fontFamily: 'Tajawal, sans-serif',
         },
       }}
     >
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir="rtl">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header Section */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1578,8 +1539,8 @@ const Reports = () => {
               <BarChart3 className="text-white w-8 h-8" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">التقارير الشاملة</h1>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">تحليل شامل للمبيعات والجلسات والأداء</p>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{t('reports.title')}</h1>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">{t('reports.subtitle')}</p>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -1589,21 +1550,21 @@ const Reports = () => {
               className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium disabled:opacity-50"
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-              <span>تحديث البيانات</span>
+              <span>{t('reports.refresh')}</span>
             </button>
             <button
               onClick={() => handleExportPDF('sales')}
               className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium"
             >
               <Printer className="w-5 h-5" />
-              <span>طباعة</span>
+              <span>{t('reports.print')}</span>
             </button>
             <button
               onClick={() => handleExport(exportReportToExcel, 'all')}
               className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 dark:from-orange-600 dark:to-orange-700 dark:hover:from-orange-700 dark:hover:to-orange-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium border-0"
             >
               <Download className="w-5 h-5" />
-              <span>تصدير Excel</span>
+              <span>{t('reports.exportExcel')}</span>
             </button>
           </div>
         </div>
@@ -1619,7 +1580,7 @@ const Reports = () => {
                 <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center ml-3">
                   <Filter className="text-white text-lg" />
                 </div>
-                نطاق التقرير
+                {t('reports.reportRange')}
               </h3>
             </div>
             <div className="p-6 bg-gray-50 dark:bg-gray-900">
@@ -1638,7 +1599,7 @@ const Reports = () => {
               </div>
               <button
                 onClick={() => setShowRevenue(!showRevenue)}
-                title={showRevenue ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                title={showRevenue ? t('reports.hideAmount') : t('reports.showAmount')}
                 className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors duration-200"
               >
                 {showRevenue ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -1647,7 +1608,7 @@ const Reports = () => {
             <div className="text-3xl font-bold mb-2">
               {showRevenue ? formatCurrency(basicStats.revenue) : '••••••'}
             </div>
-            <div className="text-green-100 text-sm font-medium">إجمالي الإيرادات</div>
+            <div className="text-green-100 text-sm font-medium">{t('reports.stats.totalRevenue')}</div>
           </div>
 
           {/* Total Orders Card */}
@@ -1658,7 +1619,7 @@ const Reports = () => {
             <div className="text-3xl font-bold mb-2">
               {formatNumber(basicStats.orders)}
             </div>
-            <div className="text-blue-100 text-sm font-medium">عدد الطلبات</div>
+            <div className="text-blue-100 text-sm font-medium">{t('reports.stats.totalOrders')}</div>
           </div>
 
           {/* Total Sessions Card */}
@@ -1669,7 +1630,7 @@ const Reports = () => {
             <div className="text-3xl font-bold mb-2">
               {formatNumber(basicStats.sessions)}
             </div>
-            <div className="text-purple-100 text-sm font-medium">عدد الجلسات</div>
+            <div className="text-purple-100 text-sm font-medium">{t('reports.stats.totalSessions')}</div>
           </div>
         </div>
       </div>
@@ -1678,40 +1639,44 @@ const Reports = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
           <BarChart3 className="w-6 h-6 text-orange-500" />
-          <span>الإحصائيات التفصيلية</span>
+          <span>{t('reports.sections.detailedStats')}</span>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCardWithComparison
             icon={DollarSign}
-            title="إجمالي الإيرادات"
+            title={t('reports.stats.totalRevenue')}
             current={basicStats.revenue}
             comparison={reports.sales?.comparison?.revenue || null}
             color="green"
-            formatValue={formatCurrency}
+            formatValue={(val) => formatCurrency(val)}
+            t={t}
           />
           <StatCardWithComparison
             icon={ShoppingCart}
-            title="عدد الطلبات"
+            title={t('reports.stats.totalOrders')}
             current={basicStats.orders}
             comparison={reports.sales?.comparison?.orders || null}
             color="blue"
             formatValue={formatNumber}
+            t={t}
           />
           <StatCardWithComparison
             icon={TrendingUp}
-            title="متوسط الطلب"
+            title={t('reports.stats.avgOrderValue')}
             current={basicStats.avgOrderValue}
             comparison={reports.sales?.comparison?.avgOrderValue || null}
             color="purple"
-            formatValue={formatCurrency}
+            formatValue={(val) => formatCurrency(val)}
+            t={t}
           />
           <StatCardWithComparison
             icon={Users}
-            title="عدد الجلسات"
+            title={t('reports.stats.totalSessions')}
             current={basicStats.sessions}
             comparison={reports.sessions?.comparison?.sessions || null}
             color="orange"
             formatValue={formatNumber}
+            t={t}
           />
         </div>
       </div>
@@ -1720,29 +1685,35 @@ const Reports = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
           <DollarSign className="w-6 h-6 text-green-500" />
-          <span>توزيع الإيرادات</span>
+          <span>{t('reports.sections.revenueDistribution')}</span>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <RevenueCard
             icon={Gamepad2}
-            title="البلايستيشن"
+            title={t('reports.playstation')}
             value={revenueBreakdown.playstation}
             total={totalRevenue}
             color="blue"
+            i18n={i18n}
+            t={t}
           />
           <RevenueCard
             icon={Monitor}
-            title="الكمبيوتر"
+            title={t('reports.computer')}
             value={revenueBreakdown.computer}
             total={totalRevenue}
             color="green"
+            i18n={i18n}
+            t={t}
           />
           <RevenueCard
             icon={ShoppingCart}
-            title="الطلبات"
+            title={t('reports.cafe')}
             value={revenueBreakdown.cafe}
             total={totalRevenue}
             color="orange"
+            i18n={i18n}
+            t={t}
           />
         </div>
       </div>
@@ -1752,19 +1723,22 @@ const Reports = () => {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <ShoppingCart className="w-6 h-6 text-orange-500" />
-            <span>أكثر المنتجات مبيعاً حسب الأقسام</span>
+            <span>{t('reports.sections.topProductsBySection')}</span>
           </h2>
           <div className="flex gap-2">
-            <button onClick={() => handleExport(exportReportToExcel, 'sales')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير Excel">
+            <button onClick={() => handleExport(exportReportToExcel, 'sales')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title={t('reports.exportExcel')}>
               <Download className="h-5 w-5" />
             </button>
-            <button onClick={() => handleExportPDF('sales')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير PDF">
+            <button onClick={() => handleExportPDF('sales')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title={t('reports.exportPDF')}>
               <Printer className="h-5 w-5" />
             </button>
           </div>
         </div>
         <TopProductsBySection 
           data={reports.sales?.topProductsBySection || []} 
+          t={t}
+          i18n={i18n}
+          formatCurrency={formatCurrency}
         />
       </div>
 
@@ -1772,26 +1746,29 @@ const Reports = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
           <Gamepad2 className="w-6 h-6 text-blue-500" />
-          <span>تحليل جلسات الألعاب</span>
+          <span>{t('reports.sections.gamingAnalysis')}</span>
         </h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-6 border border-blue-200 dark:border-gray-600">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Gamepad2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                البلايستيشن
+                {t('reports.sections.playstationSessions')}
               </h3>
               <div className="flex gap-2">
-                <button onClick={() => handleExport(exportReportToExcel, 'sessions')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-1" title="تصدير Excel">
+                <button onClick={() => handleExport(exportReportToExcel, 'sessions')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-1" title={t('reports.exportExcel')}>
                   <Download className="h-5 w-5" />
                 </button>
-                <button onClick={() => handleExportPDF('sessions')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1" title="تصدير PDF">
+                <button onClick={() => handleExportPDF('sessions')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1" title={t('reports.exportPDF')}>
                   <Printer className="h-5 w-5" />
                 </button>
               </div>
             </div>
             <PlayStationSessionsReport 
               data={reports.sessions?.playstation || null} 
+              t={t}
+              i18n={i18n}
+              formatCurrency={formatCurrency}
             />
           </div>
 
@@ -1799,19 +1776,22 @@ const Reports = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Monitor className="w-5 h-5 text-green-600 dark:text-green-400" />
-                الكمبيوتر
+                {t('reports.sections.computerSessions')}
               </h3>
               <div className="flex gap-2">
-                <button onClick={() => handleExport(exportReportToExcel, 'sessions')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-1" title="تصدير Excel">
+                <button onClick={() => handleExport(exportReportToExcel, 'sessions')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-1" title={t('reports.exportExcel')}>
                   <Download className="h-5 w-5" />
                 </button>
-                <button onClick={() => handleExportPDF('sessions')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1" title="تصدير PDF">
+                <button onClick={() => handleExportPDF('sessions')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-1" title={t('reports.exportPDF')}>
                   <Printer className="h-5 w-5" />
                 </button>
               </div>
             </div>
             <ComputerSessionsReport 
               data={reports.sessions?.computer || null} 
+              t={t}
+              i18n={i18n}
+              formatCurrency={formatCurrency}
             />
           </div>
         </div>
@@ -1819,23 +1799,31 @@ const Reports = () => {
 
       {/* Peak Hours Analysis */}
       <ReportSection 
-        title="تحليل ساعات الذروة" 
+        title={t('reports.sections.peakHoursAnalysis')} 
         onExportExcel={() => handleExport(exportReportToExcel, 'peakHours')} 
         onExportPDF={() => handleExportPDF('sales')}
+        t={t}
       >
         <PeakHoursChart 
           data={reports.sales?.peakHours || null} 
+          t={t}
+          i18n={i18n}
+          formatCurrency={formatCurrency}
         />
       </ReportSection>
 
       {/* Staff Performance */}
       <ReportSection 
-        title="أداء الموظفين" 
+        title={t('reports.sections.staffPerformance')} 
         onExportExcel={() => handleExport(exportReportToExcel, 'staffPerformance')} 
         onExportPDF={() => handleExportPDF('sales')}
+        t={t}
       >
         <StaffPerformanceTable 
           data={reports.sales?.staffPerformance || null} 
+          t={t}
+          i18n={i18n}
+          formatCurrency={formatCurrency}
         />
       </ReportSection>
 
@@ -1844,13 +1832,13 @@ const Reports = () => {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <DollarSign className="w-6 h-6 text-green-500" />
-            <span>الملخص المالي</span>
+            <span>{t('reports.sections.financialSummary')}</span>
           </h2>
           <div className="flex gap-2">
-            <button onClick={() => handleExport(exportReportToExcel, 'financial')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير Excel">
+            <button onClick={() => handleExport(exportReportToExcel, 'financial')} className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title={t('reports.exportExcel')}>
               <Download className="h-5 w-5" />
             </button>
-            <button onClick={() => handleExportPDF('financial')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="تصدير PDF">
+            <button onClick={() => handleExportPDF('financial')} className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title={t('reports.exportPDF')}>
               <Printer className="h-5 w-5" />
             </button>
           </div>
@@ -1873,7 +1861,7 @@ const Reports = () => {
                 </div>
                 <button
                   onClick={() => setShowProfit(!showProfit)}
-                  title={showProfit ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                  title={showProfit ? t('reports.hideAmount') : t('reports.showAmount')}
                   className={`p-2 rounded-lg transition-colors ${
                     netProfit >= 0
                       ? 'hover:bg-green-200 dark:hover:bg-green-800/30 text-green-700 dark:text-green-400'
@@ -1890,11 +1878,11 @@ const Reports = () => {
               }`}>
                 {showProfit ? formatCurrency(netProfit) : '••••••'}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">إجمالي الربح</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.netProfit')}</div>
               {netProfit < 0 && (
                 <div className="mt-2 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
                   <TrendingDown className="w-4 h-4" />
-                  <span>خسارة</span>
+                  <span>{t('reports.labels.loss')}</span>
                 </div>
               )}
             </div>
@@ -1907,7 +1895,7 @@ const Reports = () => {
                 </div>
                 <button
                   onClick={() => setShowCosts(!showCosts)}
-                  title={showCosts ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                  title={showCosts ? t('reports.hideAmount') : t('reports.showAmount')}
                   className="hover:bg-red-200 dark:hover:bg-red-800/30 p-2 rounded-lg transition-colors text-red-700 dark:text-red-400"
                 >
                   {showCosts ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -1916,7 +1904,7 @@ const Reports = () => {
               <div className="text-3xl font-bold text-red-700 dark:text-red-400 mb-2">
                 {showCosts ? formatCurrency(totalCosts) : '••••••'}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">إجمالي التكاليف</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.totalCosts')}</div>
             </div>
 
             {/* Profit Margin Card */}
@@ -1946,7 +1934,7 @@ const Reports = () => {
               }`}>
                 {formatNumber(profitMargin)}%
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">هامش الربح</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.profitMargin')}</div>
             </div>
 
             {/* Total Transactions Card */}
@@ -1957,35 +1945,35 @@ const Reports = () => {
               <div className="text-3xl font-bold text-orange-700 dark:text-orange-400 mb-2">
                 {formatNumber(totalTransactions)}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">عدد المعاملات</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('reports.stats.totalTransactions')}</div>
             </div>
           </div>
         ) : (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد بيانات مالية متاحة</p>
+          <p className="text-gray-500 dark:text-gray-400 text-center py-8">{t('reports.noFinancialData')}</p>
         )}
       </div>
 
       {/* Inventory Summary */}
-      <ReportSection title="ملخص المخزون" onExportExcel={() => handleExport(exportReportToExcel, 'inventory')} onExportPDF={() => handleExportPDF('inventory')}>
+      <ReportSection title={t('reports.sections.inventorySummary')} onExportExcel={() => handleExport(exportReportToExcel, 'inventory')} onExportPDF={() => handleExportPDF('inventory')} t={t}>
         {reports.inventory && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <FinancialStat
-              label="إجمالي المنتجات"
+              label={t('reports.inventorySummary.totalProducts')}
               value={formatNumber((reports.inventory as { totalItems?: number })?.totalItems || 0)}
               color="green"
             />
             <FinancialStat
-              label="إجمالي الكمية"
+              label={t('reports.inventorySummary.totalQuantity')}
               value={formatNumber((reports.inventory as { totalQuantity?: number })?.totalQuantity || 0)}
               color="blue"
             />
             <FinancialStat
-              label="إجمالي القيمة"
+              label={t('reports.inventorySummary.totalValue')}
               value={formatCurrency((reports.inventory as { totalValue?: number })?.totalValue || 0)}
               color="purple"
             />
             <FinancialStat
-              label="مخزون منخفض"
+              label={t('reports.inventorySummary.lowStock')}
               value={formatNumber((reports.inventory as { lowStockItems?: number })?.lowStockItems || 0)}
               color="orange"
             />
@@ -1999,7 +1987,14 @@ const Reports = () => {
 
 // Helper Components for cleaner structure
 
-const RevenueCard = ({ icon: Icon, title, value, total, color }: RevenueCardProps) => (
+const RevenueCard = ({ icon: Icon, title, value, total, color, i18n, t }: RevenueCardProps) => {
+  const { formatCurrencyWithLocale } = useCurrency();
+  const { currency } = useOrganization();
+  const formatCurrency = useCallback((amount: number) => {
+    return formatCurrencyUtil(amount, i18n.language, currency);
+  }, [i18n.language, currency]);
+  
+  return (
   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-200">
     <div className="flex items-center justify-between mb-4">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -2009,22 +2004,23 @@ const RevenueCard = ({ icon: Icon, title, value, total, color }: RevenueCardProp
         {title}
       </h3>
       <span className={`text-sm font-bold px-3 py-1.5 rounded-full bg-${color}-100 text-${color}-800 dark:bg-${color}-900/30 dark:text-${color}-300`}>
-        {formatNumberArabic((value / total) * 100 || 0)}%
+        {formatDecimal((value / total) * 100 || 0, i18n.language)}%
       </span>
     </div>
     <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-center mt-4">
-      {formatNumberArabic(value)} ج.م
+      {formatCurrency(value)}
     </p>
     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
       <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-        <span>من الإجمالي</span>
-        <span className="font-semibold">{formatNumberArabic(total)} ج.م</span>
+        <span>{t('reports.revenueByType')}</span>
+        <span className="font-semibold">{formatCurrency(total)}</span>
       </div>
     </div>
   </div>
-);
+  );
+};
 
-const ReportSection = ({ title, onExportExcel, onExportPDF, children }: ReportSectionProps) => (
+const ReportSection = ({ title, onExportExcel, onExportPDF, children, t }: ReportSectionProps) => (
   <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl transition-all duration-200">
     <div className="flex items-center justify-between mb-6">
       <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{title}</h3>
@@ -2032,14 +2028,14 @@ const ReportSection = ({ title, onExportExcel, onExportPDF, children }: ReportSe
         <button 
           onClick={onExportExcel} 
           className="text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" 
-          title="تصدير Excel"
+          title={t('reports.exportExcel')}
         >
           <Download className="h-5 w-5" />
         </button>
         <button 
           onClick={onExportPDF} 
           className="text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" 
-          title="تصدير PDF"
+          title={t('reports.exportPDF')}
         >
           <Printer className="h-5 w-5" />
         </button>

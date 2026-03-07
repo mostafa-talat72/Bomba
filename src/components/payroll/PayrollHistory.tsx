@@ -3,6 +3,11 @@ import { Select, Card, Row, Col, Empty, Spin, Tag, Statistic, Timeline, Divider 
 import { DollarSign, Calendar, TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../contexts/LanguageContext';
+import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 
 const { Option } = Select;
 
@@ -38,11 +43,17 @@ interface PayrollRecord {
 }
 
 const PayrollHistory: React.FC = () => {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [payrolls, setPayrolls] = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
+
+  useEffect(() => {
+    dayjs.locale(language);
+  }, [language]);
 
   useEffect(() => {
     fetchEmployees();
@@ -63,7 +74,7 @@ const PayrollHistory: React.FC = () => {
         setEmployees([]);
       }
     } catch (error: any) {
-      console.error('فشل في تحميل الموظفين');
+      console.error(t('payroll.payrollHistory.messages.loadError'));
       setEmployees([]);
     }
   };
@@ -80,7 +91,7 @@ const PayrollHistory: React.FC = () => {
         setStats(null);
       }
     } catch (error: any) {
-      console.error('فشل في تحميل سجل الرواتب');
+      console.error(t('payroll.payrollHistory.messages.loadError'));
       setPayrolls([]);
       setStats(null);
     } finally {
@@ -100,14 +111,7 @@ const PayrollHistory: React.FC = () => {
   };
 
   const getStatusName = (status: string) => {
-    const names: any = {
-      draft: 'مسودة',
-      pending: 'قيد المراجعة',
-      approved: 'معتمد',
-      paid: 'مدفوع',
-      locked: 'مقفل'
-    };
-    return names[status] || status;
+    return t(`payroll.payrollHistory.status.${status}`, status);
   };
 
   const toArabicNumbers = (num: number | string) => {
@@ -120,9 +124,9 @@ const PayrollHistory: React.FC = () => {
       {/* Employee Selector */}
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex items-center gap-4">
-          <span className="text-gray-700 dark:text-gray-200 font-medium">اختر الموظف:</span>
+          <span className="text-gray-700 dark:text-gray-200 font-medium">{t('payroll.payrollHistory.selectEmployee')}</span>
           <Select
-            placeholder="اختر موظف"
+            placeholder={t('payroll.payrollHistory.selectEmployeePlaceholder')}
             value={selectedEmployee}
             onChange={setSelectedEmployee}
             showSearch
@@ -141,7 +145,7 @@ const PayrollHistory: React.FC = () => {
 
       {!selectedEmployee ? (
         <Card className="dark:bg-gray-800 dark:border-gray-700">
-          <Empty description="الرجاء اختيار موظف لعرض سجل رواتبه" />
+          <Empty description={t('payroll.payrollHistory.empty')} />
         </Card>
       ) : loading ? (
         <div className="flex justify-center items-center py-20">
@@ -155,7 +159,7 @@ const PayrollHistory: React.FC = () => {
               <Col span={6}>
                 <Card className="dark:bg-gray-800 dark:border-gray-700">
                   <Statistic
-                    title={<span className="dark:text-gray-300">عدد الكشوف</span>}
+                    title={<span className="dark:text-gray-300">{t('payroll.payrollHistory.stats.totalPayrolls')}</span>}
                     value={toArabicNumbers(stats.totalPayrolls)}
                     prefix={<Calendar size={20} />}
                     valueStyle={{ color: '#1890ff' }}
@@ -165,9 +169,9 @@ const PayrollHistory: React.FC = () => {
               <Col span={6}>
                 <Card className="dark:bg-gray-800 dark:border-gray-700">
                   <Statistic
-                    title={<span className="dark:text-gray-300">إجمالي المستحقات</span>}
+                    title={<span className="dark:text-gray-300">{t('payroll.payrollHistory.stats.totalGross')}</span>}
                     value={toArabicNumbers(stats.totalGross.toFixed(2))}
-                    suffix="جنيه"
+                    suffix={t('common.currency')}
                     prefix={<TrendingUp size={20} />}
                     valueStyle={{ color: '#52c41a' }}
                   />
@@ -176,9 +180,9 @@ const PayrollHistory: React.FC = () => {
               <Col span={6}>
                 <Card className="dark:bg-gray-800 dark:border-gray-700">
                   <Statistic
-                    title={<span className="dark:text-gray-300">إجمالي الخصومات</span>}
+                    title={<span className="dark:text-gray-300">{t('payroll.payrollHistory.stats.totalDeductions')}</span>}
                     value={toArabicNumbers(stats.totalDeductions.toFixed(2))}
-                    suffix="جنيه"
+                    suffix={t('common.currency')}
                     prefix={<TrendingDown size={20} />}
                     valueStyle={{ color: '#ff4d4f' }}
                   />
@@ -187,9 +191,9 @@ const PayrollHistory: React.FC = () => {
               <Col span={6}>
                 <Card className="dark:bg-gray-800 dark:border-gray-700">
                   <Statistic
-                    title={<span className="dark:text-gray-300">صافي المدفوع</span>}
+                    title={<span className="dark:text-gray-300">{t('payroll.payrollHistory.stats.totalNet')}</span>}
                     value={toArabicNumbers(stats.totalNet.toFixed(2))}
-                    suffix="جنيه"
+                    suffix={t('common.currency')}
                     prefix={<DollarSign size={20} />}
                     valueStyle={{ color: '#faad14' }}
                   />
@@ -201,11 +205,11 @@ const PayrollHistory: React.FC = () => {
           {/* Payroll Timeline */}
           {payrolls.length === 0 ? (
             <Card className="dark:bg-gray-800 dark:border-gray-700">
-              <Empty description="لا يوجد سجل رواتب لهذا الموظف" />
+              <Empty description={t('payroll.payrollHistory.noHistory')} />
             </Card>
           ) : (
             <Card className="dark:bg-gray-800 dark:border-gray-700">
-              <h3 className="text-lg font-bold mb-4 dark:text-gray-100">سجل الرواتب</h3>
+              <h3 className="text-lg font-bold mb-4 dark:text-gray-100">{t('payroll.payrollHistory.title')}</h3>
               <Timeline mode="left">
                 {payrolls.map((payroll) => (
                   <Timeline.Item
@@ -225,32 +229,32 @@ const PayrollHistory: React.FC = () => {
                     <Card size="small" className="dark:bg-gray-700 dark:border-gray-600">
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-600 dark:text-gray-300">رقم الكشف:</span>
+                          <span className="text-gray-600 dark:text-gray-300">{t('payroll.payrollHistory.payrollId')}</span>
                           <span className="font-mono text-sm dark:text-gray-100">{payroll.payrollId}</span>
                         </div>
                         
                         <Divider className="my-2" />
                         
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-600 dark:text-gray-300">إجمالي المستحقات:</span>
+                          <span className="text-gray-600 dark:text-gray-300">{t('payroll.payrollHistory.grossSalary')}</span>
                           <span className="font-bold text-green-600 dark:text-green-400">
-                            {toArabicNumbers(payroll.summary.grossSalary.toFixed(2))} جنيه
+                            {toArabicNumbers(payroll.summary.grossSalary.toFixed(2))} {t('common.currency')}
                           </span>
                         </div>
                         
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-600 dark:text-gray-300">الخصومات:</span>
+                          <span className="text-gray-600 dark:text-gray-300">{t('payroll.payrollHistory.deductions')}</span>
                           <span className="font-bold text-red-600 dark:text-red-400">
-                            -{toArabicNumbers(payroll.summary.totalDeductions.toFixed(2))} جنيه
+                            -{toArabicNumbers(payroll.summary.totalDeductions.toFixed(2))} {t('common.currency')}
                           </span>
                         </div>
                         
                         <Divider className="my-2" />
                         
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-700 dark:text-gray-200 font-medium">صافي المستحق:</span>
+                          <span className="text-gray-700 dark:text-gray-200 font-medium">{t('payroll.payrollHistory.netSalary')}</span>
                           <span className="font-bold text-blue-600 dark:text-blue-400 text-lg">
-                            {toArabicNumbers(payroll.summary.netSalary.toFixed(2))} جنيه
+                            {toArabicNumbers(payroll.summary.netSalary.toFixed(2))} {t('common.currency')}
                           </span>
                         </div>
                         
@@ -261,13 +265,13 @@ const PayrollHistory: React.FC = () => {
                               <div className="flex items-center gap-1">
                                 <Clock size={14} className="text-gray-400" />
                                 <span className="text-gray-600 dark:text-gray-300">
-                                  حضور: {toArabicNumbers(payroll.attendance.present)} يوم
+                                  {t('payroll.payrollHistory.attendance')} {toArabicNumbers(payroll.attendance.present)} {t('payroll.payrollHistory.days')}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <Clock size={14} className="text-gray-400" />
                                 <span className="text-gray-600 dark:text-gray-300">
-                                  ساعات: {toArabicNumbers(payroll.attendance.totalHours.toFixed(1))}
+                                  {t('payroll.payrollHistory.hours')} {toArabicNumbers(payroll.attendance.totalHours.toFixed(1))}
                                 </span>
                               </div>
                             </div>
@@ -276,16 +280,16 @@ const PayrollHistory: React.FC = () => {
                             {payroll.attendance.dailyRecords && payroll.attendance.dailyRecords.length > 0 && (
                               <div className="mt-3">
                                 <div className="text-xs font-medium text-gray-700 dark:text-gray-200 mb-2">
-                                  تفاصيل الحضور اليومي:
+                                  {t('payroll.payrollHistory.dailyAttendance')}
                                 </div>
                                 <div className="max-h-60 overflow-y-auto">
                                   <table className="w-full text-xs">
                                     <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
                                       <tr>
-                                        <th className="px-2 py-1 text-right">التاريخ</th>
-                                        <th className="px-2 py-1 text-right">الحالة</th>
-                                        <th className="px-2 py-1 text-right">الساعات</th>
-                                        <th className="px-2 py-1 text-right">الراتب</th>
+                                        <th className="px-2 py-1 text-right">{t('payroll.payrollHistory.date')}</th>
+                                        <th className="px-2 py-1 text-right">{t('payroll.payrollHistory.status')}</th>
+                                        <th className="px-2 py-1 text-right">{t('payroll.payrollHistory.hoursColumn')}</th>
+                                        <th className="px-2 py-1 text-right">{t('payroll.payrollHistory.salary')}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -303,13 +307,7 @@ const PayrollHistory: React.FC = () => {
                                               }
                                               className="text-xs"
                                             >
-                                              {
-                                                record.status === 'present' ? 'حاضر' :
-                                                record.status === 'late' ? 'متأخر' :
-                                                record.status === 'absent' ? 'غائب' :
-                                                record.status === 'leave' ? 'إجازة' :
-                                                record.status
-                                              }
+                                              {t(`payroll.payrollHistory.${record.status}`, record.status)}
                                             </Tag>
                                           </td>
                                           <td className="px-2 py-1">

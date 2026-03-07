@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ConfigProvider, Table, DatePicker, Tabs, Spin, message, Empty, TimePicker } from 'antd';
+import { ConfigProvider, Table, DatePicker, Tabs, Spin, Empty, TimePicker } from 'antd';
 import {
   ShoppingCartOutlined,
   CoffeeOutlined,
@@ -20,38 +20,31 @@ import dayjs, { Dayjs } from 'dayjs';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'react-toastify';
 import { useApp } from '../context/AppContext';
 import { Order, Session } from '../services/api';
 import api from '../services/api';
-
-// تعيين اللغة الافتراضية ليوم جي إس إلى العربية
-dayjs.locale('ar');
-
-// دالة لتحويل الأرقام إلى العربية
-const toArabicNumbers = (num: number | string): string => {
-  if (num === null || num === undefined) return '';
-  const arabicNumbers = '۰١٢٣٤٥٦٧٨٩';
-  return String(num).replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
-};
-
-// دالة لتنسيق الأرقام مع فواصل الآلاف وتحويلها للعربية - بدون أرقام عشرية
-const formatNumber = (num: number): string => {
-  const rounded = Math.round(num);
-  const formatted = new Intl.NumberFormat('ar-EG', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(rounded);
-  
-  // Convert to Arabic numbers
-  return toArabicNumbers(formatted);
-};
+import { formatDecimal, formatCurrency as formatCurrencyUtil } from '../utils/formatters';
 
 // Extend dayjs with plugins
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 
-// Removed static CATEGORIES - will use dynamic menu sections instead
+// Helper function to get Ant Design locale based on language
+const getAntdLocale = (language: string) => {
+  switch (language) {
+    case 'ar': return arEG;
+    case 'en': return enUS;
+    case 'fr': return frFR;
+    default: return arEG;
+  }
+};
 
 interface ConsumptionItem {
   id: string;
@@ -63,7 +56,15 @@ interface ConsumptionItem {
 }
 
 const ConsumptionReport = () => {
+  const { t, i18n } = useTranslation();
   const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user } = useApp();
+  
+  // Helper function to format currency with organization settings
+  const formatCurrency = useCallback((amount: number) => {
+    const currency = localStorage.getItem('organizationCurrency') || 'EGP';
+    return formatCurrencyUtil(amount, i18n.language, currency);
+  }, [i18n.language]);
+  
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
     dayjs().set('hour', 0).set('minute', 0).set('second', 0),
     dayjs().set('hour', 23).set('minute', 59).set('second', 59)
@@ -83,37 +84,42 @@ const ConsumptionReport = () => {
   // Track if initial data has been loaded
   const hasLoadedInitialData = useRef(false);
 
+  // Update dayjs locale when language changes
+  useEffect(() => {
+    dayjs.locale(i18n.language);
+  }, [i18n.language]);
+
   const allItems = useMemo(() => Object.values(consumptionData).flat(), [consumptionData]);
   const totalSales = useMemo(() => allItems.reduce((sum, item) => sum + item.total, 0), [allItems]);
 
   const columns = useMemo(() => [
     {
-      title: 'اسم الصنف',
+      title: t('consumptionReport.table.itemName'),
       dataIndex: 'name',
       key: 'name',
-      align: 'right' as const,
+      align: (i18n.language === 'ar' ? 'right' : 'left') as const,
       render: (text: string) => <span className="font-semibold text-gray-900 dark:text-gray-100">{text}</span>,
     },
     {
-      title: 'الكمية',
+      title: t('consumptionReport.table.quantity'),
       dataIndex: 'quantity',
       key: 'quantity',
       align: 'center' as const,
       sorter: (a: ConsumptionItem, b: ConsumptionItem) => a.quantity - b.quantity,
       render: (quantity: number, record: ConsumptionItem) => {
-        const isGamingDevice = record.category === 'البلايستيشن' || record.category === 'الكمبيوتر';
+        const isGamingDevice = record.category === '__PLAYSTATION__' || 
+                               record.category === '__COMPUTER__';
         
         // For Gaming Devices, show hours
         if (isGamingDevice) {
           // Check if hours is integer
           const isInteger = quantity % 1 === 0;
           const formatted = isInteger ? quantity.toFixed(0) : quantity.toFixed(2);
-          // Replace dot with Arabic comma
-          const arabicFormatted = toArabicNumbers(formatted.replace('.', '،'));
+          const localizedNumber = formatDecimal(parseFloat(formatted), i18n.language);
           
           return (
             <span className="font-semibold text-gray-900 dark:text-gray-100">
-              {arabicFormatted} ساعة
+              {localizedNumber} {t('consumptionReport.units.hours')}
             </span>
           );
         }
@@ -121,18 +127,19 @@ const ConsumptionReport = () => {
         // For other items, show as integer
         return (
           <span className="font-semibold text-gray-900 dark:text-gray-100">
-            {toArabicNumbers(Math.round(quantity))}
+            {formatDecimal(Math.round(quantity), i18n.language)}
           </span>
         );
       },
     },
     {
-      title: 'سعر الوحدة',
+      title: t('consumptionReport.table.unitPrice'),
       dataIndex: 'price',
       key: 'price',
       align: 'center' as const,
       render: (price: number, record: ConsumptionItem) => {
-        const isGamingDevice = record.category === 'البلايستيشن' || record.category === 'الكمبيوتر';
+        const isGamingDevice = record.category === '__PLAYSTATION__' || 
+                               record.category === '__COMPUTER__';
         
         // For Gaming Devices, show "-" instead of price
         if (isGamingDevice) {
@@ -145,25 +152,25 @@ const ConsumptionReport = () => {
         
         return (
           <span className="font-semibold text-gray-900 dark:text-gray-100">
-            {formatNumber(price)} ج.م
+            {formatCurrency(price)}
           </span>
         );
       },
       sorter: (a: ConsumptionItem, b: ConsumptionItem) => a.price - b.price,
     },
     {
-      title: 'الإجمالي',
+      title: t('consumptionReport.table.total'),
       dataIndex: 'total',
       key: 'total',
       align: 'center' as const,
       render: (total: number) => (
         <span className="font-bold text-blue-600 dark:text-blue-400">
-          {formatNumber(total)} ج.م
+          {formatCurrency(total)}
         </span>
       ),
       sorter: (a: ConsumptionItem, b: ConsumptionItem) => a.total - b.total,
     },
-  ], []);
+  ], [t, i18n.language]);
 
   const processOrdersAndSessions = useCallback((ordersToProcess: Order[], sessionsToProcess: Session[]) => {
     const itemsBySection: Record<string, ConsumptionItem[]> = {};
@@ -173,9 +180,9 @@ const ConsumptionReport = () => {
       itemsBySection[section.name] = [];
     });
 
-    // Add separate sections for PlayStation and Computer
-    itemsBySection['البلايستيشن'] = [];
-    itemsBySection['الكمبيوتر'] = [];
+    // Add separate sections for PlayStation and Computer using keys
+    itemsBySection['__PLAYSTATION__'] = [];
+    itemsBySection['__COMPUTER__'] = [];
 
     // Process cafe orders directly
     ordersToProcess.forEach((order) => {
@@ -280,7 +287,7 @@ const ConsumptionReport = () => {
 
 
       // Determine which section to add to based on device type
-      const sectionName = session.deviceType === 'computer' ? 'الكمبيوتر' : 'البلايستيشن';
+      const sectionName = session.deviceType === 'computer' ? '__COMPUTER__' : '__PLAYSTATION__';
       
       // Group by device name - sum hours and costs for each device
       const existingItem = itemsBySection[sectionName].find(i => i.name === deviceName);
@@ -373,18 +380,18 @@ const ConsumptionReport = () => {
           orders: ordersResponse.message,
           sessions: sessionsResponse.message
         });
-        message.error('فشل في تحميل البيانات');
+        toast.error(t('consumptionReport.messages.loadError'));
       }
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
+      const errorMessage = error instanceof Error ? error.message : t('consumptionReport.messages.unexpectedError');
       setError(errorMessage);
-      message.error(`فشل في تحميل البيانات: ${errorMessage}`);
+      toast.error(t('consumptionReport.messages.loadErrorDetail', { error: errorMessage }));
       console.error('❌ Error fetching data:', error);
     } finally {
       setLoading(false);
     }
-  }, [dateRange, fetchMenuItems, fetchMenuSections, menuItems, menuSections, processOrdersAndSessions]);
+  }, [dateRange, fetchMenuItems, fetchMenuSections, menuItems, menuSections, processOrdersAndSessions, t]);
 
 
   const calculateTotal = (items: ConsumptionItem[]): number => {
@@ -393,13 +400,16 @@ const ConsumptionReport = () => {
 
   const printReport = () => {
     try {
-      // Format date like in bill print
+      const isRTL = i18n.language === 'ar';
+      const dir = isRTL ? 'rtl' : 'ltr';
+      
+      // Format date with locale
       const formatDate = (date: Dayjs) => {
-        return date.format('YYYY/MM/DD - hh:mm A');
+        return date.locale(i18n.language).format('YYYY/MM/DD - hh:mm A');
       };
 
       // Get organization name from user or use default
-      const organizationName = user?.organizationName || 'المنشأة';
+      const organizationName = user?.organizationName || t('consumptionReport.print.organization');
 
       // Create separate pages for each category
       const categories = Object.entries(consumptionData).filter(([_, items]) => items.length > 0);
@@ -408,16 +418,23 @@ const ConsumptionReport = () => {
         .map(([category, items]) => {
           const categoryTotal = calculateTotal(items);
           
+          // Translate category name if it's a gaming device
+          const displayCategory = category === '__PLAYSTATION__' 
+            ? t('consumptionReport.categories.playstation')
+            : category === '__COMPUTER__'
+            ? t('consumptionReport.categories.computer')
+            : category;
+          
           return `
             <div class="page">
               <div class="page-content">
                 <div class="header">
                   <div class="org-name">${organizationName}</div>
-                  <div class="title">تقرير الاستهلاك</div>
-                  <div class="category-name">${category}</div>
-                  <div class="date-info"><strong>من:</strong> ${formatDate(dateRange[0])}</div>
-                  <div class="date-info"><strong>إلى:</strong> ${formatDate(dateRange[1])}</div>
-                  <div class="date-info"><strong>تاريخ:</strong> ${formatDate(dayjs())}</div>
+                  <div class="title">${t('consumptionReport.print.title')}</div>
+                  <div class="category-name">${displayCategory}</div>
+                  <div class="date-info"><strong>${t('consumptionReport.print.from')}:</strong> ${formatDate(dateRange[0])}</div>
+                  <div class="date-info"><strong>${t('consumptionReport.print.to')}:</strong> ${formatDate(dateRange[1])}</div>
+                  <div class="date-info"><strong>${t('consumptionReport.print.date')}:</strong> ${formatDate(dayjs())}</div>
                 </div>
 
                 <div class="divider"></div>
@@ -425,28 +442,28 @@ const ConsumptionReport = () => {
                 <table class="items-table">
                   <thead>
                     <tr>
-                      <th>الصنف</th>
-                      <th>الكمية</th>
-                      <th>السعر</th>
-                      <th>الإجمالي</th>
+                      <th>${t('consumptionReport.table.itemName')}</th>
+                      <th>${t('consumptionReport.table.quantity')}</th>
+                      <th>${t('consumptionReport.table.unitPrice')}</th>
+                      <th>${t('consumptionReport.table.total')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     ${items.map(item => {
-                      const isGamingDevice = item.category === 'البلايستيشن' || item.category === 'الكمبيوتر';
+                      const isGamingDevice = item.category === '__PLAYSTATION__' || item.category === '__COMPUTER__';
                       const quantityDisplay = isGamingDevice 
-                        ? `${toArabicNumbers(item.quantity.toFixed(2).replace('.', '،'))} س`
-                        : toArabicNumbers(Math.round(item.quantity));
+                        ? `${formatDecimal(item.quantity, i18n.language)} ${t('consumptionReport.units.hours')}`
+                        : formatDecimal(Math.round(item.quantity), i18n.language);
                       const unitPriceDisplay = isGamingDevice 
                         ? '-' 
-                        : formatNumber(item.price);
+                        : formatCurrency(item.price);
                       
                       return `
                         <tr>
                           <td class="item-name">${item.name}</td>
                           <td class="item-quantity">${quantityDisplay}</td>
                           <td class="item-price">${unitPriceDisplay}</td>
-                          <td class="item-total">${formatNumber(item.total)}</td>
+                          <td class="item-total">${formatCurrency(item.total)}</td>
                         </tr>
                       `;
                     }).join('')}
@@ -456,14 +473,14 @@ const ConsumptionReport = () => {
                 <div class="divider"></div>
 
                 <div class="category-total">
-                  <strong>إجمالي ${category}:</strong> ${formatNumber(categoryTotal)} ج.م
+                  <strong>${t('consumptionReport.print.categoryTotal', { category: displayCategory })}:</strong> ${formatCurrency(categoryTotal)}
                 </div>
 
-                <div class="thank-you">شكراً لكم</div>
+                <div class="thank-you">${t('consumptionReport.print.thankYou')}</div>
               </div>
               
               <div class="footer">
-                <div><strong>تم تصميم وتطوير هذا النظام بواسطة مصطفى طلعت للحلول البرمجية | 01116626164</strong></div>
+                <div><strong>${t('consumptionReport.print.footer')}</strong></div>
               </div>
             </div>
           `;
@@ -471,11 +488,11 @@ const ConsumptionReport = () => {
 
       const printContent = `
         <!DOCTYPE html>
-        <html dir="rtl" lang="ar">
+        <html dir="${dir}" lang="${i18n.language}">
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>تقرير الاستهلاك</title>
+          <title>${t('consumptionReport.print.title')}</title>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
             * { 
@@ -486,17 +503,17 @@ const ConsumptionReport = () => {
             }
             body { 
               margin: 0; 
-              padding: 0 12px 0 4px; 
+              padding: ${isRTL ? '0 12px 0 4px' : '0 4px 0 12px'}; 
               font-size: 11px; 
               color: #000; 
               font-weight: 600;
               width: auto;
               max-width: auto;
               text-align: center;
-              direction: rtl;
+              direction: ${dir};
             }
             .page {
-              padding: 8px 10px 8px 4px;
+              padding: ${isRTL ? '8px 10px 8px 4px' : '8px 4px 8px 10px'};
             }
             .page-content {
               width: 100%;
@@ -546,7 +563,7 @@ const ConsumptionReport = () => {
               font-size: 0.85em;
               border: 2px solid #000;
               table-layout: fixed;
-              direction: rtl;
+              direction: ${dir};
             }
             .items-table thead {
               background: #e0e0e0;
@@ -572,7 +589,7 @@ const ConsumptionReport = () => {
             }
             .items-table th:first-child {
               text-align: center;
-              padding-left: 5px;
+              padding-${isRTL ? 'left' : 'right'}: 5px;
               width: 50% !important;
             }
             .items-table td {
@@ -581,7 +598,7 @@ const ConsumptionReport = () => {
             .items-table .item-name {
               text-align: center;
               font-weight: 700;
-              padding-left: 5px;
+              padding-${isRTL ? 'left' : 'right'}: 5px;
               width: 50% !important;
             }
             .items-table .item-quantity {
@@ -636,9 +653,9 @@ const ConsumptionReport = () => {
                 width: auto;
               }
               body { 
-                padding: 4px 8px 4px 2px; 
+                padding: ${isRTL ? '4px 8px 4px 2px' : '4px 2px 4px 8px'}; 
                 font-weight: 600;
-                direction: rtl;
+                direction: ${dir};
               }
               .no-print { 
                 display: none !important; 
@@ -696,7 +713,7 @@ const ConsumptionReport = () => {
               cursor: pointer;
               border-radius: 4px;
             ">
-              طباعة التقرير
+              ${t('consumptionReport.print.printButton')}
             </button>
           </div>
         </body>
@@ -739,13 +756,13 @@ const ConsumptionReport = () => {
           }, 500);
         });
         
-        message.success('جاري فتح نافذة الطباعة...');
+        toast.success(t('consumptionReport.messages.printOpening'));
       } else {
-        message.error('فشل في إنشاء نافذة الطباعة.');
+        toast.error(t('consumptionReport.messages.printError'));
         document.body.removeChild(iframe);
       }
     } catch (error) {
-      message.error('حدث خطأ أثناء الطباعة');
+      toast.error(t('consumptionReport.messages.printFailed'));
       console.error('Print error:', error);
     }
   };
@@ -849,9 +866,9 @@ const ConsumptionReport = () => {
       // Save the PDF
       doc.save(`تقرير_الاستهلاك_${dateRange[0].format('YYYY-MM-DD')}_${dateRange[1].format('YYYY-MM-DD')}.pdf`);
 
-      message.success('تم تصدير التقرير بنجاح');
+      toast.success(t('consumptionReport.messages.exportSuccess'));
     } catch (error) {
-      message.error('حدث خطأ أثناء تصدير التقرير');
+      toast.error(t('consumptionReport.messages.exportError'));
     } finally {
       setLoading(false);
     }
@@ -937,10 +954,10 @@ const ConsumptionReport = () => {
       label: (
         <div className="flex items-center">
           <ShoppingCartOutlined className="ml-1.5 text-blue-500" />
-          <span className="font-medium">الكل</span>
+          <span className="font-medium">{t('consumptionReport.tabs.all')}</span>
           {allItems.length > 0 && (
             <span className="bg-blue-100 text-blue-600 text-xs font-medium px-2 py-0.5 rounded-full mr-2">
-              {toArabicNumbers(allItems.length)}
+              {formatDecimal(allItems.length, i18n.language)}
             </span>
           )}
         </div>
@@ -956,22 +973,22 @@ const ConsumptionReport = () => {
               showSizeChanger: true,
               showTotal: (total) => (
                 <span className="text-gray-700 dark:text-gray-300 font-medium">
-                  إجمالي {toArabicNumbers(total)} عنصر
+                  {t('consumptionReport.pagination.total', { count: total })}
                 </span>
               ),
               position: ['bottomCenter'],
               className: 'px-4 py-3',
               locale: {
-                items_per_page: '/ صفحة',
-                jump_to: 'الذهاب إلى',
-                jump_to_confirm: 'تأكيد',
-                page: 'صفحة',
-                prev_page: 'الصفحة السابقة',
-                next_page: 'الصفحة التالية',
-                prev_5: 'خمس صفحات سابقة',
-                next_5: 'خمس صفحات تالية',
-                prev_3: 'ثلاث صفحات سابقة',
-                next_3: 'ثلاث صفحات تالية',
+                items_per_page: t('consumptionReport.pagination.itemsPerPage'),
+                jump_to: t('consumptionReport.pagination.jumpTo'),
+                jump_to_confirm: t('consumptionReport.pagination.confirm'),
+                page: t('consumptionReport.pagination.page'),
+                prev_page: t('consumptionReport.pagination.prevPage'),
+                next_page: t('consumptionReport.pagination.nextPage'),
+                prev_5: t('consumptionReport.pagination.prev5'),
+                next_5: t('consumptionReport.pagination.next5'),
+                prev_3: t('consumptionReport.pagination.prev3'),
+                next_3: t('consumptionReport.pagination.next3'),
               },
             }}
             loading={loading}
@@ -982,7 +999,7 @@ const ConsumptionReport = () => {
                   <Empty
                     description={
                       <span className="text-gray-500">
-                        لا توجد بيانات متاحة للفترة المحددة
+                        {t('consumptionReport.messages.noData')}
                       </span>
                     }
                   />
@@ -994,12 +1011,12 @@ const ConsumptionReport = () => {
                 <Table.Summary.Cell
                   index={0}
                   colSpan={3}
-                  align="right"
+                  align={i18n.language === 'ar' ? 'right' : 'left'}
                   className="font-bold text-lg text-white py-4"
                 >
                   <span className="flex items-center gap-2">
                     <BarChartOutlined className="text-white" />
-                    الإجمالي الكلي:
+                    {t('consumptionReport.table.grandTotal')}
                   </span>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell
@@ -1008,10 +1025,10 @@ const ConsumptionReport = () => {
                   className="font-bold text-lg text-white py-4"
                 >
                   <div className="flex items-center justify-center gap-3">
-                    <span className="text-xl">{showTotalSales ? `${formatNumber(totalSales)} ج.م` : '••••••'}</span>
+                    <span className="text-xl">{showTotalSales ? formatCurrency(totalSales) : '••••••'}</span>
                     <button
                       onClick={() => setShowTotalSales(!showTotalSales)}
-                      title={showTotalSales ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                      title={showTotalSales ? t('consumptionReport.stats.hideAmount') : t('consumptionReport.stats.showAmount')}
                       className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
                     >
                       {showTotalSales ? <EyeInvisibleOutlined className="text-lg" /> : <EyeOutlined className="text-lg" />}
@@ -1026,24 +1043,31 @@ const ConsumptionReport = () => {
     };
 
     // Create tabs for menu sections + PlayStation + Computer
-    const allSections = [...menuSections.map(s => s.name), 'البلايستيشن', 'الكمبيوتر'];
+    const allSections = [...menuSections.map(s => s.name), '__PLAYSTATION__', '__COMPUTER__'];
     
     const sectionTabs = allSections.map(sectionName => {
       const items = consumptionData[sectionName] || [];
       const sectionTotal = calculateTotal(items);
       const hasItems = items.length > 0;
+      
+      // Get translated name for gaming sections
+      const displayName = sectionName === '__PLAYSTATION__' 
+        ? t('consumptionReport.categories.playstation')
+        : sectionName === '__COMPUTER__'
+        ? t('consumptionReport.categories.computer')
+        : sectionName;
 
       return {
         key: sectionName,
         label: (
           <div className="flex items-center">
-            {getCategoryIcon(sectionName)}
+            {getCategoryIcon(displayName)}
             <span className={!hasItems ? 'opacity-60' : 'font-medium'}>
-              {sectionName}
+              {displayName}
             </span>
             {hasItems && (
               <span className="bg-blue-100 text-blue-600 text-xs font-medium px-2 py-0.5 rounded-full mr-2">
-                {toArabicNumbers(items.length)}
+                {formatDecimal(items.length, i18n.language)}
               </span>
             )}
           </div>
@@ -1061,22 +1085,22 @@ const ConsumptionReport = () => {
                 onShowSizeChange: (_current, size) => setPageSize(size),
                 showTotal: (total) => (
                   <span className="text-gray-700 dark:text-gray-300 font-medium">
-                    إجمالي {toArabicNumbers(total)} عنصر
+                    {t('consumptionReport.pagination.total', { count: total })}
                   </span>
                 ),
                 position: ['bottomCenter'],
                 className: 'px-4 py-3',
                 locale: {
-                  items_per_page: '/ صفحة',
-                  jump_to: 'الذهاب إلى',
-                  jump_to_confirm: 'تأكيد',
-                  page: 'صفحة',
-                  prev_page: 'الصفحة السابقة',
-                  next_page: 'الصفحة التالية',
-                  prev_5: 'خمس صفحات سابقة',
-                  next_5: 'خمس صفحات تالية',
-                  prev_3: 'ثلاث صفحات سابقة',
-                  next_3: 'ثلاث صفحات تالية',
+                  items_per_page: t('consumptionReport.pagination.itemsPerPage'),
+                  jump_to: t('consumptionReport.pagination.jumpTo'),
+                  jump_to_confirm: t('consumptionReport.pagination.confirm'),
+                  page: t('consumptionReport.pagination.page'),
+                  prev_page: t('consumptionReport.pagination.prevPage'),
+                  next_page: t('consumptionReport.pagination.nextPage'),
+                  prev_5: t('consumptionReport.pagination.prev5'),
+                  next_5: t('consumptionReport.pagination.next5'),
+                  prev_3: t('consumptionReport.pagination.prev3'),
+                  next_3: t('consumptionReport.pagination.next3'),
                 },
               }}
               loading={loading}
@@ -1087,7 +1111,7 @@ const ConsumptionReport = () => {
                     <Empty
                       description={
                         <span className="text-gray-500">
-                          لا توجد عناصر في هذه الفئة للفترة المحددة
+                          {t('consumptionReport.messages.noCategoryData')}
                         </span>
                       }
                     />
@@ -1099,12 +1123,12 @@ const ConsumptionReport = () => {
                   <Table.Summary.Cell
                     index={0}
                     colSpan={3}
-                    align="right"
+                    align={i18n.language === 'ar' ? 'right' : 'left'}
                     className="font-bold text-lg text-white py-4"
                   >
                     <span className="flex items-center gap-2">
-                      {getCategoryIcon(sectionName)}
-                      إجمالي {sectionName}:
+                      {getCategoryIcon(displayName)}
+                      {t('consumptionReport.table.categoryTotal', { category: displayName })}
                     </span>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell
@@ -1113,10 +1137,10 @@ const ConsumptionReport = () => {
                     className="font-bold text-lg text-white py-4"
                   >
                     <div className="flex items-center justify-center gap-3">
-                      <span className="text-xl">{showSectionTotals[sectionName] ? `${formatNumber(sectionTotal)} ج.م` : '••••••'}</span>
+                      <span className="text-xl">{showSectionTotals[sectionName] ? formatCurrency(sectionTotal) : '••••••'}</span>
                       <button
                         onClick={() => setShowSectionTotals(prev => ({ ...prev, [sectionName]: !prev[sectionName] }))}
-                        title={showSectionTotals[sectionName] ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                        title={showSectionTotals[sectionName] ? t('consumptionReport.stats.hideAmount') : t('consumptionReport.stats.showAmount')}
                         className="p-2 hover:bg-blue-700 dark:hover:bg-blue-800 rounded-lg transition-colors text-white"
                       >
                         {showSectionTotals[sectionName] ? <EyeInvisibleOutlined className="text-lg" /> : <EyeOutlined className="text-lg" />}
@@ -1132,7 +1156,7 @@ const ConsumptionReport = () => {
     });
 
     return [allTab, ...sectionTabs];
-  }, [allItems, columns, consumptionData, error, loading, totalSales, showTotalSales, showSectionTotals, menuSections, pageSize]);
+  }, [allItems, columns, consumptionData, error, loading, totalSales, showTotalSales, showSectionTotals, menuSections, pageSize, t, i18n.language]);
 
 
   // Add custom styles
@@ -1238,15 +1262,15 @@ const ConsumptionReport = () => {
 
   return (
     <ConfigProvider
-      direction="rtl"
-      locale={arEG}
+      direction={i18n.language === 'ar' ? 'rtl' : 'ltr'}
+      locale={getAntdLocale(i18n.language)}
       theme={{
         token: {
           fontFamily: 'Tajawal, sans-serif',
         },
       }}
     >
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir="rtl">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header Section */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1255,8 +1279,8 @@ const ConsumptionReport = () => {
               <BarChartOutlined className="text-white text-3xl" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">تقرير الاستهلاك</h1>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">عرض وتحليل بيانات المبيعات والاستهلاك</p>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{t('consumptionReport.title')}</h1>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">{t('consumptionReport.subtitle')}</p>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -1269,28 +1293,28 @@ const ConsumptionReport = () => {
               className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium disabled:opacity-50"
             >
               <ReloadOutlined spin={loading} />
-              <span>تحديث البيانات</span>
+              <span>{t('consumptionReport.buttons.refresh')}</span>
             </button>
             <button
               onClick={() => printReport()}
               className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium"
             >
               <PrinterOutlined />
-              <span>طباعة</span>
+              <span>{t('consumptionReport.buttons.print')}</span>
             </button>
             <button
               onClick={() => exportToPDF()}
               className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 dark:from-blue-600 dark:to-blue-700 dark:hover:from-blue-700 dark:hover:to-blue-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium border-0"
             >
               <DownloadOutlined />
-              <span>تصدير التقرير</span>
+              <span>{t('consumptionReport.buttons.export')}</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Date/Time Picker and Stats Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" dir="rtl">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
         {/* Date/Time Picker Card */}
         <div className="lg:col-span-2">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300">
@@ -1299,7 +1323,7 @@ const ConsumptionReport = () => {
                 <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center ml-3">
                   <CalendarOutlined className="text-white text-lg" />
                 </div>
-                نطاق التقرير
+                {t('consumptionReport.dateRange.title')}
               </h3>
             </div>
             <div className="p-6 bg-gray-50 dark:bg-gray-900">
@@ -1308,7 +1332,7 @@ const ConsumptionReport = () => {
                 <div className="space-y-3">
                   <div className="flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300">
                     <div className="w-3 h-3 bg-blue-500 dark:bg-blue-400 rounded-full ml-2"></div>
-                    <span>وقت البدء</span>
+                    <span>{t('consumptionReport.dateRange.startTime')}</span>
                   </div>
                   <div className="space-y-3">
                     <DatePicker
@@ -1317,7 +1341,7 @@ const ConsumptionReport = () => {
                       className="w-full"
                       format="YYYY/MM/DD"
                       allowClear={false}
-                      placeholder="تاريخ البدء"
+                      placeholder={t('consumptionReport.dateRange.startDatePlaceholder')}
                       size="large"
                     />
                     <TimePicker
@@ -1326,7 +1350,7 @@ const ConsumptionReport = () => {
                       className="w-full"
                       format="hh:mm A"
                       minuteStep={15}
-                      placeholder="وقت البدء"
+                      placeholder={t('consumptionReport.dateRange.startTimePlaceholder')}
                       size="large"
                     />
                   </div>
@@ -1336,7 +1360,7 @@ const ConsumptionReport = () => {
                 <div className="space-y-3">
                   <div className="flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300">
                     <div className="w-3 h-3 bg-green-500 dark:bg-green-400 rounded-full ml-2"></div>
-                    <span>وقت الانتهاء</span>
+                    <span>{t('consumptionReport.dateRange.endTime')}</span>
                   </div>
                   <div className="space-y-3">
                     <DatePicker
@@ -1345,7 +1369,7 @@ const ConsumptionReport = () => {
                       className="w-full"
                       format="YYYY/MM/DD"
                       allowClear={false}
-                      placeholder="تاريخ الانتهاء"
+                      placeholder={t('consumptionReport.dateRange.endDatePlaceholder')}
                       size="large"
                     />
                     <TimePicker
@@ -1354,7 +1378,7 @@ const ConsumptionReport = () => {
                       className="w-full"
                       format="hh:mm A"
                       minuteStep={15}
-                      placeholder="وقت الانتهاء"
+                      placeholder={t('consumptionReport.dateRange.endTimePlaceholder')}
                       size="large"
                     />
                   </div>
@@ -1365,15 +1389,15 @@ const ConsumptionReport = () => {
               <div className="mt-6 p-5 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">من</span>
+                    <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">{t('consumptionReport.dateRange.from')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {toArabicNumbers(dateRange[0]?.format('dddd، D MMMM YYYY [عند] hh:mm A'))}
+                      {dateRange[0]?.locale(i18n.language).format('dddd، D MMMM YYYY [' + t('consumptionReport.dateRange.at') + '] hh:mm A')}
                     </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-green-600 dark:text-green-400 mb-2">إلى</span>
+                    <span className="text-sm font-semibold text-green-600 dark:text-green-400 mb-2">{t('consumptionReport.dateRange.to')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {toArabicNumbers(dateRange[1]?.format('dddd، D MMMM YYYY [عند] hh:mm A'))}
+                      {dateRange[1]?.locale(i18n.language).format('dddd، D MMMM YYYY [' + t('consumptionReport.dateRange.at') + '] hh:mm A')}
                     </span>
                   </div>
                 </div>
@@ -1392,16 +1416,16 @@ const ConsumptionReport = () => {
               </div>
               <button
                 onClick={() => setShowTotalSales(!showTotalSales)}
-                title={showTotalSales ? 'إخفاء المبلغ' : 'إظهار المبلغ'}
+                title={showTotalSales ? t('consumptionReport.stats.hideAmount') : t('consumptionReport.stats.showAmount')}
                 className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors duration-200"
               >
                 {showTotalSales ? <EyeInvisibleOutlined className="text-lg" /> : <EyeOutlined className="text-lg" />}
               </button>
             </div>
             <div className="text-3xl font-bold mb-2">
-              {showTotalSales ? `${toArabicNumbers(formatNumber(totalSales))} ج.م` : '••••••'}
+              {showTotalSales ? formatCurrency(totalSales) : '••••••'}
             </div>
-            <div className="text-blue-100 text-sm font-medium">إجمالي المبيعات</div>
+            <div className="text-blue-100 text-sm font-medium">{t('consumptionReport.stats.totalSales')}</div>
           </div>
 
           {/* Items Count Card */}
@@ -1410,9 +1434,9 @@ const ConsumptionReport = () => {
               <ShoppingCartOutlined className="text-2xl" />
             </div>
             <div className="text-3xl font-bold mb-2">
-              {toArabicNumbers(allItems.length)}
+              {formatDecimal(allItems.length, i18n.language)}
             </div>
-            <div className="text-green-100 text-sm font-medium">عدد الأصناف المباعة</div>
+            <div className="text-green-100 text-sm font-medium">{t('consumptionReport.stats.itemsSold')}</div>
           </div>
 
           {/* Categories Count Card */}
@@ -1421,16 +1445,16 @@ const ConsumptionReport = () => {
               <ShoppingFilled className="text-2xl" />
             </div>
             <div className="text-3xl font-bold mb-2">
-              {toArabicNumbers(Object.keys(consumptionData).length)}
+              {formatDecimal(Object.keys(consumptionData).length, i18n.language)}
             </div>
-            <div className="text-purple-100 text-sm font-medium">عدد الفئات</div>
+            <div className="text-purple-100 text-sm font-medium">{t('consumptionReport.stats.categoriesCount')}</div>
           </div>
         </div>
       </div>
 
       {/* Data Table Section */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700 transition-all duration-300">
-        <Spin spinning={loading} tip="جاري تحميل البيانات...">
+        <Spin spinning={loading} tip={t('consumptionReport.messages.loading')}>
           {error ? (
             <div className="py-12">
               <Empty
@@ -1438,7 +1462,7 @@ const ConsumptionReport = () => {
                   <div className="space-y-4">
                     <div className="text-red-500 dark:text-red-400 text-lg font-medium">
                       <ExclamationCircleOutlined className="ml-2" />
-                      حدث خطأ أثناء تحميل البيانات
+                      {t('consumptionReport.messages.loadErrorOccurred')}
                     </div>
                     <button
                       onClick={() => fetchData(true)}
@@ -1446,7 +1470,7 @@ const ConsumptionReport = () => {
                       className="flex items-center justify-center gap-2 mx-auto px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 dark:from-blue-600 dark:to-blue-700 dark:hover:from-blue-700 dark:hover:to-blue-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium disabled:opacity-50"
                     >
                       <ReloadOutlined spin={loading} />
-                      إعادة المحاولة
+                      {t('consumptionReport.buttons.retry')}
                     </button>
                   </div>
                 }
@@ -1460,18 +1484,18 @@ const ConsumptionReport = () => {
               tabBarExtraContent={{
     left: (
       <div className="flex items-center text-sm text-gray-700 dark:text-gray-300 font-medium">
-        <span className="ml-2">عرض</span>
+        <span className="ml-2">{t('consumptionReport.pagination.show')}</span>
         <select
           value={pageSize}
           onChange={(e) => setPageSize(Number(e.target.value))}
           className="mr-2 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm w-20 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all duration-200"
         >
-          <option value="10">{toArabicNumbers('10')}</option>
-          <option value="20">{toArabicNumbers('20')}</option>
-          <option value="50">{toArabicNumbers('50')}</option>
-          <option value="100">{toArabicNumbers('100')}</option>
+          <option value="10">{formatDecimal(10, i18n.language)}</option>
+          <option value="20">{formatDecimal(20, i18n.language)}</option>
+          <option value="50">{formatDecimal(50, i18n.language)}</option>
+          <option value="100">{formatDecimal(100, i18n.language)}</option>
         </select>
-        <span>عنصر في الصفحة</span>
+        <span>{t('consumptionReport.pagination.perPage')}</span>
       </div>
     )
   }}

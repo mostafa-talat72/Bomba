@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Gamepad2, Monitor, ShoppingCart, Receipt, TrendingUp, Clock, Users, DollarSign, BarChart3, Calendar, Coffee, Activity, Zap, Award } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import api from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
+import { translateActivityMessage } from '../utils/activityTranslator';
 
 interface RecentActivity {
   id: string;
@@ -31,6 +34,8 @@ interface DashboardStats {
 }
 
 const Dashboard = () => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const { sessions, orders, bills, isAuthenticated, getRecentActivity, refreshData } = useApp();
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
@@ -162,55 +167,55 @@ const Dashboard = () => {
 
   const stats = [
     {
-      name: 'جلسات نشطة',
-      value: formatDecimal(realTimeActiveSessions),
+      name: t('dashboard.activeSessions'),
+      value: formatDecimal(realTimeActiveSessions, i18n.language),
       icon: Clock,
       color: 'bg-blue-500',
       bgColor: 'bg-gradient-to-br from-blue-50 to-blue-100',
       darkBgColor: 'dark:from-blue-900 dark:to-blue-800',
       textColor: 'text-blue-700',
       darkTextColor: 'dark:text-blue-300',
-      description: 'جلسات حالية'
+      description: t('dashboard.currentSessions')
     },
     {
-      name: 'طلبات معلقة',
-      value: formatDecimal(realTimePendingOrders),
+      name: t('dashboard.pendingOrders'),
+      value: formatDecimal(realTimePendingOrders, i18n.language),
       icon: ShoppingCart,
       color: 'bg-orange-500',
       bgColor: 'bg-gradient-to-br from-orange-50 to-orange-100',
       darkBgColor: 'dark:from-orange-900 dark:to-orange-800',
       textColor: 'text-orange-700',
       darkTextColor: 'dark:text-orange-300',
-      description: 'في الانتظار'
+      description: t('dashboard.waiting')
     },
     {
-      name: 'مبيعات اليوم',
-      value: formatCurrency(todayRevenue),
+      name: t('dashboard.todaySales'),
+      value: formatCurrency(todayRevenue, i18n.language),
       icon: DollarSign,
       color: 'bg-green-500',
       bgColor: 'bg-gradient-to-br from-green-50 to-green-100',
       darkBgColor: 'dark:from-green-900 dark:to-green-800',
       textColor: 'text-green-700',
       darkTextColor: 'dark:text-green-300',
-      description: 'إجمالي المبيعات'
+      description: t('dashboard.totalSales')
     },
     {
-      name: 'فواتير اليوم',
-      value: formatDecimal(todayOrders),
+      name: t('dashboard.todayBills'),
+      value: formatDecimal(todayOrders, i18n.language),
       icon: Receipt,
       color: 'bg-purple-500',
       bgColor: 'bg-gradient-to-br from-purple-50 to-purple-100',
       darkBgColor: 'dark:from-purple-900 dark:to-purple-800',
       textColor: 'text-purple-700',
       darkTextColor: 'dark:text-purple-300',
-      description: 'عدد الفواتير'
+      description: t('dashboard.billsCount')
     }
   ];
 
   // Calculate current cost for active sessions
   const calculateCurrentCost = (session: Record<string, unknown>) => {
     if (session.status !== 'active') {
-      return formatCurrency(session.totalCost as number);
+      return formatCurrency(session.totalCost as number, i18n.language);
     }
 
     const now = new Date();
@@ -227,15 +232,15 @@ const Dashboard = () => {
 
       const minuteRate = hourlyRate / 60;
       const cost = Math.round(minutes * minuteRate);
-      return formatCurrency(Math.max(cost, 1)); // Minimum 1 pound
+      return formatCurrency(Math.max(cost, 1), i18n.language); // Minimum 1 pound
     } else if (session.deviceType === 'computer') {
       const hourlyRate = 15;
       const minuteRate = hourlyRate / 60;
       const cost = Math.round(minutes * minuteRate);
-      return formatCurrency(Math.max(cost, 1)); // Minimum 1 pound
+      return formatCurrency(Math.max(cost, 1), i18n.language); // Minimum 1 pound
     }
 
-    return formatCurrency(session.totalCost as number);
+    return formatCurrency(session.totalCost as number, i18n.language);
   };
 
   // Get icon component based on activity type
@@ -254,7 +259,7 @@ const Dashboard = () => {
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-orange-600 dark:border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">جاري تحميل البيانات...</p>
+          <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">{t('dashboard.loading')}</p>
         </div>
       </div>
     );
@@ -273,9 +278,9 @@ const Dashboard = () => {
           <div className="flex items-center mb-4">
             <div>
               <h1 className="text-4xl font-bold mb-2">
-                مرحباً بك في نظام Bomba
+                {t('dashboard.welcome')}
               </h1>
-              <p className="text-orange-100 text-lg font-medium">منصة إدارة ذكية للكافيهات والمطاعم والترفيه</p>
+              <p className="text-orange-100 text-lg font-medium">{t('dashboard.subtitle')}</p>
             </div>
           </div>
         </div>
@@ -283,23 +288,29 @@ const Dashboard = () => {
         <div className="hidden lg:flex items-center space-x-4 space-x-reverse">
           <div className="flex items-center space-x-4 space-x-reverse">
             <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
-              <Calendar className="h-5 w-5 ml-2" />
+              <Calendar className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               <span className="text-orange-100 font-medium">
-                {new Date().toLocaleDateString('ar-EG', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
+                {new Date().toLocaleDateString(
+                  isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
+                  {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  }
+                )}
               </span>
             </div>
             <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
-              <Clock className="h-5 w-5 ml-2" />
+              <Clock className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               <span className="text-orange-100 font-medium">
-                {new Date().toLocaleTimeString('ar-EG', {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+                {new Date().toLocaleTimeString(
+                  isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
+                  {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }
+                )}
               </span>
             </div>
           </div>
@@ -335,12 +346,12 @@ const Dashboard = () => {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900">
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center mr-3">
+              <div className={`w-10 h-10 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center ${isRTL ? 'mr-3' : 'ml-3'}`}>
                 <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
-              الجلسات النشطة
-              <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm font-bold px-3 py-1 rounded-full mr-3">
-                {formatDecimal(activeSessions.length)}
+              {t('dashboard.activeSessions')}
+              <span className={`bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm font-bold px-3 py-1 rounded-full ${isRTL ? 'mr-3' : 'ml-3'}`}>
+                {formatDecimal(activeSessions.length, i18n.language)}
               </span>
             </h3>
           </div>
@@ -350,8 +361,8 @@ const Dashboard = () => {
                 <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-6">
                   <Clock className="h-10 w-10 text-gray-400 dark:text-gray-500" />
                 </div>
-                <p className="text-gray-500 dark:text-gray-400 text-xl font-semibold mb-2">لا توجد جلسات نشطة حالياً</p>
-                <p className="text-gray-400 dark:text-gray-500">جميع الأجهزة متاحة للاستخدام</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xl font-semibold mb-2">{t('dashboard.noActiveSessions')}</p>
+                <p className="text-gray-400 dark:text-gray-500">{t('dashboard.allDevicesAvailable')}</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -366,29 +377,32 @@ const Dashboard = () => {
                   return (
                     <div key={session.id} className="flex items-center justify-between p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 rounded-xl border border-blue-100 dark:border-blue-700 hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
                       <div className="flex items-center">
-                        <div className="w-14 h-14 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center mr-4">
+                        <div className={`w-14 h-14 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center ${isRTL ? 'mr-4' : 'ml-4'}`}>
                           {session.deviceType.includes('PlayStation') || session.deviceType.includes('بلايستيشن') ? (
                             <Gamepad2 className="h-7 w-7 text-blue-600 dark:text-blue-400" />
                           ) : (
                             <Monitor className="h-7 w-7 text-blue-600 dark:text-blue-400" />
                           )}
                         </div>
-                        <div className="mr-4">
+                        <div className={isRTL ? 'mr-4' : 'ml-4'}>
                           <p className="font-bold text-gray-900 dark:text-gray-100 text-lg">{session.deviceName}</p>
                           <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                            بدأت: {startTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                            {t('dashboard.startedAt')}: {startTime.toLocaleTimeString(
+                              isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
+                              { hour: '2-digit', minute: '2-digit' }
+                            )}
                           </p>
                           <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                            المدة: {hours > 0 ? `${formatDecimal(hours)}س ${formatDecimal(minutes)}د` : `${formatDecimal(minutes)}د`}
+                            {t('dashboard.duration')}: {hours > 0 ? `${formatDecimal(hours, i18n.language)}${t('dashboard.hours')} ${formatDecimal(minutes, i18n.language)}${t('dashboard.minutes')}` : `${formatDecimal(minutes, i18n.language)}${t('dashboard.minutes')}`}
                             {session.deviceType === 'playstation' && session.controllers && (
-                              <span className="mr-2">• {formatDecimal(session.controllers)} دراع</span>
+                              <span className={isRTL ? 'mr-2' : 'ml-2'}>• {formatDecimal(session.controllers, i18n.language)} {t('dashboard.controllers')}</span>
                             )}
                           </p>
                         </div>
                       </div>
-                      <div className="text-left">
+                      <div className={isRTL ? 'text-right' : 'text-left'}>
                         <p className="font-bold text-green-600 dark:text-green-400 text-xl">{currentCost}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">التكلفة الحالية</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('dashboard.currentCost')}</p>
                       </div>
                     </div>
                   );
@@ -402,12 +416,12 @@ const Dashboard = () => {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900 dark:to-emerald-900">
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-              <div className="w-10 h-10 bg-green-100 dark:bg-green-800 rounded-xl flex items-center justify-center mr-3">
+              <div className={`w-10 h-10 bg-green-100 dark:bg-green-800 rounded-xl flex items-center justify-center ${isRTL ? 'mr-3' : 'ml-3'}`}>
                 <Activity className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
-              النشاط الأخير
-              <span className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm font-bold px-3 py-1 rounded-full mr-3">
-                {formatDecimal(Math.min(recentActivity.length, 5))}
+              {t('dashboard.recentActivity')}
+              <span className={`bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm font-bold px-3 py-1 rounded-full ${isRTL ? 'mr-3' : 'ml-3'}`}>
+                {formatDecimal(Math.min(recentActivity.length, 5), i18n.language)}
               </span>
             </h3>
           </div>
@@ -417,20 +431,21 @@ const Dashboard = () => {
                 <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-6">
                   <Activity className="h-10 w-10 text-gray-400 dark:text-gray-500" />
                 </div>
-                <p className="text-gray-500 dark:text-gray-400 text-xl font-semibold mb-2">لا يوجد نشاط حديث</p>
-                <p className="text-gray-400 dark:text-gray-500">سيظهر النشاط هنا عند بدء الجلسات أو الطلبات</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xl font-semibold mb-2">{t('dashboard.noRecentActivity')}</p>
+                <p className="text-gray-400 dark:text-gray-500">{t('dashboard.activityWillAppear')}</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {recentActivity.slice(0, 5).map((activity) => {
                   const Icon = getActivityIcon(activity.icon);
+                  const translatedMessage = translateActivityMessage(activity.message);
                   return (
                     <div key={activity.id} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-all duration-200 hover:scale-[1.02] group">
-                      <div className={`w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center mr-4 group-hover:scale-110 transition-transform duration-200 ${activity.color}`}>
+                      <div className={`w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center ${isRTL ? 'mr-4' : 'ml-4'} group-hover:scale-110 transition-transform duration-200 ${activity.color}`}>
                         <Icon className="h-6 w-6" />
                       </div>
-                      <div className="mr-4 flex-1">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">{activity.message}</p>
+                      <div className={`${isRTL ? 'mr-4' : 'ml-4'} flex-1`}>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">{translatedMessage}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{activity.time}</p>
                       </div>
                       <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
@@ -447,10 +462,10 @@ const Dashboard = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-900 dark:to-violet-900">
           <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-            <div className="w-10 h-10 bg-purple-100 dark:bg-purple-800 rounded-xl flex items-center justify-center mr-3">
+            <div className={`w-10 h-10 bg-purple-100 dark:bg-purple-800 rounded-xl flex items-center justify-center ${isRTL ? 'mr-3' : 'ml-3'}`}>
               <Zap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
-            حالة النظام
+            {t('dashboard.systemStatus')}
           </h3>
         </div>
         <div className="p-6">
@@ -459,38 +474,38 @@ const Dashboard = () => {
               <div className="w-16 h-16 bg-green-100 dark:bg-green-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
               </div>
-              <h4 className="font-bold text-green-800 dark:text-green-200 mb-2 text-lg">النظام يعمل</h4>
-              <p className="text-sm text-green-600 dark:text-green-400">جميع الخدمات متاحة</p>
+              <h4 className="font-bold text-green-800 dark:text-green-200 mb-2 text-lg">{t('dashboard.systemRunning')}</h4>
+              <p className="text-sm text-green-600 dark:text-green-400">{t('dashboard.allServicesAvailable')}</p>
             </div>
             <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 rounded-2xl border border-blue-200 dark:border-blue-700 hover:shadow-lg transition-all duration-200 hover:scale-105">
               <div className="w-16 h-16 bg-blue-100 dark:bg-blue-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <Users className="h-8 w-8 text-blue-600 dark:text-blue-400" />
               </div>
-              <h4 className="font-bold text-blue-800 dark:text-blue-200 mb-2 text-lg">المستخدمون النشطون</h4>
+              <h4 className="font-bold text-blue-800 dark:text-blue-200 mb-2 text-lg">{t('dashboard.activeUsers')}</h4>
               <p className="text-sm text-blue-600 dark:text-blue-400">
-                {realTimeActiveSessions > 0 ? `${formatDecimal(realTimeActiveSessions)} جلسة نشطة` : 'لا توجد جلسات نشطة'}
+                {realTimeActiveSessions > 0 ? `${formatDecimal(realTimeActiveSessions, i18n.language)} ${t('dashboard.activeSession')}` : t('dashboard.noActiveSessions2')}
               </p>
             </div>
             <div className="text-center p-6 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900 dark:to-amber-900 rounded-2xl border border-orange-200 dark:border-orange-700 hover:shadow-lg transition-all duration-200 hover:scale-105">
               <div className="w-16 h-16 bg-orange-100 dark:bg-orange-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <ShoppingCart className="h-8 w-8 text-orange-600 dark:text-orange-400" />
               </div>
-              <h4 className="font-bold text-orange-800 dark:text-orange-200 mb-2 text-lg">الطلبات المعلقة</h4>
+              <h4 className="font-bold text-orange-800 dark:text-orange-200 mb-2 text-lg">{t('dashboard.pendingOrders')}</h4>
               <p className="text-sm text-orange-600 dark:text-orange-400">
                 {realTimePendingOrders > 0 ? (
                   <>
-                    {formatDecimal(realTimePendingOrders)} طلب في الانتظار أو جاهز
+                    {formatDecimal(realTimePendingOrders, i18n.language)} {t('dashboard.pendingOrdersCount')}
                     <br />
                     <span className="text-xs">
-                      {formatDecimal(ordersAnalysis.pending || 0)} في الانتظار • {formatDecimal(ordersAnalysis.preparing || 0)} قيد التحضير • {formatDecimal(ordersAnalysis.ready || 0)} جاهزة
+                      {formatDecimal(ordersAnalysis.pending || 0, i18n.language)} {t('dashboard.waiting')} • {formatDecimal(ordersAnalysis.preparing || 0, i18n.language)} {t('dashboard.preparing')} • {formatDecimal(ordersAnalysis.ready || 0, i18n.language)} {t('dashboard.ready')}
                     </span>
                     <br />
                     <span className="text-xs text-gray-500 dark:text-gray-400">
-                      إجمالي محسوب: {formatDecimal(actualPendingOrders.length)}
+                      {t('dashboard.totalCalculated')}: {formatDecimal(actualPendingOrders.length, i18n.language)}
                     </span>
                   </>
                 ) : (
-                  'لا توجد طلبات معلقة'
+                  t('dashboard.noPendingOrders')
                 )}
               </p>
             </div>

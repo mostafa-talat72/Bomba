@@ -3,6 +3,17 @@ import { Save, DollarSign, AlertCircle, CheckCircle, X } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { api } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+import { formatCurrency } from '../utils/formatters';
+import { DatePicker, ConfigProvider } from 'antd';
+import dayjs from 'dayjs';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
+import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 
 interface CostCategory {
   _id: string;
@@ -44,6 +55,8 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
   editingCost,
   categories,
 }) => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const { showNotification } = useApp();
   const [loading, setLoading] = useState(false);
 
@@ -100,27 +113,27 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
 
     // Validation
     if (!formData.category) {
-      showNotification('يرجى اختيار القسم', 'error');
+      showNotification(t('costs.modals.costForm.notifications.categoryRequired'), 'error');
       return;
     }
 
     if (!formData.description.trim()) {
-      showNotification('يرجى إدخال وصف التكلفة', 'error');
+      showNotification(t('costs.modals.costForm.notifications.descriptionRequired'), 'error');
       return;
     }
 
     if (formData.amount <= 0) {
-      showNotification('يرجى إدخال مبلغ صحيح', 'error');
+      showNotification(t('costs.modals.costForm.notifications.amountInvalid'), 'error');
       return;
     }
 
     if (formData.paidAmount < 0) {
-      showNotification('المبلغ المدفوع لا يمكن أن يكون سالباً', 'error');
+      showNotification(t('costs.modals.costForm.notifications.paidAmountNegative'), 'error');
       return;
     }
 
     if (formData.paidAmount > formData.amount) {
-      showNotification('المبلغ المدفوع لا يمكن أن يتجاوز المبلغ الإجمالي', 'error');
+      showNotification(t('costs.modals.costForm.notifications.paidAmountExceeds'), 'error');
       return;
     }
 
@@ -136,18 +149,18 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
       if (editingCost) {
         // Update existing cost
         const response = await api.put(`/costs/${editingCost._id}`, payload);
-        showNotification('تم تحديث التكلفة بنجاح', 'success');
+        showNotification(t('costs.modals.costForm.notifications.updated'), 'success');
       } else {
         // Create new cost
         const response = await api.post('/costs', payload);
-        showNotification('تم إضافة التكلفة بنجاح', 'success');
+        showNotification(t('costs.modals.costForm.notifications.created'), 'success');
       }
 
       onSave();
       onClose();
     } catch (error: any) {
       console.error('Cost Form - Error:', error);
-      const message = error.response?.data?.message || error.message || 'فشل في حفظ التكلفة';
+      const message = error.response?.data?.message || error.message || t('costs.modals.costForm.notifications.error');
       showNotification(message, 'error');
     } finally {
       setLoading(false);
@@ -165,11 +178,29 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
 
   const selectedCategory = getSelectedCategory();
 
+  // Get Ant Design locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      default:
+        return enUS;
+    }
+  };
+
+  // Set dayjs locale
+  useEffect(() => {
+    dayjs.locale(i18n.language);
+  }, [i18n.language]);
+
   return isOpen ? (
+    <ConfigProvider locale={getAntdLocale()} direction={isRTL ? 'rtl' : 'ltr'}>
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div 
         className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden"
-        dir="rtl"
+        dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
         <div 
@@ -197,10 +228,10 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               </div>
               <div className="flex-1">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                  {editingCost ? 'تعديل التكلفة' : 'إضافة تكلفة جديدة'}
+                  {editingCost ? t('costs.modals.costForm.titleEdit') : t('costs.modals.costForm.titleAdd')}
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {editingCost ? 'تحديث بيانات التكلفة' : 'إضافة تكلفة جديدة للنظام'}
+                  {editingCost ? t('costs.modals.costForm.subtitleEdit') : t('costs.modals.costForm.subtitleAdd')}
                 </p>
               </div>
             </div>
@@ -219,7 +250,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
         {/* Category Selection */}
         <div>
           <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-            القسم <span className="text-red-500">*</span>
+            {t('costs.modals.costForm.category')} <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <select
@@ -228,7 +259,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               className="form-field w-full px-4 py-3 pr-12 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none font-semibold"
               required
             >
-              <option value="">اختر القسم</option>
+              <option value="">{t('costs.modals.costForm.categoryPlaceholder')}</option>
               {categories?.map((cat) => (
                 <option key={cat._id} value={cat._id}>
                   {cat.name}
@@ -251,13 +282,13 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
         {/* Description */}
         <div>
           <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-            الوصف <span className="text-red-500">*</span>
+            {t('costs.modals.costForm.description')} <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="مثال: فاتورة كهرباء شهر يناير"
+            placeholder={t('costs.modals.costForm.descriptionPlaceholder')}
             className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
             required
           />
@@ -268,7 +299,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-blue-600" />
-              المبلغ الإجمالي <span className="text-red-500">*</span>
+              {t('costs.modals.costForm.totalAmount')} <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -276,7 +307,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               min="0"
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
-              placeholder="أدخل المبلغ الإجمالي..."
+              placeholder={t('costs.modals.costForm.totalAmountPlaceholder')}
               className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold text-lg"
               required
             />
@@ -285,7 +316,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-green-600" />
-              المبلغ المدفوع
+              {t('costs.modals.costForm.paidAmount')}
             </label>
             <input
               type="number"
@@ -294,7 +325,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               max={formData.amount}
               value={formData.paidAmount}
               onChange={(e) => setFormData({ ...formData, paidAmount: parseFloat(e.target.value) || 0 })}
-              placeholder="أدخل المبلغ المدفوع..."
+              placeholder={t('costs.modals.costForm.paidAmountPlaceholder')}
               className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all font-semibold text-lg"
             />
           </div>
@@ -308,18 +339,18 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
                 <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <span className="text-sm font-bold text-blue-900 dark:text-blue-300">
-                المبلغ المتبقي:
+                {t('costs.modals.costForm.remainingAmount')}:
               </span>
             </div>
             <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {remainingAmount.toFixed(2)} جنيه
+              {formatCurrency(remainingAmount, i18n.language)}
             </span>
           </div>
           {formData.paidAmount > 0 && formData.paidAmount < formData.amount && (
             <div className="flex items-center gap-2 mt-3 p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
               <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
               <p className="text-xs text-yellow-700 dark:text-yellow-400 font-medium">
-                سيتم تحديث حالة الدفع تلقائياً إلى "مدفوع جزئياً"
+                {t('costs.modals.costForm.partiallyPaidNote')}
               </p>
             </div>
           )}
@@ -327,7 +358,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
             <div className="flex items-center gap-2 mt-3 p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
               <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
               <p className="text-xs text-green-700 dark:text-green-400 font-medium">
-                سيتم تحديث حالة الدفع تلقائياً إلى "مدفوع"
+                {t('costs.modals.costForm.fullyPaidNote')}
               </p>
             </div>
           )}
@@ -337,26 +368,30 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-              📅 التاريخ <span className="text-red-500">*</span>
+              📅 {t('costs.modals.costForm.date')} <span className="text-red-500">*</span>
             </label>
-            <input
-              type="date"
-              value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+            <DatePicker
+              value={formData.date ? dayjs(formData.date) : null}
+              onChange={(date) => setFormData({ ...formData, date: date ? date.format('YYYY-MM-DD') : '' })}
+              format="YYYY-MM-DD"
+              className="w-full"
+              style={{ width: '100%', height: '48px' }}
+              placeholder={t('costs.modals.costForm.date')}
               required
             />
           </div>
 
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-              📆 تاريخ الاستحقاق <span className="text-xs font-normal text-gray-500">(اختياري)</span>
+              📆 {t('costs.modals.costForm.dueDate')} <span className="text-xs font-normal text-gray-500">({t('costs.modals.costForm.dueDateOptional')})</span>
             </label>
-            <input
-              type="date"
-              value={formData.dueDate}
-              onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-              className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+            <DatePicker
+              value={formData.dueDate ? dayjs(formData.dueDate) : null}
+              onChange={(date) => setFormData({ ...formData, dueDate: date ? date.format('YYYY-MM-DD') : '' })}
+              format="YYYY-MM-DD"
+              className="w-full"
+              style={{ width: '100%', height: '48px' }}
+              placeholder={t('costs.modals.costForm.dueDate')}
             />
           </div>
         </div>
@@ -364,30 +399,30 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
         {/* Payment Method */}
         <div>
           <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-            طريقة الدفع
+            {t('costs.modals.costForm.paymentMethod')}
           </label>
           <select
             value={formData.paymentMethod}
             onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
             className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
           >
-            <option value="cash">💵 نقدي</option>
-            <option value="card">💳 بطاقة</option>
-            <option value="transfer">🏦 تحويل بنكي</option>
-            <option value="check">📝 شيك</option>
+            <option value="cash">{t('costs.modals.costForm.paymentMethodCash')}</option>
+            <option value="card">{t('costs.modals.costForm.paymentMethodCard')}</option>
+            <option value="transfer">{t('costs.modals.costForm.paymentMethodTransfer')}</option>
+            <option value="check">{t('costs.modals.costForm.paymentMethodCheck')}</option>
           </select>
         </div>
 
         {/* Vendor */}
         <div>
           <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-            🏢 المورد <span className="text-xs font-normal text-gray-500">(اختياري)</span>
+            {t('costs.modals.costForm.vendor')} <span className="text-xs font-normal text-gray-500">({t('costs.modals.costForm.vendorOptional')})</span>
           </label>
           <input
             type="text"
             value={formData.vendor}
             onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-            placeholder="اسم المورد أو الجهة..."
+            placeholder={t('costs.modals.costForm.vendorPlaceholder')}
             className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
           />
         </div>
@@ -395,12 +430,12 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
         {/* Notes */}
         <div>
           <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-            📝 ملاحظات <span className="text-xs font-normal text-gray-500">(اختياري)</span>
+            {t('costs.modals.costForm.notes')} <span className="text-xs font-normal text-gray-500">({t('costs.modals.costForm.notesOptional')})</span>
           </label>
           <textarea
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            placeholder="أي ملاحظات إضافية..."
+            placeholder={t('costs.modals.costForm.notesPlaceholder')}
             rows={3}
             className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
           />
@@ -418,12 +453,12 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               {loading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>جاري الحفظ...</span>
+                  <span>{t('costs.modals.costForm.saving')}</span>
                 </>
               ) : (
                 <>
                   <Save className="w-5 h-5" />
-                  <span>{editingCost ? 'تحديث التكلفة' : 'حفظ التكلفة'}</span>
+                  <span>{editingCost ? t('costs.modals.costForm.update') : t('costs.modals.costForm.save')}</span>
                 </>
               )}
             </div>
@@ -434,13 +469,14 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
             disabled={loading}
             className="px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 font-semibold"
           >
-            إلغاء
+            {t('costs.modals.costForm.cancel')}
           </button>
         </div>
           </form>
         </div>
       </div>
     </div>
+    </ConfigProvider>
   ) : null;
 };
 

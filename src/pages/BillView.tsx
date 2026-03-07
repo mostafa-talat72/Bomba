@@ -354,7 +354,9 @@ const BillView = () => {
 	}, [billId]);
 
 	const formatCurrency = (amount: number) => {
-		return formatCurrencyUtil(amount);
+		const currency = localStorage.getItem('organizationCurrency') || 'EGP';
+		const language = localStorage.getItem('language') || 'ar';
+		return formatCurrencyUtil(amount, language, currency);
 	};
 
 	const formatDate = (dateString: string) => {

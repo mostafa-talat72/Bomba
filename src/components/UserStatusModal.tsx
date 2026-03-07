@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Save, UserCheck, UserX, Shield, AlertTriangle } from 'lucide-react';
 import { User as UserType } from '../services/api';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 interface UserStatusModalProps {
   isOpen: boolean;
@@ -15,6 +17,8 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
   user,
   onUpdateStatus,
 }) => {
+  const { t } = useTranslation();
+  const { isRTL } = useLanguage();
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
@@ -27,8 +31,8 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
   const statusOptions = [
     {
       id: 'active',
-      name: 'نشط',
-      description: 'المستخدم يمكنه تسجيل الدخول واستخدام النظام',
+      name: t('users.statusModal.active'),
+      description: t('users.statusModal.activeDesc'),
       icon: UserCheck,
       color: 'text-green-600',
       bgColor: 'bg-green-100',
@@ -36,8 +40,8 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
     },
     {
       id: 'inactive',
-      name: 'غير نشط',
-      description: 'المستخدم لا يمكنه تسجيل الدخول',
+      name: t('users.statusModal.inactive'),
+      description: t('users.statusModal.inactiveDesc'),
       icon: UserX,
       color: 'text-red-600',
       bgColor: 'bg-red-100',
@@ -45,8 +49,8 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
     },
     {
       id: 'suspended',
-      name: 'معلق',
-      description: 'المستخدم معلق مؤقتاً ولا يمكنه الوصول للنظام',
+      name: t('users.statusModal.suspended'),
+      description: t('users.statusModal.suspendedDesc'),
       icon: Shield,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100',
@@ -82,7 +86,7 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div 
         className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-slideUp"
-        dir="rtl"
+        dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
@@ -93,19 +97,19 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
               </div>
               <div className="flex-1">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                  تغيير حالة المستخدم
+                  {t('users.statusModal.title')}
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  تحديث حالة {user.name}
+                  {t('users.statusModal.subtitle')} {user.name}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${currentStatusInfo.bgColor} ${currentStatusInfo.color}`}>
-                    الحالة الحالية: {currentStatusInfo.name}
+                    {t('users.statusModal.currentStatus')}: {currentStatusInfo.name}
                   </span>
                   {hasChanges && (
                     <span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full text-xs font-bold flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3" />
-                      تغيير معلق
+                      {t('users.statusModal.pendingChange')}
                     </span>
                   )}
                 </div>
@@ -126,7 +130,7 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
             {/* Status Options */}
             <div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                اختر الحالة الجديدة:
+                {t('users.statusModal.selectNewStatus')}:
               </h3>
               <div className="space-y-3">
                 {statusOptions.map(status => {
@@ -151,7 +155,7 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
                         onChange={(e) => setSelectedStatus(e.target.value)}
                         className="mt-1 w-5 h-5"
                       />
-                      <div className="mr-3 flex-1">
+                      <div className={`${isRTL ? 'mr-3' : 'ml-3'} flex-1`}>
                         <div className="flex items-center gap-2 mb-2">
                           <StatusIcon className={`w-5 h-5 ${isSelected ? status.color : 'text-gray-500'}`} />
                           <span className={`text-lg font-bold ${isSelected ? status.color : 'text-gray-900 dark:text-gray-100'}`}>
@@ -159,7 +163,7 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
                           </span>
                           {isCurrent && (
                             <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-bold">
-                              الحالة الحالية
+                              {t('users.statusModal.currentStatus')}
                             </span>
                           )}
                         </div>
@@ -180,19 +184,19 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
                   <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-lg font-bold text-amber-900 dark:text-amber-200 mb-2">
-                      تأكيد تغيير الحالة
+                      {t('users.statusModal.confirmChange')}
                     </h4>
                     <p className="text-sm text-amber-800 dark:text-amber-300 mb-3">
-                      ستقوم بتغيير حالة المستخدم من "{currentStatusInfo.name}" إلى "{newStatusInfo.name}".
+                      {t('users.statusModal.willChangeFrom')} "{currentStatusInfo.name}" {t('users.statusModal.to')} "{newStatusInfo.name}".
                     </p>
                     {selectedStatus === 'inactive' && (
                       <p className="text-sm text-red-700 dark:text-red-400 font-semibold">
-                        ⚠️ المستخدم لن يتمكن من تسجيل الدخول بعد هذا التغيير.
+                        {t('users.statusModal.inactiveWarning')}
                       </p>
                     )}
                     {selectedStatus === 'suspended' && (
                       <p className="text-sm text-yellow-700 dark:text-yellow-400 font-semibold">
-                        ⚠️ المستخدم سيتم تعليقه مؤقتاً ولن يتمكن من الوصول للنظام.
+                        {t('users.statusModal.suspendedWarning')}
                       </p>
                     )}
                   </div>
@@ -215,12 +219,12 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
                 {loading ? (
                   <>
                     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>جاري التحديث...</span>
+                    <span>{t('users.statusModal.updating')}</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-6 h-6" />
-                    <span>تحديث الحالة</span>
+                    <span>{t('users.statusModal.updateStatus')}</span>
                   </>
                 )}
               </div>
@@ -230,7 +234,7 @@ const UserStatusModal: React.FC<UserStatusModalProps> = ({
               disabled={loading}
               className="px-6 py-4 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 font-bold"
             >
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </div>

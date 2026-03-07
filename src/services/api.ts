@@ -2370,6 +2370,8 @@ class ApiClient {
     phone?: string;
     email?: string;
     website?: string;
+    currency?: string;
+    timezone?: string;
     socialLinks?: {
       facebook?: string;
       instagram?: string;

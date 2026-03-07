@@ -1,4 +1,3 @@
-import React from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { ReportPDF } from '../components/ReportPDF';
 
@@ -11,14 +10,25 @@ interface ExportPDFOptions {
   };
   organizationName?: string;
   filename?: string;
+  language?: string;
+  translations?: any;
 }
 
 export const exportReportToPDF = async (options: ExportPDFOptions): Promise<void> => {
-  const { reportType, data, dateRange, organizationName, filename } = options;
+  const { reportType, data, dateRange, organizationName, filename, language, translations } = options;
 
   try {
     // إنشاء مستند PDF
-    const doc = <ReportPDF reportType={reportType} data={data} dateRange={dateRange} organizationName={organizationName} />;
+    const doc = (
+      <ReportPDF 
+        reportType={reportType} 
+        data={data} 
+        dateRange={dateRange} 
+        organizationName={organizationName}
+        language={language}
+        translations={translations}
+      />
+    );
     
     // تحويل المستند إلى Blob
     const blob = await pdf(doc).toBlob();
@@ -46,17 +56,37 @@ export const exportReportToPDF = async (options: ExportPDFOptions): Promise<void
 };
 
 // دالة مساعدة لتنسيق اسم الملف
-export const generatePDFFilename = (reportType: string, dateRange: { startDate: string; endDate: string }): string => {
+export const generatePDFFilename = (
+  reportType: string, 
+  dateRange: { startDate: string; endDate: string },
+  language: string = 'ar'
+): string => {
   const start = new Date(dateRange.startDate).toISOString().split('T')[0];
   const end = new Date(dateRange.endDate).toISOString().split('T')[0];
   
-  const reportNames: Record<string, string> = {
-    sales: 'تقرير-المبيعات',
-    financial: 'التقرير-المالي',
-    sessions: 'تقرير-الجلسات',
-    inventory: 'تقرير-المخزون',
+  const reportNames: Record<string, Record<string, string>> = {
+    sales: {
+      ar: 'تقرير-المبيعات',
+      en: 'sales-report',
+      fr: 'rapport-ventes'
+    },
+    financial: {
+      ar: 'التقرير-المالي',
+      en: 'financial-report',
+      fr: 'rapport-financier'
+    },
+    sessions: {
+      ar: 'تقرير-الجلسات',
+      en: 'sessions-report',
+      fr: 'rapport-sessions'
+    },
+    inventory: {
+      ar: 'تقرير-المخزون',
+      en: 'inventory-report',
+      fr: 'rapport-inventaire'
+    },
   };
   
-  const name = reportNames[reportType] || 'تقرير';
+  const name = reportNames[reportType]?.[language] || reportNames[reportType]?.['ar'] || 'report';
   return `${name}-${start}-${end}.pdf`;
 };

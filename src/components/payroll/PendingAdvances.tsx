@@ -1,12 +1,16 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Tag, Space, Modal, Input, message, Spin } from 'antd';
 import { CheckCircle, XCircle, Clock, DollarSign } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
+import { useOrganization } from '../../context/OrganizationContext';
 
-dayjs.locale('ar');
 dayjs.extend(relativeTime);
 
 interface Advance {
@@ -42,12 +46,21 @@ interface PendingAdvancesProps {
 }
 
 const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
+  const { getCurrencySymbol } = useOrganization();
   const [loading, setLoading] = useState(false);
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [selectedAdvance, setSelectedAdvance] = useState<Advance | null>(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [rejectionReason, setRejectionReason] = useState('');
+
+  // Update dayjs locale when language changes
+  useEffect(() => {
+    const currentLang = i18n.language;
+    dayjs.locale(currentLang);
+  }, [i18n.language]);
 
   useEffect(() => {
     fetchPendingAdvances();
@@ -59,13 +72,13 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
       const response = await api.get('/payroll/advances', {
         params: { status: 'pending' }
       });
-      
+
       if (response.success) {
         setAdvances(response.data);
       }
     } catch (error: any) {
-      console.error('فشل في تحميل طلبات السلف:', error);
-      message.error('فشل في تحميل طلبات السلف');
+      console.error(t('payroll.pendingAdvances.messages.loadError'), error);
+      message.error(t('payroll.pendingAdvances.messages.loadError'));
     } finally {
       setLoading(false);
     }
@@ -83,25 +96,24 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
 
     try {
       setLoading(true);
-      
+
       const response = await api.put(`/payroll/advances/${selectedAdvance._id}/status`, {
         status: actionType === 'approve' ? 'approved' : 'rejected',
         rejectionReason: actionType === 'reject' ? rejectionReason : undefined
       });
 
       if (response.success) {
-        message.success(actionType === 'approve' ? 'تم اعتماد السلفة بنجاح' : 'تم رفض السلفة');
+        message.success(actionType === 'approve' ? t('payroll.pendingAdvances.messages.approveSuccess') : t('payroll.pendingAdvances.messages.rejectSuccess'));
         setActionModalVisible(false);
         fetchPendingAdvances();
-        
-        // تحديث الصفحة الرئيسية
+
         if (onUpdate) {
           onUpdate();
         }
       }
     } catch (error: any) {
-      console.error('فشل في تحديث حالة السلفة:', error);
-      message.error('فشل في تحديث حالة السلفة');
+      console.error(t('payroll.pendingAdvances.messages.updateError'), error);
+      message.error(t('payroll.pendingAdvances.messages.updateError'));
     } finally {
       setLoading(false);
     }
@@ -123,7 +135,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
 
   const columns = [
     {
-      title: 'رقم الطلب',
+      title: t('payroll.pendingAdvances.table.requestId'),
       dataIndex: 'advanceId',
       key: 'advanceId',
       render: (id: string) => (
@@ -133,7 +145,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
       )
     },
     {
-      title: 'الموظف',
+      title: t('payroll.pendingAdvances.table.employee'),
       dataIndex: 'employeeId',
       key: 'employee',
       render: (employee: any) => (
@@ -148,20 +160,20 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
       )
     },
     {
-      title: 'المبلغ',
+      title: t('payroll.pendingAdvances.table.amount'),
       dataIndex: 'amount',
       key: 'amount',
       render: (amount: number) => (
         <div className="flex items-center gap-2">
           <DollarSign size={16} className="text-green-600" />
           <span className="font-bold text-green-600 dark:text-green-400">
-            {amount.toFixed(2)} جنيه
+            {amount.toFixed(2)} {currency()}
           </span>
         </div>
       )
     },
     {
-      title: 'السبب',
+      title: t('payroll.pendingAdvances.table.reason'),
       dataIndex: 'reason',
       key: 'reason',
       render: (reason: string) => (
@@ -169,40 +181,40 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
       )
     },
     {
-      title: 'تاريخ الطلب',
+      title: t('payroll.pendingAdvances.table.requestDate'),
       dataIndex: 'requestDate',
       key: 'requestDate',
       render: (date: string) => formatDateTime(date)
     },
     {
-      title: 'طريقة السداد',
+      title: t('payroll.pendingAdvances.table.repaymentMethod'),
       dataIndex: 'repayment',
       key: 'repayment',
       render: (repayment: any) => (
         <div className="text-sm">
           <div className="text-gray-700 dark:text-gray-300">
-            {repayment.method === 'installments' ? 'أقساط' : 'دفعة واحدة'}
+            {repayment.method === 'installments' ? t('payroll.pendingAdvances.repayment.installments') : t('payroll.pendingAdvances.repayment.full')}
           </div>
           {repayment.method === 'installments' && (
             <div className="text-xs text-gray-500 dark:text-gray-400">
-              {repayment.installments} قسط × {repayment.amountPerMonth.toFixed(2)} جنيه
+              {repayment.installments} {t('payroll.pendingAdvances.repayment.installmentsDetail', { amount: repayment.amountPerMonth.toFixed(2) })}
             </div>
           )}
         </div>
       )
     },
     {
-      title: 'الحالة',
+      title: t('payroll.pendingAdvances.table.status'),
       dataIndex: 'status',
       key: 'status',
       render: () => (
         <Tag color="warning" icon={<Clock size={14} />}>
-          قيد الانتظار
+          {t('payroll.pendingAdvances.status.pending')}
         </Tag>
       )
     },
     {
-      title: 'الإجراءات',
+      title: t('payroll.pendingAdvances.table.actions'),
       key: 'actions',
       render: (_: any, record: Advance) => (
         <Space>
@@ -213,7 +225,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
             onClick={() => handleAction(record, 'approve')}
             className="bg-green-600 hover:bg-green-700"
           >
-            اعتماد
+            {t('payroll.pendingAdvances.actions.approve')}
           </Button>
           <Button
             danger
@@ -221,7 +233,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
             icon={<XCircle size={16} />}
             onClick={() => handleAction(record, 'reject')}
           >
-            رفض
+            {t('payroll.pendingAdvances.actions.reject')}
           </Button>
         </Space>
       )
@@ -237,16 +249,16 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       <Card>
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
               <Clock size={28} className="text-orange-600" />
-              طلبات السلف المعلقة
+              {t('payroll.pendingAdvances.title')}
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              {advances.length} طلب في انتظار الموافقة
+              {advances.length} {t('payroll.pendingAdvances.subtitle')}
             </p>
           </div>
           <Button
@@ -254,7 +266,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
             onClick={fetchPendingAdvances}
             loading={loading}
           >
-            تحديث
+            {t('payroll.pendingAdvances.refresh')}
           </Button>
         </div>
 
@@ -265,7 +277,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
           loading={loading}
           pagination={{ pageSize: 10, showSizeChanger: true }}
           locale={{
-            emptyText: 'لا توجد طلبات سلف معلقة'
+            emptyText: t('payroll.pendingAdvances.empty')
           }}
         />
       </Card>
@@ -276,12 +288,12 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
             {actionType === 'approve' ? (
               <>
                 <CheckCircle className="text-green-600" />
-                <span>اعتماد السلفة</span>
+                <span>{t('payroll.pendingAdvances.approveModal.title')}</span>
               </>
             ) : (
               <>
                 <XCircle className="text-red-600" />
-                <span>رفض السلفة</span>
+                <span>{t('payroll.pendingAdvances.rejectModal.title')}</span>
               </>
             )}
           </div>
@@ -289,8 +301,8 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
         open={actionModalVisible}
         onOk={confirmAction}
         onCancel={() => setActionModalVisible(false)}
-        okText={actionType === 'approve' ? 'اعتماد' : 'رفض'}
-        cancelText="إلغاء"
+        okText={actionType === 'approve' ? t('payroll.pendingAdvances.approveModal.okText') : t('payroll.pendingAdvances.rejectModal.okText')}
+        cancelText={actionType === 'approve' ? t('payroll.pendingAdvances.approveModal.cancelText') : t('payroll.pendingAdvances.rejectModal.cancelText')}
         confirmLoading={loading}
         okButtonProps={{
           danger: actionType === 'reject',
@@ -302,19 +314,19 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
             <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">الموظف:</span>
+                  <span className="text-gray-600 dark:text-gray-400">{t('payroll.pendingAdvances.approveModal.employee')}</span>
                   <div className="font-medium text-gray-800 dark:text-gray-200">
                     {selectedAdvance.employeeId.personalInfo.name}
                   </div>
                 </div>
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">المبلغ:</span>
+                  <span className="text-gray-600 dark:text-gray-400">{t('payroll.pendingAdvances.approveModal.amount')}</span>
                   <div className="font-bold text-green-600">
-                    {selectedAdvance.amount.toFixed(2)} جنيه
+                    {selectedAdvance.amount.toFixed(2)} {currency()}
                   </div>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-gray-600 dark:text-gray-400">السبب:</span>
+                  <span className="text-gray-600 dark:text-gray-400">{t('payroll.pendingAdvances.approveModal.reason')}</span>
                   <div className="font-medium text-gray-800 dark:text-gray-200">
                     {selectedAdvance.reason}
                   </div>
@@ -325,22 +337,23 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
             {actionType === 'reject' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  سبب الرفض <span className="text-red-500">*</span>
+                  {t('payroll.pendingAdvances.rejectModal.rejectionReason')} <span className="text-red-500">*</span>
                 </label>
                 <Input.TextArea
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="اكتب سبب رفض السلفة..."
+                  placeholder={t('payroll.pendingAdvances.rejectModal.rejectionReasonPlaceholder')}
                   rows={4}
                   required
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 />
               </div>
             )}
 
             <p className="text-gray-600 dark:text-gray-400 text-sm">
               {actionType === 'approve'
-                ? 'هل أنت متأكد من اعتماد هذه السلفة؟'
-                : 'هل أنت متأكد من رفض هذه السلفة؟'}
+                ? t('payroll.pendingAdvances.approveModal.confirm')
+                : t('payroll.pendingAdvances.rejectModal.confirm')}
             </p>
           </div>
         )}

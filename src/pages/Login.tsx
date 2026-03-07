@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 
 interface FormData {
@@ -15,6 +16,7 @@ interface FormErrors {
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useApp();
+  const { t } = useTranslation();
 
   // State management
   const [formData, setFormData] = useState<FormData>({
@@ -54,23 +56,23 @@ const Login: React.FC = () => {
     const newErrors: FormErrors = {};
 
     if (!formData.email.trim()) {
-      newErrors.email = 'البريد الإلكتروني مطلوب';
+      newErrors.email = t('auth.emailRequired');
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {
-        newErrors.email = 'البريد الإلكتروني غير صحيح';
+        newErrors.email = t('auth.emailInvalid');
       }
     }
 
     if (!formData.password.trim()) {
-      newErrors.password = 'كلمة المرور مطلوبة';
+      newErrors.password = t('auth.passwordRequired');
     } else if (formData.password.length < 6) {
-      newErrors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+      newErrors.password = t('auth.passwordMinLength');
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [formData]);
+  }, [formData, t]);
 
   // Handle form submission
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -94,24 +96,24 @@ const Login: React.FC = () => {
         const errorMessage = result.message || '';
 
         if (errorMessage.includes('غير مفعل') || errorMessage.includes('pending')) {
-          setErrors({ email: 'الحساب غير مفعل. يرجى تفعيل بريدك الإلكتروني أولاً.' });
+          setErrors({ email: t('auth.accountNotVerified') });
           setShowResendLink(true);
         } else if (errorMessage.includes('غير صحيحة') || errorMessage.includes('خطأ')) {
-          setErrors({ email: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.' });
+          setErrors({ email: t('auth.invalidEmailOrPassword') });
         } else if (errorMessage.includes('غير موجود')) {
-          setErrors({ email: 'البريد الإلكتروني غير موجود في النظام.' });
+          setErrors({ email: t('auth.emailNotFound') });
         } else {
-          setErrors({ email: errorMessage || 'حدث خطأ أثناء تسجيل الدخول.' });
+          setErrors({ email: errorMessage || t('auth.loginErrorGeneric') });
         }
       }
     } catch {
       setErrors({
-        email: 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.'
+        email: t('auth.loginErrorRetry')
       });
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, validateForm, login, navigate, clearForm]);
+  }, [formData, validateForm, login, navigate, clearForm, t]);
 
   // Auto-focus email field on mount
   useEffect(() => {
@@ -136,10 +138,10 @@ const Login: React.FC = () => {
               </svg>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">
-              تسجيل الدخول
+              {t('auth.login')}
             </h1>
             <p className="text-white/80 text-sm">
-              مرحباً بك من جديد في نظام بومبا
+              {t('auth.welcomeBack')}
             </p>
           </div>
 
@@ -148,7 +150,7 @@ const Login: React.FC = () => {
             {/* Email Field */}
             <div>
               <label className="block text-sm font-medium text-white/90 mb-3 text-right">
-                البريد الإلكتروني
+                {t('common.email')}
               </label>
               <input
                 ref={emailInputRef}
@@ -158,7 +160,7 @@ const Login: React.FC = () => {
                 className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-right text-white placeholder-white/50 ${
                   errors.email ? 'border-red-400' : 'border-white/20'
                 }`}
-                placeholder="أدخل بريدك الإلكتروني"
+                placeholder={t('auth.emailPlaceholder')}
                 disabled={isSubmitting}
                 autoComplete="email"
                 dir="rtl"
@@ -171,7 +173,7 @@ const Login: React.FC = () => {
             {/* Password Field */}
             <div>
               <label className="block text-sm font-medium text-white/90 mb-3 text-right">
-                كلمة المرور
+                {t('common.password')}
               </label>
               <div className="relative">
                 <input
@@ -182,7 +184,7 @@ const Login: React.FC = () => {
                   className={`w-full px-4 py-4 pr-12 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-right text-white placeholder-white/50 ${
                     errors.password ? 'border-red-400' : 'border-white/20'
                   }`}
-                  placeholder="أدخل كلمة المرور"
+                  placeholder={t('auth.passwordPlaceholder')}
                   disabled={isSubmitting}
                   autoComplete="new-password"
                   dir="rtl"
@@ -192,8 +194,8 @@ const Login: React.FC = () => {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute left-4 top-1/2 transform -translate-y-1/2 p-2 text-white/60 hover:text-white transition-colors"
                   disabled={isSubmitting}
-                  aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
-                  title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                  title={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                 >
                   {showPassword ? (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -225,10 +227,10 @@ const Login: React.FC = () => {
               {isSubmitting ? (
                 <div className="flex items-center justify-center gap-3">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>جاري الدخول...</span>
+                  <span>{t('auth.loggingIn')}</span>
                 </div>
               ) : (
-                <span>دخول</span>
+                <span>{t('auth.loginButton')}</span>
               )}
             </button>
           </form>
@@ -253,7 +255,7 @@ const Login: React.FC = () => {
                 disabled={isSubmitting}
                 className="block w-full text-white/60 hover:text-white text-sm transition-colors disabled:opacity-50"
               >
-                نسيت كلمة المرور؟
+                {t('auth.forgotPassword')}
               </button>
             </div>
 
@@ -265,7 +267,7 @@ const Login: React.FC = () => {
                 disabled={isSubmitting}
                 className="text-white/80 hover:text-white font-medium text-sm transition-colors disabled:opacity-50"
               >
-                ليس لديك حساب؟ سجل منشأتك الآن
+                {t('auth.noAccount')}
               </button>
             </div>
           </div>

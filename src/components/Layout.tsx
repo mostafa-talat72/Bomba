@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Home,
   Gamepad2,
@@ -26,8 +27,10 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 import NotificationCenter from './NotificationCenter';
 import PermissionGuard from './PermissionGuard';
+import LanguageSwitcher from './LanguageSwitcher';
 import ScrollButtons from './ScrollButtons';
 
 // عرف نوع read بشكل صحيح
@@ -37,6 +40,8 @@ interface NotificationRead {
 }
 
 const Layout = () => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { user, logout, sessions, orders, notifications, subscriptionStatus } = useApp();
@@ -115,39 +120,52 @@ const Layout = () => {
     // التحقق من أن الشاشة صغيرة (mobile)
     const isMobile = window.innerWidth < 1024; // lg breakpoint
 
-    // إذا كان السحب من اليمين إلى اليسار (فتح الـ sidebar) - فقط على الشاشات الصغيرة
-    if (isLeftSwipe && !sidebarOpen && isMobile) {
-      setSidebarOpen(true);
-    }
-    // إذا كان السحب من اليسار إلى اليمين (إغلاق الـ sidebar) - فقط على الشاشات الصغيرة
-    else if (isRightSwipe && sidebarOpen && isMobile) {
-      setSidebarOpen(false);
+    if (isMobile) {
+      if (isRTL) {
+        // RTL: السحب من اليمين إلى اليسار لفتح الـ sidebar
+        if (isLeftSwipe && !sidebarOpen) {
+          setSidebarOpen(true);
+        }
+        // RTL: السحب من اليسار إلى اليمين لإغلاق الـ sidebar
+        else if (isRightSwipe && sidebarOpen) {
+          setSidebarOpen(false);
+        }
+      } else {
+        // LTR: السحب من اليسار إلى اليمين لفتح الـ sidebar
+        if (isRightSwipe && !sidebarOpen) {
+          setSidebarOpen(true);
+        }
+        // LTR: السحب من اليمين إلى اليسار لإغلاق الـ sidebar
+        else if (isLeftSwipe && sidebarOpen) {
+          setSidebarOpen(false);
+        }
+      }
     }
   };
 
   const navigation = [
-    { name: 'لوحة التحكم', href: '/dashboard', icon: Home, permissions: ['dashboard'] },
-    { name: 'الطلبات', href: '/cafe', icon: ShoppingCart, permissions: ['cafe'], badgePreparing: preparingOrders, badgeReady: readyOrders },
-    { name: 'الفواتير', href: '/billing', icon: Receipt, permissions: ['billing'] },
+    { name: t('nav.dashboard'), href: '/dashboard', icon: Home, permissions: ['dashboard'] },
+    { name: t('nav.orders'), href: '/cafe', icon: ShoppingCart, permissions: ['cafe'], badgePreparing: preparingOrders, badgeReady: readyOrders },
+    { name: t('nav.billing'), href: '/billing', icon: Receipt, permissions: ['billing'] },
     {
-      name: 'الأجهزة',
+      name: t('nav.devices'),
       icon: Server,
       permissions: ['playstation', 'computer'],
       children: [
-        { name: 'البلايستيشن', href: '/playstation', icon: Gamepad2, permissions: ['playstation'], badge: activePlaystationSessions },
-        { name: 'الكمبيوتر', href: '/computer', icon: Monitor, permissions: ['computer'], badge: activeComputerSessions },
+        { name: t('nav.playstation'), href: '/playstation', icon: Gamepad2, permissions: ['playstation'], badge: activePlaystationSessions },
+        { name: t('nav.computer'), href: '/computer', icon: Monitor, permissions: ['computer'], badge: activeComputerSessions },
       ]
     },
-    { name: 'المنيو', href: '/menu', icon: Utensils, permissions: ['menu'] },
-    { name: 'التقارير', href: '/reports', icon: BarChart3, permissions: ['reports'] },
-    { name: 'تقرير الاستهلاك', href: '/consumption-report', icon: Package2, permissions: ['reports'] },
-    { name: 'المخزون', href: '/inventory', icon: Package, permissions: ['inventory'] },
-    { name: 'التكاليف', href: '/costs', icon: Wallet, permissions: ['costs'] },
-    { name: 'المرتبات', href: '/payroll', icon: DollarSign, permissions: ['users'] },
-    { name: 'المستخدمين', href: '/users', icon: Users, permissions: ['users'] },
-    { name: 'الإشعارات', href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'], badge: unreadNotifications },
-    { name: 'الاشتراكات', href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'] },
-    { name: 'الإعدادات', href: '/settings', icon: Settings, permissions: ['settings'] },
+    { name: t('nav.menu'), href: '/menu', icon: Utensils, permissions: ['menu'] },
+    { name: t('nav.reports'), href: '/reports', icon: BarChart3, permissions: ['reports'] },
+    { name: t('nav.consumptionReport'), href: '/consumption-report', icon: Package2, permissions: ['reports'] },
+    { name: t('nav.inventory'), href: '/inventory', icon: Package, permissions: ['inventory'] },
+    { name: t('nav.costs'), href: '/costs', icon: Wallet, permissions: ['costs'] },
+    { name: t('nav.payroll'), href: '/payroll', icon: DollarSign, permissions: ['users'] },
+    { name: t('nav.users'), href: '/users', icon: Users, permissions: ['users'] },
+    { name: t('nav.notifications'), href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'], badge: unreadNotifications },
+    { name: t('nav.subscriptions'), href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'] },
+    { name: t('nav.settings'), href: '/settings', icon: Settings, permissions: ['settings'] },
   ];
 
   const isActive = (href: string) => location.pathname === href;
@@ -192,17 +210,17 @@ const Layout = () => {
       {/* Sidebar */}
       <div
         className={`
-          fixed inset-y-0 right-0 z-40 w-64 bg-white dark:bg-gray-950 shadow-lg transform transition-transform duration-300 ease-in-out
+          fixed inset-y-0 ${isRTL ? 'right-0' : 'left-0'} z-40 w-64 bg-white dark:bg-gray-950 shadow-lg transform transition-transform duration-300 ease-in-out
           flex flex-col overflow-hidden
-          ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+          ${sidebarOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')}
           lg:relative lg:translate-x-0 lg:w-64 lg:z-10
         `}
-        style={{ direction: 'rtl' }}
+        style={{ direction: isRTL ? 'rtl' : 'ltr' }}
       >
         {/* Sidebar Header */}
         <div className="flex items-center justify-between h-16 px-4 sm:px-6 bg-orange-600 dark:bg-orange-700 text-white flex-shrink-0">
           <div className="flex items-center min-w-0">
-            <ShoppingCart className="h-6 w-6 sm:h-8 sm:w-8 mr-2 sm:mr-3 flex-shrink-0" />
+            <ShoppingCart className={`h-6 w-6 sm:h-8 sm:w-8 ${isRTL ? 'mr-2 sm:mr-3' : 'ml-2 sm:ml-3'} flex-shrink-0`} />
             <h1 className="text-lg sm:text-xl font-bold truncate">Bomba</h1>
           </div>
           <button
@@ -220,27 +238,27 @@ const Layout = () => {
                   <User className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
                 </div>
               </div>
-            <div className="mr-2 sm:mr-3 flex-1 min-w-0">
+            <div className={`${isRTL ? 'mr-2 sm:mr-3' : 'ml-2 sm:ml-3'} flex-1 min-w-0`}>
               <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user?.name}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {user?.role === 'admin' ? 'مدير' :
-                 user?.role === 'staff' ? 'موظف' :
-                 user?.role === 'cashier' ? 'كاشير' :
-                 user?.role === 'kitchen' ? 'مطبخ' : 'موظف'}
+                {user?.role === 'admin' ? t('roles.admin') :
+                 user?.role === 'staff' ? t('roles.staff') :
+                 user?.role === 'cashier' ? t('roles.cashier') :
+                 user?.role === 'kitchen' ? t('roles.kitchen') : t('roles.staff')}
               </p>
             </div>
-            <div className="flex items-center space-x-1 space-x-reverse">
+            <div className={`flex items-center ${isRTL ? 'space-x-1 space-x-reverse' : 'space-x-1'}`}>
               <button
                 onClick={toggleDarkMode}
                 className="p-1 text-gray-400 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300 transition-colors duration-200 flex-shrink-0"
-                title={isDarkMode ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي"}
+                title={isDarkMode ? t('theme.switchToLight') : t('theme.switchToDark')}
               >
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
               <button
                 onClick={handleLogout}
                 className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200 flex-shrink-0"
-                title="تسجيل الخروج"
+                title={t('auth.logout')}
               >
                 <LogOut className="h-4 w-4" />
               </button>
@@ -257,22 +275,22 @@ const Layout = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                   </svg>
                 </div>
-                <p className="text-xs text-red-600 dark:text-red-400 font-medium">لا توجد صفحات متاحة</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">لم يتم منحك أي صلاحيات</p>
+                <p className="text-xs text-red-600 dark:text-red-400 font-medium">{t('nav.noPages')}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('nav.noPermissions')}</p>
               </div>
             ) : (
               filteredNavigation.map((item) => {
                 // إذا كان عنصر الأجهزة
-                if (item.name === 'الأجهزة' && item.children) {
+                if (item.name === t('nav.devices') && item.children) {
                   return (
                     <div key={item.name}>
                       <button
-                        className={`group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 ${devicesOpen ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-r-4 border-orange-600' : ''}`}
+                        className={`group flex items-center w-full px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 ${devicesOpen ? `bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ${isRTL ? 'border-r-4' : 'border-l-4'} border-orange-600` : ''}`}
                         onClick={() => setDevicesOpen((open) => !open)}
                       >
-                        <item.icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                        <item.icon className={`${isRTL ? 'ml-2 sm:ml-3' : 'mr-2 sm:mr-3'} h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0`} />
                         <span className="truncate">{item.name}</span>
-                        <span className="ml-auto">
+                        <span className={isRTL ? 'ml-auto' : 'mr-auto'}>
                           <svg className={`w-4 h-4 transition-transform duration-200 ${devicesOpen ? 'transform rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
@@ -289,15 +307,15 @@ const Layout = () => {
                                                               <Link
                                   to={child.href}
                                   className={`${isActive(child.href)
-                                    ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-r-4 border-orange-600'
+                                    ? `bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ${isRTL ? 'border-r-4' : 'border-l-4'} border-orange-600`
                                     : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                                     } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
                                   onClick={() => setSidebarOpen(false)}
                                 >
-                                <child.icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                                <child.icon className={`${isRTL ? 'ml-2 sm:ml-3' : 'mr-2 sm:mr-3'} h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0`} />
                                 <span className="truncate">{child.name}</span>
                                 {(child.badge ?? 0) > 0 && (
-                                  <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">
+                                  <span className={`${isRTL ? 'ml-2' : 'mr-2'} inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white`}>
                                     {child.badge}
                                   </span>
                                 )}
@@ -320,25 +338,25 @@ const Layout = () => {
                     <Link
                       to={item.href}
                       className={`${isActive(item.href)
-                        ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-r-4 border-orange-600'
+                        ? `bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ${isRTL ? 'border-r-4' : 'border-l-4'} border-orange-600`
                         : 'text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                         } group flex items-center px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors duration-200 min-w-0`}
                       onClick={() => setSidebarOpen(false)}
                     >
-                      <Icon className="ml-2 sm:ml-3 h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                      <Icon className={`${isRTL ? 'ml-2 sm:ml-3' : 'mr-2 sm:mr-3'} h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0`} />
                       <span className="truncate">{item.name}</span>
                       {(item.badge ?? 0) > 0 && (
-                        <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">
+                        <span className={`${isRTL ? 'ml-2' : 'mr-2'} inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white`}>
                           {item.badge}
                         </span>
                       )}
                       {Number(item.badgePreparing) > 0 && (
-                        <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500 text-white">
+                        <span className={`${isRTL ? 'ml-1' : 'mr-1'} inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500 text-white`}>
                           {item.badgePreparing}
                         </span>
                       )}
                       {Number(item.badgeReady) > 0 && (
-                        <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-green-600 text-white">
+                        <span className={`${isRTL ? 'ml-1' : 'mr-1'} inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-green-600 text-white`}>
                           {item.badgeReady}
                         </span>
                       )}
@@ -368,7 +386,7 @@ const Layout = () => {
                   </svg>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                      ⚠️ تنبيه: اشتراكك سينتهي خلال {daysLeft} {daysLeft === 1 ? 'يوم' : 'أيام'}
+                      ⚠️ {t('subscription.warning', { days: daysLeft })}
                     </p>
                   </div>
                 </div>
@@ -376,7 +394,7 @@ const Layout = () => {
                   href="/subscription"
                   className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-yellow-800 bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-800 dark:text-yellow-100 dark:hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 flex-shrink-0"
                 >
-                  تجديد الآن
+                  {t('subscription.renewNow')}
                 </a>
               </div>
             );
@@ -407,28 +425,32 @@ const Layout = () => {
               </button>
               <h2 className="mr-2 sm:mr-4 text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate xs:text-base xs:mr-0 xs:w-full xs:text-center">
                 {filteredNavigation.find(item => isActive(item.href))?.name ||
-                 (filteredNavigation.length === 0 ? 'لا توجد صفحات متاحة' : 'لوحة التحكم')}
+                 (filteredNavigation.length === 0 ? t('nav.noPages') : t('nav.dashboard'))}
               </h2>
               {/* إشارة بصرية للسحب على الشاشات الصغيرة */}
               {showSwipeIndicator && (
                 <div className="lg:hidden flex items-center mr-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span className="mr-1">← اسحب لفتح القائمة</span>
+                  <span className="mr-1">{t('nav.swipeToOpen')}</span>
                   <div className="w-1 h-1 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse"></div>
                 </div>
               )}
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-4 space-x-reverse flex-shrink-0 xs:w-full xs:justify-center xs:mt-2">
+              <LanguageSwitcher />
               <PermissionGuard requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
                 <NotificationCenter />
               </PermissionGuard>
               <div className="hidden sm:block text-sm text-gray-500 dark:text-gray-400">
-                {new Date().toLocaleDateString('ar-EG', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
+                {new Date().toLocaleDateString(
+                  isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
+                  {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  }
+                )}
               </div>
             </div>
           </div>

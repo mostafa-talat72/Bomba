@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Clock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Session, Device } from '../services/api';
-
-// دالة لتحويل الأرقام الإنجليزية إلى العربية
-const toArabicNumbers = (str: string): string => {
-  const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-  return str.replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
-};
+import { formatDecimal, formatCurrency } from '../utils/formatters';
 
 interface SessionCostDisplayProps {
   session: Session;
@@ -18,6 +14,7 @@ interface SessionCostDisplayProps {
  * Calculates cost on the frontend based on controllersHistory
  */
 export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session, device }) => {
+  const { t, i18n } = useTranslation();
   const [currentCost, setCurrentCost] = useState(0);
   const [duration, setDuration] = useState({ hours: 0, minutes: 0 });
 
@@ -121,10 +118,10 @@ export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session,
       <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
         <div className="flex items-center">
           <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400 ml-2" />
-          <span className="text-sm text-green-700 dark:text-green-300">التكلفة الحالية:</span>
+          <span className="text-sm text-green-700 dark:text-green-300">{t('gaming.currentCost')}:</span>
         </div>
         <span className="text-lg font-bold text-green-800 dark:text-green-200">
-          {toArabicNumbers(String(currentCost))} ج.م
+          {formatCurrency(currentCost, i18n.language)}
         </span>
       </div>
 
@@ -132,19 +129,19 @@ export const SessionCostDisplay: React.FC<SessionCostDisplayProps> = ({ session,
       <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
         <div className="flex items-center">
           <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400 ml-2" />
-          <span className="text-xs text-blue-700 dark:text-blue-300">المدة:</span>
+          <span className="text-xs text-blue-700 dark:text-blue-300">{t('gaming.duration')}:</span>
         </div>
         <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">
-          {duration.hours > 0 && `${toArabicNumbers(String(duration.hours))} س `}
-          {toArabicNumbers(String(duration.minutes))} د
+          {duration.hours > 0 && `${formatDecimal(duration.hours, i18n.language)} ${t('dashboard.hours')} `}
+          {formatDecimal(duration.minutes, i18n.language)} ${t('dashboard.minutes')}
         </span>
       </div>
 
       {/* Current Rate */}
       <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
-        <span className="text-xs text-gray-600 dark:text-gray-400">السعر الحالي:</span>
+        <span className="text-xs text-gray-600 dark:text-gray-400">{t('gaming.currentRate')}:</span>
         <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
-          {toArabicNumbers(String(getCurrentRate()))} ج.م/ساعة
+          {formatCurrency(getCurrentRate(), i18n.language)}/{t('dashboard.hours')}
         </span>
       </div>
     </div>

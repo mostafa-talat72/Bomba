@@ -1,0 +1,173 @@
+{
+  "ar": {
+    "pendingAdvances": {
+      "title": "طلبات السلف المعلقة",
+      "subtitle": "طلب في انتظار الموافقة",
+      "refresh": "تحديث",
+      "table": {
+        "requestId": "رقم الطلب",
+        "employee": "الموظف",
+        "amount": "المبلغ",
+        "reason": "السبب",
+        "requestDate": "تاريخ الطلب",
+        "repaymentMethod": "طريقة السداد",
+        "status": "الحالة",
+        "actions": "الإجراءات"
+      },
+      "repayment": {
+        "installments": "أقساط",
+        "full": "دفعة واحدة",
+        "installmentsDetail": "قسط × {amount} جنيه"
+      },
+      "status": {
+        "pending": "قيد الانتظار"
+      },
+      "actions": {
+        "approve": "اعتماد",
+        "reject": "رفض"
+      },
+      "approveModal": {
+        "title": "اعتماد السلفة",
+        "employee": "الموظف:",
+        "amount": "المبلغ:",
+        "reason": "السبب:",
+        "confirm": "هل أنت متأكد من اعتماد هذه السلفة؟",
+        "okText": "اعتماد",
+        "cancelText": "إلغاء"
+      },
+      "rejectModal": {
+        "title": "رفض السلفة",
+        "employee": "الموظف:",
+        "amount": "المبلغ:",
+        "reason": "السبب:",
+        "rejectionReason": "سبب الرفض",
+        "rejectionReasonRequired": "مطلوب",
+        "rejectionReasonPlaceholder": "اكتب سبب رفض السلفة...",
+        "confirm": "هل أنت متأكد من رفض هذه السلفة؟",
+        "okText": "رفض",
+        "cancelText": "إلغاء"
+      },
+      "messages": {
+        "loadError": "فشل في تحميل طلبات السلف",
+        "approveSuccess": "تم اعتماد السلفة بنجاح",
+        "rejectSuccess": "تم رفض السلفة",
+        "updateError": "فشل في تحديث حالة السلفة"
+      },
+      "empty": "لا توجد طلبات سلف معلقة"
+    }
+  },
+  "en": {
+    "pendingAdvances": {
+      "title": "Pending Advance Requests",
+      "subtitle": "request awaiting approval",
+      "refresh": "Refresh",
+      "table": {
+        "requestId": "Request ID",
+        "employee": "Employee",
+        "amount": "Amount",
+        "reason": "Reason",
+        "requestDate": "Request Date",
+        "repaymentMethod": "Repayment Method",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "repayment": {
+        "installments": "Installments",
+        "full": "Full Payment",
+        "installmentsDetail": "installment × {amount} EGP"
+      },
+      "status": {
+        "pending": "Pending"
+      },
+      "actions": {
+        "approve": "Approve",
+        "reject": "Reject"
+      },
+      "approveModal": {
+        "title": "Approve Advance",
+        "employee": "Employee:",
+        "amount": "Amount:",
+        "reason": "Reason:",
+        "confirm": "Are you sure you want to approve this advance?",
+        "okText": "Approve",
+        "cancelText": "Cancel"
+      },
+      "rejectModal": {
+        "title": "Reject Advance",
+        "employee": "Employee:",
+        "amount": "Amount:",
+        "reason": "Reason:",
+        "rejectionReason": "Rejection Reason",
+        "rejectionReasonRequired": "Required",
+        "rejectionReasonPlaceholder": "Enter rejection reason...",
+        "confirm": "Are you sure you want to reject this advance?",
+        "okText": "Reject",
+        "cancelText": "Cancel"
+      },
+      "messages": {
+        "loadError": "Failed to load advance requests",
+        "approveSuccess": "Advance approved successfully",
+        "rejectSuccess": "Advance rejected",
+        "updateError": "Failed to update advance status"
+      },
+      "empty": "No pending advance requests"
+    }
+  },
+  "fr": {
+    "pendingAdvances": {
+      "title": "Demandes d'Avance en Attente",
+      "subtitle": "demande en attente d'approbation",
+      "refresh": "Actualiser",
+      "table": {
+        "requestId": "ID de Demande",
+        "employee": "Employé",
+        "amount": "Montant",
+        "reason": "Raison",
+        "requestDate": "Date de Demande",
+        "repaymentMethod": "Méthode de Remboursement",
+        "status": "Statut",
+        "actions": "Actions"
+      },
+      "repayment": {
+        "installments": "Versements",
+        "full": "Paiement Complet",
+        "installmentsDetail": "versement × {amount} EGP"
+      },
+      "status": {
+        "pending": "En Attente"
+      },
+      "actions": {
+        "approve": "Approuver",
+        "reject": "Rejeter"
+      },
+      "approveModal": {
+        "title": "Approuver l'Avance",
+        "employee": "Employé:",
+        "amount": "Montant:",
+        "reason": "Raison:",
+        "confirm": "Êtes-vous sûr de vouloir approuver cette avance?",
+        "okText": "Approuver",
+        "cancelText": "Annuler"
+      },
+      "rejectModal": {
+        "title": "Rejeter l'Avance",
+        "employee": "Employé:",
+        "amount": "Montant:",
+        "reason": "Raison:",
+        "rejectionReason": "Raison du Rejet",
+        "rejectionReasonRequired": "Requis",
+        "rejectionReasonPlaceholder": "Entrez la raison du rejet...",
+        "confirm": "Êtes-vous sûr de vouloir rejeter cette avance?",
+        "okText": "Rejeter",
+        "cancelText": "Annuler"
+      },
+      "messages": {
+        "loadError": "Échec du chargement des demandes d'avance",
+        "approveSuccess": "Avance approuvée avec succès",
+        "rejectSuccess": "Avance rejetée",
+        "updateError": "Échec de la mise à jour du statut de l'avance"
+      },
+      "empty": "Aucune demande d'avance en attente"
+    }
+  }
+}

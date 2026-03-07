@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle, Folder, FolderOpen, ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory } from '../services/api';
 import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
 import '../styles/menu-animations.css';
 
 const Menu: React.FC = () => {
+	const { t, i18n } = useTranslation();
+	const { language } = useLanguage();
 	const {
 		menuItems,
 		menuSections,
@@ -56,7 +60,15 @@ const Menu: React.FC = () => {
 		ingredients: [] as { item: string; quantity: number; unit: string }[]
 	});
 
-	const unitOptions = ['جرام', 'كيلو', 'مل', 'لتر', 'قطعة', 'ملعقة', 'كوب'];
+	const unitOptions = [
+		t('menu.units.gram'),
+		t('menu.units.kilo'),
+		t('menu.units.ml'),
+		t('menu.units.liter'),
+		t('menu.units.piece'),
+		t('menu.units.spoon'),
+		t('menu.units.cup')
+	];
 
 	// Form states
 	const [sectionFormData, setSectionFormData] = useState({
@@ -83,7 +95,7 @@ const Menu: React.FC = () => {
 		try {
 			await fetchMenuSections();
 		} catch (error) {
-			showNotification('خطأ في تحميل الأقسام', 'error');
+			showNotification(t('menu.notifications.loadingSectionsError'), 'error');
 		}
 	};
 
@@ -91,7 +103,7 @@ const Menu: React.FC = () => {
 		try {
 			await fetchMenuCategories();
 		} catch (error) {
-			showNotification('خطأ في تحميل الفئات', 'error');
+			showNotification(t('menu.notifications.loadingCategoriesError'), 'error');
 		}
 	};
 
@@ -154,7 +166,7 @@ const Menu: React.FC = () => {
 			// Fetch all menu items
 			await fetchMenuItems();
 		} catch (error) {
-			showNotification('خطأ في تحميل قائمة الطعام', 'error');
+			showNotification(t('menu.notifications.loadingMenuError'), 'error');
 		} finally {
 			setLoading(false);
 		}
@@ -203,7 +215,7 @@ const Menu: React.FC = () => {
 				setShowDeleteModal({show: false, itemId: null, type: 'item'});
 			}
 		} catch (error) {
-			showNotification('حدث خطأ أثناء حذف العنصر', 'error');
+			showNotification(t('menu.notifications.deleteItemError'), 'error');
 		} finally {
 			setDeletingItems(prev => ({ ...prev, [itemId]: false }));
 		}
@@ -240,7 +252,7 @@ const Menu: React.FC = () => {
 
 	const handleSaveSection = async () => {
 		if (!sectionFormData.name.trim()) {
-			showNotification('يرجى إدخال اسم القسم', 'error');
+			showNotification(t('menu.notifications.enterSectionName'), 'error');
 			return;
 		}
 
@@ -255,7 +267,7 @@ const Menu: React.FC = () => {
 			setEditingSection(null);
 			await loadMenuSections();
 		} catch (error) {
-			showNotification('حدث خطأ أثناء حفظ القسم', 'error');
+			showNotification(t('menu.notifications.saveSectionError'), 'error');
 		} finally {
 			setSavingSection(false);
 		}
@@ -273,7 +285,7 @@ const Menu: React.FC = () => {
 				setShowDeleteModal({show: false, itemId: null, type: 'item'});
 			}
 		} catch (error) {
-			showNotification('حدث خطأ أثناء حذف القسم', 'error');
+			showNotification(t('menu.notifications.deleteSectionError'), 'error');
 		} finally {
 			setDeletingSections(prev => ({ ...prev, [itemId]: false }));
 		}
@@ -308,12 +320,12 @@ const Menu: React.FC = () => {
 
 	const handleSaveCategory = async () => {
 		if (!categoryFormData.name.trim()) {
-			showNotification('يرجى إدخال اسم الفئة', 'error');
+			showNotification(t('menu.notifications.enterCategoryName'), 'error');
 			return;
 		}
 
 		if (!categoryFormData.section) {
-			showNotification('يرجى اختيار القسم', 'error');
+			showNotification(t('menu.selectSection'), 'error');
 			return;
 		}
 
@@ -328,7 +340,7 @@ const Menu: React.FC = () => {
 			setEditingCategory(null);
 			await loadMenuCategories();
 		} catch (error) {
-			showNotification('حدث خطأ أثناء حفظ الفئة', 'error');
+			showNotification(t('menu.notifications.saveCategoryError'), 'error');
 		} finally {
 			setSavingCategory(false);
 		}
@@ -346,7 +358,7 @@ const Menu: React.FC = () => {
 				setShowDeleteModal({show: false, itemId: null, type: 'item'});
 			}
 		} catch (error) {
-			showNotification('حدث خطأ أثناء حذف الفئة', 'error');
+			showNotification(t('menu.notifications.deleteCategoryError'), 'error');
 		} finally {
 			setDeletingCategories(prev => ({ ...prev, [itemId]: false }));
 		}
@@ -354,7 +366,7 @@ const Menu: React.FC = () => {
 
 	const handleSaveItem = async () => {
 		if (!formData.name || !formData.price || !formData.category) {
-			showNotification('يرجى ملء جميع الحقول المطلوبة', 'error');
+			showNotification(t('menu.notifications.enterItemName'), 'error');
 			return;
 		}
 
@@ -362,7 +374,7 @@ const Menu: React.FC = () => {
 
 		const price = parseFloat(formData.price);
 		if (isNaN(price) || price <= 0) {
-			showNotification('يرجى إدخال سعر صحيح', 'error');
+			showNotification(t('menu.notifications.enterPrice'), 'error');
 			return;
 		}
 
@@ -376,7 +388,7 @@ const Menu: React.FC = () => {
 
 		// التحقق من أن جميع الخامات المضافة صحيحة (فقط إذا كانت هناك خامات مضافة)
 		if (formData.ingredients.length > 0 && validIngredients.length !== formData.ingredients.length) {
-			showNotification('يرجى التأكد من إدخال بيانات صحيحة للخامات المضافة', 'error');
+			showNotification(t('menu.notifications.invalidIngredients'), 'error');
 			return;
 		}
 
@@ -398,18 +410,18 @@ const Menu: React.FC = () => {
 					setShowAddModal(false);
 					setEditingItem(null);
 					await loadMenuItems();
-					showNotification('تم تحديث العنصر بنجاح', 'success');
+					showNotification(t('menu.notifications.itemUpdatedSuccess'), 'success');
 				}
 			} else {
 				const result = await createMenuItem(itemData);
 				if (result) {
 					setShowAddModal(false);
 					await loadMenuItems();
-					showNotification('تمت إضافة العنصر بنجاح', 'success');
+					showNotification(t('menu.notifications.itemAddedSuccess'), 'success');
 				}
 			}
 		} catch (error) {
-			showNotification('حدث خطأ أثناء حفظ العنصر', 'error');
+			showNotification(t('menu.notifications.saveItemError'), 'error');
 		} finally {
 			setSavingItem(false);
 		}
@@ -432,7 +444,7 @@ const Menu: React.FC = () => {
 
 
 	const getStatusText = (isAvailable: boolean) => {
-		return isAvailable ? 'متاح' : 'غير متاح';
+		return isAvailable ? t('menu.available') : t('menu.unavailable');
 	};
 
 	const addIngredient = () => {
@@ -568,11 +580,11 @@ const Menu: React.FC = () => {
 							</div>
 							<div>
 								<h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent dark:from-orange-400 dark:to-orange-300">
-									إدارة المنيو
+									{t('menu.pageTitle')}
 								</h1>
 								<p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
 									<Sparkles className="h-4 w-4" />
-									إدارة قائمة الطعام والمشروبات بأناقة
+									{t('menu.pageSubtitle')}
 								</p>
 							</div>
 						</div>
@@ -583,21 +595,21 @@ const Menu: React.FC = () => {
 							className="action-button bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 dark:from-blue-500 dark:to-blue-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
 						>
 							<Layers className="h-5 w-5" />
-							<span className="font-medium">إضافة قسم</span>
+							<span className="font-medium">{t('menu.addSection')}</span>
 						</button>
 						<button
 							onClick={() => handleAddCategory()}
 							className="action-button bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 dark:from-green-500 dark:to-green-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
 						>
 							<Folder className="h-5 w-5" />
-							<span className="font-medium">إضافة فئة</span>
+							<span className="font-medium">{t('menu.addCategory')}</span>
 						</button>
 						<button
 							onClick={() => handleAddItem()}
 							className="action-button bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
 						>
 							<Plus className="h-5 w-5" />
-							<span className="font-medium">إضافة عنصر</span>
+							<span className="font-medium">{t('menu.addItem')}</span>
 						</button>
 					</div>
 				</div>
@@ -609,7 +621,7 @@ const Menu: React.FC = () => {
 					<div className="flex-1 min-w-[250px]">
 						<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
 							<Search className="h-4 w-4 text-orange-500" />
-							البحث السريع
+							{t('menu.quickSearch')}
 						</label>
 						<div className="relative">
 							<Search className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
@@ -617,15 +629,15 @@ const Menu: React.FC = () => {
 								type="text"
 								value={searchTerm}
 								onChange={(e) => setSearchTerm(e.target.value)}
-								placeholder="ابحث في الأقسام والفئات والعناصر..."
+								placeholder={t('menu.searchPlaceholder')}
 								className="search-input w-full pr-12 pl-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 focus:bg-white dark:focus:bg-gray-600 transition-all duration-200"
 							/>
 						</div>
 					</div>
 					<div className="flex items-end">
 						<div className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 px-6 py-3 rounded-xl border border-orange-200 dark:border-orange-700">
-							<div className="text-xs text-gray-600 dark:text-gray-400 mb-1">إجمالي العناصر</div>
-							<div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{filteredMenuItems.length}</div>
+							<div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('menu.totalItems')}</div>
+							<div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatDecimal(filteredMenuItems.length, i18n.language)}</div>
 						</div>
 					</div>
 				</div>
@@ -635,15 +647,15 @@ const Menu: React.FC = () => {
 			{loading ? (
 				<div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
 					<div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-200 border-t-orange-600 dark:border-orange-800 dark:border-t-orange-400 mx-auto"></div>
-					<p className="mt-4 text-gray-600 dark:text-gray-300 font-medium">جاري التحميل...</p>
+					<p className="mt-4 text-gray-600 dark:text-gray-300 font-medium">{t('menu.loading')}</p>
 				</div>
 			) : menuSections.length === 0 ? (
 				<div className="empty-state text-center py-16 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
 					<div className="bg-gradient-to-br from-orange-100 to-orange-50 dark:from-orange-900/20 dark:to-orange-800/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
 						<Layers className="h-10 w-10 text-orange-600 dark:text-orange-400" />
 					</div>
-					<p className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">لا توجد أقسام في المنيو</p>
-					<p className="text-sm text-gray-500 dark:text-gray-400">ابدأ بإضافة قسم جديد لتنظيم قائمة الطعام</p>
+					<p className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.noSections')}</p>
+					<p className="text-sm text-gray-500 dark:text-gray-400">{t('menu.noSectionsSubtitle')}</p>
 				</div>
 			) : (
 				<div className="space-y-6">
@@ -679,14 +691,14 @@ const Menu: React.FC = () => {
 												<button
 													onClick={() => handleAddCategory(section.id)}
 													className="action-button p-2.5 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
-													title="إضافة فئة"
+													title={t('menu.addCategory')}
 												>
 													<Plus className="h-5 w-5" />
 												</button>
 												<button
 													onClick={() => handleEditSection(section)}
 													className="action-button p-2.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
-													title="تعديل القسم"
+													title={t('menu.editSection')}
 												>
 													<Edit className="h-5 w-5" />
 												</button>
@@ -694,7 +706,7 @@ const Menu: React.FC = () => {
 													onClick={() => openDeleteModal(section.id, 'section')}
 													disabled={deletingSections[section.id]}
 													className={`action-button p-2.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md ${deletingSections[section.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-													title="حذف القسم"
+													title={t('menu.deleteSection')}
 												>
 													{deletingSections[section.id] ? (
 														<div className="animate-spin rounded-full h-5 w-5 border-2 border-red-200 border-t-red-600"></div>
@@ -712,7 +724,7 @@ const Menu: React.FC = () => {
 											{sectionCategories.length === 0 ? (
 												<div className="empty-state text-center py-8 bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600">
 													<Folder className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-													<p className="text-gray-500 dark:text-gray-400 text-sm">لا توجد فئات في هذا القسم</p>
+													<p className="text-gray-500 dark:text-gray-400 text-sm">{t('menu.noCategoriesInSection')}</p>
 												</div>
 											) : (
 												sectionCategories.map((category) => {
@@ -744,7 +756,7 @@ const Menu: React.FC = () => {
 																			<div className="flex items-center gap-2">
 																				<h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{category.name}</h3>
 																				<span className="badge px-2.5 py-1 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
-																					{filteredCategoryItems.length} عنصر
+																					{formatDecimal(filteredCategoryItems.length, i18n.language)} {t('menu.itemsCountLabel')}
 																				</span>
 																			</div>
 																			{category.description && (
@@ -756,14 +768,14 @@ const Menu: React.FC = () => {
 																		<button
 																			onClick={() => handleAddItem(category.id)}
 																			className="action-button p-2 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-																			title="إضافة عنصر"
+																			title={t('menu.addItem')}
 																		>
 																			<Plus className="h-4 w-4" />
 																		</button>
 																		<button
 																			onClick={() => handleEditCategory(category)}
 																			className="action-button p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-																			title="تعديل الفئة"
+																			title={t('menu.editCategory')}
 																		>
 																			<Edit className="h-4 w-4" />
 																		</button>
@@ -771,7 +783,7 @@ const Menu: React.FC = () => {
 																			onClick={() => openDeleteModal(category.id, 'category')}
 																			disabled={deletingCategories[category.id]}
 																			className={`action-button p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md ${deletingCategories[category.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-																			title="حذف الفئة"
+																			title={t('menu.deleteCategory')}
 																		>
 																			{deletingCategories[category.id] ? (
 																				<div className="animate-spin rounded-full h-4 w-4 border-2 border-red-200 border-t-red-600"></div>
@@ -790,7 +802,7 @@ const Menu: React.FC = () => {
 																		<div className="empty-state text-center py-8 bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600">
 																			<Utensils className="h-8 w-8 text-gray-400 mx-auto mb-2" />
 																			<p className="text-gray-500 dark:text-gray-400 text-sm">
-																				{searchTerm ? 'لا توجد نتائج للبحث' : 'لا توجد عناصر في هذه الفئة'}
+																				{searchTerm ? t('menu.noSearchResults') : t('menu.noItemsInCategory')}
 																			</p>
 																		</div>
 																	) : (
@@ -802,7 +814,7 @@ const Menu: React.FC = () => {
 																							<div className="flex items-center gap-2 mb-2 flex-wrap">
 																								<h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{item.name}</h3>
 																								{item.isNew && (
-																									<span className="badge px-2.5 py-1 text-xs font-semibold bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full shadow-sm">جديد</span>
+																									<span className="badge px-2.5 py-1 text-xs font-semibold bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full shadow-sm">{t('menu.new')}</span>
 																								)}
 																								{item.isPopular && (
 																									<Star className="popular-star h-5 w-5 text-yellow-500 fill-yellow-500" />
@@ -813,7 +825,7 @@ const Menu: React.FC = () => {
 																							)}
 																							{item.ingredients && item.ingredients.length > 0 && (
 																								<div className="text-xs text-blue-600 dark:text-blue-400 mb-3 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
-																									<span className="font-semibold">الخامات:</span> {item.ingredients.map(ing => {
+																									<span className="font-semibold">{t('menu.ingredientsLabel')}:</span> {item.ingredients.map(ing => {
 																										const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
 																										return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
 																									}).join(', ')}
@@ -827,15 +839,15 @@ const Menu: React.FC = () => {
 
 																					<div className="space-y-3 mb-5 pb-5 border-b border-gray-200 dark:border-gray-700">
 																						<div className="flex items-center justify-between">
-																							<span className="price-tag text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">{formatCurrency(item.price)}</span>
+																							<span className="price-tag text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">{formatCurrency(item.price, i18n.language)}</span>
 																							<div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-full">
 																								<TrendingUp className="h-4 w-4" />
-																								<span className="font-semibold">{formatDecimal(item.orderCount)}</span>
+																								<span className="font-semibold">{formatDecimal(item.orderCount, i18n.language)}</span>
 																							</div>
 																						</div>
 																						<div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
 																							<Clock className="h-4 w-4 text-orange-500" />
-																							<span>{formatDecimal(item.preparationTime)} دقيقة</span>
+																							<span>{formatDecimal(item.preparationTime, i18n.language)} {t('menu.minutes')}</span>
 																						</div>
 																					</div>
 
@@ -843,23 +855,23 @@ const Menu: React.FC = () => {
 																						<button
 																							onClick={() => handleEditItem(item)}
 																							className="action-button flex-1 p-2.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
-																							title="تعديل"
+																							title={t('menu.edit')}
 																						>
 																							<Edit className="h-4 w-4" />
-																							<span className="text-sm font-medium">تعديل</span>
+																							<span className="text-sm font-medium">{t('menu.edit')}</span>
 																						</button>
 																						<button
 																							onClick={() => openDeleteModal(item.id, 'item')}
 																							disabled={deletingItems[item.id]}
 																							className={`action-button flex-1 p-2.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 ${deletingItems[item.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-																							title="حذف"
+																							title={t('menu.delete')}
 																						>
 																							{deletingItems[item.id] ? (
 																								<div className="animate-spin rounded-full h-4 w-4 border-2 border-red-200 border-t-red-600"></div>
 																							) : (
 																								<>
 																									<Trash2 className="h-4 w-4" />
-																									<span className="text-sm font-medium">حذف</span>
+																									<span className="text-sm font-medium">{t('menu.delete')}</span>
 																								</>
 																							)}
 																						</button>
@@ -901,7 +913,7 @@ const Menu: React.FC = () => {
 										<Utensils className="h-6 w-6 text-white" />
 									</div>
 									<h3 className="text-xl font-bold text-white">
-										{editingItem ? 'تعديل العنصر' : 'إضافة عنصر جديد'}
+										{editingItem ? t('menu.editItemTitle') : t('menu.addNewItem')}
 									</h3>
 								</div>
 								<button
@@ -915,18 +927,18 @@ const Menu: React.FC = () => {
 						<div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">اسم العنصر *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.itemNameLabel')} {t('menu.required')}</label>
 								<input
 									type="text"
 									value={formData.name}
 									onChange={(e) => setFormData({ ...formData, name: e.target.value })}
 									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-									placeholder="مثال: قهوة تركية"
+									placeholder={t('menu.itemNamePlaceholder')}
 								/>
 							</div>
 
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">السعر (ج.م) *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.priceEGP')} {t('menu.required')}</label>
 								<input
 									type="number"
 									value={formData.price}
@@ -939,13 +951,13 @@ const Menu: React.FC = () => {
 							</div>
 
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">الفئة *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.category')} {t('menu.required')}</label>
 								<select
 									value={formData.category}
 									onChange={(e) => setFormData({ ...formData, category: e.target.value })}
 									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
 								>
-									<option value="">اختر الفئة</option>
+									<option value="">{t('menu.selectCategory')}</option>
 									{menuCategories.map(category => {
 										const sectionName = typeof category.section === 'string' 
 											? menuSections.find(s => s.id === category.section)?.name || ''
@@ -960,7 +972,7 @@ const Menu: React.FC = () => {
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">وقت التحضير (دقيقة)</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('menu.preparationTimeMinutes')}</label>
 								<input
 									type="number"
 									value={formData.preparationTime}
@@ -979,7 +991,7 @@ const Menu: React.FC = () => {
 											onChange={(e) => setFormData({ ...formData, isAvailable: e.target.checked })}
 											className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
 										/>
-										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">متاح للطلب</span>
+										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">{t('menu.availableForOrder')}</span>
 									</label>
 									<label className="flex items-center">
 								<input
@@ -988,30 +1000,30 @@ const Menu: React.FC = () => {
 											onChange={(e) => setFormData({ ...formData, isPopular: e.target.checked })}
 											className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
 										/>
-										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">شائع</span>
+										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">{t('menu.popularItem')}</span>
 									</label>
 							</div>
 
 							<div className="md:col-span-2">
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.description')}</label>
 								<textarea
 									value={formData.description}
 									onChange={(e) => setFormData({ ...formData, description: e.target.value })}
 									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
 									rows={3}
-									placeholder="وصف مختصر للعنصر..."
+									placeholder={t('menu.descriptionPlaceholder')}
 								/>
 							</div>
 
 							<div className="md:col-span-2">
 									<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-										الخامات المرتبطة
+										{t('menu.ingredientsLinked')}
 										<span className="text-xs text-gray-500 dark:text-gray-400 mr-2 font-normal">
 											({(() => {
 												const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
 												const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
 												const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
-												return `${formatDecimal(availableItems.length)} من ${formatDecimal(availableRawMaterials.length)} خامة متاحة`;
+												return `${formatDecimal(availableItems.length, i18n.language)} ${t('menu.of')} ${formatDecimal(availableRawMaterials.length, i18n.language)} ${t('menu.availableRawMaterials')}`;
 											})()})
 										</span>
 										{inventoryItems.length === 0 && (
@@ -1020,7 +1032,7 @@ const Menu: React.FC = () => {
 												onClick={() => fetchInventoryItems()}
 												className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mr-2"
 											>
-												تحديث الخامات
+												{t('menu.updateIngredients')}
 											</button>
 										)}
 									</label>
@@ -1031,13 +1043,13 @@ const Menu: React.FC = () => {
 									{formData.ingredients.map((ingredient, index) => (
 											<div key={index} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
 											<div className="flex-1">
-													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">الخامة</label>
+													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('menu.ingredients')}</label>
 												<select
 													value={ingredient.item}
 													onChange={(e) => updateIngredient(index, 'item', e.target.value)}
 														className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
 												>
-													<option value="">اختر الخامة</option>
+													<option value="">{t('menu.selectIngredient')}</option>
 													{inventoryItems && inventoryItems.length > 0 ? (
 														inventoryItems.filter(item => item.isRawMaterial).length > 0 ? (
 															(() => {
@@ -1052,7 +1064,7 @@ const Menu: React.FC = () => {
 																	});
 
 																if (availableItems.length === 0) {
-																	return <option value="" disabled>جميع الخامات مختارة بالفعل</option>;
+																	return <option value="" disabled>{t('menu.allIngredientsAlreadySelected')}</option>;
 																}
 
 																return availableItems.map(item => (
@@ -1062,15 +1074,15 @@ const Menu: React.FC = () => {
 																));
 															})()
 														) : (
-															<option value="" disabled>لا توجد خامات في المخزون</option>
+															<option value="" disabled>{t('menu.noIngredientsAvailable')}</option>
 														)
 													) : (
-														<option value="" disabled>جاري تحميل الخامات...</option>
+														<option value="" disabled>{t('menu.loadingIngredients')}</option>
 													)}
 												</select>
 											</div>
 											<div className="w-24">
-													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">الكمية</label>
+													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('menu.quantity')}</label>
 												<input
 													type="number"
 													value={ingredient.quantity}
@@ -1083,7 +1095,7 @@ const Menu: React.FC = () => {
 											</div>
 											<div className="w-24">
 													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-														الوحدة
+														{t('menu.unit')}
 														{(() => {
 															const selectedInventoryItem = inventoryItems.find(item => item.id === ingredient.item);
 															return selectedInventoryItem ? (
@@ -1132,9 +1144,9 @@ const Menu: React.FC = () => {
 															<svg className="h-5 w-5 text-yellow-600 dark:text-yellow-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
 															</svg>
-															<span className="text-yellow-800 dark:text-yellow-200 font-medium">جميع الخامات مختارة بالفعل</span>
+															<span className="text-yellow-800 dark:text-yellow-200 font-medium">{t('menu.allIngredientsSelected')}</span>
 														</div>
-														<p className="text-sm text-yellow-700 dark:text-yellow-300">لا يمكن إضافة المزيد من الخامات</p>
+														<p className="text-sm text-yellow-700 dark:text-yellow-300">{t('menu.cannotAddMore')}</p>
 													</div>
 												);
 											} else if (availableRawMaterials.length === 0 && inventoryItems.length > 0) {
@@ -1144,9 +1156,9 @@ const Menu: React.FC = () => {
 															<svg className="h-5 w-5 text-blue-600 dark:text-blue-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 															</svg>
-															<span className="text-blue-800 dark:text-blue-200 font-medium">لا توجد خامات متاحة</span>
+															<span className="text-blue-800 dark:text-blue-200 font-medium">{t('menu.noIngredientsAvailable')}</span>
 														</div>
-														<p className="text-sm text-blue-700 dark:text-blue-300">يجب إضافة خامات في المخزون أولاً</p>
+														<p className="text-sm text-blue-700 dark:text-blue-300">{t('menu.addIngredientsFirst')}</p>
 													</div>
 												);
 											} else {
@@ -1157,7 +1169,7 @@ const Menu: React.FC = () => {
 														className="w-full p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:border-orange-500 dark:hover:border-orange-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors duration-200 flex items-center justify-center"
 													>
 														<Plus className="h-4 w-4 ml-2" />
-														إضافة خامة
+														{t('menu.addIngredient')}
 											</button>
 										);
 											}
@@ -1172,7 +1184,7 @@ const Menu: React.FC = () => {
 								onClick={() => setShowAddModal(false)}
 								className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 font-medium shadow-sm hover:shadow-md"
 							>
-								إلغاء
+								{t('common.cancel')}
 							</button>
 							<button
 									type="button"
@@ -1183,12 +1195,12 @@ const Menu: React.FC = () => {
 									{savingItem ? (
 										<>
 											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-											<span>{editingItem ? 'جاري التحديث...' : 'جاري الإضافة...'}</span>
+											<span>{t('menu.saving')}</span>
 										</>
 									) : (
 										<>
 											<CheckCircle className="h-5 w-5" />
-											<span>{editingItem ? 'تحديث العنصر' : 'إضافة العنصر'}</span>
+											<span>{editingItem ? t('common.saveChanges') : t('common.save')}</span>
 										</>
 									)}
 							</button>
@@ -1208,7 +1220,7 @@ const Menu: React.FC = () => {
 									<div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
 										<Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
 									</div>
-									<h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">تأكيد الحذف</h3>
+									<h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('menu.confirmDelete')}</h3>
 								</div>
 								<button
 									onClick={closeDeleteModal}
@@ -1225,12 +1237,12 @@ const Menu: React.FC = () => {
 
 							<div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
 								<p className="text-gray-700 dark:text-gray-300 text-center font-medium">
-									{showDeleteModal.type === 'section' && 'هل أنت متأكد من رغبتك في حذف هذا القسم؟'}
-									{showDeleteModal.type === 'category' && 'هل أنت متأكد من رغبتك في حذف هذه الفئة؟'}
-									{showDeleteModal.type === 'item' && 'هل أنت متأكد من رغبتك في حذف هذا العنصر؟'}
+									{showDeleteModal.type === 'section' && `${t('menu.confirmDelete')} ${t('menu.deleteSection')}?`}
+									{showDeleteModal.type === 'category' && `${t('menu.confirmDelete')} ${t('menu.deleteCategory')}?`}
+									{showDeleteModal.type === 'item' && `${t('menu.confirmDelete')} ${t('menu.item')}?`}
 								</p>
 								<p className="text-sm text-red-600 dark:text-red-400 text-center mt-2">
-									⚠️ لا يمكن التراجع عن هذه العملية
+									⚠️ {t('menu.cannotUndo')}
 								</p>
 							</div>
 
@@ -1244,7 +1256,7 @@ const Menu: React.FC = () => {
 									}
 									className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium shadow-sm hover:shadow-md"
 								>
-									إلغاء
+									{t('common.cancel')}
 								</button>
 								<button
 									onClick={() => {
@@ -1264,12 +1276,12 @@ const Menu: React.FC = () => {
 										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])) ? (
 										<>
 											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-											<span>جاري الحذف...</span>
+											<span>{t('menu.deleting')}</span>
 										</>
 									) : (
 										<>
 											<Trash2 className="h-5 w-5" />
-											<span>حذف نهائياً</span>
+											<span>{t('common.delete')}</span>
 										</>
 									)}
 								</button>
@@ -1297,7 +1309,7 @@ const Menu: React.FC = () => {
 										<Layers className="h-6 w-6 text-white" />
 									</div>
 									<h3 className="text-xl font-bold text-white">
-										{editingSection ? 'تعديل القسم' : 'إضافة قسم جديد'}
+										{editingSection ? t('menu.editSectionTitle') : t('menu.addNewSection')}
 									</h3>
 								</div>
 								<button
@@ -1310,27 +1322,27 @@ const Menu: React.FC = () => {
 						</div>
 						<div className="p-6 space-y-5">
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">اسم القسم *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.sectionName')} {t('menu.required')}</label>
 								<input
 									type="text"
 									value={sectionFormData.name}
 									onChange={(e) => setSectionFormData({ ...sectionFormData, name: e.target.value })}
 									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-									placeholder="مثال: المشروبات"
+									placeholder={t('menu.sectionNamePlaceholder')}
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.description')}</label>
 								<textarea
 									value={sectionFormData.description}
 									onChange={(e) => setSectionFormData({ ...sectionFormData, description: e.target.value })}
 									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
 									rows={3}
-									placeholder="وصف القسم..."
+									placeholder={t('menu.descriptionPlaceholder')}
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ترتيب العرض</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.sortOrder')}</label>
 								<input
 									type="number"
 									value={sectionFormData.sortOrder}
@@ -1344,7 +1356,7 @@ const Menu: React.FC = () => {
 									onClick={() => setShowSectionModal(false)}
 									className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 font-medium shadow-sm hover:shadow-md"
 								>
-									إلغاء
+									{t('common.cancel')}
 								</button>
 								<button
 									onClick={handleSaveSection}
@@ -1354,12 +1366,12 @@ const Menu: React.FC = () => {
 									{savingSection ? (
 										<>
 											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-											<span>{editingSection ? 'جاري التحديث...' : 'جاري الإضافة...'}</span>
+											<span>{t('menu.saving')}</span>
 										</>
 									) : (
 										<>
 											<CheckCircle className="h-5 w-5" />
-											<span>{editingSection ? 'تحديث القسم' : 'إضافة القسم'}</span>
+											<span>{editingSection ? t('common.saveChanges') : t('common.save')}</span>
 										</>
 									)}
 								</button>
@@ -1387,7 +1399,7 @@ const Menu: React.FC = () => {
 										<Folder className="h-6 w-6 text-white" />
 									</div>
 									<h3 className="text-xl font-bold text-white">
-										{editingCategory ? 'تعديل الفئة' : 'إضافة فئة جديدة'}
+										{editingCategory ? t('menu.editCategoryTitle') : t('menu.addNewCategory')}
 									</h3>
 								</div>
 								<button
@@ -1400,40 +1412,40 @@ const Menu: React.FC = () => {
 						</div>
 						<div className="p-6 space-y-5">
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">اسم الفئة *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.categoryName')} {t('menu.required')}</label>
 								<input
 									type="text"
 									value={categoryFormData.name}
 									onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
 									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-									placeholder="مثال: المشروبات الساخنة"
+									placeholder={t('menu.categoryNamePlaceholder')}
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">القسم *</label>
+								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.selectSection')} {t('menu.required')}</label>
 								<select
 									value={categoryFormData.section}
 									onChange={(e) => setCategoryFormData({ ...categoryFormData, section: e.target.value })}
 									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
 								>
-									<option value="">اختر القسم</option>
+									<option value="">{t('menu.selectSection')}</option>
 									{menuSections.map(section => (
 										<option key={section.id} value={section.id}>{section.name}</option>
 									))}
 								</select>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الوصف</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('menu.description')}</label>
 								<textarea
 									value={categoryFormData.description}
 									onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
 									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
 									rows={3}
-									placeholder="وصف الفئة..."
+									placeholder={t('menu.descriptionPlaceholder')}
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ترتيب العرض</label>
+								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('menu.sortOrder')}</label>
 								<input
 									type="number"
 									value={categoryFormData.sortOrder}
@@ -1447,7 +1459,7 @@ const Menu: React.FC = () => {
 									onClick={() => setShowCategoryModal(false)}
 									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200"
 								>
-									إلغاء
+									{t('common.cancel')}
 								</button>
 								<button
 									onClick={handleSaveCategory}
@@ -1457,12 +1469,12 @@ const Menu: React.FC = () => {
 									{savingCategory ? (
 										<>
 											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
-											{editingCategory ? 'جاري التحديث...' : 'جاري الإضافة...'}
+											{t('menu.saving')}
 										</>
 									) : (
 										<>
 											<CheckCircle className="h-4 w-4 ml-2" />
-											{editingCategory ? 'تحديث الفئة' : 'إضافة الفئة'}
+											{editingCategory ? t('common.saveChanges') : t('common.save')}
 										</>
 									)}
 								</button>

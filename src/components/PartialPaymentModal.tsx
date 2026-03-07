@@ -4,6 +4,8 @@ import { Bill, Order, OrderItem } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
 import ConfirmModal from './ConfirmModal';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 interface PartialPaymentModalProps {
   isOpen: boolean;
@@ -20,6 +22,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   onPaymentSubmit,
   isProcessing
 }) => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: number }>({});
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -129,8 +133,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               <Receipt className="h-5 w-5 sm:h-8 sm:w-8 text-green-600 dark:text-green-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-lg sm:text-2xl font-bold text-white truncate">دفع أصناف محددة</h3>
-              <p className="text-xs sm:text-sm text-green-100 mt-1 truncate">فاتورة #{bill.billNumber}</p>
+              <h3 className="text-lg sm:text-2xl font-bold text-white truncate">{t('billing.partialPaymentModal.title')}</h3>
+              <p className="text-xs sm:text-sm text-green-100 mt-1 truncate">{t('billing.partialPaymentModal.billNumber')} #{bill.billNumber}</p>
             </div>
           </div>
           <button
@@ -146,7 +150,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
           <div className="mb-4 sm:mb-6">
             <h4 className="font-bold text-lg sm:text-xl text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center gap-2">
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              اختر الأصناف المطلوب دفعها
+              {t('billing.partialPaymentModal.selectItems')}
             </h4>
 
             {availableItems.length === 0 ? (
@@ -154,9 +158,9 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                 <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg">
                   <CheckCircle className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
                 </div>
-                <h5 className="font-bold text-lg sm:text-xl text-green-900 dark:text-green-100 mb-2">جميع العناصر مدفوعة بالكامل!</h5>
+                <h5 className="font-bold text-lg sm:text-xl text-green-900 dark:text-green-100 mb-2">{t('billing.partialPaymentModal.allItemsPaid')}</h5>
                 <p className="text-green-700 dark:text-green-300 text-base sm:text-lg px-4">
-                  لا توجد عناصر متبقية للدفع في هذه الفاتورة
+                  {t('billing.partialPaymentModal.noItemsRemaining')}
                 </p>
               </div>
             ) : (
@@ -175,12 +179,12 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                             <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate">{item.name}</span>
                             {item.hasAddons && (
                               <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full whitespace-nowrap">
-                                🍯 مع إضافات
+                                🍯 {t('billing.partialPaymentModal.withAddons')}
                               </span>
                             )}
                           </div>
                           <div className="text-xs sm:text-sm text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-1 rounded-lg inline-block mt-1">
-                            {formatCurrency(item.price)}
+                            {formatCurrency(item.price, i18n.language)}
                           </div>
                         </div>
                       </div>
@@ -189,16 +193,16 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                     {/* إحصائيات العنصر */}
                     <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3 sm:mb-4">
                       <div className="text-center p-2 sm:p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                        <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">الكمية الكلية</div>
-                        <div className="font-bold text-sm sm:text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity)}</div>
+                        <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">{t('billing.totalQuantity')}</div>
+                        <div className="font-bold text-sm sm:text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity, i18n.language)}</div>
                       </div>
                       <div className="text-center p-2 sm:p-3 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                        <div className="text-green-700 dark:text-green-300 text-xs mb-1">المدفوع</div>
-                        <div className="font-bold text-sm sm:text-lg text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity)}</div>
+                        <div className="text-green-700 dark:text-green-300 text-xs mb-1">{t('billing.paidQuantity')}</div>
+                        <div className="font-bold text-sm sm:text-lg text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity, i18n.language)}</div>
                       </div>
                       <div className="text-center p-2 sm:p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
-                        <div className="text-orange-700 dark:text-orange-300 text-xs mb-1">المتبقي</div>
-                        <div className="font-bold text-sm sm:text-lg text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity)}</div>
+                        <div className="text-orange-700 dark:text-orange-300 text-xs mb-1">{t('billing.remainingQuantity')}</div>
+                        <div className="font-bold text-sm sm:text-lg text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity, i18n.language)}</div>
                       </div>
                     </div>
 
@@ -215,7 +219,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                         </button>
                         
                         <span className="mx-1 sm:mx-2 w-8 sm:w-12 text-center select-none font-bold text-lg sm:text-2xl text-green-700 dark:text-green-300">
-                          {formatDecimal(selectedItems[item.id] || 0)}
+                          {formatDecimal(selectedItems[item.id] || 0, i18n.language)}
                         </span>
                         
                         <button
@@ -234,7 +238,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                         onClick={() => handlePayAll(item.id)}
                         disabled={(selectedItems[item.id] || 0) === item.remainingQuantity}
                       >
-                        دفع الكمية بالكامل
+                        {t('billing.partialPaymentModal.payFullQuantity')}
                       </button>
                     </div>
 
@@ -243,10 +247,10 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                       <div className="mt-3 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
                         <div className="flex justify-between items-center text-sm sm:text-base">
                           <span className="text-blue-800 dark:text-blue-200 font-medium">
-                            المبلغ المحدد: {formatDecimal(selectedItems[item.id])} × {formatCurrency(item.price)}
+                            {t('billing.partialPaymentModal.selectedAmount')}: {formatDecimal(selectedItems[item.id], i18n.language)} × {formatCurrency(item.price, i18n.language)}
                           </span>
                           <span className="font-bold text-blue-900 dark:text-blue-100">
-                            = {formatCurrency(item.price * (selectedItems[item.id] || 0))}
+                            = {formatCurrency(item.price * (selectedItems[item.id] || 0), i18n.language)}
                           </span>
                         </div>
                       </div>
@@ -260,7 +264,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
           {/* طريقة الدفع */}
           {availableItems.length > 0 && (
             <div className="mb-4 sm:mb-6">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">طريقة الدفع</h4>
+              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.paymentMethodLabel')}</h4>
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <button
                   onClick={() => setPaymentMethod('cash')}
@@ -271,7 +275,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                   }`}
                 >
                   <div className="text-xl sm:text-2xl mb-1">💵</div>
-                  <div className="text-xs sm:text-sm font-medium">نقداً</div>
+                  <div className="text-xs sm:text-sm font-medium">{t('billing.paymentMethodCash')}</div>
                 </button>
                 <button
                   onClick={() => setPaymentMethod('card')}
@@ -282,7 +286,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                   }`}
                 >
                   <div className="text-xl sm:text-2xl mb-1">💳</div>
-                  <div className="text-xs sm:text-sm font-medium">بطاقة</div>
+                  <div className="text-xs sm:text-sm font-medium">{t('billing.paymentMethodCard')}</div>
                 </button>
                 <button
                   onClick={() => setPaymentMethod('transfer')}
@@ -293,7 +297,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                   }`}
                 >
                   <div className="text-xl sm:text-2xl mb-1">📱</div>
-                  <div className="text-xs sm:text-sm font-medium">تحويل</div>
+                  <div className="text-xs sm:text-sm font-medium">{t('billing.paymentMethodTransfer')}</div>
                 </button>
               </div>
             </div>
@@ -302,7 +306,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
           {/* ملخص الدفع */}
           {hasSelectedItems && (
             <div className="mb-4 sm:mb-6 bg-orange-50 dark:bg-orange-900 p-3 sm:p-4 rounded-lg border border-orange-200 dark:border-orange-700">
-              <h4 className="font-medium text-orange-900 dark:text-orange-100 mb-2">ملخص الدفع</h4>
+              <h4 className="font-medium text-orange-900 dark:text-orange-100 mb-2">{t('billing.partialPaymentModal.paymentSummary')}</h4>
               <div className="space-y-2">
                 {Object.entries(selectedItems)
                   .filter(([_, quantity]) => quantity > 0)
@@ -313,18 +317,18 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                     return (
                       <div key={itemId} className="flex justify-between text-xs sm:text-sm bg-orange-100 dark:bg-orange-800 p-2 rounded border border-orange-200 dark:border-orange-600">
                         <span className="text-orange-800 dark:text-orange-200 truncate flex-1 pr-2">
-                          {item.name} × {formatDecimal(quantity)}
+                          {item.name} × {formatDecimal(quantity, i18n.language)}
                         </span>
                         <span className="font-bold text-orange-900 dark:text-orange-100 flex-shrink-0">
-                          {formatCurrency(item.price * quantity)}
+                          {formatCurrency(item.price * quantity, i18n.language)}
                         </span>
                       </div>
                     );
                   })}
                 <div className="border-t border-orange-200 dark:border-orange-600 pt-2 mt-2">
                   <div className="flex justify-between font-bold text-base sm:text-lg text-orange-900 dark:text-orange-100">
-                    <span>المجموع الكلي:</span>
-                    <span>{formatCurrency(totalAmount)}</span>
+                    <span>{t('billing.partialPaymentModal.grandTotal')}:</span>
+                    <span>{formatCurrency(totalAmount, i18n.language)}</span>
                   </div>
                 </div>
               </div>
@@ -339,7 +343,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
             className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 order-2 sm:order-1"
             disabled={isProcessing}
           >
-            إلغاء
+            {t('common.cancel')}
           </button>
 
           <button
@@ -357,13 +361,13 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span className="hidden sm:inline">جاري الدفع...</span>
-                <span className="sm:hidden">جاري...</span>
+                <span className="hidden sm:inline">{t('billing.partialPaymentModal.processing')}</span>
+                <span className="sm:hidden">{t('billing.partialPaymentModal.processingShort')}</span>
               </>
             ) : (
               <>
-                <span className="hidden sm:inline">تأكيد الدفع - {formatCurrency(totalAmount)}</span>
-                <span className="sm:hidden">تأكيد - {formatCurrency(totalAmount)}</span>
+                <span className="hidden sm:inline">{t('billing.partialPaymentModal.confirmPayment')} - {formatCurrency(totalAmount, i18n.language)}</span>
+                <span className="sm:hidden">{t('billing.partialPaymentModal.confirmPaymentShort')} - {formatCurrency(totalAmount, i18n.language)}</span>
               </>
             )}
           </button>
@@ -375,10 +379,14 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
         isOpen={showConfirmModal}
         onClose={() => !isProcessing && setShowConfirmModal(false)}
         onConfirm={confirmPayment}
-        title="تأكيد الدفع الجزئي"
-        message={`هل تريد دفع المشروبات المحددة؟\n\nعدد الأصناف: ${Object.values(selectedItems).filter(q => q > 0).length}\nالمبلغ الإجمالي: ${formatCurrency(totalAmount)}\nطريقة الدفع: ${paymentMethod === 'cash' ? 'نقدي' : paymentMethod === 'card' ? 'بطاقة' : 'تحويل'}`}
-        confirmText={isProcessing ? 'جاري الدفع...' : 'نعم، تأكيد الدفع'}
-        cancelText="تراجع"
+        title={t('billing.partialPaymentModal.confirmTitle')}
+        message={t('billing.partialPaymentModal.confirmMessage', {
+          count: Object.values(selectedItems).filter(q => q > 0).length,
+          amount: formatCurrency(totalAmount, i18n.language),
+          method: t(`billing.paymentMethod${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}`)
+        })}
+        confirmText={isProcessing ? t('billing.partialPaymentModal.processing') : t('billing.partialPaymentModal.confirmButton')}
+        cancelText={t('common.cancel')}
         confirmColor="bg-green-600 hover:bg-green-700"
         loading={isProcessing}
       />

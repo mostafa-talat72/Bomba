@@ -1,6 +1,8 @@
 import React from 'react';
 import { X, AlertTriangle, Lock } from 'lucide-react';
 import { User as UserType } from '../services/api';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 interface UserDeleteModalProps {
   isOpen: boolean;
@@ -23,6 +25,9 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
   error,
   loading,
 }) => {
+  const { t } = useTranslation();
+  const { isRTL } = useLanguage();
+  
   if (!isOpen || !user) return null;
 
   const isAdmin = user.role === 'admin';
@@ -31,7 +36,7 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div 
         className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md animate-slideUp"
-        dir="rtl"
+        dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
         <div 
@@ -53,10 +58,10 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
               </div>
               <div className="flex-1">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
-                  تأكيد حذف المستخدم
+                  {t('users.delete.confirmTitle')}
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  هذا الإجراء لا يمكن التراجع عنه
+                  {t('users.delete.irreversible')}
                 </p>
               </div>
             </div>
@@ -78,10 +83,10 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
               <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-bold text-red-900 dark:text-red-200 mb-1">
-                  هل أنت متأكد من حذف المستخدم؟
+                  {t('users.delete.confirmQuestion')}
                 </p>
                 <p className="text-sm text-red-700 dark:text-red-400">
-                  سيتم حذف المستخدم <span className="font-bold">{user.name}</span> نهائياً من النظام
+                  {t('users.delete.willDelete')} <span className="font-bold">{user.name}</span> {t('users.delete.permanently')}
                 </p>
               </div>
             </div>
@@ -92,19 +97,19 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                 <Lock className="w-4 h-4 text-red-600" />
-                كلمة المرور للتأكيد <span className="text-red-500">*</span>
+                {t('users.delete.passwordConfirm')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => onPasswordChange(e.target.value)}
-                placeholder="أدخل كلمة المرور لتأكيد الحذف..."
+                placeholder={t('users.delete.passwordPlaceholder')}
                 className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all font-semibold"
                 autoFocus
                 disabled={loading}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                ⚠️ حذف مدير يتطلب تأكيد كلمة المرور
+                {t('users.delete.adminWarning')}
               </p>
             </div>
           )}
@@ -128,7 +133,7 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
               disabled={loading}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              إلغاء
+              {t('common.cancel')}
             </button>
             <button
               onClick={onConfirm}
@@ -140,12 +145,12 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
                 {loading ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>جاري الحذف...</span>
+                    <span>{t('users.delete.deleting')}</span>
                   </>
                 ) : (
                   <>
                     <AlertTriangle className="w-5 h-5" />
-                    <span>تأكيد الحذف</span>
+                    <span>{t('users.delete.confirmDelete')}</span>
                   </>
                 )}
               </div>

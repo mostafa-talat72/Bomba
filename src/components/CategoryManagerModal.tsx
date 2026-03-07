@@ -5,6 +5,8 @@ import IconPickerModal from './IconPickerModal';
 import ConfirmDialog from './ConfirmDialog';
 import { api } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 interface CostCategory {
   _id: string;
@@ -28,6 +30,8 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   onSave,
 }) => {
   const { showNotification } = useApp();
+  const { t } = useTranslation();
+  const { isRTL } = useLanguage();
   const [categories, setCategories] = useState<CostCategory[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
@@ -77,7 +81,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     } catch (error: any) {
       setCategories([]);
       showNotification(
-        error.response?.data?.message || 'فشل في تحميل الأقسام',
+        error.response?.data?.message || t('costs.modals.categoryManager.notifications.loadError'),
         'error'
       );
     } finally {
@@ -101,7 +105,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     e.preventDefault();
 
     if (!formData.name.trim()) {
-      showNotification('يرجى إدخال اسم القسم', 'error');
+      showNotification(t('costs.modals.categoryManager.notifications.nameRequired'), 'error');
       return;
     }
 
@@ -110,17 +114,17 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
       if (editingCategory) {
         await api.put(`/cost-categories/${editingCategory._id}`, formData);
-        showNotification('تم تحديث القسم بنجاح', 'success');
+        showNotification(t('costs.modals.categoryManager.notifications.updated'), 'success');
       } else {
         await api.post('/cost-categories', formData);
-        showNotification('تم إنشاء القسم بنجاح', 'success');
+        showNotification(t('costs.modals.categoryManager.notifications.created'), 'success');
       }
 
       resetForm();
       await fetchCategories();
       setTimeout(() => onSave(), 100);
     } catch (error: any) {
-      const message = error.response?.data?.message || 'فشل في حفظ القسم';
+      const message = error.response?.data?.message || t('costs.modals.categoryManager.notifications.createError');
       showNotification(message, 'error');
     } finally {
       setLoading(false);
@@ -137,11 +141,11 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     try {
       setDeleting(deleteConfirm.categoryId);
       await api.delete(`/cost-categories/${deleteConfirm.categoryId}`);
-      showNotification('تم حذف القسم بنجاح', 'success');
+      showNotification(t('costs.modals.categoryManager.notifications.deleted'), 'success');
       await fetchCategories();
       onSave();
     } catch (error: any) {
-      const message = error.response?.data?.message || 'فشل في حذف القسم';
+      const message = error.response?.data?.message || t('costs.modals.categoryManager.notifications.deleteError');
       showNotification(message, 'error');
     } finally {
       setDeleting(null);
@@ -173,14 +177,14 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   return (
     <>
       <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-        <div 
+        <div
           className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-slideUp"
-          dir="rtl"
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
           {/* Header */}
-          <div 
+          <div
             className="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0"
-            style={{ 
+            style={{
               background: 'linear-gradient(135deg, #667eea15 0%, #764ba205 100%)'
             }}
           >
@@ -188,7 +192,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
               <div className="flex items-center gap-4 flex-1">
                 <div
                   className="p-4 rounded-2xl"
-                  style={{ 
+                  style={{
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     boxShadow: '0 8px 24px -6px rgba(102, 126, 234, 0.6)'
                   }}
@@ -197,10 +201,10 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 </div>
                 <div className="flex-1">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                    إدارة أقسام التكاليف
+                    {t('costs.modals.categoryManager.title')}
                   </h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    إضافة وتعديل وحذف أقسام التكاليف
+                    {t('costs.modals.categoryManager.subtitle')}
                   </p>
                 </div>
               </div>
@@ -225,7 +229,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
                   <div className="relative flex items-center gap-2">
                     <Plus className="w-5 h-5" />
-                    <span>إضافة قسم جديد</span>
+                    <span>{t('costs.modals.categoryManager.addNew')}</span>
                   </div>
                 </button>
               )}
@@ -239,7 +243,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                         {editingCategory ? <Edit2 className="w-5 h-5 text-white" /> : <Plus className="w-5 h-5 text-white" />}
                       </div>
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                        {editingCategory ? 'تعديل القسم' : 'قسم جديد'}
+                        {editingCategory ? t('costs.modals.categoryManager.editCategory') : t('costs.modals.categoryManager.newCategory')}
                       </h3>
                     </div>
                     <button
@@ -254,13 +258,13 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   {/* Name Input */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                      اسم القسم <span className="text-red-500">*</span>
+                      {t('costs.modals.categoryManager.name')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="مثال: رواتب، إيجار، صيانة"
+                      placeholder={t('costs.modals.categoryManager.namePlaceholder')}
                       className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
                       required
                     />
@@ -270,7 +274,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                        الأيقونة
+                        {t('costs.modals.categoryManager.icon')}
                       </label>
                       <button
                         type="button"
@@ -296,7 +300,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
                     <div>
                       <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                        اللون
+                        {t('costs.modals.categoryManager.color')}
                       </label>
                       <div className="flex items-center gap-2">
                         <input
@@ -319,12 +323,12 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   {/* Description */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                      الوصف <span className="text-xs font-normal text-gray-500">(اختياري)</span>
+                      {t('costs.modals.categoryManager.description')} <span className="text-xs font-normal text-gray-500">({t('costs.modals.categoryManager.descriptionOptional')})</span>
                     </label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="وصف مختصر للقسم..."
+                      placeholder={t('costs.modals.categoryManager.descriptionPlaceholder')}
                       rows={3}
                       className="form-field w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
                     />
@@ -333,7 +337,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   {/* Sort Order */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                      ترتيب العرض
+                      {t('costs.modals.categoryManager.sortOrder')}
                     </label>
                     <input
                       type="number"
@@ -344,7 +348,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" />
-                      الأقسام ذات الترتيب الأقل تظهر أولاً
+                      {t('costs.modals.categoryManager.sortOrderNote')}
                     </p>
                   </div>
 
@@ -360,12 +364,12 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                         {loading ? (
                           <>
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            <span>جاري الحفظ...</span>
+                            <span>{t('costs.modals.categoryManager.saving')}</span>
                           </>
                         ) : (
                           <>
                             <Save className="w-5 h-5" />
-                            <span>حفظ القسم</span>
+                            <span>{t('costs.modals.categoryManager.save')}</span>
                           </>
                         )}
                       </div>
@@ -375,7 +379,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                       onClick={resetForm}
                       className="px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 font-semibold"
                     >
-                      إلغاء
+                      {t('costs.modals.categoryManager.cancel')}
                     </button>
                   </div>
                 </form>
@@ -386,23 +390,23 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                    الأقسام الحالية
+                    {t('costs.modals.categoryManager.currentCategories')}
                   </h3>
                   <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold">
                     {categories?.length || 0}
                   </span>
                 </div>
-                
+
                 {fetchLoading ? (
                   <div className="text-center py-12">
                     <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-500 dark:text-gray-400 font-semibold">جاري التحميل...</p>
+                    <p className="text-gray-500 dark:text-gray-400 font-semibold">{t('costs.modals.categoryManager.loading')}</p>
                   </div>
                 ) : !categories || categories.length === 0 ? (
                   <div className="text-center py-12 px-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border-2 border-dashed border-gray-300 dark:border-gray-600">
                     <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 dark:text-gray-400 font-semibold">لا توجد أقسام</p>
-                    <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">قم بإضافة قسم جديد للبدء</p>
+                    <p className="text-gray-500 dark:text-gray-400 font-semibold">{t('costs.modals.categoryManager.noCategories')}</p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">{t('costs.modals.categoryManager.noCategoriesDesc')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto modern-scrollbar">
@@ -431,7 +435,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             )}
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-xs text-gray-400 dark:text-gray-500">
-                                الترتيب: {category.sortOrder}
+                                {t('costs.modals.categoryManager.order')}: {category.sortOrder}
                               </span>
                               <span className="text-xs text-gray-400 dark:text-gray-500">•</span>
                               <span className="text-xs text-gray-400 dark:text-gray-500">
@@ -444,7 +448,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                           <button
                             onClick={() => handleEdit(category)}
                             className="p-2.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-all duration-200 hover:scale-110"
-                            title="تعديل"
+                            title={t('costs.modals.categoryManager.edit')}
                           >
                             <Edit2 className="w-5 h-5" />
                           </button>
@@ -452,7 +456,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             onClick={() => handleDelete(category._id)}
                             disabled={deleting === category._id}
                             className="p-2.5 text-red-600 hover:text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                            title="حذف"
+                            title={t('costs.modals.categoryManager.delete')}
                           >
                             {deleting === category._id ? (
                               <div className="w-5 h-5 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
@@ -489,15 +493,15 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         isOpen={deleteConfirm.show}
         onClose={() => setDeleteConfirm({ show: false, categoryId: null })}
         onConfirm={handleDeleteConfirm}
-        title="تأكيد الحذف"
-        message="هل أنت متأكد من حذف هذا القسم؟ قد يؤثر ذلك على التكاليف المرتبطة به."
-        confirmText="حذف"
-        cancelText="إلغاء"
+        title={t('costs.modals.categoryManager.deleteConfirmTitle')}
+        message={t('costs.modals.categoryManager.deleteConfirmMessage')}
+        confirmText={t('costs.modals.categoryManager.deleteConfirm')}
+        cancelText={t('costs.modals.categoryManager.deleteCancel')}
         type="danger"
         loading={deleting !== null}
       />
     </>
   );
-};
+}
 
 export default CategoryManagerModal;

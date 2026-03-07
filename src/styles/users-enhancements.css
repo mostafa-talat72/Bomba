@@ -376,3 +376,122 @@
     0 2px 4px -1px rgba(0, 0, 0, 0.2),
     0 0 0 1px rgba(255, 255, 255, 0.05);
 }
+
+
+/* ========================================
+   دعم RTL/LTR للغات المختلفة
+   ======================================== */
+
+/* تحسين الأزرار في RTL */
+[dir="rtl"] .icon-button::before {
+  left: auto;
+  right: -100%;
+}
+
+[dir="rtl"] .icon-button:hover::before {
+  right: 100%;
+  left: auto;
+}
+
+/* تحسين الصلاحيات في RTL */
+[dir="rtl"] .permission-item:hover {
+  transform: translateX(2px);
+}
+
+/* تحسين الإشعارات في RTL */
+[dir="rtl"] .notification-slide {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* تحسين الإحصائيات في RTL */
+[dir="rtl"] .stat-card::after {
+  right: auto;
+  left: 0;
+}
+
+/* تحسين البطاقات في RTL */
+[dir="rtl"] .permission-badge::after,
+[dir="rtl"] .status-badge::before {
+  left: auto;
+  right: -100%;
+}
+
+[dir="rtl"] .permission-badge:hover::after,
+[dir="rtl"] .status-badge:hover::before {
+  right: 100%;
+  left: auto;
+}
+
+/* تحسين الأزرار المتدرجة في RTL */
+[dir="rtl"] .btn-gradient::before {
+  left: auto;
+  right: 0;
+}
+
+/* تحسين النماذج في RTL */
+[dir="rtl"] .form-input-enhanced {
+  text-align: right;
+}
+
+[dir="ltr"] .form-input-enhanced {
+  text-align: left;
+}
+
+/* تحسين محاذاة النصوص */
+[dir="rtl"] .text-left {
+  text-align: right !important;
+}
+
+[dir="rtl"] .text-right {
+  text-align: left !important;
+}
+
+[dir="ltr"] .text-left {
+  text-align: left !important;
+}
+
+[dir="ltr"] .text-right {
+  text-align: right !important;
+}
+
+/* تحسين الهوامش والحشو */
+[dir="rtl"] .ml-auto {
+  margin-left: 0 !important;
+  margin-right: auto !important;
+}
+
+[dir="rtl"] .mr-auto {
+  margin-right: 0 !important;
+  margin-left: auto !important;
+}
+
+/* تحسين الأيقونات */
+[dir="rtl"] .icon-flip {
+  transform: scaleX(-1);
+}
+
+/* تحسين القوائم المنسدلة */
+[dir="rtl"] select,
+[dir="rtl"] .select-wrapper {
+  background-position: left 0.5rem center;
+  padding-left: 2.5rem;
+  padding-right: 0.75rem;
+}
+
+[dir="ltr"] select,
+[dir="ltr"] .select-wrapper {
+  background-position: right 0.5rem center;
+  padding-right: 2.5rem;
+  padding-left: 0.75rem;
+}

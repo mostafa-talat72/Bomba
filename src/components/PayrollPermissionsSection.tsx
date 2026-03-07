@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Users, Check, AlertCircle, Save } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface PayrollPermissionsSectionProps {
   isOwner: boolean;
@@ -19,6 +20,7 @@ export const PayrollPermissionsSection: React.FC<PayrollPermissionsSectionProps>
   initialPermissions,
   availableManagers
 }) => {
+  const { t } = useTranslation();
   const [permissions, setPermissions] = useState<PayrollPermissions>({
     allowManagersToManagePayroll: false,
     authorizedPayrollManagers: [],
@@ -61,10 +63,10 @@ export const PayrollPermissionsSection: React.FC<PayrollPermissionsSectionProps>
           <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 ml-3 mt-0.5" />
           <div>
             <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-              لا توجد صلاحية
+              {t('settings.organization.payroll.noPermission.title')}
             </h4>
             <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-              فقط صاحب المنشأة يمكنه إدارة صلاحيات المرتبات.
+              {t('settings.organization.payroll.noPermission.message')}
             </p>
           </div>
         </div>
@@ -78,10 +80,10 @@ export const PayrollPermissionsSection: React.FC<PayrollPermissionsSectionProps>
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
           <Users className="h-5 w-5 ml-2 text-blue-600" />
-          صلاحيات إدارة المرتبات
+          {t('settings.organization.payroll.permissions.title')}
         </h3>
         <span className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs px-2 py-1 rounded-full">
-          مالك المنشأة
+          {t('settings.organization.payroll.permissions.ownerOnly')}
         </span>
       </div>
 
@@ -90,10 +92,10 @@ export const PayrollPermissionsSection: React.FC<PayrollPermissionsSectionProps>
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-1">
-              السماح للمديرين بإدارة المرتبات
+              {t('settings.organization.payroll.permissions.allowManagers')}
             </h4>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              عند التفعيل، يمكن للمديرين المصرح لهم إدارة إعدادات المرتبات
+              {t('settings.organization.payroll.permissions.allowManagersDesc')}
             </p>
           </div>
           <button
@@ -121,10 +123,10 @@ export const PayrollPermissionsSection: React.FC<PayrollPermissionsSectionProps>
         <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
           <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
             <Users className="h-5 w-5 ml-2 text-blue-600" />
-            المديرون المصرح لهم
+            {t('settings.organization.payroll.permissions.authorizedManagers')}
           </h4>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            اختر المديرين الذين يمكنهم إدارة إعدادات المرتبات (الخصومات، السلف، الحوافز، إلخ)
+            {t('settings.organization.payroll.permissions.selectManagers')}
           </p>
           <div className="space-y-2">
             {availableManagers.map((manager) => (
@@ -170,10 +172,10 @@ export const PayrollPermissionsSection: React.FC<PayrollPermissionsSectionProps>
             <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 ml-3 mt-0.5" />
             <div>
               <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                لا يوجد مديرون متاحون
+                {t('settings.organization.payroll.permissions.noManagers')}
               </h4>
               <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                لا يوجد مديرون آخرون في المنشأة. يمكنك إضافة مديرين جدد من صفحة المستخدمين.
+                {t('settings.organization.permissions.noManagers')}
               </p>
             </div>
           </div>
@@ -193,12 +195,12 @@ export const PayrollPermissionsSection: React.FC<PayrollPermissionsSectionProps>
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <span>جاري الحفظ...</span>
+              <span>{t('common.saving')}</span>
             </>
           ) : (
             <>
               <Save className="h-4 w-4" />
-              <span>حفظ صلاحيات المرتبات</span>
+              <span>{t('settings.organization.payroll.permissions.savePermissions')}</span>
             </>
           )}
         </button>

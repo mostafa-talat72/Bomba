@@ -1,3 +1,6 @@
+import { formatDecimal, formatCurrency as formatCurrencyUtil } from './formatters';
+import type { TFunction } from 'i18next';
+
 interface OrderItem {
   _id: string;
   name: string;
@@ -51,19 +54,21 @@ export const printOrder = async (
   order: Order, 
   menuSections: MenuSection[] = [],
   menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }> = new Map(),
-  fallbackOrganizationName?: string
+  fallbackOrganizationName?: string,
+  language: string = 'ar',
+  t: TFunction = ((key: string) => key) as TFunction
 ) => {
-  // جلب اسم المنشأة من بيانات الطلب أو استخدام الاحتياطي
-  let establishmentName = fallbackOrganizationName || 'نظام إدارة المقاهي';
+  // Get establishment name from order data or use fallback
+  let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
   
-  // إذا كانت المنشأة موجودة في بيانات الطلب
+  // If organization exists in order data
   if ((order as any).organization) {
     const org = (order as any).organization;
     if (typeof org === 'object' && org.name) {
-      // إذا كانت المنشأة populated object
+      // If organization is a populated object
       establishmentName = org.name;
     } else if (typeof org === 'string') {
-      // إذا كانت المنشأة string ID فقط، نحاول جلب البيانات
+      // If organization is just a string ID, try to fetch data
       try {
         const response = await fetch(`/api/organizations/${org}`);
         if (response.ok) {
@@ -74,7 +79,7 @@ export const printOrder = async (
         }
       } catch (error) {
         console.warn('Failed to fetch organization name for order:', error);
-        // استخدام الاسم الاحتياطي في حالة الفشل
+        // Use fallback name in case of failure
       }
     }
   }
@@ -85,15 +90,15 @@ export const printOrder = async (
     return;
   }
 
-  // تجميع العناصر حسب قسم المنيو
+  // Group items by menu section
   const itemsBySection = new Map<string, OrderItem[]>();
 
   order.items.forEach(item => {
-    // الحصول على قسم المنيو للعنصر
+    // Get menu section for item
     let sectionId: string | null = null;
     let sectionName: string | null = null;
 
-    // محاولة الحصول على menuItem من item.menuItem (قد يكون string ID أو object)
+    // Try to get menuItem from item.menuItem (could be string ID or object)
     const menuItemFromOrder = typeof item.menuItem === 'object' && item.menuItem !== null 
       ? (item.menuItem as any) 
       : null;
@@ -102,22 +107,22 @@ export const printOrder = async (
       ? (menuItemFromOrder._id || menuItemFromOrder.id) 
       : (typeof item.menuItem === 'string' ? item.menuItem : null);
     
-    // محاولة الحصول على category و section
+    // Try to get category and section
     let category = null;
     let section = null;
 
-    // أولاً: محاولة الحصول من menuItem في order.items مباشرة (إذا كان populated)
+    // First: Try to get from menuItem in order.items directly (if populated)
     if (menuItemFromOrder && menuItemFromOrder.category) {
       category = menuItemFromOrder.category;
-      // إذا كان category object (populated)، نحصل على section منه
+      // If category is object (populated), get section from it
       if (typeof category === 'object' && category.section) {
         section = category.section;
       }
     }
     
-    // ثانياً: إذا لم يكن موجوداً، نبحث في menuItemsMap
+    // Second: If not found, search in menuItemsMap
     if (!section && menuItemId) {
-      // محاولة البحث بكل الأشكال الممكنة
+      // Try searching in all possible forms
       const menuItem = menuItemsMap.get(menuItemId) 
         || menuItemsMap.get(String(menuItemId))
         || (typeof menuItemId === 'object' && menuItemId 
@@ -125,13 +130,13 @@ export const printOrder = async (
           : null);
       
       if (menuItem) {
-        // الحصول على category من menuItem
+        // Get category from menuItem
         if ((menuItem as any).category) {
           category = typeof (menuItem as any).category === 'string' 
             ? (menuItem as any).category 
             : ((menuItem as any).category as any);
           
-          // إذا كان category object، نحصل على section منه
+          // If category is object, get section from it
           if (category && typeof category === 'object' && category.section) {
             section = category.section;
           }
@@ -139,7 +144,7 @@ export const printOrder = async (
       }
     }
     
-    // الحصول على sectionId من section
+    // Get sectionId from section
     if (section) {
       if (typeof section === 'string') {
         sectionId = section;
@@ -148,21 +153,21 @@ export const printOrder = async (
       }
       
       if (sectionId) {
-        // البحث عن اسم القسم
+        // Search for section name
         const sectionObj = menuSections.find(s => 
           s._id === sectionId || 
           s.id === sectionId ||
           String(s._id) === String(sectionId) ||
           String(s.id) === String(sectionId)
         );
-        sectionName = sectionObj?.name || 'غير محدد';
+        sectionName = sectionObj?.name || t('orderPrint.unspecifiedSection');
       }
     }
 
-    // إذا لم يكن هناك قسم، نضعه في قسم "أخرى"
+    // If no section, put in "Other" section
     if (!sectionId) {
       sectionId = 'other';
-      sectionName = 'أخرى';
+      sectionName = t('orderPrint.otherSection');
     }
 
     if (!itemsBySection.has(sectionId)) {
@@ -171,32 +176,35 @@ export const printOrder = async (
     itemsBySection.get(sectionId)!.push(item);
   });
 
-  // طباعة جميع الأقسام في نفس الصفحة
+  // Print all sections on same page
   const sectionsArray = Array.from(itemsBySection.entries()).map(([sectionId, items]) => {
     const sectionName = sectionId === 'other' 
-      ? 'أخرى'
+      ? t('orderPrint.otherSection')
       : menuSections.find(s => 
           s._id === sectionId || 
           s.id === sectionId ||
           String(s._id) === String(sectionId) ||
           String(s.id) === String(sectionId)
-        )?.name || 'غير محدد';
+        )?.name || t('orderPrint.unspecifiedSection');
     
     return { sectionId, sectionName, items };
   });
 
-  // طباعة جميع الأقسام في صفحة واحدة باستخدام iframe
-  printAllSectionsInOnePage(order, sectionsArray, establishmentName);
+  // Print all sections on one page using iframe
+  printAllSectionsInOnePage(order, sectionsArray, establishmentName, language, t);
 };
 
-// دالة لطباعة جميع الأقسام في صفحة واحدة باستخدام iframe
+// Function to print all sections on one page using iframe
 const printAllSectionsInOnePage = (
   order: Order,
   sections: Array<{ sectionId: string; sectionName: string; items: OrderItem[] }>,
-  establishmentName: string
+  establishmentName: string,
+  language: string,
+  t: TFunction
 ) => {
   const now = new Date();
-  const dateTimeString = now.toLocaleString('ar-EG', {
+  const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
+  const dateTimeString = now.toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -208,7 +216,10 @@ const printAllSectionsInOnePage = (
   const isUpdatedOrder = order.updatedAt && 
     new Date(order.updatedAt).getTime() > new Date(order.createdAt).getTime();
 
-  // إنشاء محتوى كل قسم - كل قسم يحتوي على معلومات كاملة
+  const dir = language === 'ar' ? 'rtl' : 'ltr';
+  const align = language === 'ar' ? 'right' : 'left';
+
+  // Create content for each section - each section contains complete information
   const sectionsContent = sections.map(({ sectionName, items }) => {
     const sectionTotal = items.reduce((sum, item) => {
       const itemTotal = item.price * item.quantity;
@@ -217,69 +228,78 @@ const printAllSectionsInOnePage = (
       return sum + itemTotal + addonsTotal;
     }, 0);
 
-    const formattedTotal = sectionTotal.toLocaleString('ar-EG', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    });
+    const formattedTotal = formatDecimal(sectionTotal, language);
+    
+    // Get currency from localStorage
+    const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
+    
+    // Get currency symbol based on language
+    const getCurrencySymbolForLanguage = (curr: string, lang: string): string => {
+      const symbols: { [key: string]: { [lang: string]: string } } = {
+        'EGP': { 'ar': 'ج.م', 'en': 'EGP', 'fr': 'EGP' },
+        'SAR': { 'ar': 'ر.س', 'en': 'SAR', 'fr': 'SAR' },
+        'AED': { 'ar': 'د.إ', 'en': 'AED', 'fr': 'AED' },
+        'USD': { 'ar': '$', 'en': '$', 'fr': '$' },
+        'EUR': { 'ar': '€', 'en': '€', 'fr': '€' },
+        'GBP': { 'ar': '£', 'en': '£', 'fr': '£' }
+      };
+      return symbols[curr]?.[lang] || curr;
+    };
+    
+    const currencySymbol = getCurrencySymbolForLanguage(organizationCurrency, language);
 
     return `
       <div class="section-block" style="page-break-after: always; margin-bottom: 2px;">
-        <!-- Header لكل قسم -->
+        <!-- Header for each section -->
         <div class="header">
           <h1>${establishmentName}</h1>
           ${isUpdatedOrder ? `
           <div class="update-banner">
-            <span>🔄 تم تحديث الطلب</span>
-            <small>${new Date(order.updatedAt!).toLocaleString('ar-EG')}</small>
+            <span>🔄 ${t('orderPrint.orderUpdated')}</span>
+            <small>${new Date(order.updatedAt!).toLocaleString(locale)}</small>
           </div>` : ''}
         </div>
 
-        <!-- معلومات الطلب لكل قسم -->
+        <!-- Order info for each section -->
         <div class="order-info">
           <div style="margin-bottom: 2px;">
             <div style="font-size: 20px; font-weight: bold; margin: 2px 0;"><strong>${order.orderNumber}</strong></div>
             <div style="font-size: 16px; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
               <div style="font-size: 16px; margin: 2px 0; text-align: center;">
-                طاولة: <strong>${order.table.number}</strong>
+                ${t('orderPrint.table')}: <strong>${order.table.number}</strong>
               </div>
             ` : ''}
           </div>
         </div>
 
-        <!-- اسم القسم -->
+        <!-- Section name -->
         <div class="section-name">
-          قسم: ${sectionName}
+          ${t('orderPrint.section')}: ${sectionName}
         </div>
 
-        <!-- جدول العناصر -->
+        <!-- Items table -->
         <table class="items">
           <thead>
             <tr>
-              <th class="item-name">الصنف</th>
-              <th class="item-qty">الكمية</th>
-              <th class="item-price">المجموع</th>
+              <th class="item-name">${t('orderPrint.item')}</th>
+              <th class="item-qty">${t('orderPrint.quantity')}</th>
+              <th class="item-price">${t('orderPrint.total')}</th>
             </tr>
           </thead>
           <tbody>
             ${items.map(item => `
               <tr>
                 <td class="item-name">${item.name}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
-                <td class="item-qty"><strong>${item.quantity.toLocaleString('ar-EG')}</strong></td>
-                <td class="item-price"><strong>${(item.price * item.quantity).toLocaleString('ar-EG', {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 2
-                })}</strong></td>
+                <td class="item-qty"><strong>${formatDecimal(item.quantity, language)}</strong></td>
+                <td class="item-price"><strong>${formatDecimal(item.price * item.quantity, language)}</strong></td>
               </tr>
               ${item.addons && item.addons.length > 0 ?
                 item.addons.map(addon => `
                   <tr>
-                    <td class="item-name" style="padding-right: 15px;">+ ${addon.name}</td>
-                    <td class="item-qty"><strong>${addon.quantity.toLocaleString('ar-EG')}</strong></td>
-                    <td class="item-price"><strong>${(addon.price * addon.quantity).toLocaleString('ar-EG', {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 2
-                    })}</strong></td>
+                    <td class="item-name" style="padding-${align}: 15px;">+ ${addon.name}</td>
+                    <td class="item-qty"><strong>${formatDecimal(addon.quantity, language)}</strong></td>
+                    <td class="item-price"><strong>${formatDecimal(addon.price * addon.quantity, language)}</strong></td>
                   </tr>
                 `).join('') : ''
               }
@@ -287,32 +307,33 @@ const printAllSectionsInOnePage = (
           </tbody>
         </table>
 
-        <!-- إجمالي القسم -->
+        <!-- Section total -->
         <div class="total">
-          إجمالي القسم: <strong>${formattedTotal}</strong> ج.م
+          ${t('orderPrint.sectionTotal')}: <strong>${formattedTotal}</strong> ${currencySymbol}
         </div>
 
-        <!-- ملاحظات الطلب إذا كانت موجودة -->
+        <!-- Order notes if exist -->
         ${order.notes ? `
           <div class="notes">
-            <strong>ملاحظات:</strong> ${order.notes}
+            <strong>${t('orderPrint.notes')}:</strong> ${order.notes}
           </div>
         ` : ''}
 
-        <!-- Footer لكل قسم -->
+        <!-- Footer for each section -->
         <div class="footer">
-          شكراً لزيارتكم<br>
-          <strong style="font-weight: 900; font-size: 14px;">تم تصميم وتطوير هذا النظام بواسطة مصطفى طلعت للحلول البرمجية | 01116626164</strong>        </div>
+          ${t('orderPrint.thankYou')}<br>
+          <strong style="font-weight: 900; font-size: 14px;">${t('orderPrint.footer')}</strong>
+        </div>
       </div>
     `;
   }).join('');
 
   const printContent = `
 <!DOCTYPE html>
-<html dir="rtl">
+<html dir="${dir}">
 <head>
 <meta charset="UTF-8">
-<title>طباعة الطلب #${order.orderNumber}</title>
+<title>${t('orderPrint.printButton')} #${order.orderNumber}</title>
 
 <style>
 @page {
@@ -322,7 +343,7 @@ const printAllSectionsInOnePage = (
 
 /* ===== BODY ===== */
 body {
-  direction: rtl;
+  direction: ${dir};
   font-family: 'Arial', sans-serif;
   margin: 0 auto;
   padding: 0 4mm;
@@ -395,7 +416,7 @@ body {
   margin: 6px 0;
   table-layout: fixed;
   text-align: center;
-  direction: rtl;
+  direction: ${dir};
   border: 1px solid #000;
 }
 
@@ -406,7 +427,7 @@ body {
   border: 1px solid #000;
   text-align: center;
   vertical-align: middle;
-  direction: rtl;
+  direction: ${dir};
   unicode-bidi: plaintext;
 }
 
@@ -439,7 +460,7 @@ body {
   font-style: italic;
 }
 
-/* ===== TOTAL (مجموع القسم) ===== */
+/* ===== TOTAL (Section Total) ===== */
 .total {
   margin: 1px auto 0;
   padding: 1px 0;
@@ -564,7 +585,12 @@ body {
         }, 50);
       };
     } else {
-      alert('الرجاء السماح بالنوافذ المنبثقة لطباعة الطلب');
+      const alertMsg = language === 'ar' 
+        ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الطلب'
+        : language === 'fr'
+        ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la commande'
+        : 'Please allow pop-ups to print the order';
+      alert(alertMsg);
     }
   }
 };

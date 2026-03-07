@@ -19,6 +19,18 @@ const OrganizationSchema = new mongoose.Schema({
     email: { type: String, default: "" },
     website: { type: String, default: "" },
     
+    // إعدادات العملة والمنطقة الزمنية
+    currency: { 
+        type: String, 
+        enum: ["EGP", "SAR", "AED", "USD", "EUR", "GBP"],
+        default: "EGP" 
+    },
+    timezone: { 
+        type: String, 
+        enum: ["Africa/Cairo", "Asia/Riyadh", "Asia/Dubai"],
+        default: "Africa/Cairo" 
+    },
+    
     // الروابط الاجتماعية
     socialLinks: {
         facebook: { type: String, default: "" },

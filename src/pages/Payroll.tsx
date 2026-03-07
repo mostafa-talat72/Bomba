@@ -5,8 +5,12 @@ import EmployeeList from '../components/payroll/EmployeeList';
 import PayrollSummary from '../components/payroll/PayrollSummary';
 import PendingAdvances from '../components/payroll/PendingAdvances';
 import api from '../services/api';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 const Payroll: React.FC = () => {
+  const { t } = useTranslation();
+  const { isRTL } = useLanguage();
   const [activeTab, setActiveTab] = useState('employees');
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingAdvancesCount, setPendingAdvancesCount] = useState(0);
@@ -25,7 +29,7 @@ const Payroll: React.FC = () => {
         setPendingAdvancesCount(response.data.length);
       }
     } catch (error) {
-      console.error('فشل في تحميل عدد طلبات السلف:', error);
+      console.error(t('payroll.notifications.loadAdvancesError'), error);
     }
   };
 
@@ -46,7 +50,7 @@ const Payroll: React.FC = () => {
       label: (
         <span className="flex items-center gap-2 dark:text-gray-200">
           <Users size={18} />
-          الموظفين
+          {t('payroll.tabs.employees')}
         </span>
       ),
       children: <EmployeeList key={`employees-${refreshKey}`} onAdvanceAdded={handleAdvancesUpdate} />
@@ -73,7 +77,7 @@ const Payroll: React.FC = () => {
         >
           <span className="flex items-center gap-2 dark:text-gray-200">
             <Clock size={18} />
-            طلبات السلف
+            {t('payroll.tabs.pendingAdvances')}
           </span>
         </Badge>
       ),
@@ -84,7 +88,7 @@ const Payroll: React.FC = () => {
       label: (
         <span className="flex items-center gap-2 dark:text-gray-200">
           <FileText size={18} />
-          كشف المصروفات
+          {t('payroll.tabs.summary')}
         </span>
       ),
       children: <PayrollSummary key={`summary-${refreshKey}`} />
@@ -92,10 +96,10 @@ const Payroll: React.FC = () => {
   ];
 
   return (
-    <div className="p-6 min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
+    <div className="p-6 min-h-screen bg-gray-50 dark:bg-gray-900" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">نظام المرتبات</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">إدارة الموظفين والحضور والرواتب والخصومات</p>
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">{t('payroll.title')}</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">{t('payroll.subtitle')}</p>
       </div>
 
       <Tabs

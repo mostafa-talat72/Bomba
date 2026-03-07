@@ -291,10 +291,22 @@ export const printKitchenOrder = (order: Order, establishmentName: string = 'ا�
           minimumFractionDigits: 0,
           maximumFractionDigits: 2
         });
+        
+        // Get currency from localStorage
+        const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
+        const currencySymbols: { [key: string]: string } = {
+          'EGP': 'ج.م',
+          'SAR': 'ر.س',
+          'AED': 'د.إ',
+          'USD': '$',
+          'EUR': '€',
+          'GBP': '£'
+        };
+        const currencySymbol = currencySymbols[organizationCurrency] || organizationCurrency;
 
         return `
           <div class="total">
-            الإجمالي: <strong>${formattedTotal}</strong> ج.م
+            الإجمالي: <strong>${formattedTotal}</strong> ${currencySymbol}
           </div>
         `;
       })()}

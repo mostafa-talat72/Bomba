@@ -4,6 +4,11 @@ import { Plus, Trash2, DollarSign, User, Calendar, FileText } from 'lucide-react
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../contexts/LanguageContext';
+import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -30,6 +35,8 @@ interface DeductionsManagementProps {
 }
 
 const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelectedEmployeeId, autoOpenModal = false }) => {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const [deductions, setDeductions] = useState<Deduction[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,13 +44,15 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
   const [form] = Form.useForm();
 
   useEffect(() => {
+    dayjs.locale(language);
+  }, [language]);
+
+  useEffect(() => {
     fetchDeductions();
     fetchEmployees();
-    // إذا كان هناك موظف محدد مسبقاً، اختره في الفورم
     if (preSelectedEmployeeId) {
       form.setFieldsValue({ employeeId: preSelectedEmployeeId });
     }
-    // فتح المودال تلقائياً إذا كان autoOpenModal = true
     if (autoOpenModal) {
       setIsModalVisible(true);
     }
@@ -59,7 +68,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
         setDeductions([]);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل الخصومات');
+      message.error(t('payroll.deductionsManagement.messages.loadError'));
       setDeductions([]);
     } finally {
       setLoading(false);
@@ -75,7 +84,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
         setEmployees([]);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل الموظفين');
+      message.error(t('payroll.deductionsManagement.messages.loadEmployeesError'));
       setEmployees([]);
     }
   };
@@ -87,45 +96,36 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
         date: values.date.format('YYYY-MM-DD'),
         month: values.date.format('YYYY-MM')
       });
-      message.success('تم إضافة الخصم بنجاح');
+      message.success(t('payroll.deductionsManagement.messages.addSuccess'));
       setIsModalVisible(false);
       form.resetFields();
       fetchDeductions();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في إضافة الخصم');
+      message.error(error.response?.data?.error || t('payroll.deductionsManagement.messages.addError'));
     }
   };
 
   const handleDelete = async (id: string) => {
     Modal.confirm({
-      title: 'تأكيد الحذف',
-      content: 'هل أنت متأكد من حذف هذا الخصم؟',
-      okText: 'حذف',
-      cancelText: 'إلغاء',
+      title: t('payroll.deductionsManagement.confirmDelete.title'),
+      content: t('payroll.deductionsManagement.confirmDelete.content'),
+      okText: t('payroll.deductionsManagement.confirmDelete.okText'),
+      cancelText: t('payroll.deductionsManagement.confirmDelete.cancelText'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.delete(`/payroll/deductions/${id}`);
-          message.success('تم حذف الخصم بنجاح');
+          message.success(t('payroll.deductionsManagement.messages.deleteSuccess'));
           fetchDeductions();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في الحذف');
+          message.error(error.response?.data?.error || t('payroll.deductionsManagement.messages.deleteError'));
         }
       }
     });
   };
 
   const getDeductionTypeName = (type: string) => {
-    const types: any = {
-      absence: 'غياب',
-      late: 'تأخير',
-      penalty: 'جزاء',
-      loan: 'قرض',
-      insurance: 'تأمينات',
-      tax: 'ضرائب',
-      other: 'أخرى'
-    };
-    return types[type] || type;
+    return t(`payroll.deductionsManagement.types.${type}`, type);
   };
 
   const getDeductionTypeColor = (type: string) => {
@@ -146,13 +146,13 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
       {/* Header */}
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex justify-between items-center">
-          <h3 className="text-lg font-bold dark:text-gray-100">إدارة الخصومات</h3>
+          <h3 className="text-lg font-bold dark:text-gray-100">{t('payroll.deductionsManagement.title')}</h3>
           <Button
             type="primary"
             icon={<Plus size={16} />}
             onClick={() => setIsModalVisible(true)}
           >
-            إضافة خصم
+            {t('payroll.deductionsManagement.addNew')}
           </Button>
         </div>
       </Card>
@@ -164,7 +164,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
         </div>
       ) : deductions.length === 0 ? (
         <Card className="dark:bg-gray-800 dark:border-gray-700">
-          <Empty description="لا توجد خصومات" />
+          <Empty description={t('payroll.deductionsManagement.empty')} />
         </Card>
       ) : (
         <Row gutter={[16, 16]}>
@@ -180,7 +180,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
                     onClick={() => handleDelete(deduction._id)}
                     className="dark:text-red-400"
                   >
-                    حذف
+                    {t('payroll.deductionsManagement.delete')}
                   </Button>
                 ]}
               >
@@ -192,7 +192,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate">
-                        {deduction.employeeId?.personalInfo?.name || 'موظف'}
+                        {deduction.employeeId?.personalInfo?.name || t('payroll.deductionsManagement.employee')}
                       </h3>
                       <Tag color={getDeductionTypeColor(deduction.type)} className="text-xs">
                         {getDeductionTypeName(deduction.type)}
@@ -204,24 +204,24 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
                   <div className="flex items-center justify-between py-3 px-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
                     <div className="flex items-center gap-2">
                       <DollarSign size={20} className="text-red-600 dark:text-red-400" />
-                      <span className="text-sm text-gray-600 dark:text-gray-300">المبلغ</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('payroll.deductionsManagement.amount')}</span>
                     </div>
                     <span className="text-xl font-bold text-red-600 dark:text-red-400">
-                      -{deduction.amount} جنيه
+                      -{deduction.amount} {t('common.currency')}
                     </span>
                   </div>
 
                   {/* Date */}
                   <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                     <Calendar size={16} className="flex-shrink-0" />
-                    <span>التاريخ: {dayjs(deduction.date).format('DD/MM/YYYY')}</span>
+                    <span>{t('payroll.deductionsManagement.date')} {dayjs(deduction.date).format('DD/MM/YYYY')}</span>
                   </div>
 
                   {/* Reason */}
                   <div className="flex items-start gap-2 text-sm">
                     <FileText size={16} className="flex-shrink-0 text-gray-400 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">السبب:</div>
+                      <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">{t('payroll.deductionsManagement.reason')}</div>
                       <div className="text-gray-700 dark:text-gray-200 line-clamp-2">
                         {deduction.reason}
                       </div>
@@ -232,7 +232,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
                   {deduction.recurring && (
                     <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                       <Tag color="processing" className="text-xs">
-                        خصم متكرر شهرياً
+                        {t('payroll.deductionsManagement.recurring')}
                       </Tag>
                     </div>
                   )}
@@ -245,7 +245,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
 
       {/* Add Deduction Modal */}
       <Modal
-        title="إضافة خصم"
+        title={t('payroll.deductionsManagement.form.title')}
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
         footer={null}
@@ -254,12 +254,12 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
-            label={<span className="dark:text-gray-200">الموظف</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.deductionsManagement.form.employee')}</span>}
             name="employeeId"
-            rules={[{ required: true, message: 'الرجاء اختيار الموظف' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.form.employeeRequired') }]}
           >
             <Select
-              placeholder="اختر موظف"
+              placeholder={t('payroll.deductionsManagement.form.employeePlaceholder')}
               showSearch
               optionFilterProp="children"
               className="dark:bg-gray-700"
@@ -274,54 +274,54 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">نوع الخصم</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.deductionsManagement.form.type')}</span>}
             name="type"
-            rules={[{ required: true, message: 'الرجاء اختيار نوع الخصم' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.form.typeRequired') }]}
           >
             <Select className="dark:bg-gray-700">
-              <Option value="absence">غياب</Option>
-              <Option value="late">تأخير</Option>
-              <Option value="penalty">جزاء</Option>
-              <Option value="loan">قرض</Option>
-              <Option value="insurance">تأمينات</Option>
-              <Option value="tax">ضرائب</Option>
-              <Option value="other">أخرى</Option>
+              <Option value="absence">{t('payroll.deductionsManagement.types.absence')}</Option>
+              <Option value="late">{t('payroll.deductionsManagement.types.late')}</Option>
+              <Option value="penalty">{t('payroll.deductionsManagement.types.penalty')}</Option>
+              <Option value="loan">{t('payroll.deductionsManagement.types.loan')}</Option>
+              <Option value="insurance">{t('payroll.deductionsManagement.types.insurance')}</Option>
+              <Option value="tax">{t('payroll.deductionsManagement.types.tax')}</Option>
+              <Option value="other">{t('payroll.deductionsManagement.types.other')}</Option>
             </Select>
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">المبلغ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.deductionsManagement.form.amount')}</span>}
             name="amount"
-            rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.form.amountRequired') }]}
           >
             <InputNumber
               {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
-              placeholder="المبلغ بالجنيه"
+              placeholder={t('payroll.deductionsManagement.form.amountPlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600"
             />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">التاريخ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.deductionsManagement.form.date')}</span>}
             name="date"
-            rules={[{ required: true, message: 'الرجاء اختيار التاريخ' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.form.dateRequired') }]}
           >
             <DatePicker
               style={{ width: '100%' }}
-              placeholder="اختر التاريخ"
+              placeholder={t('payroll.deductionsManagement.form.datePlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600"
             />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">السبب</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.deductionsManagement.form.reason')}</span>}
             name="reason"
-            rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.form.reasonRequired') }]}
           >
             <TextArea
               rows={3}
-              placeholder="سبب الخصم..."
+              placeholder={t('payroll.deductionsManagement.form.reasonPlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             />
           </Form.Item>
@@ -332,17 +332,17 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
           >
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" className="w-4 h-4" />
-              <span className="dark:text-gray-200">خصم متكرر شهرياً</span>
+              <span className="dark:text-gray-200">{t('payroll.deductionsManagement.form.recurring')}</span>
             </label>
           </Form.Item>
 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit">
-                إضافة
+                {t('payroll.deductionsManagement.form.submit')}
               </Button>
               <Button onClick={() => setIsModalVisible(false)}>
-                إلغاء
+                {t('payroll.deductionsManagement.form.cancel')}
               </Button>
             </div>
           </Form.Item>

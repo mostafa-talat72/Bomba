@@ -3,7 +3,12 @@ import { Button, Modal, Form, InputNumber, Input, Select, Tag, message, Card, Ro
 import { Plus, Check, X, DollarSign, User, Calendar, FileText } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
+import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -14,20 +19,25 @@ interface AdvanceManagementProps {
 }
 
 const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmployeeId, autoOpenModal = false }) => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const [advances, setAdvances] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(autoOpenModal);
   const [form] = Form.useForm();
 
+  // Update dayjs locale when language changes
+  useEffect(() => {
+    dayjs.locale(i18n.language);
+  }, [i18n.language]);
+
   useEffect(() => {
     fetchAdvances();
     fetchEmployees();
-    // إذا كان هناك موظف محدد مسبقاً، اختره في الفورم
     if (preSelectedEmployeeId) {
       form.setFieldsValue({ employeeId: preSelectedEmployeeId });
     }
-    // فتح المودال تلقائياً إذا كان autoOpenModal = true
     if (autoOpenModal) {
       setIsModalVisible(true);
     }
@@ -43,7 +53,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
         setAdvances([]);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل السلف');
+      message.error(t('payroll.advanceManagement.messages.loadAdvancesError'));
       setAdvances([]);
     } finally {
       setLoading(false);
@@ -59,7 +69,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
         setEmployees([]);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل الموظفين');
+      message.error(t('payroll.advanceManagement.messages.loadEmployeesError'));
       setEmployees([]);
     }
   };
@@ -67,28 +77,28 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
   const handleSubmit = async (values: any) => {
     try {
       await api.post('/payroll/advances', values);
-      message.success('تم تقديم طلب السلفة بنجاح');
+      message.success(t('payroll.advanceManagement.messages.submitSuccess'));
       setIsModalVisible(false);
       form.resetFields();
       fetchAdvances();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تقديم الطلب');
+      message.error(error.response?.data?.error || t('payroll.advanceManagement.messages.submitError'));
     }
   };
 
   const handleApprove = async (id: string) => {
     Modal.confirm({
-      title: 'تأكيد الموافقة',
-      content: 'هل أنت متأكد من الموافقة على هذه السلفة؟',
-      okText: 'موافقة',
-      cancelText: 'إلغاء',
+      title: t('payroll.advanceManagement.confirmApprove.title'),
+      content: t('payroll.advanceManagement.confirmApprove.content'),
+      okText: t('payroll.advanceManagement.confirmApprove.okText'),
+      cancelText: t('payroll.advanceManagement.confirmApprove.cancelText'),
       onOk: async () => {
         try {
           await api.put(`/payroll/advances/${id}/status`, { status: 'approved' });
-          message.success('تمت الموافقة على السلفة');
+          message.success(t('payroll.advanceManagement.messages.approveSuccess'));
           fetchAdvances();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في الموافقة');
+          message.error(error.response?.data?.error || t('payroll.advanceManagement.messages.approveError'));
         }
       }
     });
@@ -96,18 +106,18 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
 
   const handleReject = async (id: string) => {
     Modal.confirm({
-      title: 'تأكيد الرفض',
-      content: 'هل أنت متأكد من رفض هذه السلفة؟',
-      okText: 'رفض',
-      cancelText: 'إلغاء',
+      title: t('payroll.advanceManagement.confirmReject.title'),
+      content: t('payroll.advanceManagement.confirmReject.content'),
+      okText: t('payroll.advanceManagement.confirmReject.okText'),
+      cancelText: t('payroll.advanceManagement.confirmReject.cancelText'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.put(`/payroll/advances/${id}/status`, { status: 'rejected' });
-          message.success('تم رفض السلفة');
+          message.success(t('payroll.advanceManagement.messages.rejectSuccess'));
           fetchAdvances();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في الرفض');
+          message.error(error.response?.data?.error || t('payroll.advanceManagement.messages.rejectError'));
         }
       }
     });
@@ -125,14 +135,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
   };
 
   const getStatusName = (status: string) => {
-    const names: any = {
-      pending: 'قيد الانتظار',
-      approved: 'موافق عليها',
-      rejected: 'مرفوضة',
-      paid: 'مدفوعة',
-      completed: 'مكتملة'
-    };
-    return names[status] || status;
+    return t(`payroll.advanceManagement.status.${status}`, status);
   };
 
   return (
@@ -140,13 +143,13 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
       {/* Header */}
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex justify-between items-center">
-          <h3 className="text-lg font-bold dark:text-gray-100">إدارة السلف</h3>
+          <h3 className="text-lg font-bold dark:text-gray-100">{t('payroll.advanceManagement.title')}</h3>
           <Button
             type="primary"
             icon={<Plus size={16} />}
             onClick={() => setIsModalVisible(true)}
           >
-            طلب سلفة جديدة
+            {t('payroll.advanceManagement.addNew')}
           </Button>
         </div>
       </Card>
@@ -158,7 +161,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
         </div>
       ) : advances.length === 0 ? (
         <Card className="dark:bg-gray-800 dark:border-gray-700">
-          <Empty description="لا توجد سلف" />
+          <Empty description={t('payroll.advanceManagement.noAdvances')} />
         </Card>
       ) : (
         <Row gutter={[16, 16]}>
@@ -175,7 +178,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
                           onClick={() => handleApprove(advance._id)}
                           className="text-green-600 dark:text-green-400"
                         >
-                          موافقة
+                          {t('payroll.advanceManagement.confirmApprove.okText')}
                         </Button>,
                         <Button
                           type="link"
@@ -184,7 +187,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
                           onClick={() => handleReject(advance._id)}
                           className="dark:text-red-400"
                         >
-                          رفض
+                          {t('payroll.advanceManagement.confirmReject.okText')}
                         </Button>
                       ]
                     : []
@@ -198,7 +201,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate">
-                        {advance.employeeId?.personalInfo?.name || 'موظف'}
+                        {advance.employeeId?.personalInfo?.name || t('payroll.advanceManagement.employee')}
                       </h3>
                       <Tag color={getStatusColor(advance.status)} className="text-xs">
                         {getStatusName(advance.status)}
@@ -210,24 +213,24 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
                   <div className="flex items-center justify-between py-3 px-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
                     <div className="flex items-center gap-2">
                       <DollarSign size={20} className="text-green-600 dark:text-green-400" />
-                      <span className="text-sm text-gray-600 dark:text-gray-300">المبلغ</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('payroll.advanceManagement.form.amount')}</span>
                     </div>
                     <span className="text-xl font-bold text-green-600 dark:text-green-400">
-                      {advance.amount} جنيه
+                      {advance.amount} {t('common.currency')}
                     </span>
                   </div>
 
                   {/* Request Date */}
                   <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                     <Calendar size={16} className="flex-shrink-0" />
-                    <span>تاريخ الطلب: {dayjs(advance.requestDate).format('DD/MM/YYYY')}</span>
+                    <span>{t('payroll.pendingAdvances.table.requestDate')}: {dayjs(advance.requestDate).format('DD/MM/YYYY')}</span>
                   </div>
 
                   {/* Reason */}
                   <div className="flex items-start gap-2 text-sm">
                     <FileText size={16} className="flex-shrink-0 text-gray-400 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">السبب:</div>
+                      <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">{t('payroll.advanceManagement.form.reason')}:</div>
                       <div className="text-gray-700 dark:text-gray-200 line-clamp-2">
                         {advance.reason}
                       </div>
@@ -238,23 +241,27 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
                   {advance.repayment && (
                     <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-1 text-xs">
                       <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                        <span>طريقة السداد:</span>
+                        <span>{t('payroll.advanceManagement.repaymentMethod')}:</span>
                         <span className="font-medium">
-                          {advance.repayment.method === 'full' ? 'دفعة واحدة' : `${advance.repayment.installments} أقساط`}
+                          {advance.repayment.method === 'full' 
+                            ? t('payroll.advanceManagement.fullPayment')
+                            : t('payroll.advanceManagement.installmentsCount', { count: advance.repayment.installments })}
                         </span>
                       </div>
                       {advance.repayment.method === 'installments' && (
                         <>
                           <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                            <span>القسط الشهري:</span>
-                            <span className="font-medium">{advance.repayment.amountPerMonth} جنيه</span>
+                            <span>{t('payroll.pendingAdvances.repayment.installmentsDetail', { amount: '' })}:</span>
+                            <span className="font-medium">{advance.repayment.amountPerMonth} {t('common.currency')}</span>
                           </div>
-                          <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                            <span>المتبقي:</span>
-                            <span className="font-medium text-orange-600 dark:text-orange-400">
-                              {advance.repayment.remainingAmount} جنيه
-                            </span>
-                          </div>
+                          {advance.repayment.remainingAmount !== undefined && (
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                              <span>{t('common.subtotal')}:</span>
+                              <span className="font-medium text-orange-600 dark:text-orange-400">
+                                {advance.repayment.remainingAmount} {t('common.currency')}
+                              </span>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -268,7 +275,7 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
 
       {/* Request Modal */}
       <Modal
-        title="طلب سلفة جديدة"
+        title={t('payroll.advanceManagement.form.title')}
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
         footer={null}
@@ -277,12 +284,12 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
-            label={<span className="dark:text-gray-200">الموظف</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.form.employee')}</span>}
             name="employeeId"
-            rules={[{ required: true, message: 'الرجاء اختيار الموظف' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.form.employeeRequired') }]}
           >
             <Select
-              placeholder="اختر موظف"
+              placeholder={t('payroll.advanceManagement.form.employeePlaceholder')}
               showSearch
               optionFilterProp="children"
               className="dark:bg-gray-700"
@@ -297,38 +304,39 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">المبلغ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.form.amount')}</span>}
             name="amount"
-            rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.form.amountRequired') }]}
           >
             <InputNumber
-              {...numberOnlyInputProps} style={{ width: '100%' }}
+              {...numberOnlyInputProps}
+              style={{ width: '100%' }}
               min={0}
-              placeholder="المبلغ بالجنيه"
+              placeholder={t('payroll.advanceManagement.form.amountPlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600"
             />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">السبب</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.form.reason')}</span>}
             name="reason"
-            rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.form.reasonRequired') }]}
           >
             <TextArea
               rows={3}
-              placeholder="سبب طلب السلفة..."
+              placeholder={t('payroll.advanceManagement.form.reasonPlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">طريقة السداد</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.form.repaymentMethod')}</span>}
             name={['repayment', 'method']}
             initialValue="installments"
           >
             <Select className="dark:bg-gray-700">
-              <Option value="full">دفعة واحدة</Option>
-              <Option value="installments">أقساط شهرية</Option>
+              <Option value="full">{t('payroll.advanceManagement.form.fullPayment')}</Option>
+              <Option value="installments">{t('payroll.advanceManagement.form.installments')}</Option>
             </Select>
           </Form.Item>
 
@@ -343,14 +351,15 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
               return (
                 method === 'installments' && (
                   <Form.Item
-                    label={<span className="dark:text-gray-200">عدد الأقساط</span>}
+                    label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.form.installmentsCount')}</span>}
                     name={['repayment', 'installments']}
-                    rules={[{ required: true, message: 'الرجاء إدخال عدد الأقساط' }]}
+                    rules={[{ required: true, message: t('payroll.advanceManagement.form.installmentsCountRequired') }]}
                   >
                     <InputNumber
-                      {...numberOnlyInputProps} style={{ width: '100%' }}
+                      {...numberOnlyInputProps}
+                      style={{ width: '100%' }}
                       min={1}
-                      placeholder="عدد الأقساط الشهرية"
+                      placeholder={t('payroll.advanceManagement.form.installmentsCountPlaceholder')}
                       className="dark:bg-gray-700 dark:border-gray-600"
                     />
                   </Form.Item>
@@ -362,10 +371,10 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit">
-                تقديم الطلب
+                {t('payroll.advanceManagement.form.submit')}
               </Button>
               <Button onClick={() => setIsModalVisible(false)}>
-                إلغاء
+                {t('payroll.advanceManagement.form.cancel')}
               </Button>
             </div>
           </Form.Item>

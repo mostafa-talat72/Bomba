@@ -367,6 +367,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (response.success && response.data?.user) {
           setUser(response.data.user);
           setIsAuthenticated(true);
+          
+          // Load and apply settings after authentication
+          await loadAndApplySettings();
+          
           await refreshData();
         } else if (response.message && (response.message.includes('توكن غير صالح') || response.message.includes('انتهت صلاحية الجلسة'))) {
           // محاولة تجديد التوكن تلقائياً
@@ -385,6 +389,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (response.success && response.data?.user) {
                   setUser(response.data.user);
                   setIsAuthenticated(true);
+                  
+                  // Load and apply settings after token refresh
+                  await loadAndApplySettings();
+                  
                   await refreshData();
                   setIsLoading(false);
                   return;
@@ -452,6 +460,70 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Load and apply settings (theme, language, currency, timezone)
+  const loadAndApplySettings = async (): Promise<void> => {
+    try {
+      // Load user's general settings (theme, language)
+      const generalSettingsResponse = await api.getGeneralSettings();
+      if (generalSettingsResponse.success && generalSettingsResponse.data) {
+        const { theme, language } = generalSettingsResponse.data;
+        
+        // Apply theme
+        if (theme) {
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('darkMode', 'true');
+          } else if (theme === 'light') {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('darkMode', 'false');
+          } else if (theme === 'auto') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (prefersDark) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+            localStorage.setItem('darkMode', prefersDark.toString());
+          }
+        }
+        
+        // Apply language and direction
+        if (language && window.i18n) {
+          await window.i18n.changeLanguage(language);
+          
+          // Apply language to document
+          document.documentElement.lang = language;
+          
+          // Apply direction based on language
+          const isRTL = language === 'ar';
+          document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+          
+          // Also update body direction for better compatibility
+          document.body.dir = isRTL ? 'rtl' : 'ltr';
+          
+          // Store language in localStorage
+          localStorage.setItem('language', language);
+        }
+      }
+      
+      // Load organization settings (currency, timezone)
+      const orgResponse = await api.getOrganization();
+      if (orgResponse.success && orgResponse.data) {
+        const { currency, timezone } = orgResponse.data;
+        
+        // Store in localStorage for easy access across the app
+        if (currency) {
+          localStorage.setItem('organizationCurrency', currency);
+        }
+        if (timezone) {
+          localStorage.setItem('organizationTimezone', timezone);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading and applying settings:', error);
+    }
+  };
+
   // Auth methods
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
@@ -463,6 +535,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         api.setToken(token);
         setUser(user);
         setIsAuthenticated(true);
+        
+        // Load and apply settings after login
+        await loadAndApplySettings();
+        
         await refreshData();
         // رسالة ترحيب فقط عند تسجيل الدخول وليس عند reload
         if (firstLoginRef.current) {

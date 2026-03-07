@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Crown, Shield, Check, AlertTriangle } from 'lucide-react';
 import { User as UserType } from '../services/api';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 interface Permission {
   id: string;
@@ -23,6 +25,8 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
   permissions,
   onUpdatePermissions,
 }) => {
+  const { t } = useTranslation();
+  const { isRTL } = useLanguage();
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -84,11 +88,11 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
 
   const getPermissionsByCategory = () => {
     const categories = {
-      'إدارة النظام': ['all', 'users', 'settings'],
-      'التقارير والإحصائيات': ['dashboard', 'reports', 'consumption'],
-      'الألعاب': ['playstation', 'computer'],
-      'المطعم والكافيه': ['cafe', 'menu', 'inventory'],
-      'المالية': ['billing', 'costs'],
+      [t('users.permissionsModal.systemManagement')]: ['all', 'users', 'settings'],
+      [t('users.permissionsModal.reportsAndStats')]: ['dashboard', 'reports', 'consumption'],
+      [t('users.permissionsModal.gaming')]: ['playstation', 'computer'],
+      [t('users.permissionsModal.restaurantAndCafe')]: ['cafe', 'menu', 'inventory'],
+      [t('users.permissionsModal.financial')]: ['billing', 'costs'],
     };
 
     return categories;
@@ -102,7 +106,7 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div 
         className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-slideUp"
-        dir="rtl"
+        dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20">
@@ -113,19 +117,19 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
               </div>
               <div className="flex-1">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                  إدارة صلاحيات المستخدم
+                  {t('users.permissionsModal.title')}
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  تحديد الصلاحيات لـ {user.name}
+                  {t('users.permissionsModal.subtitle')} {user.name}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs font-bold">
-                    {user.role === 'admin' ? 'مدير' : user.role === 'staff' ? 'موظف' : user.role === 'cashier' ? 'كاشير' : 'مطبخ'}
+                    {user.role === 'admin' ? t('users.roles.admin') : user.role === 'staff' ? t('users.roles.staff') : user.role === 'cashier' ? t('users.roles.cashier') : t('users.roles.kitchen')}
                   </span>
                   {hasChanges && (
                     <span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full text-xs font-bold flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3" />
-                      تغييرات غير محفوظة
+                      {t('users.permissionsModal.unsavedChanges')}
                     </span>
                   )}
                 </div>
@@ -148,22 +152,22 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-bold text-blue-900 dark:text-blue-200 flex items-center gap-2">
                   <Shield className="w-5 h-5" />
-                  ملخص الصلاحيات
+                  {t('users.permissionsModal.summary')}
                 </h3>
                 <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm font-bold">
-                  {selectedPermissions.length} من {permissions.length}
+                  {selectedPermissions.length} {t('users.form.of')} {permissions.length}
                 </span>
               </div>
               {selectedPermissions.includes('all') ? (
                 <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
                   <Crown className="w-5 h-5" />
-                  <span className="font-bold">جميع الصلاحيات - وصول كامل للنظام</span>
+                  <span className="font-bold">{t('users.permissionsModal.allPermissionsAccess')}</span>
                 </div>
               ) : (
                 <div className="text-sm text-blue-700 dark:text-blue-300">
                   {selectedPermissions.length === 0 
-                    ? 'لا توجد صلاحيات محددة' 
-                    : `تم تحديد ${selectedPermissions.length} صلاحية`
+                    ? t('users.noPermissions')
+                    : t('users.permissionsModal.selectedCount', { count: selectedPermissions.length })
                   }
                 </div>
               )}
@@ -206,7 +210,7 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
                               <Check className="absolute top-0.5 left-0.5 w-4 h-4 text-green-600 pointer-events-none" />
                             )}
                           </div>
-                          <div className="mr-3 flex-1">
+                          <div className={`${isRTL ? 'mr-3' : 'ml-3'} flex-1`}>
                             <div className={`text-sm font-bold transition-colors ${
                               isChecked 
                                 ? 'text-green-900 dark:text-green-200' 
@@ -248,12 +252,12 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
                 {loading ? (
                   <>
                     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>جاري الحفظ...</span>
+                    <span>{t('users.permissionsModal.saving')}</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-6 h-6" />
-                    <span>حفظ الصلاحيات</span>
+                    <span>{t('users.permissionsModal.savePermissions')}</span>
                   </>
                 )}
               </div>
@@ -263,7 +267,7 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
               disabled={loading}
               className="px-6 py-4 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 font-bold"
             >
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </div>

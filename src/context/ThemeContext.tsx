@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import api from '../services/api';
 
 interface ThemeContextType {
   isDarkMode: boolean;
-  toggleDarkMode: () => void;
+  toggleDarkMode: (saveToDatabase?: boolean) => Promise<void>;
+  setTheme: (theme: 'light' | 'dark' | 'auto', saveToDatabase?: boolean) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -42,12 +44,55 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, [isDarkMode]);
 
-  const toggleDarkMode = () => {
-    setIsDarkMode(prev => !prev);
+  const toggleDarkMode = async (saveToDatabase: boolean = true) => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    
+    // Save to database if requested (default: true)
+    if (saveToDatabase) {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const theme = newMode ? 'dark' : 'light';
+          await api.updateGeneralSettings({ theme });
+        }
+      } catch (dbError) {
+        console.warn('Failed to save theme to database:', dbError);
+        // Don't throw error, theme is still applied locally
+      }
+    }
+  };
+
+  const setTheme = async (theme: 'light' | 'dark' | 'auto', saveToDatabase: boolean = true) => {
+    let newMode: boolean;
+    
+    if (theme === 'dark') {
+      newMode = true;
+    } else if (theme === 'light') {
+      newMode = false;
+    } else {
+      // auto mode: follow system preference
+      newMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    
+    setIsDarkMode(newMode);
+    
+    // Save to database if requested (default: true)
+    if (saveToDatabase) {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          await api.updateGeneralSettings({ theme });
+        }
+      } catch (dbError) {
+        console.warn('Failed to save theme to database:', dbError);
+        // Don't throw error, theme is still applied locally
+      }
+    }
   };
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode }}>
+    <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

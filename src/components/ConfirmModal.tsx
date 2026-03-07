@@ -1,5 +1,6 @@
 import React from 'react';
 import Modal from './Modal';
+import { useTranslation } from 'react-i18next';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -26,6 +27,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   loading = false,
   zIndex = 'z-[60]'
 }) => {
+  const { t } = useTranslation();
+  
   return (
     <Modal
       isOpen={isOpen}
@@ -50,7 +53,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             onClick={onConfirm}
             disabled={loading}
           >
-            {loading ? 'جاري...' : confirmText}
+            {loading ? t('common.processing') : confirmText}
           </button>
         </div>
       </div>

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle, DollarSign } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { printOrder } from '../utils/printOrder';
 import api from '../services/api';
 import { io, Socket } from 'socket.io-client';
@@ -37,6 +39,7 @@ interface TableButtonProps {
 }
 
 const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, onClick }) => {
+  const { t } = useTranslation();
   return (
     <button
       onClick={() => onClick(table)}
@@ -54,15 +57,15 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
       <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2">
         {isSelected ? (
           <span className="flex items-center justify-center w-12 h-6 sm:w-16 sm:h-16 bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
-            مختارة
+            {t('cafe.selected')}
           </span>
         ) : isOccupied ? (
           <span className="flex items-center justify-center w-12 h-6 sm:w-16 sm:h-16 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
-            محجوزة
+            {t('cafe.occupied')}
           </span>
         ) : (
           <span className="flex items-center justify-center w-12 h-6 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500 to-green-600 text-white text-xs font-bold rounded-full shadow-lg border-2 sm:border-4 border-white dark:border-gray-800">
-            فارغة
+            {t('cafe.empty')}
           </span>
         )}
       </div>
@@ -92,7 +95,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
           {table.number}
         </span>
         <span className="text-xs text-gray-600 dark:text-gray-400 mt-1 hidden sm:block">
-          طاولة
+          {t('cafe.table')}
         </span>
       </div>
 
@@ -121,6 +124,7 @@ interface OrderItemProps {
 }
 
 const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete }) => {
+  const { t } = useTranslation();
   // Calculate total from items if finalAmount is not available
   const calculateTotal = () => {
     if (order.finalAmount) return order.finalAmount;
@@ -152,14 +156,14 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
           <button
             onClick={() => onPrint(order)}
             className="text-blue-600 hover:text-blue-700 p-1"
-            title="طباعة"
+            title={t('cafe.print')}
           >
             <Printer className="h-4 w-4" />
           </button>
           <button
             onClick={() => onEdit(order)}
             className="text-orange-600 hover:text-orange-700 p-1"
-            title="تعديل"
+            title={t('cafe.edit')}
           >
             <Edit className="h-4 w-4" />
           </button>
@@ -169,14 +173,14 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
               onDelete(order);
             }}
             className="text-red-600 hover:text-red-700 p-1"
-            title="حذف"
+            title={t('cafe.delete')}
           >
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
       <div className="text-xs text-gray-500 dark:text-gray-400">
-        {order.items?.length || 0} عنصر
+        {order.items?.length || 0} {t('cafe.item')}
       </div>
     </div>
   );
@@ -185,6 +189,8 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
 OrderItem.displayName = 'OrderItem';
 
 const Cafe: React.FC = () => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -310,14 +316,14 @@ const Cafe: React.FC = () => {
           
           // Show notification about which table we're opening
           if (state.tableNumber) {
-            showNotification(`تم فتح طاولة ${state.tableNumber}`, 'info');
+            showNotification(t('cafe.tableOpened') + ' ' + state.tableNumber, 'info');
           }
         }, 100);
         
         // Clear the state immediately to prevent reopening
         navigate(location.pathname, { replace: true, state: {} });
       } else {
-        showNotification('لم يتم العثور على الطاولة المطلوبة', 'error');
+        showNotification(t('cafe.tableNotFound'), 'error');
         // Clear the state even if table not found
         navigate(location.pathname, { replace: true, state: {} });
       }
@@ -367,11 +373,11 @@ const Cafe: React.FC = () => {
     });
 
     socket.on('disconnect', (reason) => {
-      showNotification?.('انقطع الاتصال - جاري إعادة الاتصال...', 'warning');
+      showNotification?.(t('cafe.notifications.connectionLost'), 'warning');
     });
 
     socket.on('reconnect', async (attemptNumber) => {
-      showNotification?.('تم إعادة الاتصال', 'success');
+      showNotification?.(t('cafe.notifications.reconnected'), 'success');
       // Refresh data to sync state
       await fetchBills();
       fetchAllTableStatuses();
@@ -383,7 +389,7 @@ const Cafe: React.FC = () => {
 
     socket.on('reconnect_failed', () => {
       console.error('Socket.IO reconnection failed');
-      showNotification?.('فشل إعادة الاتصال. يرجى تحديث الصفحة.', 'error');
+      showNotification?.(t('cafe.notifications.reconnectFailed'), 'error');
     });
 
     socket.on('connect_error', (error: any) => {
@@ -515,7 +521,7 @@ const Cafe: React.FC = () => {
         // Ignore errors in background loading
       });
     } catch (error) {
-      showNotification('خطأ في تحميل البيانات', 'error');
+      showNotification(t('cafe.notifications.loadingDataError'), 'error');
       setLoading(false);
     }
   };
@@ -697,14 +703,14 @@ const Cafe: React.FC = () => {
         } 
       });
     } else {
-      showNotification('لا توجد فاتورة غير مدفوعة لهذه الطاولة', 'warning');
+      showNotification(t('cafe.noBillForTable'), 'warning');
     }
   };
 
   // Handle add order
   const handleAddOrder = () => {
     if (!selectedTable) {
-      showNotification('يرجى اختيار طاولة أولاً', 'error');
+      showNotification(t('cafe.selectTable'), 'error');
       return;
     }
     // إعادة تعيين كل شيء كأنها المرة الأولى
@@ -720,7 +726,7 @@ const Cafe: React.FC = () => {
     setSelectedOrder(order);
     // Check if order.items exists and is an array
     if (!order.items || !Array.isArray(order.items)) {
-      showNotification('خطأ: الطلب لا يحتوي على عناصر', 'error');
+      showNotification(t('cafe.notifications.orderHasNoItems'), 'error');
       return;
     }
     const items: LocalOrderItem[] = order.items.map(item => ({
@@ -833,7 +839,7 @@ const Cafe: React.FC = () => {
   // Save order
   const handleSaveOrder = async (shouldPrint: boolean = false) => {
     if (!selectedTable || currentOrderItems.length === 0) {
-      showNotification('يرجى إضافة عنصر واحد على الأقل', 'error');
+      showNotification(t('cafe.addAtLeastOne'), 'error');
       return;
     }
 
@@ -859,14 +865,14 @@ const Cafe: React.FC = () => {
       setSelectedTable(null);
       setCurrentOrderItems([]);
       setOrderNotes('');
-      showNotification('جاري حفظ الطلب...', 'info');
+      showNotification(t('cafe.notifications.savingOrder'), 'info');
       
       // Create order in background
       setSavingOrder(true);
       const order = await createOrder(orderData);
       
       if (order) {
-        showNotification('تم إضافة الطلب بنجاح', 'success');
+        showNotification(t('cafe.orderAddedSuccess'), 'success');
         
         // Print order if requested or by default
         if (shouldPrint) {
@@ -890,8 +896,8 @@ const Cafe: React.FC = () => {
               updatedAt: (order as any).updatedAt instanceof Date ? (order as any).updatedAt.toISOString() : (order as any).updatedAt,
             };
             
-            const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
-            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName);
+            const establishmentName = user?.organizationName || (order.organization as any)?.name || t('orderPrint.defaultEstablishment');
+            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
           }, 0);
         }
         
@@ -917,7 +923,7 @@ const Cafe: React.FC = () => {
       } else {
         // If order creation failed, revert optimistic updates
         setTableStatuses(previousTableStatuses);
-        showNotification('فشل في إضافة الطلب', 'error');
+        showNotification(t('cafe.orderAddedError'), 'error');
       }
     } catch (error: any) {
       // Revert optimistic updates on error
@@ -929,9 +935,9 @@ const Cafe: React.FC = () => {
       } else if (error?.response?.data?.message) {
         showNotification(error.response.data.message, 'error');
       } else if (!navigator.onLine) {
-        showNotification('لا يوجد اتصال بالإنترنت', 'error');
+        showNotification(t('cafe.noConnection'), 'error');
       } else {
-        showNotification('خطأ في إضافة الطلب', 'error');
+        showNotification(t('cafe.errorAddingOrder'), 'error');
       }
     } finally {
       setSavingOrder(false);
@@ -941,7 +947,7 @@ const Cafe: React.FC = () => {
   // Update order
   const handleUpdateOrder = async (shouldPrint: boolean = false) => {
     if (!selectedOrder || currentOrderItems.length === 0) {
-      showNotification('يرجى إضافة عنصر واحد على الأقل', 'error');
+      showNotification(t('cafe.addAtLeastOne'), 'error');
       return;
     }
 
@@ -1110,14 +1116,14 @@ const Cafe: React.FC = () => {
       setSelectedOrder(null);
       setCurrentOrderItems([]);
       setOrderNotes('');
-      showNotification('جاري تحديث الطلب...', 'info');
+      showNotification(t('cafe.notifications.updatingOrder'), 'info');
       
       // Update order in background
       setSavingOrder(true);
       const updatedOrder = await updateOrder(orderToUpdate.id, orderData);
       
       if (updatedOrder) {
-        showNotification('تم تحديث الطلب بنجاح', 'success');
+        showNotification(t('cafe.orderUpdatedSuccess'), 'success');
         
         // Print updated order if requested
         if (shouldPrint) {
@@ -1141,8 +1147,8 @@ const Cafe: React.FC = () => {
               updatedAt: (updatedOrder as any).updatedAt instanceof Date ? (updatedOrder as any).updatedAt.toISOString() : (updatedOrder as any).updatedAt,
             };
             
-            const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || 'اسم المنشأة';
-            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName);
+            const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || t('orderPrint.defaultEstablishment');
+            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
           }, 0);
         }
         
@@ -1161,7 +1167,7 @@ const Cafe: React.FC = () => {
       } else {
         // If order update failed, revert optimistic updates
         setTableStatuses(previousTableStatuses);
-        showNotification('فشل في تحديث الطلب', 'error');
+        showNotification(t('cafe.orderUpdatedError'), 'error');
       }
     } catch (error: any) {
       // Revert optimistic updates on error
@@ -1173,9 +1179,9 @@ const Cafe: React.FC = () => {
       } else if (error?.response?.data?.message) {
         showNotification(error.response.data.message, 'error');
       } else if (!navigator.onLine) {
-        showNotification('لا يوجد اتصال بالإنترنت', 'error');
+        showNotification(t('cafe.noConnection'), 'error');
       } else {
-        showNotification('خطأ في تحديث الطلب', 'error');
+        showNotification(t('cafe.orderUpdatedError'), 'error');
       }
     } finally {
       setSavingOrder(false);
@@ -1186,7 +1192,7 @@ const Cafe: React.FC = () => {
   const handlePrintOrder = async (order: Order) => {
     // Check if order.items exists and is an array
     if (!order.items || !Array.isArray(order.items)) {
-      showNotification('خطأ: الطلب لا يحتوي على عناصر', 'error');
+      showNotification(t('cafe.notifications.orderHasNoItems'), 'error');
       return;
     }
     const menuItemsMap = new Map();
@@ -1209,9 +1215,9 @@ const Cafe: React.FC = () => {
     };
     
     // Get establishment name from user (already populated from backend)
-    const establishmentName = user?.organizationName || (order.organization as any)?.name || 'اسم المنشأة';
+    const establishmentName = user?.organizationName || (order.organization as any)?.name || t('orderPrint.defaultEstablishment');
     
-    await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName);
+    await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
   };
 
   // Show confirm modal
@@ -1259,23 +1265,28 @@ const Cafe: React.FC = () => {
         hasPartialPayments = true;
         totalPaid = orderItemPayments.reduce((sum: number, ip: any) => sum + ip.paidAmount, 0);
         const paidItems = orderItemPayments.map((ip: any) => 
-          `• ${ip.itemName}: ${convertToArabicNumbers(ip.paidQuantity)} من ${convertToArabicNumbers(ip.quantity)} (${formatCurrencyArabic(ip.paidAmount)})`
+          t('cafe.paidItem', { 
+            itemName: ip.itemName, 
+            paidQty: formatDecimal(ip.paidQuantity, i18n.language), 
+            totalQty: formatDecimal(ip.quantity, i18n.language), 
+            amount: formatCurrency(ip.paidAmount, i18n.language) 
+          })
         ).join('\n');
         
-        paidItemsInfo = `\n\n⚠️ تحذير: هذا الطلب يحتوي على أصناف مدفوعة جزئياً:\n\n${paidItems}\n\n💰 إجمالي المبلغ المدفوع: ${formatCurrencyArabic(totalPaid)}\n\n✓ سيتم استرداد المبلغ المدفوع تلقائياً إلى رصيد الفاتورة`;
+        paidItemsInfo = `\n\n${t('cafe.partialPaymentsDeleteWarning')}\n\n${paidItems}\n\n${t('cafe.totalPaidAmount', { amount: formatCurrency(totalPaid, i18n.language) })}\n\n${t('cafe.autoRefundMessage')}`;
       }
     }
 
     const confirmMessage = hasPartialPayments
-      ? `هل أنت متأكد من حذف الطلب ${order.orderNumber}؟${paidItemsInfo}`
-      : `هل أنت متأكد من حذف الطلب ${order.orderNumber}؟`;
+      ? t('cafe.deleteOrderConfirm', { orderNumber: order.orderNumber }) + paidItemsInfo
+      : t('cafe.deleteOrderConfirm', { orderNumber: order.orderNumber });
 
     const confirmColor = hasPartialPayments 
       ? 'bg-orange-600 hover:bg-orange-700' 
       : 'bg-red-600 hover:bg-red-700';
 
     showConfirm(
-      'حذف الطلب',
+      t('cafe.confirmDeleteTitle'),
       confirmMessage,
       async () => {
         try {
@@ -1289,9 +1300,9 @@ const Cafe: React.FC = () => {
           if (result === true) {
             // إظهار رسالة النجاح فوراً
             if (hasPartialPayments) {
-              showNotification(`تم حذف الطلب بنجاح واسترداد ${formatCurrencyArabic(totalPaid)}`, 'success');
+              showNotification(t('cafe.notifications.orderDeletedWithRefund', { amount: formatCurrency(totalPaid, i18n.language) }), 'success');
             } else {
-              showNotification('تم حذف الطلب بنجاح', 'success');
+              showNotification(t('cafe.orderDeletedSuccess'), 'success');
             }
             
             // إعادة تحميل البيانات في الخلفية (بدون await)
@@ -1308,16 +1319,16 @@ const Cafe: React.FC = () => {
             });
           } else {
             // إظهار رسالة الخطأ
-            showNotification('خطأ في حذف الطلب', 'error');
+            showNotification(t('cafe.orderDeletedError'), 'error');
           }
         } catch (error) {
           setConfirmLoading(false);
           setShowConfirmModal(false);
-          showNotification('خطأ في حذف الطلب', 'error');
+          showNotification(t('cafe.orderDeletedError'), 'error');
         }
       },
-      'تأكيد الحذف',
-      'إلغاء',
+      t('cafe.confirmButton'),
+      t('cafe.cancelButton'),
       confirmColor
     );
   };
@@ -1329,24 +1340,24 @@ const Cafe: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-            <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ml-2 flex-shrink-0" />
-            <span className="truncate">إدارة الطلبات والطاولات</span>
+            <ShoppingCart className={`h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'} flex-shrink-0`} />
+            <span className="truncate">{t('cafe.pageTitle')}</span>
           </h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">إدارة الطلبات والطاولات</p>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">{t('cafe.pageSubtitle')}</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           <button
             onClick={() => setShowManagementModal(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center transition-colors duration-200 text-sm sm:text-base"
           >
-            <Settings className="h-4 w-4 sm:h-5 sm:w-5 ml-1 sm:ml-2" />
-            إدارة الطاولات
+            <Settings className={`h-4 w-4 sm:h-5 sm:w-5 ${isRTL ? 'ml-1 sm:ml-2' : 'mr-1 sm:mr-2'}`} />
+            {t('cafe.manageTables')}
           </button>
           <button
             onClick={loadInitialData}
             className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 sm:px-4 py-2 rounded-lg flex items-center transition-colors duration-200 text-sm sm:text-base"
           >
-            تحديث
+            {t('cafe.refresh')}
           </button>
         </div>
       </div>
@@ -1356,8 +1367,8 @@ const Cafe: React.FC = () => {
         <div className="group bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-blue-100 dark:text-blue-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">عدد الأقسام</p>
-              <p className="text-2xl sm:text-4xl font-bold">{tableStats.totalSections}</p>
+              <p className="text-blue-100 dark:text-blue-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">{t('cafe.sectionsCount')}</p>
+              <p className="text-2xl sm:text-4xl font-bold">{formatDecimal(tableStats.totalSections, i18n.language)}</p>
             </div>
             <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
               <Settings className="h-5 w-5 sm:h-8 sm:w-8" />
@@ -1368,8 +1379,8 @@ const Cafe: React.FC = () => {
         <div className="group bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-green-100 dark:text-green-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">إجمالي الطاولات</p>
-              <p className="text-2xl sm:text-4xl font-bold">{tableStats.totalTables}</p>
+              <p className="text-green-100 dark:text-green-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">{t('cafe.totalTables')}</p>
+              <p className="text-2xl sm:text-4xl font-bold">{formatDecimal(tableStats.totalTables, i18n.language)}</p>
             </div>
             <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
               <ShoppingCart className="h-5 w-5 sm:h-8 sm:w-8" />
@@ -1380,8 +1391,8 @@ const Cafe: React.FC = () => {
         <div className="group bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-emerald-100 dark:text-emerald-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">الطاولات الفارغة</p>
-              <p className="text-2xl sm:text-4xl font-bold">{tableStats.emptyTables}</p>
+              <p className="text-emerald-100 dark:text-emerald-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">{t('cafe.emptyTables')}</p>
+              <p className="text-2xl sm:text-4xl font-bold">{formatDecimal(tableStats.emptyTables, i18n.language)}</p>
             </div>
             <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
               <CheckCircle className="h-5 w-5 sm:h-8 sm:w-8" />
@@ -1392,8 +1403,8 @@ const Cafe: React.FC = () => {
         <div className="group bg-gradient-to-br from-red-500 to-red-600 dark:from-red-600 dark:to-red-700 rounded-xl shadow-lg hover:shadow-2xl p-4 sm:p-6 text-white transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-red-100 dark:text-red-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">الطاولات المحجوزة</p>
-              <p className="text-2xl sm:text-4xl font-bold">{tableStats.occupiedTables}</p>
+              <p className="text-red-100 dark:text-red-200 text-xs sm:text-sm font-medium mb-1 sm:mb-2 truncate">{t('cafe.occupiedTables')}</p>
+              <p className="text-2xl sm:text-4xl font-bold">{formatDecimal(tableStats.occupiedTables, i18n.language)}</p>
             </div>
             <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 sm:p-4 group-hover:bg-white/30 transition-all duration-300 flex-shrink-0">
               <AlertTriangle className="h-5 w-5 sm:h-8 sm:w-8" />
@@ -1410,7 +1421,7 @@ const Cafe: React.FC = () => {
             <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700">
               <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <div className="w-1 h-6 sm:h-8 bg-blue-500 rounded-full flex-shrink-0"></div>
-                <span className="truncate">الأقسام والطاولات</span>
+                <span className="truncate">{t('cafe.sectionsAndTables')}</span>
               </h2>
             </div>
             
@@ -1595,7 +1606,7 @@ const Cafe: React.FC = () => {
           editingSection={editingSection}
           onSave={async () => {
             if (!sectionFormData.name.trim()) {
-              showNotification('يرجى إدخال اسم القسم', 'error');
+              showNotification(t('cafe.notifications.enterSectionName'), 'error');
               return;
             }
             if (editingSection) {
@@ -1624,11 +1635,11 @@ const Cafe: React.FC = () => {
           editingTable={editingTable}
           onSave={async () => {
             if (!tableFormData.number || tableFormData.number.trim() === '') {
-              showNotification('يرجى إدخال رقم/اسم الطاولة', 'error');
+              showNotification(t('cafe.enterTableNumber'), 'error');
               return;
             }
             if (!tableFormData.section) {
-              showNotification('يرجى اختيار قسم', 'error');
+              showNotification(t('cafe.notifications.selectSection'), 'error');
               return;
             }
             if (editingTable) {
@@ -1691,7 +1702,7 @@ const Cafe: React.FC = () => {
                 disabled={confirmLoading}
                 className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl transition-colors text-sm sm:text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {confirmModalData.cancelText || 'إلغاء'}
+                {confirmModalData.cancelText || t('common.cancel')}
               </button>
               <button
                 onClick={() => {
@@ -1706,10 +1717,10 @@ const Cafe: React.FC = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>جاري التنفيذ...</span>
+                    <span>{t('common.loading')}</span>
                   </>
                 ) : (
-                  confirmModalData.confirmText || 'تأكيد'
+                  confirmModalData.confirmText || t('common.confirm')
                 )}
               </button>
             </div>
@@ -1734,12 +1745,15 @@ const Cafe: React.FC = () => {
                   </div>
                   <div className="min-w-0 flex-1">
                     <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg truncate">
-                      طاولة {convertToArabicNumbers(selectedTable.number)}
+                      {t('cafe.tableOrdersModal.tableTitle', { number: formatDecimal(selectedTable.number, i18n.language) })}
                     </h2>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="px-2 sm:px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
                         <p className="text-xs sm:text-sm text-white font-medium">
-                          {convertToArabicNumbers(filteredTableOrders.length)} {filteredTableOrders.length === 1 ? 'طلب' : 'طلبات'}
+                          {filteredTableOrders.length === 1 
+                            ? t('cafe.tableOrdersModal.orderCount', { count: filteredTableOrders.length })
+                            : t('cafe.tableOrdersModal.ordersCount', { count: filteredTableOrders.length })
+                          }
                         </p>
                       </div>
                     </div>
@@ -1764,8 +1778,8 @@ const Cafe: React.FC = () => {
                   <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-full flex items-center justify-center mb-4 shadow-lg">
                     <ShoppingCart className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 text-gray-400" />
                   </div>
-                  <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg font-semibold">لا توجد طلبات</p>
-                  <p className="text-gray-400 dark:text-gray-500 text-xs sm:text-sm mt-2 text-center px-4">اضغط على "طلب جديد" لإضافة طلب</p>
+                  <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg font-semibold">{t('cafe.tableOrdersModal.noOrders')}</p>
+                  <p className="text-gray-400 dark:text-gray-500 text-xs sm:text-sm mt-2 text-center px-4">{t('cafe.tableOrdersModal.clickNewOrder')}</p>
                 </div>
               ) : (
                 <div className="space-y-3 sm:space-y-4">
@@ -1786,8 +1800,8 @@ const Cafe: React.FC = () => {
                             <div className="text-xs sm:text-sm font-semibold text-orange-600 dark:text-orange-400 truncate">
                               {(() => {
                                 // Calculate total from items if not available
-                                if (order.finalAmount) return formatCurrencyArabic(order.finalAmount);
-                                if (order.totalAmount) return formatCurrencyArabic(order.totalAmount);
+                                if (order.finalAmount) return formatCurrency(order.finalAmount, i18n.language);
+                                if (order.totalAmount) return formatCurrency(order.totalAmount, i18n.language);
                                 
                                 // Calculate from items
                                 if (order.items && Array.isArray(order.items)) {
@@ -1795,10 +1809,10 @@ const Cafe: React.FC = () => {
                                     const itemTotal = (item.price || 0) * (item.quantity || 0);
                                     return sum + itemTotal;
                                   }, 0);
-                                  return formatCurrencyArabic(total);
+                                  return formatCurrency(total, i18n.language);
                                 }
                                 
-                                return formatCurrencyArabic(0);
+                                return formatCurrency(0, i18n.language);
                               })()}
                             </div>
                           </div>
@@ -1807,21 +1821,21 @@ const Cafe: React.FC = () => {
                           <button
                             onClick={() => handlePrintOrder(order)}
                             className="p-2 sm:p-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-blue-200 dark:hover:border-blue-700"
-                            title="طباعة"
+                            title={t('cafe.tableOrdersModal.print')}
                           >
                             <Printer className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
                           </button>
                           <button
                             onClick={() => handleEditOrder(order)}
                             className="p-2 sm:p-2.5 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-green-200 dark:hover:border-green-700"
-                            title="تعديل"
+                            title={t('cafe.tableOrdersModal.edit')}
                           >
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
                           </button>
                           <button
                             onClick={() => handleDeleteOrder(order)}
                             className="p-2 sm:p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-red-200 dark:hover:border-red-700"
-                            title="حذف"
+                            title={t('cafe.tableOrdersModal.delete')}
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" />
                           </button>
@@ -1838,7 +1852,7 @@ const Cafe: React.FC = () => {
                             ))}
                             {order.items.length > 3 && (
                               <div className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2 font-medium">
-                                +{order.items.length - 3} عناصر أخرى
+                                {t('cafe.tableOrdersModal.moreItems', { count: order.items.length - 3 })}
                               </div>
                             )}
                           </div>
@@ -1858,7 +1872,7 @@ const Cafe: React.FC = () => {
                   className="flex-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
                 >
                   <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
-                  طلب جديد
+                  {t('cafe.tableOrdersModal.newOrder')}
                 </button>
                 
                 {/* Payment Management Button - only show if table is occupied */}
@@ -1871,10 +1885,10 @@ const Cafe: React.FC = () => {
                       <button
                         onClick={() => handlePaymentManagement(selectedTable)}
                         className="flex-1 sm:flex-none sm:min-w-[140px] bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
-                        title="إدارة الدفع"
+                        title={t('cafe.tableOrdersModal.paymentManagement')}
                       >
                         <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
-                        إدارة الدفع
+                        {t('cafe.tableOrdersModal.paymentManagement')}
                       </button>
                     );
                   }
@@ -1947,6 +1961,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
   loading,
   isEdit,
 }) => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const sectionRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const orderItemRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
@@ -2077,12 +2093,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
               </div>
               <div>
                 <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
-                  {isEdit ? 'تعديل الطلب' : 'طلب جديد'}
+                  {isEdit ? t('cafe.orderModal.editOrderTitle') : t('cafe.orderModal.newOrderTitle')}
                 </h2>
                 <div className="flex items-center gap-2 mt-1">
                   <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
                     <p className="text-xs sm:text-sm text-white font-medium">
-                      طاولة {convertToArabicNumbers(table.number)}
+                      {t('cafe.orderModal.table', { number: formatDecimal(table.number, i18n.language) })}
                     </p>
                   </div>
                 </div>
@@ -2104,36 +2120,36 @@ const OrderModal: React.FC<OrderModalProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full"></div>
-                المنيو
+                {t('cafe.orderModal.menu')}
               </h3>
             </div>
             {/* Search Input */}
             <div className="relative flex-shrink-0">
-              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+              <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none`} />
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="بحث عن عنصر..."
+                placeholder={t('cafe.orderModal.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
-                className="w-full pr-10 pl-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+                className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300`}
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600`}
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-            <div className="flex-1 space-y-3 pr-2 menu-scroll-container" style={{overflowY: 'scroll'}}>
+            <div className={`flex-1 space-y-3 ${isRTL ? 'pr-2' : 'pl-2'} menu-scroll-container`} style={{overflowY: 'scroll'}}>
               {searchQuery.trim() ? (
                 // Show all matching items when searching
                 <div className="space-y-2">
                   {filteredMenuItems.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">لا توجد نتائج</div>
+                    <div className="text-center py-8 text-gray-500">{t('cafe.orderModal.noResults')}</div>
                   ) : (
                     filteredMenuItems.map(item => (
                       <button
@@ -2145,7 +2161,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                           {item.name}
                         </span>
                         <span className="font-semibold text-orange-600 dark:text-orange-400">
-                          {formatCurrencyArabic(item.price)}
+                          {formatCurrency(item.price, i18n.language)}
                         </span>
                       </button>
                     ))
@@ -2212,7 +2228,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                             {item.name}
                                           </span>
                                           <span className="font-semibold text-orange-600 dark:text-orange-400">
-                                            {formatCurrencyArabic(item.price)}
+                                            {formatCurrency(item.price, i18n.language)}
                                           </span>
                                         </button>
                                       ))}
@@ -2234,16 +2250,16 @@ const OrderModal: React.FC<OrderModalProps> = ({
           <div className="flex flex-col space-y-4 h-full min-h-0">
             <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 flex-shrink-0">
               <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full"></div>
-              الطلبات
+              {t('cafe.orderModal.orders')}
               {orderItems.length > 0 && (
                 <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs font-bold rounded-full">
-                  {convertToArabicNumbers(orderItems.length)}
+                  {formatDecimal(orderItems.length, i18n.language)}
                 </span>
               )}
             </h3>
-            <div className="flex-1 space-y-3 pr-2 order-scroll-container" style={{overflowY: 'scroll'}}>
+            <div className={`flex-1 space-y-3 ${isRTL ? 'pr-2' : 'pl-2'} order-scroll-container`} style={{overflowY: 'scroll'}}>
               {orderItems.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">لا توجد عناصر في الطلب</div>
+                <div className="text-center py-8 text-gray-500">{t('cafe.orderModal.noItems')}</div>
               ) : (
                 orderItems.map(item => {
                   const menuItem = menuItems.find(mi => mi.id === item.menuItem);
@@ -2259,7 +2275,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             {item.name}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {formatCurrencyArabic(item.price)} × {convertToArabicNumbers(item.quantity)} = {formatCurrencyArabic(item.price * item.quantity)}
+                            {formatCurrency(item.price, i18n.language)} × {formatDecimal(item.quantity, i18n.language)} = {formatCurrency(item.price * item.quantity, i18n.language)}
                           </div>
                         </div>
                         <button
@@ -2277,7 +2293,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                           <MinusCircle className="h-4 w-4" />
                         </button>
                         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 border-2 border-blue-200 dark:border-gray-500 rounded-lg px-3 py-2 min-w-[3rem] shadow-sm">
-                          <span className="font-bold text-lg text-blue-800 dark:text-white text-center block">{convertToArabicNumbers(item.quantity)}</span>
+                          <span className="font-bold text-lg text-blue-800 dark:text-white text-center block">{formatDecimal(item.quantity, i18n.language)}</span>
                         </div>
                         <button
                           onClick={() => updateItemQuantity(item.menuItem, 1)}
@@ -2290,7 +2306,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         type="text"
                         value={item.notes || ''}
                         onChange={(e) => updateItemNotes(item.menuItem, e.target.value)}
-                        placeholder="ملاحظات على العنصر"
+                        placeholder={t('cafe.orderModal.itemNotesPlaceholder')}
                         className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       />
                     </div>
@@ -2300,15 +2316,15 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">الإجمالي:</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('cafe.orderModal.total')}</span>
                 <span className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                  {formatCurrencyArabic(calculateTotal())}
+                  {formatCurrency(calculateTotal(), i18n.language)}
                 </span>
               </div>
               <textarea
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
-                placeholder="ملاحظات على الطلب"
+                placeholder={t('cafe.orderModal.orderNotesPlaceholder')}
                 rows={3}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
@@ -2322,22 +2338,22 @@ const OrderModal: React.FC<OrderModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
           >
-            إلغاء
+            {t('cafe.orderModal.cancel')}
           </button>
           <button
             onClick={onSave}
             disabled={loading || orderItems.length === 0}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
-            {loading ? 'جاري الحفظ...' : isEdit ? 'تحديث' : 'حفظ'}
+            {loading ? t('cafe.orderModal.saving') : isEdit ? t('cafe.orderModal.update') : t('cafe.orderModal.save')}
           </button>
           <button
             onClick={onSaveAndPrint}
             disabled={loading || orderItems.length === 0}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            <Printer className="h-4 w-4" />
-            {loading ? 'جاري الحفظ...' : isEdit ? 'تحديث وطباعة' : 'حفظ وطباعة'}
+            <Printer className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+            {loading ? t('cafe.orderModal.saving') : isEdit ? t('cafe.orderModal.updateAndPrint') : t('cafe.orderModal.saveAndPrint')}
           </button>
         </div>
       </div>
@@ -2370,6 +2386,9 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
   onDeleteTable,
   getTablesBySection,
 }) => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
+  
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6">
       <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl max-w-sm sm:max-w-2xl md:max-w-4xl lg:max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
@@ -2386,10 +2405,10 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg truncate">
-                  إدارة الأقسام والطاولات
+                  {t('cafe.managementModal.title')}
                 </h2>
                 <p className="text-xs sm:text-sm text-white/80 mt-1 truncate">
-                  {convertToArabicNumbers(tableSections.length)} أقسام • {convertToArabicNumbers(tables.length)} طاولات
+                  {t('cafe.managementModal.sectionsCount', { count: tableSections.length })} • {t('cafe.managementModal.tablesCount', { count: tables.length })}
                 </p>
               </div>
             </div>
@@ -2408,14 +2427,14 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
               <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <div className="w-1 h-5 sm:h-6 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full flex-shrink-0"></div>
-                <span className="truncate">الأقسام</span>
+                <span className="truncate">{t('cafe.managementModal.sections')}</span>
               </h3>
               <button
                 onClick={onAddSection}
                 className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center text-sm font-bold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
               >
-                <Plus className="h-4 w-4 ml-1" />
-                إضافة قسم
+                <Plus className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+                {t('cafe.managementModal.addSection')}
               </button>
             </div>
             <div className="space-y-3 sm:space-y-4">
@@ -2433,7 +2452,7 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                             <h4 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{section.name}</h4>
                             <span className="w-fit px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-full">
-                              {convertToArabicNumbers(sectionTables.length)} طاولة
+                              {t('cafe.managementModal.tableCount', { count: sectionTables.length })}
                             </span>
                           </div>
                           {section.description && (
@@ -2444,14 +2463,14 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                           <button
                             onClick={() => onEditSection(section)}
                             className="p-2 sm:p-2.5 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-orange-200 dark:hover:border-orange-700"
-                            title="تعديل"
+                            title={t('cafe.managementModal.edit')}
                           >
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
                           </button>
                           <button
                             onClick={() => onDeleteSection(section.id)}
                             className="p-2 sm:p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all duration-300 hover:scale-110 border border-transparent hover:border-red-200 dark:hover:border-red-700"
-                            title="حذف"
+                            title={t('cafe.managementModal.delete')}
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" />
                           </button>
@@ -2471,14 +2490,14 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                                 <button
                                   onClick={() => onEditTable(table)}
                                   className="p-1 hover:bg-orange-200 dark:hover:bg-orange-800 rounded-lg transition-all duration-300"
-                                  title="تعديل"
+                                  title={t('cafe.managementModal.edit')}
                                 >
                                   <Edit className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-orange-600 dark:text-orange-400" />
                                 </button>
                                 <button
                                   onClick={() => onDeleteTable(table.id)}
                                   className="p-1 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-all duration-300"
-                                  title="حذف"
+                                  title={t('cafe.managementModal.delete')}
                                 >
                                   <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-600 dark:text-red-400" />
                                 </button>
@@ -2491,7 +2510,7 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                           className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105"
                         >
                           <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                          إضافة طاولة
+                          {t('cafe.managementModal.addTable')}
                         </button>
                       </div>
                     </div>
@@ -2507,7 +2526,7 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl transition-colors text-sm sm:text-base font-medium"
           >
-            إغلاق
+            {t('common.close')}
           </button>
         </div>
       </div>
@@ -2531,6 +2550,7 @@ const SectionModal: React.FC<SectionModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const nameInputRef = useRef<HTMLInputElement>(null);
   
   // Reset focus when modal opens
@@ -2554,7 +2574,7 @@ const SectionModal: React.FC<SectionModalProps> = ({
                 <Settings className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
               <h2 className="text-lg sm:text-xl font-bold text-white drop-shadow-lg truncate">
-                {editingSection ? 'تعديل القسم' : 'إضافة قسم'}
+                {editingSection ? t('cafe.sectionModal.editTitle') : t('cafe.sectionModal.addTitle')}
               </h2>
             </div>
             <button 
@@ -2570,7 +2590,7 @@ const SectionModal: React.FC<SectionModalProps> = ({
         <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 bg-gray-50 dark:bg-gray-900">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-              اسم القسم *
+              {t('cafe.sectionModal.sectionNameRequired')}
             </label>
             <input
               ref={nameInputRef}
@@ -2579,31 +2599,31 @@ const SectionModal: React.FC<SectionModalProps> = ({
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               autoFocus
               className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="اسم القسم"
+              placeholder={t('cafe.sectionModal.sectionNamePlaceholder')}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              الوصف
+              {t('cafe.sectionModal.description')}
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
-              placeholder="وصف القسم"
+              placeholder={t('cafe.sectionModal.descriptionPlaceholder')}
               rows={3}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              ترتيب العرض
+              {t('cafe.sectionModal.sortOrder')}
             </label>
             <input
               type="number"
               value={formData.sortOrder}
               onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
               className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="0"
+              placeholder={t('cafe.sectionModal.sortOrderPlaceholder')}
             />
           </div>
         </div>
@@ -2614,13 +2634,13 @@ const SectionModal: React.FC<SectionModalProps> = ({
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
-            إلغاء
+            {t('cafe.sectionModal.cancel')}
           </button>
           <button
             onClick={onSave}
             className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
-            حفظ
+            {t('cafe.sectionModal.save')}
           </button>
         </div>
       </div>
@@ -2646,6 +2666,7 @@ const TableModal: React.FC<TableModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const numberInputRef = useRef<HTMLInputElement>(null);
   
   // Reset focus when modal opens
@@ -2669,7 +2690,7 @@ const TableModal: React.FC<TableModalProps> = ({
                 <Plus className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
               <h2 className="text-lg sm:text-xl font-bold text-white drop-shadow-lg truncate">
-                {editingTable ? 'تعديل الطاولة' : 'إضافة طاولة'}
+                {editingTable ? t('cafe.tableModal.editTitle') : t('cafe.tableModal.addTitle')}
               </h2>
             </div>
             <button 
@@ -2685,7 +2706,7 @@ const TableModal: React.FC<TableModalProps> = ({
         <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 bg-gray-50 dark:bg-gray-900">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-              رقم/اسم الطاولة *
+              {t('cafe.tableModal.tableNumberRequired')}
             </label>
             <input
               ref={numberInputRef}
@@ -2694,19 +2715,19 @@ const TableModal: React.FC<TableModalProps> = ({
               onChange={(e) => setFormData({ ...formData, number: e.target.value })}
               autoFocus
               className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-              placeholder="مثال: 1، واحد، A1، VIP، شرفة 1"
+              placeholder={t('cafe.tableModal.tableNumberPlaceholder')}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              القسم *
+              {t('cafe.tableModal.sectionRequired')}
             </label>
             <select
               value={formData.section}
               onChange={(e) => setFormData({ ...formData, section: e.target.value })}
               className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
             >
-              <option value="">اختر القسم</option>
+              <option value="">{t('cafe.tableModal.selectSection')}</option>
               {tableSections
                 .filter(section => section.isActive)
                 .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -2725,13 +2746,13 @@ const TableModal: React.FC<TableModalProps> = ({
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
-            إلغاء
+            {t('cafe.tableModal.cancel')}
           </button>
           <button
             onClick={onSave}
             className="w-full sm:w-auto px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm sm:text-base font-medium transition-colors"
           >
-            حفظ
+            {t('cafe.tableModal.save')}
           </button>
         </div>
       </div>

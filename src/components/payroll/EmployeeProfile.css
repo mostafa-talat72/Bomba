@@ -1,14 +1,118 @@
-/* Employee Profile Styles */
+/* Employee Profile Styles - Multi-directional Support */
 
-.employee-profile {
+/* RTL Support (Arabic) */
+[dir="rtl"] .employee-profile {
   direction: rtl;
+}
+
+[dir="rtl"] .employee-profile .ant-tabs {
+  direction: rtl;
+}
+
+[dir="rtl"] .employee-profile .ant-table {
+  direction: rtl;
+}
+
+[dir="rtl"] .employee-profile .ant-modal-header,
+[dir="rtl"] .employee-profile .ant-modal-body {
+  direction: rtl;
+}
+
+[dir="rtl"] .employee-profile .ant-form-item-label {
+  text-align: right;
+}
+
+/* Modal footer buttons alignment - RTL */
+[dir="rtl"] .employee-profile .ant-modal-footer {
+  text-align: right;
+}
+
+[dir="rtl"] .employee-profile .ant-modal-footer .ant-btn + .ant-btn {
+  margin-left: 8px;
+  margin-right: 0;
+}
+
+/* Form buttons alignment - RTL */
+[dir="rtl"] .employee-profile .ant-form-item .flex {
+  flex-direction: row-reverse;
+}
+
+[dir="rtl"] .employee-profile .ant-form-item .flex.gap-2 > * + * {
+  margin-right: 0.5rem;
+  margin-left: 0;
+}
+
+[dir="rtl"] .form-section-header {
+  border-left: 4px solid #667eea;
+  border-right: none;
+}
+
+[dir="rtl"] .dark .form-section-header {
+  border-left-color: #818cf8;
+}
+
+[dir="rtl"] .info-box {
+  border-left: 4px solid;
+  border-right: none;
+}
+
+/* LTR Support (English, French) */
+[dir="ltr"] .employee-profile {
+  direction: ltr;
+}
+
+[dir="ltr"] .employee-profile .ant-tabs {
+  direction: ltr;
+}
+
+[dir="ltr"] .employee-profile .ant-table {
+  direction: ltr;
+}
+
+[dir="ltr"] .employee-profile .ant-modal-header,
+[dir="ltr"] .employee-profile .ant-modal-body {
+  direction: ltr;
+}
+
+[dir="ltr"] .employee-profile .ant-form-item-label {
+  text-align: left;
+}
+
+/* Modal footer buttons alignment - LTR */
+[dir="ltr"] .employee-profile .ant-modal-footer {
+  text-align: left;
+}
+
+[dir="ltr"] .employee-profile .ant-modal-footer .ant-btn + .ant-btn {
+  margin-right: 8px;
+  margin-left: 0;
+}
+
+/* Form buttons alignment - LTR */
+[dir="ltr"] .employee-profile .ant-form-item .flex {
+  flex-direction: row;
+}
+
+[dir="ltr"] .employee-profile .ant-form-item .flex.gap-2 > * + * {
+  margin-left: 0.5rem;
+  margin-right: 0;
+}
+
+[dir="ltr"] .form-section-header {
+  border-left: 4px solid #667eea;
+  border-right: none;
+}
+
+[dir="ltr"] .dark .form-section-header {
+  border-left-color: #818cf8;
+}
+
+[dir="ltr"] .info-box {
+  border-left: 4px solid;
+  border-right: none;
 }
 
 /* Tabs styling - improved spacing and colors */
-.employee-profile .ant-tabs {
-  direction: rtl;
-}
-
 .employee-profile .ant-tabs-nav {
   margin-bottom: 24px !important;
 }
@@ -92,7 +196,6 @@
 }
 
 .employee-profile .ant-table {
-  direction: rtl;
   min-width: 800px; /* Minimum width to prevent squishing */
 }
 
@@ -130,18 +233,6 @@
 
 .dark .employee-profile .ant-table-tbody > tr.ant-table-row:hover > td {
   background-color: #374151 !important;
-}
-
-.employee-profile .ant-modal-header {
-  direction: rtl;
-}
-
-.employee-profile .ant-modal-body {
-  direction: rtl;
-}
-
-.employee-profile .ant-form-item-label {
-  text-align: right;
 }
 
 /* Dark mode support */
@@ -196,9 +287,9 @@
   }
 }
 
-/* Scroll hint for tables on mobile */
+/* Scroll hint for tables on mobile - RTL */
 @media (max-width: 768px) {
-  .employee-profile .ant-table-wrapper::after {
+  [dir="rtl"] .employee-profile .ant-table-wrapper::after {
     content: '← اسحب لليسار لرؤية المزيد';
     display: block;
     text-align: center;
@@ -211,12 +302,30 @@
     bottom: 0;
   }
   
-  .dark .employee-profile .ant-table-wrapper::after {
+  [dir="rtl"] .dark .employee-profile .ant-table-wrapper::after {
     background: linear-gradient(to left, rgba(31,41,55,0), rgba(31,41,55,0.9));
     color: #9ca3af;
   }
+  
+  /* Scroll hint for tables on mobile - LTR */
+  [dir="ltr"] .employee-profile .ant-table-wrapper::after {
+    content: '→ Scroll right to see more';
+    display: block;
+    text-align: center;
+    padding: 8px;
+    font-size: 12px;
+    color: #999;
+    background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.9));
+    position: sticky;
+    right: 0;
+    bottom: 0;
+  }
+  
+  [dir="ltr"] .dark .employee-profile .ant-table-wrapper::after {
+    background: linear-gradient(to right, rgba(31,41,55,0), rgba(31,41,55,0.9));
+    color: #9ca3af;
+  }
 }
-
 
 /* Professional Modal Styles */
 .professional-modal .ant-modal-content {
@@ -270,6 +379,25 @@
   color: #e5e7eb;
 }
 
+/* Modal footer alignment based on direction */
+[dir="rtl"] .professional-modal .ant-modal-footer {
+  text-align: right;
+}
+
+[dir="ltr"] .professional-modal .ant-modal-footer {
+  text-align: left;
+}
+
+[dir="rtl"] .professional-modal .ant-modal-footer .ant-btn + .ant-btn {
+  margin-left: 8px;
+  margin-right: 0;
+}
+
+[dir="ltr"] .professional-modal .ant-modal-footer .ant-btn + .ant-btn {
+  margin-right: 8px;
+  margin-left: 0;
+}
+
 /* Success Modal */
 .success-modal .ant-modal-header {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
@@ -301,13 +429,11 @@
   margin-bottom: 16px;
   font-weight: 600;
   color: #374151;
-  border-left: 4px solid #667eea;
 }
 
 .dark .form-section-header {
   background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
   color: #e5e7eb;
-  border-left-color: #818cf8;
 }
 
 /* Enhanced Input Styles */
@@ -390,7 +516,6 @@
 .info-box {
   padding: 16px;
   border-radius: 8px;
-  border-left: 4px solid;
   margin-bottom: 16px;
 }
 
@@ -453,7 +578,6 @@
 .professional-modal .ant-modal-content {
   animation: slideInUp 0.3s ease-out;
 }
-
 
 /* إصلاح لون النص في حقول InputNumber في الوضع المظلم */
 .dark .ant-input-number {

@@ -4,9 +4,11 @@ import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Edit2 } from 'lucid
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../contexts/LanguageContext';
 import 'dayjs/locale/ar';
-
-dayjs.locale('ar');
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -57,6 +59,8 @@ interface AttendanceManagementProps {
 }
 
 const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelectedEmployeeId }) => {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,6 +73,10 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
   const [timeMode, setTimeMode] = useState<'same' | 'different' | 'groups'>('same');
   const [dayTimes, setDayTimes] = useState<DayTime[]>([]);
   const [timeGroups, setTimeGroups] = useState<TimeGroup[]>([]);
+
+  useEffect(() => {
+    dayjs.locale(language);
+  }, [language]);
 
   useEffect(() => {
     fetchEmployees();
@@ -89,7 +97,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         setEmployees([]);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل الموظفين');
+      message.error(t('payroll.attendanceManagement.messages.loadEmployeesError'));
       setEmployees([]);
     }
   };
@@ -108,7 +116,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         setSummary(null);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل بيانات الحضور');
+      message.error(t('payroll.attendanceManagement.messages.loadError'));
       setAttendance([]);
       setSummary(null);
     } finally {
@@ -210,27 +218,27 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         if (timeMode === 'same') {
           // التحقق من وجود وقت الحضور على الأقل
           if (!values.checkIn) {
-            message.error('الرجاء تحديد وقت الحضور');
+            message.error(t('payroll.attendanceManagement.messages.checkInRequired'));
             return;
           }
         } else if (timeMode === 'different') {
           // التحقق من أن جميع الأيام لديها أوقات
           const missingTimes = dayTimes.filter(dt => !dt.checkIn);
           if (missingTimes.length > 0) {
-            message.error('الرجاء تحديد وقت الحضور لجميع الأيام');
+            message.error(t('payroll.attendanceManagement.messages.checkInRequiredAll'));
             return;
           }
           
           // التحقق من أن عدد الأيام في dayTimes يساوي عدد الأيام المختارة
           if (dayTimes.length !== dates.length) {
-            message.error('خطأ في تحديد الأوقات، الرجاء المحاولة مرة أخرى');
+            message.error(t('payroll.attendanceManagement.messages.timesError'));
             return;
           }
         } else if (timeMode === 'groups') {
           // التحقق من أن جميع المجموعات لديها أوقات وأيام
           const invalidGroups = timeGroups.filter(g => !g.checkIn || g.dates.length === 0);
           if (invalidGroups.length > 0) {
-            message.error('الرجاء تحديد الأيام والأوقات لجميع المجموعات');
+            message.error(t('payroll.attendanceManagement.messages.groupsInvalid'));
             return;
           }
           
@@ -241,20 +249,20 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           
           if (unassignedDates.length > 0) {
             const unassignedDatesStr = unassignedDates.map((d: string) => dayjs(d).format('DD/MM/YYYY')).join('، ');
-            message.error(`الأيام التالية لم يتم تعيين وقت لها: ${unassignedDatesStr}`);
+            message.error(t('payroll.attendanceManagement.messages.unassignedDates', { dates: unassignedDatesStr }));
             return;
           }
           
           // التحقق من عدم وجود أيام مكررة
           if (allGroupDates.length !== new Set(allGroupDates).size) {
-            message.error('يوجد أيام مكررة في المجموعات');
+            message.error(t('payroll.attendanceManagement.messages.duplicateDates'));
             return;
           }
           
           // التحقق من أن جميع الأيام في المجموعات موجودة في الأيام المختارة
           const extraDates = allGroupDates.filter((d: string) => !allDates.includes(d));
           if (extraDates.length > 0) {
-            message.error('يوجد أيام في المجموعات غير موجودة في الأيام المختارة');
+            message.error(t('payroll.attendanceManagement.messages.extraDates'));
             return;
           }
         }
@@ -316,9 +324,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
       }
       
       if (successCount > 0) {
-        message.success(`تم تسجيل الحضور لـ ${successCount} يوم بنجاح`);
+        message.success(t('payroll.attendanceManagement.messages.success', { count: successCount }));
         if (errors.length > 0) {
-          message.warning(`فشل تسجيل ${errors.length} يوم`);
+          message.warning(t('payroll.attendanceManagement.messages.partialFailure', { count: errors.length }));
         }
         setIsMarkModalVisible(false);
         form.resetFields();
@@ -326,10 +334,10 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         setTimeGroups([]);
         fetchAttendance();
       } else {
-        message.error('فشل في تسجيل الحضور لجميع الأيام');
+        message.error(t('payroll.attendanceManagement.messages.allFailed'));
       }
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تسجيل الحضور');
+      message.error(error.response?.data?.error || t('payroll.attendanceManagement.messages.error'));
     }
   };
 
@@ -346,15 +354,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
   };
 
   const getStatusName = (status: string) => {
-    const names: any = {
-      present: 'حضور',
-      absent: 'غياب',
-      late: 'تأخير',
-      leave: 'إجازة',
-      half_day: 'نصف يوم',
-      weekly_off: 'إجازة أسبوعية'
-    };
-    return names[status] || status;
+    return t(`payroll.attendanceManagement.status.${status}`, status);
   };
 
   const getStatusIcon = (status: string) => {
@@ -376,9 +376,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium mb-2 dark:text-gray-200">الموظف</label>
+            <label className="block text-sm font-medium mb-2 dark:text-gray-200">{t('payroll.attendanceManagement.employee')}</label>
             <Select
-              placeholder="اختر موظف"
+              placeholder={t('payroll.attendanceManagement.employeePlaceholder')}
               value={selectedEmployee}
               onChange={setSelectedEmployee}
               style={{ width: '100%' }}
@@ -397,13 +397,13 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2 dark:text-gray-200">الشهر</label>
+            <label className="block text-sm font-medium mb-2 dark:text-gray-200">{t('payroll.attendanceManagement.month')}</label>
             <DatePicker
               picker="month"
               value={selectedMonth}
               onChange={(date) => date && setSelectedMonth(date)}
               format="YYYY-MM"
-              placeholder="اختر الشهر"
+              placeholder={t('payroll.attendanceManagement.month')}
               size="large"
               className="dark:bg-gray-700 dark:border-gray-600"
             />
@@ -416,7 +416,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
             disabled={!selectedEmployee}
             size="large"
           >
-            تسجيل حضور
+            {t('payroll.attendanceManagement.markAttendance')}
           </Button>
         </div>
       </Card>
@@ -427,9 +427,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           <Col xs={12} sm={12} md={6}>
             <Card className="dark:bg-gray-800 dark:border-gray-700">
               <Statistic
-                title={<span className="dark:text-gray-300">إجمالي أيام العمل</span>}
+                title={<span className="dark:text-gray-300">{t('payroll.attendanceManagement.stats.totalDays')}</span>}
                 value={toArabicNumbers(summary.totalDays)}
-                suffix="يوم"
+                suffix={t('payroll.payrollHistory.days')}
                 valueStyle={{ color: '#1890ff' }}
                 className="dark:text-gray-100"
               />
@@ -438,7 +438,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           <Col xs={12} sm={12} md={6}>
             <Card className="dark:bg-gray-800 dark:border-gray-700">
               <Statistic
-                title={<span className="dark:text-gray-300">أيام الحضور</span>}
+                title={<span className="dark:text-gray-300">{t('payroll.attendanceManagement.stats.presentDays')}</span>}
                 value={toArabicNumbers(summary.present)}
                 suffix={`/ ${toArabicNumbers(summary.totalDays)}`}
                 valueStyle={{ color: '#52c41a' }}
@@ -450,9 +450,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           <Col xs={12} sm={12} md={6}>
             <Card className="dark:bg-gray-800 dark:border-gray-700">
               <Statistic
-                title={<span className="dark:text-gray-300">أيام الغياب</span>}
+                title={<span className="dark:text-gray-300">{t('payroll.attendanceManagement.stats.absentDays')}</span>}
                 value={toArabicNumbers(summary.absent)}
-                suffix="يوم"
+                suffix={t('payroll.payrollHistory.days')}
                 valueStyle={{ color: '#ff4d4f' }}
                 prefix={<XCircle size={20} />}
                 className="dark:text-gray-100"
@@ -462,9 +462,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           <Col xs={12} sm={12} md={6}>
             <Card className="dark:bg-gray-800 dark:border-gray-700">
               <Statistic
-                title={<span className="dark:text-gray-300">الساعات الإضافية</span>}
+                title={<span className="dark:text-gray-300">{t('payroll.attendanceManagement.stats.overtimeHours')}</span>}
                 value={toArabicNumbers(summary.overtimeHours)}
-                suffix="ساعة"
+                suffix={t('payroll.attendanceManagement.card.hour')}
                 valueStyle={{ color: '#faad14' }}
                 prefix={<Clock size={20} />}
                 className="dark:text-gray-100"
@@ -482,7 +482,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           </div>
         ) : attendance.length === 0 ? (
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Empty description="لا توجد سجلات حضور" />
+            <Empty description={t('payroll.attendanceManagement.empty')} />
           </Card>
         ) : (
           <Row gutter={[16, 16]}>
@@ -511,7 +511,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                       <Tag color={getStatusColor(record.status)}>
                         {getStatusName(record.status)}
                       </Tag>
-                      {record.excused && <Tag color="blue">بعذر</Tag>}
+                      {record.excused && <Tag color="blue">{t('payroll.attendanceManagement.card.excused')}</Tag>}
                     </div>
 
                     {/* Times */}
@@ -519,19 +519,19 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                       <div className="space-y-1 text-sm">
                         {record.checkIn && (
                           <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                            <span>الحضور:</span>
+                            <span>{t('payroll.attendanceManagement.form.checkIn')}:</span>
                             <span className="font-medium">{formatTime12Hour(record.checkIn)}</span>
                           </div>
                         )}
                         {record.checkOut && (
                           <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                            <span>الانصراف:</span>
+                            <span>{t('payroll.attendanceManagement.form.checkOut')}:</span>
                             <div className="flex items-center gap-1">
                               <span className="font-medium">{formatTime12Hour(record.checkOut)}</span>
                               {record.checkIn && record.checkOut && 
                                parseInt(record.checkOut.split(':')[0]) < parseInt(record.checkIn.split(':')[0]) && (
                                 <span className="text-xs text-orange-500 dark:text-orange-400">
-                                  (اليوم التالي)
+                                  ({t('payroll.attendanceManagement.card.nextDay')})
                                 </span>
                               )}
                             </div>
@@ -544,14 +544,14 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                     {record.hours && record.hours > 0 && (
                       <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600 dark:text-gray-300">الساعات:</span>
+                          <span className="text-gray-600 dark:text-gray-300">{t('payroll.attendanceManagement.card.hours')}:</span>
                           <span className="font-bold text-blue-600 dark:text-blue-400">
-                            {toArabicNumbers(record.hours.toFixed(1))} ساعة
+                            {toArabicNumbers(record.hours.toFixed(1))} {t('payroll.attendanceManagement.card.hour')}
                           </span>
                         </div>
                         {record.overtime !== undefined && record.overtime !== null && record.overtime > 0 && (
                           <div key={`overtime-${record._id}`} className="flex justify-between text-xs mt-1">
-                            <span className="text-gray-500 dark:text-gray-400">إضافي:</span>
+                            <span className="text-gray-500 dark:text-gray-400">{t('payroll.attendanceManagement.card.overtime')}:</span>
                             <span className="font-medium text-green-600 dark:text-green-400">
                               +{toArabicNumbers(record.overtime.toFixed(1))}
                             </span>
@@ -565,25 +565,25 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                       <div className="pt-2 border-t border-gray-200 dark:border-gray-700 bg-green-50 dark:bg-green-900/20 -mx-4 -mb-4 px-4 py-3 rounded-b-lg">
                         {record.dailySalary !== undefined && record.dailySalary > 0 && (
                           <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-600 dark:text-gray-300">الراتب اليومي:</span>
+                            <span className="text-gray-600 dark:text-gray-300">{t('payroll.attendanceManagement.card.dailySalary')}:</span>
                             <span className="font-bold text-green-600 dark:text-green-400">
-                              {toArabicNumbers(record.dailySalary.toFixed(2))} جنيه
+                              {toArabicNumbers(record.dailySalary.toFixed(2))} {t('common.currency')}
                             </span>
                           </div>
                         )}
                         {record.overtimePay !== undefined && record.overtimePay > 0 && (
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500 dark:text-gray-400">قيمة الساعات الإضافية:</span>
+                            <span className="text-gray-500 dark:text-gray-400">{t('payroll.attendanceManagement.card.overtimePay')}:</span>
                             <span className="font-medium text-green-600 dark:text-green-400">
-                              +{toArabicNumbers(record.overtimePay.toFixed(2))} جنيه
+                              +{toArabicNumbers(record.overtimePay.toFixed(2))} {t('common.currency')}
                             </span>
                           </div>
                         )}
                         {record.totalPay !== undefined && record.totalPay > 0 && (
                           <div className="flex justify-between text-sm font-bold pt-1 border-t border-green-200 dark:border-green-800">
-                            <span className="text-gray-700 dark:text-gray-200">الإجمالي:</span>
+                            <span className="text-gray-700 dark:text-gray-200">{t('payroll.attendanceManagement.card.total')}:</span>
                             <span className="text-green-700 dark:text-green-300">
-                              {toArabicNumbers(record.totalPay.toFixed(2))} جنيه
+                              {toArabicNumbers(record.totalPay.toFixed(2))} {t('common.currency')}
                             </span>
                           </div>
                         )}
@@ -593,7 +593,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                     {/* Late */}
                     {record.lateMinutes !== undefined && record.lateMinutes !== null && record.lateMinutes > 0 && (
                       <div key={`late-${record._id}`} className="text-xs text-red-600 dark:text-red-400 text-center">
-                        تأخير: {toArabicNumbers(record.lateMinutes)} دقيقة
+                        {t('payroll.attendanceManagement.card.late')}: {toArabicNumbers(record.lateMinutes)} {t('payroll.attendanceManagement.card.minutes')}
                       </div>
                     )}
 
@@ -613,7 +613,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                         onClick={() => handleMarkAttendance(record)}
                         className="dark:text-blue-400"
                       >
-                        تعديل
+                        {t('payroll.attendanceManagement.card.edit')}
                       </Button>
                     </div>
                   </div>
@@ -626,7 +626,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
 
       {/* Mark Attendance Modal */}
       <Modal
-        title={editingRecord ? 'تعديل الحضور' : 'تسجيل حضور'}
+        title={editingRecord ? t('payroll.attendanceManagement.form.editTitle') : t('payroll.attendanceManagement.form.title')}
         open={isMarkModalVisible}
         onCancel={() => {
           setIsMarkModalVisible(false);
@@ -641,9 +641,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {editingRecord ? (
             <Form.Item
-              label={<span className="dark:text-gray-200">التاريخ</span>}
+              label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.date')}</span>}
               name="dates"
-              rules={[{ required: true, message: 'الرجاء اختيار التاريخ' }]}
+              rules={[{ required: true, message: t('payroll.attendanceManagement.form.dateRequired') }]}
             >
               <DatePicker 
                 style={{ width: '100%' }} 
@@ -654,33 +654,33 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
             </Form.Item>
           ) : (
             <Form.Item
-              label={<span className="dark:text-gray-200">الأيام (يمكن اختيار عدة أيام)</span>}
+              label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.dates')}</span>}
               name="dates"
-              rules={[{ required: true, message: 'الرجاء اختيار الأيام' }]}
+              rules={[{ required: true, message: t('payroll.attendanceManagement.form.datesRequired') }]}
             >
               <DatePicker
                 multiple
                 style={{ width: '100%' }}
                 format="YYYY-MM-DD"
                 className="dark:bg-gray-700 dark:border-gray-600"
-                placeholder="اختر يوم أو أكثر"
+                placeholder={t('payroll.attendanceManagement.form.datesPlaceholder')}
                 onChange={handleDatesChange}
               />
             </Form.Item>
           )}
 
           <Form.Item
-            label={<span className="dark:text-gray-200">الحالة</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.status')}</span>}
             name="status"
-            rules={[{ required: true, message: 'الرجاء اختيار الحالة' }]}
+            rules={[{ required: true, message: t('payroll.attendanceManagement.form.statusRequired') }]}
           >
             <Select className="dark:bg-gray-700">
-              <Option value="present">حضور</Option>
-              <Option value="absent">غياب</Option>
-              <Option value="late">تأخير</Option>
-              <Option value="leave">إجازة</Option>
-              <Option value="half_day">نصف يوم</Option>
-              <Option value="weekly_off">إجازة أسبوعية</Option>
+              <Option value="present">{t('payroll.attendanceManagement.status.present')}</Option>
+              <Option value="absent">{t('payroll.attendanceManagement.status.absent')}</Option>
+              <Option value="late">{t('payroll.attendanceManagement.status.late')}</Option>
+              <Option value="leave">{t('payroll.attendanceManagement.status.leave')}</Option>
+              <Option value="half_day">{t('payroll.attendanceManagement.status.half_day')}</Option>
+              <Option value="weekly_off">{t('payroll.attendanceManagement.status.weekly_off')}</Option>
             </Select>
           </Form.Item>
 
@@ -700,7 +700,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                       {!editingRecord && dates.length > 1 && (
                         <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                           <div className="text-sm font-medium mb-3 text-gray-700 dark:text-gray-200">
-                            اختر طريقة تحديد الأوقات:
+                            {t('payroll.attendanceManagement.form.timeMode.title')}
                           </div>
                           <div className="flex flex-col gap-3">
                             <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-all hover:bg-blue-100 dark:hover:bg-blue-900/30 dark:text-gray-200"
@@ -716,9 +716,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                 className="w-5 h-5"
                               />
                               <div>
-                                <div className="font-medium">نفس الوقت لجميع الأيام</div>
+                                <div className="font-medium">{t('payroll.attendanceManagement.form.timeMode.same')}</div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  سيتم تطبيق نفس وقت الحضور والانصراف على جميع الأيام المختارة
+                                  {t('payroll.attendanceManagement.form.timeMode.sameDesc')}
                                 </div>
                               </div>
                             </label>
@@ -741,9 +741,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                 className="w-5 h-5"
                               />
                               <div>
-                                <div className="font-medium">مجموعات أيام بأوقات مختلفة</div>
+                                <div className="font-medium">{t('payroll.attendanceManagement.form.timeMode.groups')}</div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  يمكنك تقسيم الأيام إلى مجموعات، كل مجموعة لها وقت خاص
+                                  {t('payroll.attendanceManagement.form.timeMode.groupsDesc')}
                                 </div>
                               </div>
                             </label>
@@ -761,9 +761,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                 className="w-5 h-5"
                               />
                               <div>
-                                <div className="font-medium">وقت مختلف لكل يوم</div>
+                                <div className="font-medium">{t('payroll.attendanceManagement.form.timeMode.different')}</div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  يمكنك تحديد وقت حضور وانصراف مختلف لكل يوم على حدة
+                                  {t('payroll.attendanceManagement.form.timeMode.differentDesc')}
                                 </div>
                               </div>
                             </label>
@@ -776,22 +776,22 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                         <Row gutter={16}>
                           <Col span={12}>
                             <Form.Item 
-                              label={<span className="dark:text-gray-200">وقت الحضور</span>} 
+                              label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.checkIn')}</span>} 
                               name="checkIn"
-                              rules={status === 'present' || status === 'late' ? [{ required: true, message: 'مطلوب' }] : []}
+                              rules={status === 'present' || status === 'late' ? [{ required: true, message: t('payroll.attendanceManagement.form.checkInRequired') }] : []}
                             >
                               <TimePicker 
                                 style={{ width: '100%' }} 
                                 format="hh:mm A"
                                 use12Hours
                                 className="dark:bg-gray-700 dark:border-gray-600"
-                                placeholder="اختر الوقت"
+                                placeholder={t('payroll.attendanceManagement.form.checkInPlaceholder')}
                               />
                             </Form.Item>
                           </Col>
                           <Col span={12}>
                             <Form.Item 
-                              label={<span className="dark:text-gray-200">وقت الانصراف</span>} 
+                              label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.checkOut')}</span>} 
                               name="checkOut"
                             >
                               <TimePicker 
@@ -799,7 +799,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                 format="hh:mm A"
                                 use12Hours
                                 className="dark:bg-gray-700 dark:border-gray-600"
-                                placeholder="اختر الوقت"
+                                placeholder={t('payroll.attendanceManagement.form.checkOutPlaceholder')}
                               />
                             </Form.Item>
                           </Col>
@@ -811,7 +811,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                         <div className="space-y-3">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                              المجموعات ({toArabicNumbers(timeGroups.length)})
+                              {t('payroll.attendanceManagement.form.groups.title')} ({toArabicNumbers(timeGroups.length)})
                             </span>
                             <Button 
                               type="dashed" 
@@ -819,7 +819,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                               onClick={addTimeGroup}
                               className="dark:border-gray-600 dark:text-gray-200"
                             >
-                              + إضافة مجموعة
+                              {t('payroll.attendanceManagement.form.groups.addGroup')}
                             </Button>
                           </div>
                           
@@ -839,13 +839,13 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                         size="small"
                                         onClick={() => removeTimeGroup(group.id)}
                                       >
-                                        حذف
+                                        {t('payroll.attendanceManagement.form.groups.delete')}
                                       </Button>
                                     )
                                   }
                                   title={
                                     <span className="dark:text-gray-200">
-                                      المجموعة {toArabicNumbers(index + 1)}
+                                      {t('payroll.attendanceManagement.form.groups.group')} {toArabicNumbers(index + 1)}
                                     </span>
                                   }
                                 >
@@ -853,12 +853,12 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                     {/* اختيار الأيام */}
                                     <div>
                                       <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                        اختر الأيام *
+                                        {t('payroll.attendanceManagement.form.groups.selectDays')}
                                       </div>
                                       <Select
                                         mode="multiple"
                                         style={{ width: '100%' }}
-                                        placeholder="اختر الأيام لهذه المجموعة"
+                                        placeholder={t('payroll.attendanceManagement.form.groups.selectDaysPlaceholder')}
                                         value={group.dates}
                                         onChange={(values) => updateTimeGroup(group.id, 'dates', values)}
                                         className="dark:bg-gray-600"
@@ -887,13 +887,13 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                     <Row gutter={8}>
                                       <Col span={12}>
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                          وقت الحضور *
+                                          {t('payroll.attendanceManagement.form.groups.checkIn')}
                                         </div>
                                         <TimePicker
                                           style={{ width: '100%' }}
                                           format="hh:mm A"
                                           use12Hours
-                                          placeholder="اختر الوقت"
+                                          placeholder={t('payroll.attendanceManagement.form.checkInPlaceholder')}
                                           value={group.checkIn}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkIn', time)}
                                           className="dark:bg-gray-600 dark:border-gray-500"
@@ -901,13 +901,13 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                       </Col>
                                       <Col span={12}>
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                          وقت الانصراف
+                                          {t('payroll.attendanceManagement.form.groups.checkOut')}
                                         </div>
                                         <TimePicker
                                           style={{ width: '100%' }}
                                           format="hh:mm A"
                                           use12Hours
-                                          placeholder="اختر الوقت"
+                                          placeholder={t('payroll.attendanceManagement.form.checkOutPlaceholder')}
                                           value={group.checkOut}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkOut', time)}
                                           className="dark:bg-gray-600 dark:border-gray-500"
@@ -918,7 +918,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                     {/* عرض الأيام المختارة */}
                                     {group.dates.length > 0 && (
                                       <div className="text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-600">
-                                        {toArabicNumbers(group.dates.length)} يوم محدد
+                                        {toArabicNumbers(group.dates.length)} {t('payroll.attendanceManagement.form.groups.daysSelected')}
                                       </div>
                                     )}
                                   </div>
@@ -992,15 +992,15 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                   {(status === 'absent' || status === 'late' || status === 'leave') && (
                     <>
                       <Form.Item 
-                        label={<span className="dark:text-gray-200">السبب</span>} 
+                        label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.reason')}</span>} 
                         name="reason"
-                        rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+                        rules={[{ required: true, message: t('payroll.attendanceManagement.form.reasonRequired') }]}
                       >
                         <Input 
                           placeholder={
-                            status === 'absent' ? 'سبب الغياب...' :
-                            status === 'late' ? 'سبب التأخير...' :
-                            'سبب الإجازة...'
+                            status === 'absent' ? t('payroll.attendanceManagement.form.reasonPlaceholder.absent') :
+                            status === 'late' ? t('payroll.attendanceManagement.form.reasonPlaceholder.late') :
+                            t('payroll.attendanceManagement.form.reasonPlaceholder.leave')
                           }
                           className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
                         />
@@ -1009,7 +1009,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                       <Form.Item name="excused" valuePropName="checked">
                         <label className="flex items-center gap-2 cursor-pointer dark:text-gray-200">
                           <input type="checkbox" className="w-4 h-4" />
-                          <span>بعذر مقبول</span>
+                          <span>{t('payroll.attendanceManagement.form.excused')}</span>
                         </label>
                       </Form.Item>
                     </>
@@ -1019,10 +1019,10 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
             }}
           </Form.Item>
 
-          <Form.Item label={<span className="dark:text-gray-200">ملاحظات إضافية</span>} name="notes">
+          <Form.Item label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.notes')}</span>} name="notes">
             <TextArea 
               rows={3} 
-              placeholder="ملاحظات إضافية..." 
+              placeholder={t('payroll.attendanceManagement.form.notesPlaceholder')} 
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
             />
           </Form.Item>
@@ -1030,7 +1030,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                حفظ
+                {t('payroll.attendanceManagement.form.save')}
               </Button>
               <Button 
                 onClick={() => {
@@ -1041,7 +1041,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                 }} 
                 size="large"
               >
-                إلغاء
+                {t('payroll.attendanceManagement.form.cancel')}
               </Button>
             </div>
           </Form.Item>

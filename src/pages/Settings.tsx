@@ -1,6 +1,10 @@
-import { useState, useEffect, FC } from 'react';
+﻿import { useState, useEffect, FC } from 'react';
 import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { ReportSettingsSection } from '../components/ReportSettingsSection';
 import { PayrollPermissionsSection } from '../components/PayrollPermissionsSection';
 
@@ -39,8 +43,6 @@ interface NotificationSettings {
 interface GeneralSettings {
   theme: string;
   language: string;
-  timezone: string;
-  currency: string;
 }
 
 interface ProfileData {
@@ -58,6 +60,8 @@ interface OrganizationData {
   email: string;
   website: string;
   websiteUrl: string;
+  timezone?: string;
+  currency?: string;
   socialLinks: {
     facebook: string;
     instagram: string;
@@ -99,6 +103,10 @@ interface Manager {
 }
 
 const Settings: FC = () => {
+  const { t } = useTranslation();
+  const { currentLanguage, isRTL, changeLanguage } = useLanguage();
+  const { isDarkMode, toggleDarkMode, setTheme } = useTheme();
+  const { refreshOrganizationSettings } = useOrganization();
   const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
   
   // UI State
@@ -154,8 +162,6 @@ const Settings: FC = () => {
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>({
     theme: 'light',
     language: 'ar',
-    timezone: 'Africa/Cairo',
-    currency: 'EGP',
   });
 
   // Organization state
@@ -167,6 +173,8 @@ const Settings: FC = () => {
     email: '',
     website: '',
     websiteUrl: '',
+    timezone: 'Africa/Cairo',
+    currency: 'EGP',
     socialLinks: {
       facebook: '',
       instagram: '',
@@ -289,12 +297,13 @@ const Settings: FC = () => {
           if (genSettings) {
             setGeneralSettings(prev => ({
               ...prev,
-              ...genSettings
+              theme: genSettings.theme || 'light',
+              language: genSettings.language || currentLanguage,
             }));
           }
         } catch (error) {
           console.error('Error loading settings:', error);
-          showAlertMessage('حدث خطأ أثناء تحميل الإعدادات', 'warning');
+          showAlertMessage(t('settings.errors.loadSettings'), 'warning');
         }
       }
     };
@@ -353,7 +362,7 @@ const Settings: FC = () => {
         }
       } catch (error) {
         console.error('Error loading organization data:', error);
-        showAlertMessage('حدث خطأ أثناء تحميل بيانات المنشأة', 'error');
+        showAlertMessage(t('settings.organization.errors.loadOrganization'), 'error');
       } finally {
         setOrganizationLoading(false);
       }
@@ -468,7 +477,7 @@ const Settings: FC = () => {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">جاري التحميل...</p>
+          <p className="text-gray-600 dark:text-gray-400">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -476,7 +485,7 @@ const Settings: FC = () => {
 
   const handleProfileUpdate = async () => {
     if (!profile.name.trim() || !profile.email.trim()) {
-      showAlertMessage('الاسم والبريد الإلكتروني مطلوبان', 'error');
+      showAlertMessage(t('settings.profile.errors.nameEmailRequired'), 'error');
       return;
     }
 
@@ -484,14 +493,13 @@ const Settings: FC = () => {
     try {
       const success = await updateUserProfile(profile);
       if (success) {
-        showAlertMessage('تم تحديث الملف الشخصي بنجاح');
-        // The user state should be automatically updated by the updateUserProfile function
+        showAlertMessage(t('settings.profile.success'));
       } else {
-        showAlertMessage('حدث خطأ أثناء تحديث الملف الشخصي', 'error');
+        showAlertMessage(t('settings.profile.errors.updateFailed'), 'error');
       }
     } catch (error) {
       console.error('Profile update error:', error);
-      showAlertMessage('حدث خطأ غير متوقع أثناء تحديث الملف الشخصي', 'error');
+      showAlertMessage(t('settings.profile.errors.unexpected'), 'error');
     } finally {
       setProfileSaving(false);
     }
@@ -499,17 +507,17 @@ const Settings: FC = () => {
 
   const handlePasswordChange = async () => {
     if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      showAlertMessage('جميع الحقول مطلوبة', 'error');
+      showAlertMessage(t('settings.password.errors.allFieldsRequired'), 'error');
       return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      showAlertMessage('كلمة المرور الجديدة غير متطابقة', 'error');
+      showAlertMessage(t('settings.password.errors.passwordMismatch'), 'error');
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      showAlertMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error');
+      showAlertMessage(t('settings.password.errors.passwordMinLength'), 'error');
       return;
     }
 
@@ -517,17 +525,17 @@ const Settings: FC = () => {
     try {
       const success = await changePassword(passwordData);
       if (success) {
-        showAlertMessage('تم تغيير كلمة المرور بنجاح');
+        showAlertMessage(t('settings.password.success'));
         setPasswordData({
           currentPassword: '',
           newPassword: '',
           confirmPassword: '',
         });
       } else {
-        showAlertMessage('فشل تغيير كلمة المرور. يرجى التحقق من كلمة المرور الحالية', 'error');
+        showAlertMessage(t('settings.password.errors.changeFailed'), 'error');
       }
     } catch (error) {
-      showAlertMessage('حدث خطأ أثناء تغيير كلمة المرور', 'error');
+      showAlertMessage(t('settings.password.errors.unexpected'), 'error');
     } finally {
       setPasswordSaving(false);
     }
@@ -538,13 +546,13 @@ const Settings: FC = () => {
     try {
       const success = await updateNotificationSettings(notificationSettings);
       if (success) {
-        showAlertMessage('تم حفظ إعدادات الإشعارات بنجاح');
+        showAlertMessage(t('settings.notifications.success'));
       } else {
-        showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
+        showAlertMessage(t('settings.notifications.errors.saveFailed'), 'error');
       }
     } catch (error) {
       console.error('Error updating notification settings:', error);
-      showAlertMessage('حدث خطأ أثناء حفظ إعدادات الإشعارات', 'error');
+      showAlertMessage(t('settings.notifications.errors.unexpected'), 'error');
     } finally {
       setNotificationsSaving(false);
     }
@@ -555,21 +563,33 @@ const Settings: FC = () => {
     try {
       const success = await updateGeneralSettings(generalSettings);
       if (success) {
-        showAlertMessage('تم حفظ الإعدادات العامة بنجاح');
+        // Apply theme changes (without saving to DB again, already saved above)
+        await setTheme(generalSettings.theme as 'light' | 'dark' | 'auto', false);
+
+        // Apply language changes (without saving to DB again, already saved above)
+        if (generalSettings.language !== currentLanguage) {
+          await changeLanguage(generalSettings.language, false);
+        }
+
+        showAlertMessage(t('settings.general.success'));
+        
+        // Reload page after a short delay to apply all changes
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
       } else {
-        showAlertMessage('حدث خطأ أثناء حفظ الإعدادات العامة', 'error');
+        showAlertMessage(t('settings.general.errors.saveFailed'), 'error');
       }
     } catch (error) {
-      showAlertMessage('حدث خطأ أثناء حفظ الإعدادات العامة', 'error');
+      showAlertMessage(t('settings.general.errors.unexpected'), 'error');
     } finally {
       setGeneralSaving(false);
     }
   };
 
   const handleOrganizationUpdate = async () => {
-    // التحقق من البيانات المطلوبة
     if (!organization.name.trim()) {
-      showAlertMessage('اسم المنشأة مطلوب', 'error');
+      showAlertMessage(t('settings.organization.errors.nameRequired'), 'error');
       return;
     }
 
@@ -577,13 +597,16 @@ const Settings: FC = () => {
     try {
       const success = await updateOrganization(organization);
       if (success) {
-        showAlertMessage('تم تحديث بيانات المنشأة بنجاح');
+        // Refresh organization settings in OrganizationContext
+        await refreshOrganizationSettings();
+        
+        showAlertMessage(t('settings.organization.success'));
       } else {
-        showAlertMessage('حدث خطأ أثناء تحديث بيانات المنشأة', 'error');
+        showAlertMessage(t('settings.organization.errors.updateFailed'), 'error');
       }
     } catch (error) {
       console.error('Organization update error:', error);
-      showAlertMessage('حدث خطأ غير متوقع أثناء تحديث بيانات المنشأة', 'error');
+      showAlertMessage(t('settings.organization.errors.unexpected'), 'error');
     } finally {
       setOrganizationSaving(false);
     }
@@ -644,8 +667,7 @@ const Settings: FC = () => {
         authorizedManagers: selectedManagers,
       });
       if (success) {
-        showAlertMessage('تم تحديث صلاحيات المنشأة بنجاح');
-        // Reload permissions to get updated data
+        showAlertMessage(t('settings.organization.permissions.success'));
         try {
           const permissions = await canEditOrganization();
           if (permissions) {
@@ -655,11 +677,11 @@ const Settings: FC = () => {
           console.error('Error reloading permissions:', reloadError);
         }
       } else {
-        showAlertMessage('حدث خطأ أثناء تحديث صلاحيات المنشأة', 'error');
+        showAlertMessage(t('settings.organization.permissions.errors.updateFailed'), 'error');
       }
     } catch (error) {
       console.error('Permissions update error:', error);
-      showAlertMessage('حدث خطأ غير متوقع أثناء تحديث صلاحيات المنشأة', 'error');
+      showAlertMessage(t('settings.organization.permissions.errors.unexpected'), 'error');
     } finally {
       setPermissionsSaving(false);
     }
@@ -674,11 +696,11 @@ const Settings: FC = () => {
   };
 
   const tabs: TabType[] = [
-    { id: 'profile', name: 'الملف الشخصي', icon: User },
-    { id: 'password', name: 'كلمة المرور', icon: Lock },
-    { id: 'notifications', name: 'الإشعارات', icon: Bell },
-    { id: 'general', name: 'عام', icon: SettingsIcon },
-    { id: 'organization', name: 'المنشأة', icon: Building2 },
+    { id: 'profile', name: t('settings.tabs.profile'), icon: User },
+    { id: 'password', name: t('settings.tabs.password'), icon: Lock },
+    { id: 'notifications', name: t('settings.tabs.notifications'), icon: Bell },
+    { id: 'general', name: t('settings.tabs.general'), icon: SettingsIcon },
+    { id: 'organization', name: t('settings.tabs.organization'), icon: Building2 },
   ];
 
   if (!user) {
@@ -686,26 +708,25 @@ const Settings: FC = () => {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">جاري التحميل...</p>
+          <p className="text-gray-600 dark:text-gray-400">{t('common.loading')}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
           <div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-2 xs:space-y-2 xs:w-full">
             <div className="flex items-center xs:w-full xs:justify-between">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center xs:text-base xs:w-full xs:text-center">
-              <SettingsIcon className="h-6 w-6 text-orange-600 dark:text-orange-400 ml-2" />
-              الإعدادات
+              <SettingsIcon className={`h-6 w-6 text-orange-600 dark:text-orange-400 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+              {t('settings.title')}
             </h1>
-              <p className="text-gray-600 dark:text-gray-300 mr-4 xs:mr-0 xs:w-full xs:text-center">ضبط إعدادات النظام والصلاحيات</p>
+              <p className="text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-4' : 'ml-4'} xs:mr-0 xs:w-full xs:text-center">{t('settings.subtitle')}</p>
             </div>
             <div className="flex items-center gap-2 xs:w-full xs:justify-center xs:mt-2">
-              {/* ضع هنا أزرار الإجراءات مثل حفظ الإعدادات */}
           </div>
       </div>
 
@@ -739,54 +760,54 @@ const Settings: FC = () => {
             {activeTab === 'profile' && (
                 <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">الملف الشخصي</h3>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.profile.title')}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        الاسم الكامل
+                        {t('settings.profile.fullName')}
                       </label>
                       <input
                         type="text"
                         value={profile.name}
                         onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                        placeholder="أدخل اسمك الكامل"
+                        placeholder={t('settings.profile.fullNamePlaceholder')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        البريد الإلكتروني
+                        {t('settings.profile.email')}
                       </label>
                       <input
                         type="email"
                         value={profile.email}
                         onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                        placeholder="أدخل بريدك الإلكتروني"
+                        placeholder={t('settings.profile.emailPlaceholder')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        رقم الهاتف
+                        {t('settings.profile.phone')}
                       </label>
                       <input
                         type="tel"
                         value={profile.phone}
                         onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                        placeholder="أدخل رقم هاتفك"
+                        placeholder={t('settings.profile.phonePlaceholder')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        العنوان
+                        {t('settings.profile.address')}
                       </label>
                       <input
                         type="text"
                         value={profile.address}
                         onChange={(e) => setProfile({ ...profile, address: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                        placeholder="أدخل عنوانك"
+                        placeholder={t('settings.profile.addressPlaceholder')}
                       />
                     </div>
                   </div>
@@ -802,12 +823,12 @@ const Settings: FC = () => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          <span>جاري الحفظ...</span>
+                          <span>{t('common.saving')}</span>
                         </>
                       ) : (
                         <>
                           <Save className="h-4 w-4" />
-                          <span>حفظ التغييرات</span>
+                          <span>{t('common.saveChanges')}</span>
                         </>
                       )}
                     </button>
@@ -820,11 +841,11 @@ const Settings: FC = () => {
             {activeTab === 'password' && (
                   <div className="space-y-6">
                   <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">تغيير كلمة المرور</h3>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.password.title')}</h3>
                   <div className="space-y-4">
                   <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        كلمة المرور الحالية
+                        {t('settings.password.currentPassword')}
                       </label>
                       <div className="relative">
                         <input
@@ -832,7 +853,7 @@ const Settings: FC = () => {
                           value={passwordData.currentPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
                           className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                          placeholder="أدخل كلمة المرور الحالية"
+                          placeholder={t('settings.password.currentPasswordPlaceholder')}
                         />
                         <button
                           type="button"
@@ -845,7 +866,7 @@ const Settings: FC = () => {
                     </div>
                   <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        كلمة المرور الجديدة
+                        {t('settings.password.newPassword')}
                       </label>
                       <div className="relative">
                         <input
@@ -853,7 +874,7 @@ const Settings: FC = () => {
                           value={passwordData.newPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                           className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                          placeholder="أدخل كلمة المرور الجديدة"
+                          placeholder={t('settings.password.newPasswordPlaceholder')}
                         />
                         <button
                           type="button"
@@ -866,7 +887,7 @@ const Settings: FC = () => {
                     </div>
                   <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        تأكيد كلمة المرور الجديدة
+                        {t('settings.password.confirmPassword')}
                       </label>
                       <div className="relative">
                         <input
@@ -874,7 +895,7 @@ const Settings: FC = () => {
                           value={passwordData.confirmPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                           className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                          placeholder="أعد إدخال كلمة المرور الجديدة"
+                          placeholder={t('settings.password.confirmPasswordPlaceholder')}
                         />
                         <button
                           type="button"
@@ -897,12 +918,12 @@ const Settings: FC = () => {
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span>جاري التغيير...</span>
+                            <span>{t('settings.password.changing')}</span>
                           </>
                         ) : (
                           <>
                             <Lock className="h-4 w-4" />
-                            <span>تغيير كلمة المرور</span>
+                            <span>{t('settings.password.changePassword')}</span>
                           </>
                         )}
                       </button>
@@ -916,12 +937,12 @@ const Settings: FC = () => {
             {activeTab === 'notifications' && (
                   <div className="space-y-6">
                   <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">إعدادات الإشعارات</h3>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.notifications.title')}</h3>
                     <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إشعارات الجلسات</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">استلام إشعارات عند بدء أو انتهاء الجلسات</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.sessionNotifications')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.sessionNotificationsDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -936,8 +957,8 @@ const Settings: FC = () => {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إشعارات الطلبات</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">استلام إشعارات عند إنشاء أو تحديث الطلبات</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.orderNotifications')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.orderNotificationsDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -952,8 +973,8 @@ const Settings: FC = () => {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إشعارات المخزون</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">استلام إشعارات عند انخفاض المخزون</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.inventoryNotifications')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.inventoryNotificationsDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -968,8 +989,8 @@ const Settings: FC = () => {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إشعارات الفواتير</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">استلام إشعارات عند إنشاء أو دفع الفواتير</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.billingNotifications')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.billingNotificationsDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -984,8 +1005,8 @@ const Settings: FC = () => {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">صوت الإشعارات</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">تشغيل صوت عند استلام الإشعارات</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.soundEnabled')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.soundEnabledDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -1000,8 +1021,8 @@ const Settings: FC = () => {
 
                     <div className="flex items-center justify-between">
                   <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إشعارات البريد الإلكتروني</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">إرسال الإشعارات عبر البريد الإلكتروني</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.emailNotifications')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.emailNotificationsDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -1016,8 +1037,8 @@ const Settings: FC = () => {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">إظهار عدد الإشعارات</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">إظهار عدد الإشعارات غير المقروءة</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.showNotificationCount')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.showNotificationCountDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -1032,8 +1053,8 @@ const Settings: FC = () => {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">تحديد كمقروء تلقائياً</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">تحديد الإشعارات كمقروءة تلقائياً بعد فترة</p>
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('settings.notifications.autoMarkAsRead')}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.notifications.autoMarkAsReadDesc')}</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -1058,12 +1079,12 @@ const Settings: FC = () => {
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span>جاري الحفظ...</span>
+                            <span>{t('common.saving')}</span>
                           </>
                         ) : (
                           <>
                             <Save className="h-4 w-4" />
-                            <span>حفظ إعدادات الإشعارات</span>
+                            <span>{t('settings.notifications.saveSettings')}</span>
                           </>
                         )}
                       </button>
@@ -1077,67 +1098,37 @@ const Settings: FC = () => {
             {activeTab === 'general' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">الإعدادات العامة</h3>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">{t('settings.general.title')}</h3>
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        المظهر
+                        {t('settings.general.theme')}
                       </label>
                       <select
                         value={generalSettings.theme}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, theme: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
-                        <option value="light">فاتح</option>
-                        <option value="dark">داكن</option>
-                        <option value="auto">تلقائي</option>
+                        <option value="light">{t('settings.general.themeLight')}</option>
+                        <option value="dark">{t('settings.general.themeDark')}</option>
+                        <option value="auto">{t('settings.general.themeAuto')}</option>
                       </select>
                   </div>
 
                   <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        اللغة
+                        {t('settings.general.language')}
                       </label>
                       <select
                         value={generalSettings.language}
                         onChange={(e) => setGeneralSettings({ ...generalSettings, language: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
-                        <option value="ar">العربية</option>
-                        <option value="en">English</option>
+                        <option value="ar">{t('settings.general.languageAr')}</option>
+                        <option value="en">{t('settings.general.languageEn')}</option>
+                        <option value="fr">{t('settings.general.languageFr')}</option>
                         </select>
                       </div>
-
-                      <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        المنطقة الزمنية
-                      </label>
-                      <select
-                        value={generalSettings.timezone}
-                        onChange={(e) => setGeneralSettings({ ...generalSettings, timezone: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      >
-                        <option value="Africa/Cairo">القاهرة (GMT+2)</option>
-                        <option value="Asia/Riyadh">الرياض (GMT+3)</option>
-                        <option value="Asia/Dubai">دبي (GMT+4)</option>
-                      </select>
-                  </div>
-
-                  <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        العملة
-                      </label>
-                      <select
-                        value={generalSettings.currency}
-                        onChange={(e) => setGeneralSettings({ ...generalSettings, currency: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      >
-                        <option value="EGP">جنيه مصري (EGP)</option>
-                        <option value="SAR">ريال سعودي (SAR)</option>
-                        <option value="AED">درهم إماراتي (AED)</option>
-                        <option value="USD">دولار أمريكي (USD)</option>
-                      </select>
-                  </div>
 
                     <div className="mt-6">
                       <button
@@ -1151,12 +1142,12 @@ const Settings: FC = () => {
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span>جاري الحفظ...</span>
+                            <span>{t('common.saving')}</span>
                           </>
                         ) : (
                           <>
                             <Save className="h-4 w-4" />
-                            <span>حفظ الإعدادات العامة</span>
+                            <span>{t('settings.general.saveSettings')}</span>
                           </>
                         )}
                       </button>
@@ -1171,10 +1162,10 @@ const Settings: FC = () => {
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">بيانات المنشأة</h3>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">{t('settings.organization.title')}</h3>
                     {organizationPermissions.isOwner && (
                       <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-1 rounded-full">
-                        مالك المنشأة
+                        {t('settings.organization.ownerBadge')}
                       </span>
                     )}
                   </div>
@@ -1187,7 +1178,7 @@ const Settings: FC = () => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span className="text-blue-600 dark:text-blue-400">جاري حفظ بيانات المنشأة...</span>
+                        <span className="text-blue-600 dark:text-blue-400">{t('settings.organization.saving')}</span>
                       </div>
                     </div>
                   )}
@@ -1196,51 +1187,51 @@ const Settings: FC = () => {
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
                     <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                       <Building2 className="h-5 w-5 ml-2" />
-                      المعلومات الأساسية
+                      {t('settings.organization.basicInfo')}
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          اسم المنشأة
+                          {t('settings.organization.name')}
                         </label>
                         <input
                           type="text"
                           value={organization.name}
                           onChange={(e) => setOrganization({ ...organization, name: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="أدخل اسم المنشأة"
+                          placeholder={t('settings.organization.namePlaceholder')}
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Phone className="h-4 w-4 inline ml-1" />
-                          رقم الهاتف
+                          {t('settings.organization.phone')}
                         </label>
                         <input
                           type="tel"
                           value={organization.phone}
                           onChange={(e) => setOrganization({ ...organization, phone: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="أدخل رقم الهاتف"
+                          placeholder="{t('settings.organization.phonePlaceholder')}"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Mail className="h-4 w-4 inline ml-1" />
-                          البريد الإلكتروني
+                          {t('settings.organization.email')}
                         </label>
                         <input
                           type="email"
                           value={organization.email}
                           onChange={(e) => setOrganization({ ...organization, email: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="أدخل البريد الإلكتروني"
+                          placeholder="{t('settings.organization.emailPlaceholder')}"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Globe className="h-4 w-4 inline ml-1" />
-                          الموقع الإلكتروني
+                          {t('settings.organization.website')}
                         </label>
                         <input
                           type="url"
@@ -1253,27 +1244,56 @@ const Settings: FC = () => {
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <MapPin className="h-4 w-4 inline ml-1" />
-                          العنوان
+                          {t('settings.organization.address')}
                         </label>
                         <input
                           type="text"
                           value={organization.address}
                           onChange={(e) => setOrganization({ ...organization, address: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="أدخل عنوان المنشأة"
+                          placeholder="{t('settings.organization.addressPlaceholder')}"
                         />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          وصف المنشأة
+                          {t('settings.organization.description')}
                         </label>
                         <textarea
                           value={organization.description}
                           onChange={(e) => setOrganization({ ...organization, description: e.target.value })}
                           rows={3}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                          placeholder="أدخل وصف مختصر للمنشأة"
+                          placeholder="{t('settings.organization.descriptionPlaceholder')}"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          {t('settings.general.timezone')}
+                        </label>
+                        <select
+                          value={organization.timezone || 'Africa/Cairo'}
+                          onChange={(e) => setOrganization({ ...organization, timezone: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        >
+                          <option value="Africa/Cairo">{t('settings.general.timezoneCairo')}</option>
+                          <option value="Asia/Riyadh">{t('settings.general.timezoneRiyadh')}</option>
+                          <option value="Asia/Dubai">{t('settings.general.timezoneDubai')}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          {t('settings.general.currency')}
+                        </label>
+                        <select
+                          value={organization.currency || 'EGP'}
+                          onChange={(e) => setOrganization({ ...organization, currency: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        >
+                          <option value="EGP">{t('settings.general.currencyEGP')}</option>
+                          <option value="SAR">{t('settings.general.currencySAR')}</option>
+                          <option value="AED">{t('settings.general.currencyAED')}</option>
+                          <option value="USD">{t('settings.general.currencyUSD')}</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -1283,12 +1303,12 @@ const Settings: FC = () => {
                     <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg mb-6">
                       <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                         <Globe className="h-5 w-5 ml-2 text-green-600" />
-                        سجل المنشأه المُنشأ تلقائياً
+                        {t('settings.organization.generatedWebsite.title')}
                       </h4>
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                            تم إنشاء سجل في Bomba يحتوي على جميع بيانات المنشأة
+                            {t('settings.organization.generatedWebsite.description')}
                           </p>
                           <a
                             href={organization.websiteUrl}
@@ -1297,12 +1317,12 @@ const Settings: FC = () => {
                             className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
                           >
                             <Globe className="h-4 w-4 ml-2" />
-                            عرض سجل المنشأه
+                            {t('settings.organization.generatedWebsite.viewButton')}
                           </a>
                         </div>
                         <div className="text-right">
                           <p className="text-xs text-gray-500 dark:text-gray-400">
-                            يتم تحديث السجل تلقائياً عند حفظ البيانات
+                            {t('settings.organization.generatedWebsite.autoUpdate')}
                           </p>
                         </div>
                       </div>
@@ -1312,13 +1332,13 @@ const Settings: FC = () => {
                   {/* Social Links */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
                     <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
-                      الروابط الاجتماعية
+                      {t('settings.organization.socialLinks.title')}
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Facebook className="h-4 w-4 inline ml-1 text-blue-600" />
-                          فيسبوك
+                          {t('settings.organization.socialLinks.facebook')}
                         </label>
                         <input
                           type="url"
@@ -1334,7 +1354,7 @@ const Settings: FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Instagram className="h-4 w-4 inline ml-1 text-pink-600" />
-                          إنستغرام
+                          {t('settings.organization.socialLinks.instagram')}
                         </label>
                         <input
                           type="url"
@@ -1350,7 +1370,7 @@ const Settings: FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Twitter className="h-4 w-4 inline ml-1 text-blue-400" />
-                          تويتر
+                          {t('settings.organization.socialLinks.twitter')}
                         </label>
                         <input
                           type="url"
@@ -1366,7 +1386,7 @@ const Settings: FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Linkedin className="h-4 w-4 inline ml-1 text-blue-700" />
-                          لينكد إن
+                          {t('settings.organization.socialLinks.linkedin')}
                         </label>
                         <input
                           type="url"
@@ -1382,7 +1402,7 @@ const Settings: FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Youtube className="h-4 w-4 inline ml-1 text-red-600" />
-                          يوتيوب
+                          {t('settings.organization.socialLinks.youtube')}
                         </label>
                         <input
                           type="url"
@@ -1397,7 +1417,7 @@ const Settings: FC = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          تيك توك
+                          {t('settings.organization.socialLinks.tiktok')}
                         </label>
                         <input
                           type="url"
@@ -1413,7 +1433,7 @@ const Settings: FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <MessageCircle className="h-4 w-4 inline ml-1 text-green-600" />
-                          واتساب
+                          {t('settings.organization.socialLinks.whatsapp')}
                         </label>
                         <input
                           type="tel"
@@ -1429,7 +1449,7 @@ const Settings: FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <Send className="h-4 w-4 inline ml-1 text-blue-500" />
-                          تليجرام
+                          {t('settings.organization.socialLinks.telegram')}
                         </label>
                         <input
                           type="url"
@@ -1445,7 +1465,7 @@ const Settings: FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <MapPin className="h-4 w-4 inline ml-1 text-red-600" />
-                          رابط الموقع
+                          {t('settings.organization.socialLinks.location')}
                         </label>
                         <input
                           type="url"
@@ -1465,25 +1485,15 @@ const Settings: FC = () => {
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
                     <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                       <Clock className="h-5 w-5 ml-2" />
-                      مواقيت العمل
+                      {t('settings.organization.workingHours.title')}
                     </h4>
                     <div className="space-y-4">
                       {Object.entries(organization.workingHours).map(([day, hours]) => {
-                        const dayNames: { [key: string]: string } = {
-                          monday: 'الاثنين',
-                          tuesday: 'الثلاثاء',
-                          wednesday: 'الأربعاء',
-                          thursday: 'الخميس',
-                          friday: 'الجمعة',
-                          saturday: 'السبت',
-                          sunday: 'الأحد'
-                        };
-                        
                         return (
                           <div key={day} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
                             <div className="flex items-center space-x-4">
                               <span className="text-sm font-medium text-gray-900 dark:text-gray-100 min-w-16">
-                                {dayNames[day]}
+                                {t(`settings.organization.workingHours.days.${day}`)}
                               </span>
                               <label className="relative inline-flex items-center cursor-pointer">
                                 <input
@@ -1501,7 +1511,7 @@ const Settings: FC = () => {
                                 <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
                               </label>
                               <span className="text-xs text-gray-500 dark:text-gray-400">
-                                {hours.closed ? 'مغلق' : hours.is24Hours ? '24 ساعة' : 'مفتوح'}
+                                {hours.closed ? t('settings.organization.workingHours.closed') : hours.is24Hours ? t('settings.organization.workingHours.hours24') : t('settings.organization.workingHours.open')}
                               </span>
                             </div>
                             
@@ -1530,7 +1540,7 @@ const Settings: FC = () => {
                                     <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                                   </label>
                                   <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                    24 ساعة
+                                    {t('settings.organization.workingHours.hours24')}
                                   </span>
                                 </div>
                                 
@@ -1538,7 +1548,7 @@ const Settings: FC = () => {
                                 {!hours.is24Hours && (
                                   <>
                                     <div className="flex items-center space-x-2">
-                                      <label className="text-xs text-gray-500 dark:text-gray-400">من:</label>
+                                      <label className="text-xs text-gray-500 dark:text-gray-400">{t('settings.organization.workingHours.from')}</label>
                                       <input
                                         type="time"
                                         value={hours.open}
@@ -1553,7 +1563,7 @@ const Settings: FC = () => {
                                       />
                                     </div>
                                     <div className="flex items-center space-x-2">
-                                      <label className="text-xs text-gray-500 dark:text-gray-400">إلى:</label>
+                                      <label className="text-xs text-gray-500 dark:text-gray-400">{t('settings.organization.workingHours.to')}</label>
                                       <input
                                         type="time"
                                         value={hours.close}
@@ -1574,7 +1584,7 @@ const Settings: FC = () => {
                                 {hours.is24Hours && (
                                   <div className="flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">
                                     <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                                      مفتوح طوال اليوم
+                                      {t('settings.organization.workingHours.openAllDay')}
                                     </span>
                                   </div>
                                 )}
@@ -1597,7 +1607,7 @@ const Settings: FC = () => {
                           }}
                           className="px-3 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
                         >
-                          فتح جميع الأيام (9 ص - 10 م)
+                          {t('settings.organization.workingHours.quickActions.openAll')}
                         </button>
                         <button
                           type="button"
@@ -1611,7 +1621,7 @@ const Settings: FC = () => {
                           }}
                           className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
                         >
-                          مواعيد عادية (الجمعة من 2 ظ)
+                          {t('settings.organization.workingHours.quickActions.normalHours')}
                         </button>
                         <button
                           type="button"
@@ -1624,7 +1634,7 @@ const Settings: FC = () => {
                           }}
                           className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors"
                         >
-                          فتح 24 ساعة جميع الأيام
+                          {t('settings.organization.workingHours.quickActions.open24Hours')}
                         </button>
                         <button
                           type="button"
@@ -1637,7 +1647,7 @@ const Settings: FC = () => {
                           }}
                           className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-full hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
                         >
-                          إغلاق جميع الأيام
+                          {t('settings.organization.workingHours.quickActions.closeAll')}
                         </button>
                       </div>
                     </div>
@@ -1648,17 +1658,17 @@ const Settings: FC = () => {
                     <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg mb-6">
                       <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                         <Users className="h-5 w-5 ml-2" />
-                        صلاحيات المنشأة
+                        {t('settings.organization.permissions.title')}
                       </h4>
                       
                       {/* Enable/Disable Permission */}
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <h5 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            السماح للمديرين بتعديل بيانات المنشأة
+                            {t('settings.organization.permissions.allowManagers')}
                           </h5>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            عند التفعيل، سيتمكن المديرون المحددون من تعديل بيانات المنشأة والروابط الاجتماعية
+                            {t('settings.organization.permissions.allowManagersDesc')}
                           </p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
@@ -1679,7 +1689,7 @@ const Settings: FC = () => {
                       {organizationPermissions.allowManagersToEditOrganization && availableManagers.length > 0 && (
                         <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
                           <h6 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-                            اختر المديرين المخولين:
+                            {t('settings.organization.permissions.selectManagers')}
                           </h6>
                           <div className="space-y-2 max-h-48 overflow-y-auto">
                             {availableManagers.map((manager) => (
@@ -1715,7 +1725,7 @@ const Settings: FC = () => {
                           {selectedManagers.length > 0 && (
                             <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
                               <p className="text-xs text-blue-600 dark:text-blue-400">
-                                تم اختيار {selectedManagers.length} من المديرين
+                                {t('settings.organization.permissions.managersSelected', { count: selectedManagers.length })}
                               </p>
                             </div>
                           )}
@@ -1725,7 +1735,7 @@ const Settings: FC = () => {
                       {organizationPermissions.allowManagersToEditOrganization && availableManagers.length === 0 && (
                         <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                           <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                            لا يوجد مديرين متاحين في المنشأة
+                            {t('settings.organization.permissions.noManagers')}
                           </p>
                         </div>
                       )}
@@ -1742,12 +1752,12 @@ const Settings: FC = () => {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                               </svg>
-                              <span>جاري الحفظ...</span>
+                              <span>{t('common.saving')}</span>
                             </>
                           ) : (
                             <>
                               <Save className="h-4 w-4" />
-                              <span>حفظ الصلاحيات</span>
+                              <span>{t('settings.organization.permissions.savePermissions')}</span>
                             </>
                           )}
                         </button>
@@ -1760,16 +1770,16 @@ const Settings: FC = () => {
                     <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-6">
                       <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                         <Clock className="h-5 w-5 ml-2 text-orange-600 dark:text-orange-400" />
-                        إعدادات المرتبات
+                        {t('settings.organization.payroll.title')}
                       </h4>
                       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
                         <p className="text-sm text-blue-800 dark:text-blue-200">
-                          هذه الإعدادات تؤثر على حساب الساعات الإضافية والرواتب لجميع الموظفين
+                          {t('settings.organization.payroll.description')}
                         </p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          عدد ساعات العمل اليومية
+                          {t('settings.organization.payroll.workHoursPerDay')}
                         </label>
                         <div className="flex items-center gap-4">
                           <input
@@ -1780,10 +1790,10 @@ const Settings: FC = () => {
                             onChange={(e) => setPayrollSettings({ ...payrollSettings, workHoursPerDay: parseInt(e.target.value) || 10 })}
                             className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                           />
-                          <span className="text-sm text-gray-600 dark:text-gray-400">ساعة</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">{t('settings.organization.payroll.hours')}</span>
                         </div>
                         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                          أي ساعات تزيد عن هذا العدد ستُحسب كساعات إضافية
+                          {t('settings.organization.payroll.overtimeNote')}
                         </p>
                       </div>
 
@@ -1804,17 +1814,17 @@ const Settings: FC = () => {
                     <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-6">
                       <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center">
                         <Clock className="h-5 w-5 ml-2 text-orange-600 dark:text-orange-400" />
-                        إعدادات المرتبات
+                        {t('settings.organization.payroll.title')}
                       </h4>
                       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                         <div className="flex items-start">
                           <Bell className="h-5 w-5 text-yellow-600 dark:text-yellow-400 ml-3 mt-0.5" />
                           <div>
                             <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                              لا توجد صلاحية
+                              {t('settings.organization.payroll.noPermission.title')}
                             </h4>
                             <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                              ليس لديك صلاحية لإدارة إعدادات المرتبات. يرجى التواصل مع صاحب المنشأة.
+                              {t('settings.organization.payroll.noPermission.message')}
                             </p>
                           </div>
                         </div>
@@ -1842,10 +1852,10 @@ const Settings: FC = () => {
                       onClick={async () => {
                         setOrganizationSaving(true);
                         try {
-                          // حفظ بيانات المنشأة
+                          // Save organization data
                           const orgSuccess = await updateOrganization(organization);
                           
-                          // حفظ إعدادات المرتبات
+                          // Save payroll settings
                           const payrollResponse = await fetch('/api/settings/payroll', {
                             method: 'POST',
                             headers: { 
@@ -1857,15 +1867,15 @@ const Settings: FC = () => {
                           const payrollData = await payrollResponse.json();
                           
                           if (orgSuccess && payrollResponse.ok && payrollData.success) {
-                            showAlertMessage('تم حفظ جميع الإعدادات بنجاح');
+                            showAlertMessage(t('settings.organization.saveAllSettings'));
                           } else if (!orgSuccess) {
-                            showAlertMessage('حدث خطأ أثناء حفظ بيانات المنشأة', 'error');
+                            showAlertMessage(t('settings.organization.errors.saveOrgFailed'), 'error');
                           } else {
-                            showAlertMessage('تم حفظ بيانات المنشأة ولكن حدث خطأ في حفظ إعدادات المرتبات', 'warning');
+                            showAlertMessage(t('settings.organization.errors.savePayrollWarning'), 'warning');
                           }
                         } catch (error) {
                           console.error('Error saving settings:', error);
-                          showAlertMessage('حدث خطأ أثناء حفظ الإعدادات', 'error');
+                          showAlertMessage(t('settings.organization.errors.unexpected'), 'error');
                         } finally {
                           setOrganizationSaving(false);
                         }
@@ -1879,12 +1889,12 @@ const Settings: FC = () => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          <span>جاري الحفظ...</span>
+                          <span>{t('common.saving')}</span>
                         </>
                       ) : (
                         <>
                           <Save className="h-4 w-4" />
-                          <span>حفظ الإعدادات</span>
+                          <span>{t('settings.organization.saveSettings')}</span>
                         </>
                       )}
                     </button>
@@ -1901,10 +1911,10 @@ const Settings: FC = () => {
                     <Building2 className="h-6 w-6 text-red-600 dark:text-red-400" />
                   </div>
                   <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                    ليس لديك صلاحية لتعديل بيانات المنشأة
+                    {t('settings.organization.noPermission.title')}
                   </h3>
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    يجب أن تكون مالك المنشأة أو مدير مخول لتعديل هذه البيانات
+                    {t('settings.organization.noPermission.message')}
                   </p>
                 </div>
               </div>
@@ -1915,7 +1925,7 @@ const Settings: FC = () => {
               <div className="space-y-6">
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
-                  <p className="text-gray-600 dark:text-gray-400">جاري تحميل بيانات المنشأة...</p>
+                  <p className="text-gray-600 dark:text-gray-400">{t('settings.organization.loading')}</p>
                 </div>
               </div>
             )}

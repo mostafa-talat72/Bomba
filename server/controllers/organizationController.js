@@ -120,7 +120,9 @@ export const updateOrganization = async (req, res) => {
             website,
             socialLinks,
             workingHours,
-            logo
+            logo,
+            currency,
+            timezone
         } = req.body;
 
         // تحديث البيانات
@@ -131,6 +133,8 @@ export const updateOrganization = async (req, res) => {
         if (email !== undefined) organization.email = email;
         if (website !== undefined) organization.website = website;
         if (logo !== undefined) organization.logo = logo;
+        if (currency !== undefined) organization.currency = currency;
+        if (timezone !== undefined) organization.timezone = timezone;
         
         if (socialLinks) {
             organization.socialLinks = {

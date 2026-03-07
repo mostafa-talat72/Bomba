@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatDecimal } from '../utils/formatters';
 import * as LucideIcons from 'lucide-react';
 import CategoryManagerModal from '../components/CategoryManagerModal';
 import CostFormModal from '../components/CostFormModal';
@@ -20,6 +20,16 @@ import {
 import '../styles/cost-animations.css';
 import '../styles/modern-costs.css';
 import '../styles/modern-enhancements.css';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+import { DatePicker, ConfigProvider } from 'antd';
+import dayjs from 'dayjs';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
+import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 
 interface CostCategory {
   _id: string;
@@ -75,6 +85,8 @@ interface Cost {
 }
 
 const Costs = () => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const { showNotification } = useApp();
   const [costs, setCosts] = useState<Cost[]>([]);
   const [categories, setCategories] = useState<CostCategory[]>([]);
@@ -233,11 +245,11 @@ const Costs = () => {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'paid': return 'مدفوع';
-      case 'partially_paid': return 'مدفوع جزئياً';
-      case 'pending': return 'معلق';
-      case 'overdue': return 'متأخر';
-      case 'cancelled': return 'ملغي';
+      case 'paid': return t('costs.status.paid');
+      case 'partially_paid': return t('costs.status.partiallyPaid');
+      case 'pending': return t('costs.status.pending');
+      case 'overdue': return t('costs.status.overdue');
+      case 'cancelled': return t('costs.status.cancelled');
       default: return status;
     }
   };
@@ -264,11 +276,11 @@ const Costs = () => {
   const handleDeleteCost = async (costId: string) => {
     try {
       const response = await api.delete(`/costs/${costId}`);
-      showNotification('تم حذف التكلفة بنجاح', 'success');
+      showNotification(t('costs.notifications.costDeleted'), 'success');
       fetchCosts();
       return Promise.resolve();
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'فشل في حذف التكلفة';
+      const errorMessage = error.response?.data?.message || t('costs.notifications.deleteError');
       showNotification(errorMessage, 'error');
       throw error;
     }
@@ -283,7 +295,7 @@ const Costs = () => {
         paymentMethod,
         reference: notes,
       });
-      showNotification('تم إضافة الدفعة بنجاح', 'success');
+      showNotification(t('costs.notifications.paymentAdded'), 'success');
       fetchCosts();
       setShowPaymentModal(false);
       setSelectedCostForPayment(null);
@@ -306,16 +318,34 @@ const Costs = () => {
     }
   };
 
+  // Get Ant Design locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      default:
+        return enUS;
+    }
+  };
+
+  // Set dayjs locale
+  useEffect(() => {
+    dayjs.locale(i18n.language);
+  }, [i18n.language]);
+
   return (
-    <div className="p-6 space-y-6" dir="rtl">
+    <ConfigProvider locale={getAntdLocale()} direction={isRTL ? 'rtl' : 'ltr'}>
+    <div className="p-6 space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div className="flex justify-between items-center slide-up">
         <div>
           <h1 className="text-4xl font-bold gradient-text-animated">
-            إدارة التكاليف
+            {t('costs.title')}
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2 text-lg">
-            تتبع وإدارة جميع تكاليف المشروع بأناقة وسهولة
+            {t('costs.subtitle')}
           </p>
         </div>
         <div className="flex gap-3">
@@ -324,7 +354,7 @@ const Costs = () => {
             className="modern-action-btn modern-action-btn-secondary flex items-center gap-2"
           >
             <Settings className="w-5 h-5" />
-            إدارة الأقسام
+            {t('costs.manageCategories')}
           </button>
           <button
             onClick={() => {
@@ -334,7 +364,7 @@ const Costs = () => {
             className="modern-action-btn modern-action-btn-primary flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
-            إضافة تكلفة
+            {t('costs.addCost')}
           </button>
         </div>
       </div>
@@ -353,12 +383,12 @@ const Costs = () => {
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">إجمالي التكاليف</p>
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">{t('costs.stats.totalCosts')}</p>
               <p className="stats-number text-3xl font-bold text-gray-900 dark:text-white">
-                {formatCurrency(stats.total)}
+                {formatCurrency(stats.total, i18n.language)}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {stats.count} تكلفة
+                {formatDecimal(stats.count, i18n.language)} {stats.count === 1 ? t('costs.stats.count') : t('costs.stats.costs')}
               </p>
             </div>
             <div 
@@ -389,7 +419,7 @@ const Costs = () => {
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">المدفوع</p>
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">{t('costs.stats.paid')}</p>
               <p 
                 className="stats-number text-3xl font-bold cost-filter-transition"
                 style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
@@ -398,10 +428,10 @@ const Costs = () => {
                   color: '#16a34a'
                 }}
               >
-                {formatCurrency(stats.paid)}
+                {formatCurrency(stats.paid, i18n.language)}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {stats.total > 0 ? `${((stats.paid / stats.total) * 100).toFixed(1)}%` : '0%'} مكتمل
+                {stats.total > 0 ? `${((stats.paid / stats.total) * 100).toFixed(1)}%` : '0%'} {t('costs.card.completed')}
               </p>
             </div>
             <div 
@@ -432,7 +462,7 @@ const Costs = () => {
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">المتبقي</p>
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">{t('costs.stats.remaining')}</p>
               <p 
                 className="stats-number text-3xl font-bold cost-filter-transition"
                 style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
@@ -441,10 +471,10 @@ const Costs = () => {
                   color: '#ea580c'
                 }}
               >
-                {formatCurrency(stats.remaining)}
+                {formatCurrency(stats.remaining, i18n.language)}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {stats.total > 0 ? `${((stats.remaining / stats.total) * 100).toFixed(1)}%` : '0%'} متبقي
+                {stats.total > 0 ? `${((stats.remaining / stats.total) * 100).toFixed(1)}%` : '0%'} {t('costs.card.remaining')}
               </p>
             </div>
             <div 
@@ -475,7 +505,7 @@ const Costs = () => {
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">متوسط التكلفة</p>
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">{t('costs.card.average')}</p>
               <p 
                 className="stats-number text-3xl font-bold cost-filter-transition"
                 style={selectedCategory && categories.find(c => c._id === selectedCategory) ? {
@@ -484,10 +514,10 @@ const Costs = () => {
                   color: '#8b5cf6'
                 }}
               >
-                {formatCurrency(stats.count > 0 ? stats.total / stats.count : 0)}
+                {formatCurrency(stats.count > 0 ? stats.total / stats.count : 0, i18n.language)}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                لكل تكلفة
+                {t('costs.card.perCost')}
               </p>
             </div>
             <div 
@@ -525,11 +555,11 @@ const Costs = () => {
                   <div className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600">
                     <Filter className="w-5 h-5 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">تفصيل الأقسام</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('costs.breakdown.byCategory')}</h3>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {categoryBreakdown.length} قسم • {formatCurrency(categoryBreakdown.reduce((sum: number, cat: any) => sum + cat.total, 0))}
+                    {formatDecimal(categoryBreakdown.length, i18n.language)} {categoryBreakdown.length === 1 ? t('costs.breakdown.category') : t('costs.breakdown.categories')} • {formatCurrency(categoryBreakdown.reduce((sum: number, cat: any) => sum + cat.total, 0), i18n.language)}
                   </span>
                   <div className={`transform transition-transform duration-200 collapse-indicator ${isCategoryBreakdownCollapsed ? 'collapsed' : ''}`}>
                     <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -549,7 +579,7 @@ const Costs = () => {
                         setSelectedCategory(category._id);
                         setIsCategoryFilterCollapsed(false);
                       }}
-                      title="انقر لتطبيق فلتر هذا القسم"
+                      title={t('costs.breakdown.clickToFilter')}
                     >
                       <div className="flex items-center gap-3">
                         <div 
@@ -562,22 +592,22 @@ const Costs = () => {
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-white">
-                            {category.categoryName || 'غير محدد'}
+                            {category.categoryName || t('costs.card.unspecified')}
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {category.count} تكلفة
+                            {formatDecimal(category.count, i18n.language)} {category.count === 1 ? t('costs.breakdown.cost') : t('costs.breakdown.costs')}
                           </p>
                         </div>
                       </div>
                       <div className="text-left">
                         <p className="font-bold text-gray-900 dark:text-white">
-                          {formatCurrency(category.total)}
+                          {formatCurrency(category.total, i18n.language)}
                         </p>
                         <p className="text-sm text-green-600 dark:text-green-400">
-                          مدفوع: {formatCurrency(category.paid)}
+                          {t('costs.card.paid')}: {formatCurrency(category.paid, i18n.language)}
                         </p>
                         <p className="text-sm text-red-600 dark:text-red-400">
-                          متبقي: {formatCurrency(category.total - category.paid)}
+                          {t('costs.card.remaining')}: {formatCurrency(category.total - category.paid, i18n.language)}
                         </p>
                       </div>
                       <div className="mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -603,11 +633,11 @@ const Costs = () => {
                   <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
                     <CheckCircle className="w-5 h-5 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">تفصيل الحالات</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('costs.breakdown.byStatus')}</h3>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {statusBreakdown.length} حالة • {formatCurrency(statusBreakdown.reduce((sum: number, status: any) => sum + status.total, 0))}
+                    {formatDecimal(statusBreakdown.length, i18n.language)} {statusBreakdown.length === 1 ? t('costs.breakdown.status') : t('costs.breakdown.statuses')} • {formatCurrency(statusBreakdown.reduce((sum: number, status: any) => sum + status.total, 0), i18n.language)}
                   </span>
                   <div className={`transform transition-transform duration-200 collapse-indicator ${isStatusBreakdownCollapsed ? 'collapsed' : ''}`}>
                     <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -626,7 +656,7 @@ const Costs = () => {
                       onClick={() => {
                         setSelectedStatus(status._id);
                       }}
-                      title="انقر لتطبيق فلتر هذه الحالة"
+                      title={t('costs.breakdown.clickToFilter')}
                     >
                       <div className="flex items-center gap-3">
                         <span className={`modern-status-badge text-xs ${getStatusColor(status._id)}`}>
@@ -634,18 +664,18 @@ const Costs = () => {
                           {getStatusText(status._id)}
                         </span>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {status.count} تكلفة
+                          {formatDecimal(status.count, i18n.language)} {status.count === 1 ? t('costs.breakdown.cost') : t('costs.breakdown.costs')}
                         </p>
                       </div>
                       <div className="text-left">
                         <p className="font-bold text-gray-900 dark:text-white">
-                          {formatCurrency(status.total)}
+                          {formatCurrency(status.total, i18n.language)}
                         </p>
                         <p className="text-sm text-green-600 dark:text-green-400">
-                          مدفوع: {formatCurrency(status.paid)}
+                          {t('costs.card.paid')}: {formatCurrency(status.paid, i18n.language)}
                         </p>
                         <p className="text-sm text-red-600 dark:text-red-400">
-                          متبقي: {formatCurrency(status.total - status.paid)}
+                          {t('costs.card.remaining')}: {formatCurrency(status.total - status.paid, i18n.language)}
                         </p>
                       </div>
                       <div className="mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -677,7 +707,7 @@ const Costs = () => {
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
-              إعادة المحاولة
+              {t('costs.actions.refresh')}
             </button>
           </div>
         </div>
@@ -691,12 +721,12 @@ const Costs = () => {
             <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600">
               <Filter className="w-5 h-5 text-white" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">تصفية حسب القسم</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('costs.filters.category')}</h3>
           </div>
           <div className="flex items-center gap-3">
             {selectedCategory && (
               <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
-                مُفعل
+                {t('costs.filters.activeFilters')}
               </span>
             )}
             <div className={`transform transition-transform duration-200 collapse-indicator ${isCategoryFilterCollapsed ? 'collapsed' : ''}`}>
@@ -720,7 +750,7 @@ const Costs = () => {
                   '--category-color-dark': '#764ba2'
                 } as React.CSSProperties}
               >
-                الكل
+                {t('costs.filters.allCategories')}
               </button>
               {categories?.map(category => (
                 <button
@@ -755,7 +785,7 @@ const Costs = () => {
             <div className="p-2 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600">
               <Filter className="w-5 h-5 text-white" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">البحث والتصفية</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('costs.filters.title')}</h3>
           </div>
           <div className="flex items-center gap-3">
             {hasActiveFilters && (
@@ -767,7 +797,7 @@ const Costs = () => {
                 className="modern-action-btn modern-action-btn-secondary flex items-center gap-2"
               >
                 <XCircle className="w-4 h-4" />
-                مسح الكل
+                {t('costs.filters.clearAll')}
               </button>
             )}
             <div className={`transform transition-transform duration-200 collapse-indicator ${isDateFilterCollapsed ? 'collapsed' : ''}`}>
@@ -785,10 +815,11 @@ const Costs = () => {
               <div className="lg:col-span-2 modern-search-container">
                 <input
                   type="text"
-                  placeholder="ابحث عن تكلفة، مورد، أو وصف..."
+                  placeholder={t('costs.filters.search')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="modern-search-input transition-smooth"
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 />
                 <Search className="modern-search-icon w-5 h-5" />
               </div>
@@ -799,14 +830,15 @@ const Costs = () => {
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
                   className="modern-form-input transition-smooth w-full appearance-none"
-                  style={{ paddingRight: '2.5rem' }}
+                  style={{ paddingRight: isRTL ? '1rem' : '2.5rem', paddingLeft: isRTL ? '2.5rem' : '1rem' }}
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 >
-                  <option value="all">جميع الحالات</option>
-                  <option value="pending">معلق</option>
-                  <option value="partially_paid">مدفوع جزئياً</option>
-                  <option value="paid">مدفوع</option>
+                  <option value="all">{t('costs.status.all')}</option>
+                  <option value="pending">{t('costs.status.pending')}</option>
+                  <option value="partially_paid">{t('costs.status.partiallyPaid')}</option>
+                  <option value="paid">{t('costs.status.paid')}</option>
                 </select>
-                <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <Filter className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none`} />
               </div>
 
               {/* Quick Date Filters */}
@@ -820,7 +852,7 @@ const Costs = () => {
                   className="flex-1 px-3 py-2 quick-action-btn text-white rounded-lg transition-all text-sm font-medium"
                   style={{ '--btn-color': '#3b82f6', '--btn-color-dark': '#1d4ed8' } as React.CSSProperties}
                 >
-                  اليوم
+                  {t('costs.filters.today')}
                 </button>
                 <button
                   onClick={() => {
@@ -832,7 +864,7 @@ const Costs = () => {
                   className="flex-1 px-3 py-2 quick-action-btn text-white rounded-lg transition-all text-sm font-medium"
                   style={{ '--btn-color': '#10b981', '--btn-color-dark': '#047857' } as React.CSSProperties}
                 >
-                  أسبوع
+                  {t('costs.filters.week')}
                 </button>
               </div>
             </div>
@@ -841,24 +873,28 @@ const Costs = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  من تاريخ
+                  {t('costs.filters.from')}
                 </label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="modern-form-input transition-smooth w-full"
+                <DatePicker
+                  value={dateFrom ? dayjs(dateFrom) : null}
+                  onChange={(date) => setDateFrom(date ? date.format('YYYY-MM-DD') : '')}
+                  format="YYYY-MM-DD"
+                  className="w-full"
+                  style={{ width: '100%', height: '42px' }}
+                  placeholder={t('costs.filters.from')}
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  إلى تاريخ
+                  {t('costs.filters.to')}
                 </label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="modern-form-input transition-smooth w-full"
+                <DatePicker
+                  value={dateTo ? dayjs(dateTo) : null}
+                  onChange={(date) => setDateTo(date ? date.format('YYYY-MM-DD') : '')}
+                  format="YYYY-MM-DD"
+                  className="w-full"
+                  style={{ width: '100%', height: '42px' }}
+                  placeholder={t('costs.filters.to')}
                 />
               </div>
               <div className="flex items-end">
@@ -872,7 +908,7 @@ const Costs = () => {
                   className="w-full px-3 py-2 quick-action-btn text-white rounded-lg transition-all text-sm font-medium"
                   style={{ '--btn-color': '#8b5cf6', '--btn-color-dark': '#7c3aed' } as React.CSSProperties}
                 >
-                  شهر
+                  {t('costs.filters.month')}
                 </button>
               </div>
             </div>
@@ -892,9 +928,7 @@ const Costs = () => {
                 {selectedStatus !== 'all' && (
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-sm font-medium">
                     <Filter className="w-3.5 h-3.5" />
-                    {selectedStatus === 'pending' ? 'معلق' : 
-                     selectedStatus === 'paid' ? 'مدفوع' : 
-                     selectedStatus === 'partially_paid' ? 'مدفوع جزئياً' : selectedStatus}
+                    {getStatusText(selectedStatus)}
                     <button onClick={() => setSelectedStatus('all')} className="hover:text-purple-900 dark:hover:text-purple-200">
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -903,7 +937,7 @@ const Costs = () => {
                 {dateFrom && (
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-medium">
                     <Clock className="w-3.5 h-3.5" />
-                    من: {new Date(dateFrom).toLocaleDateString('ar-EG')}
+                    {t('costs.dateLabels.from')} {new Date(dateFrom).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
                     <button onClick={() => setDateFrom('')} className="hover:text-green-900 dark:hover:text-green-200">
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -912,7 +946,7 @@ const Costs = () => {
                 {dateTo && (
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-sm font-medium">
                     <Clock className="w-3.5 h-3.5" />
-                    إلى: {new Date(dateTo).toLocaleDateString('ar-EG')}
+                    {t('costs.dateLabels.to')} {new Date(dateTo).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
                     <button onClick={() => setDateTo('')} className="hover:text-orange-900 dark:hover:text-orange-200">
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -935,7 +969,7 @@ const Costs = () => {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                حدث خطأ أثناء تحميل التكاليف
+                {t('costs.errors.loadingError')}
               </h3>
               <p className="text-gray-600 dark:text-gray-400">{error}</p>
             </div>
@@ -944,7 +978,7 @@ const Costs = () => {
               className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <RefreshCw className="w-5 h-5" />
-              إعادة المحاولة
+              {t('costs.errors.retry')}
             </button>
           </div>
         </div>
@@ -955,16 +989,16 @@ const Costs = () => {
             <div className="modern-empty-icon">
               <DollarSign className="w-12 h-12" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">لا توجد تكاليف</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('costs.empty.noCosts')}</h3>
             <p className="text-gray-500 dark:text-gray-400 mb-4">
-              {hasActiveFilters ? 'لم يتم العثور على نتائج مطابقة للفلاتر المحددة' : 'ابدأ بإضافة أول تكلفة'}
+              {hasActiveFilters ? t('costs.empty.noResults') : t('costs.empty.startAdding')}
             </p>
             {hasActiveFilters && (
               <button
                 onClick={clearAllFilters}
                 className="modern-action-btn modern-action-btn-primary"
               >
-                مسح الفلاتر
+                {t('costs.empty.clearFilters')}
               </button>
             )}
           </div>
@@ -1010,7 +1044,7 @@ const Costs = () => {
                             color: cost.category?.color || '#667eea'
                           }}
                         >
-                          {cost.category?.name || 'غير محدد'}
+                          {cost.category?.name || t('costs.card.unspecified')}
                         </span>
                       </div>
                       {cost.vendor && (
@@ -1037,10 +1071,10 @@ const Costs = () => {
                       <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                         <DollarSign className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">الإجمالي</span>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">{t('costs.card.total')}</span>
                     </div>
                     <p className="text-lg font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(cost.amount)}
+                      {formatCurrency(cost.amount, i18n.language)}
                     </p>
                   </div>
 
@@ -1050,10 +1084,10 @@ const Costs = () => {
                       <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/30">
                         <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
                       </div>
-                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">المدفوع</span>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">{t('costs.card.paid')}</span>
                     </div>
                     <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                      {formatCurrency(cost.paidAmount)}
+                      {formatCurrency(cost.paidAmount, i18n.language)}
                     </p>
                   </div>
 
@@ -1063,10 +1097,10 @@ const Costs = () => {
                       <div className="p-1.5 rounded-lg bg-red-100 dark:bg-red-900/30">
                         <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
                       </div>
-                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">المتبقي</span>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">{t('costs.card.remaining')}</span>
                     </div>
                     <p className="text-lg font-bold text-red-600 dark:text-red-400">
-                      {formatCurrency(cost.remainingAmount)}
+                      {formatCurrency(cost.remainingAmount, i18n.language)}
                     </p>
                   </div>
                 </div>
@@ -1076,7 +1110,7 @@ const Costs = () => {
                   {/* Date */}
                   <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
                     <Clock className="w-3.5 h-3.5" />
-                    <span>{new Date(cost.date).toLocaleDateString('ar-EG', { 
+                    <span>{new Date(cost.date).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US', { 
                       day: 'numeric', 
                       month: 'short', 
                       year: 'numeric' 
@@ -1090,9 +1124,9 @@ const Costs = () => {
             {pagination.totalPages > 1 && (
               <div className="flex items-center justify-between mt-6 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <span>صفحة {pagination.page} من {pagination.totalPages}</span>
+                  <span>{t('costs.pagination.page')} {formatDecimal(pagination.page, i18n.language)} {t('costs.pagination.of')} {formatDecimal(pagination.totalPages, i18n.language)}</span>
                   <span>•</span>
-                  <span>إجمالي {stats.count} تكلفة</span>
+                  <span>{t('costs.pagination.total')} {formatDecimal(stats.count, i18n.language)} {stats.count === 1 ? t('costs.stats.count') : t('costs.stats.costs')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -1105,7 +1139,7 @@ const Costs = () => {
                     disabled={!pagination.hasPrev}
                     className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    السابق
+                    {t('costs.pagination.previous')}
                   </button>
                   <div className="flex items-center gap-1">
                     {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
@@ -1120,7 +1154,7 @@ const Costs = () => {
                               : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                           }`}
                         >
-                          {pageNum}
+                          {formatDecimal(pageNum, i18n.language)}
                         </button>
                       );
                     })}
@@ -1135,7 +1169,7 @@ const Costs = () => {
                     disabled={!pagination.hasNext}
                     className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    التالي
+                    {t('costs.pagination.next')}
                   </button>
                 </div>
               </div>
@@ -1203,6 +1237,7 @@ const Costs = () => {
         onAddPayment={openPaymentModal}
       />
     </div>
+    </ConfigProvider>
   );
 };
 

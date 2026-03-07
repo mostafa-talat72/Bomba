@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users as UsersIcon, Plus, Shield, User, Crown, Search, Filter, Lock, Unlock, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { User as UserType } from '../services/api';
 import UserCard from '../components/UserCard';
@@ -12,6 +14,8 @@ import { formatDecimal } from '../utils/formatters';
 import '../styles/users-enhancements.css';
 
 const Users = () => {
+  const { t } = useTranslation();
+  const { currentLanguage, isRTL } = useLanguage();
   const { users, fetchUsers, createUser, updateUser, deleteUser, showNotification, user } = useApp();
   const [showAddUser, setShowAddUser] = useState(false);
   const [showEditUser, setShowEditUser] = useState(false);
@@ -53,35 +57,33 @@ const Users = () => {
   const [permissionsUser, setPermissionsUser] = useState<UserType | null>(null);
   const [statusUser, setStatusUser] = useState<UserType | null>(null);
 
-  // إخفاء خيار 'مالك' من قائمة الأدوار في لوحة المدير
   const roles = [
-    { id: 'admin', name: 'مدير', icon: Crown, color: 'text-purple-600', bgColor: 'bg-purple-100', description: 'صلاحيات كاملة على النظام - جميع الصلاحيات' },
-    { id: 'staff', name: 'موظف', icon: User, color: 'text-blue-600', bgColor: 'bg-blue-100', description: 'صلاحيات محدودة - لوحة التحكم، التقارير، الإعدادات' },
-    { id: 'cashier', name: 'كاشير', icon: Shield, color: 'text-green-600', bgColor: 'bg-green-100', description: 'إدارة المبيعات والفواتير - الطلبات، المنيو، الفواتير، التقارير' },
-    { id: 'kitchen', name: 'مطبخ', icon: Shield, color: 'text-orange-600', bgColor: 'bg-orange-100', description: 'إدارة الطلبات والمطبخ - الطلبات، المنيو، المخزون، التكاليف' },
-    // لا تضف خيار 'مالك' هنا
+    { id: 'admin', name: t('users.roles.admin'), icon: Crown, color: 'text-purple-600', bgColor: 'bg-purple-100', description: t('users.roles.adminDesc') },
+    { id: 'staff', name: t('users.roles.staff'), icon: User, color: 'text-blue-600', bgColor: 'bg-blue-100', description: t('users.roles.staffDesc') },
+    { id: 'cashier', name: t('users.roles.cashier'), icon: Shield, color: 'text-green-600', bgColor: 'bg-green-100', description: t('users.roles.cashierDesc') },
+    { id: 'kitchen', name: t('users.roles.kitchen'), icon: Shield, color: 'text-orange-600', bgColor: 'bg-orange-100', description: t('users.roles.kitchenDesc') },
   ];
 
   const permissions = [
-    { id: 'all', name: 'جميع الصلاحيات', description: 'وصول كامل لجميع الميزات والتحكم الكامل في النظام' },
-    { id: 'dashboard', name: 'لوحة التحكم', description: 'التحكم الكامل في لوحة التحكم وعرض الإحصائيات والتقارير' },
-    { id: 'playstation', name: 'البلايستيشن', description: 'التحكم الكامل في أجهزة البلايستيشن وجلسات اللعب' },
-    { id: 'computer', name: 'الكمبيوتر', description: 'التحكم الكامل في أجهزة الكمبيوتر وجلسات الاستخدام' },
-    { id: 'cafe', name: 'الطلبات', description: 'التحكم الكامل في طلبات الطلبات والمشروبات والخدمة' },
-    { id: 'menu', name: 'المنيو', description: 'التحكم الكامل في قائمة الطعام والمشروبات والأسعار' },
-    { id: 'billing', name: 'الفواتير', description: 'التحكم الكامل في إنشاء وإدارة الفواتير والمدفوعات' },
-    { id: 'reports', name: 'التقارير', description: 'التحكم الكامل في عرض وتصدير جميع التقارير' },
-    { id: 'consumption', name: 'تقرير الاستهلاك', description: 'عرض وتحليل تقارير استهلاك المواد والمنتجات' },
-    { id: 'inventory', name: 'المخزون', description: 'التحكم الكامل في المخزون والأصناف والمشتريات' },
-    { id: 'costs', name: 'التكاليف', description: 'التحكم الكامل في التكاليف والمصروفات والميزانية' },
-    { id: 'users', name: 'المستخدمين', description: 'التحكم الكامل في المستخدمين والصلاحيات والأدوار' },
-    { id: 'settings', name: 'الإعدادات', description: 'التحكم الكامل في إعدادات النظام والتكوين' },
+    { id: 'all', name: t('users.permissions.all'), description: t('users.permissions.allDesc') },
+    { id: 'dashboard', name: t('users.permissions.dashboard'), description: t('users.permissions.dashboardDesc') },
+    { id: 'playstation', name: t('users.permissions.playstation'), description: t('users.permissions.playstationDesc') },
+    { id: 'computer', name: t('users.permissions.computer'), description: t('users.permissions.computerDesc') },
+    { id: 'cafe', name: t('users.permissions.cafe'), description: t('users.permissions.cafeDesc') },
+    { id: 'menu', name: t('users.permissions.menu'), description: t('users.permissions.menuDesc') },
+    { id: 'billing', name: t('users.permissions.billing'), description: t('users.permissions.billingDesc') },
+    { id: 'reports', name: t('users.permissions.reports'), description: t('users.permissions.reportsDesc') },
+    { id: 'consumption', name: t('users.permissions.consumption'), description: t('users.permissions.consumptionDesc') },
+    { id: 'inventory', name: t('users.permissions.inventory'), description: t('users.permissions.inventoryDesc') },
+    { id: 'costs', name: t('users.permissions.costs'), description: t('users.permissions.costsDesc') },
+    { id: 'users', name: t('users.permissions.users'), description: t('users.permissions.usersDesc') },
+    { id: 'settings', name: t('users.permissions.settings'), description: t('users.permissions.settingsDesc') },
   ];
 
   const businessTypes = [
-    { id: 'cafe', name: 'كافيه' },
-    { id: 'restaurant', name: 'مطعم' },
-    { id: 'playstation', name: 'بلايستيشن' },
+    { id: 'cafe', name: t('users.businessTypes.cafe') },
+    { id: 'restaurant', name: t('users.businessTypes.restaurant') },
+    { id: 'playstation', name: t('users.businessTypes.playstation') },
   ];
 
   // Get accessible pages for a user based on their permissions
@@ -113,24 +115,23 @@ const Users = () => {
     return accessiblePages;
   };
 
-  // Get page display name
   const getPageDisplayName = (page: string) => {
-    const pageNames = {
-      dashboard: 'لوحة التحكم',
-      playstation: 'البلايستيشن',
-      computer: 'الكمبيوتر',
-      cafe: 'الطلبات',
-      menu: 'المنيو',
-      billing: 'الفواتير',
-      reports: 'التقارير',
-      consumption: 'تقرير الاستهلاك',
-      inventory: 'المخزون',
-      costs: 'التكاليف',
-      users: 'المستخدمين',
-      settings: 'الإعدادات',
-      notifications: 'الإشعارات'
+    const pageNames: Record<string, string> = {
+      dashboard: t('nav.dashboard'),
+      playstation: t('nav.playstation'),
+      computer: t('nav.computer'),
+      cafe: t('nav.cafe'),
+      menu: t('nav.menu'),
+      billing: t('nav.billing'),
+      reports: t('nav.reports'),
+      consumption: t('nav.consumptionReport'),
+      inventory: t('nav.inventory'),
+      costs: t('nav.costs'),
+      users: t('nav.users'),
+      settings: t('nav.settings'),
+      notifications: t('nav.notifications')
     };
-    return pageNames[page as keyof typeof pageNames] || page;
+    return pageNames[page] || page;
   };
 
   // تحميل البيانات عند بدء الصفحة
@@ -172,7 +173,7 @@ const Users = () => {
       setLoading(true);
       await fetchUsers();
     } catch {
-      setAlertMessage('خطأ في تحميل المستخدمين');
+      setAlertMessage(t('users.errors.loadUsers'));
       setAlertType('error');
       setShowAlert(true);
     } finally {
@@ -281,24 +282,22 @@ const Users = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // التحقق من صحة البيانات
     if (!showEditUser && formData.password !== formData.confirmPassword) {
-      setAlertMessage('كلمات المرور غير متطابقة');
+      setAlertMessage(t('users.errors.passwordMismatch'));
       setAlertType('error');
       setShowAlert(true);
       return;
     }
 
     if (!showEditUser && formData.password.length < 6) {
-      setAlertMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      setAlertMessage(t('users.errors.passwordMinLength'));
       setAlertType('error');
       setShowAlert(true);
       return;
     }
 
-    // التحقق من الصلاحيات
     if (formData.permissions.length === 0) {
-      setAlertMessage('يجب تحديد صلاحية واحدة على الأقل');
+      setAlertMessage(t('users.errors.permissionsRequired'));
       setAlertType('error');
       setShowAlert(true);
       return;
@@ -350,7 +349,7 @@ const Users = () => {
         const user = await createUser(userData);
         if (user) {
           if (formData.role === 'owner') {
-            setAlertMessage('تم إرسال رسالة تأكيد إلى بريدك الإلكتروني. يرجى تفعيل الحساب من الإيميل ثم تسجيل الدخول.');
+            setAlertMessage(t('users.success.verificationEmailSent'));
             setAlertType('success');
             setShowAlert(true);
             setTimeout(() => {
@@ -359,7 +358,7 @@ const Users = () => {
               window.location.href = '/login';
             }, 3000);
           } else {
-            setAlertMessage('تم إضافة المستخدم بنجاح');
+            setAlertMessage(t('users.success.userAdded'));
             setAlertType('success');
             setShowAlert(true);
             setShowAddUser(false);
@@ -373,7 +372,7 @@ const Users = () => {
       await loadUsers();
 
     } catch {
-      setAlertMessage('خطأ في حفظ المستخدم');
+      setAlertMessage(t('users.errors.saveUser'));
       setAlertType('error');
       setShowAlert(true);
     } finally {
@@ -436,13 +435,13 @@ const Users = () => {
       const data = await response.json();
       
       if (data.success) {
-        showNotification('تم تحديث صلاحيات المستخدم بنجاح', 'success');
+        showNotification(t('users.success.permissionsUpdated'), 'success');
         await loadUsers();
       } else {
         throw new Error(data.message);
       }
     } catch (error) {
-      showNotification('خطأ في تحديث صلاحيات المستخدم', 'error');
+      showNotification(t('users.errors.updatePermissions'), 'error');
       throw error;
     }
   };
@@ -461,13 +460,13 @@ const Users = () => {
       const data = await response.json();
       
       if (data.success) {
-        showNotification('تم تحديث حالة المستخدم بنجاح', 'success');
+        showNotification(t('users.success.statusUpdated'), 'success');
         await loadUsers();
       } else {
         throw new Error(data.message);
       }
     } catch (error) {
-      showNotification('خطأ في تحديث حالة المستخدم', 'error');
+      showNotification(t('users.errors.updateStatus'), 'error');
       throw error;
     }
   };
@@ -484,7 +483,7 @@ const Users = () => {
     if (!deleteTarget) return;
     if (deleteTarget.role === 'admin') {
       if (!deletePassword) {
-        setDeleteError('يرجى إدخال كلمة المرور');
+        setDeleteError(t('users.errors.passwordRequired'));
         return;
       }
       setDeleteLoading(true);
@@ -497,7 +496,7 @@ const Users = () => {
         });
         const data = await res.json();
         if (!data.success) {
-          setDeleteError('كلمة المرور غير صحيحة');
+          setDeleteError(t('users.errors.passwordIncorrect'));
           setDeleteLoading(false);
           return;
         }
@@ -506,19 +505,18 @@ const Users = () => {
         setDeleteTarget(null);
         setDeletePassword('');
       } catch {
-        showNotification('خطأ في تحقق المستخدم', 'error');
+        showNotification(t('users.errors.verifyUser'), 'error');
       } finally {
         setDeleteLoading(false);
       }
     } else {
-      // حذف مباشر للعامل
       setDeleteLoading(true);
       try {
         await deleteUser(deleteTarget.id);
         setShowDeleteModal(false);
         setDeleteTarget(null);
       } catch {
-        showNotification('خطأ في حذف المستخدم', 'error');
+        showNotification(t('users.errors.deleteUser'), 'error');
       } finally {
         setDeleteLoading(false);
       }
@@ -540,18 +538,18 @@ const Users = () => {
   };
 
   const getStatusText = (status: string) => {
-    switch (status) {
-      case 'active': return 'نشط';
-      case 'inactive': return 'غير نشط';
-      case 'suspended': return 'معلق';
-      case 'pending': return 'في الانتظار';
-      default: return 'غير معروف';
-    }
+    const statusMap: Record<string, string> = {
+      active: t('common.active'),
+      inactive: t('common.inactive'),
+      suspended: t('users.statusTypes.suspended').replace('⏸️ ', ''),
+      pending: t('users.statusTypes.pending'),
+    };
+    return statusMap[status] || t('users.statusTypes.unknown');
   };
 
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border-2 border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -561,9 +559,9 @@ const Users = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                إدارة المستخدمين
+                {t('users.title')}
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">إدارة صلاحيات وحسابات المستخدمين</p>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">{t('users.subtitle')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -574,14 +572,14 @@ const Users = () => {
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <RefreshCw className={`h-5 w-5 relative ${loading ? 'animate-spin' : ''}`} />
-              <span className="relative">تحديث</span>
+              <span className="relative">{t('users.refresh')}</span>
             </button>
             
             {/* Quick Actions */}
             <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
               <Crown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span className="text-sm font-bold text-blue-900 dark:text-blue-200">
-                إدارة متقدمة
+                {t('users.advancedManagement')}
               </span>
             </div>
             
@@ -594,7 +592,7 @@ const Users = () => {
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
               <Plus className="h-5 w-5 relative" />
-              <span className="relative">إضافة مستخدم</span>
+              <span className="relative">{t('users.addUser')}</span>
             </button>
           </div>
         </div>
@@ -608,8 +606,8 @@ const Users = () => {
               <UsersIcon className="h-7 w-7 text-white" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">المستخدمين</p>
-              <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalUsers)}</p>
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.totalUsers')}</p>
+              <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{formatDecimal(stats.totalUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
@@ -620,8 +618,8 @@ const Users = () => {
               <Shield className="h-7 w-7 text-white" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">نشط</p>
-              <p className="text-3xl font-bold text-green-600 dark:text-green-400">{formatDecimal(stats.activeUsers)}</p>
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.activeUsers')}</p>
+              <p className="text-3xl font-bold text-green-600 dark:text-green-400">{formatDecimal(stats.activeUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
@@ -632,8 +630,8 @@ const Users = () => {
               <Lock className="h-7 w-7 text-white" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">غير نشط</p>
-              <p className="text-3xl font-bold text-red-600 dark:text-red-400">{formatDecimal(stats.inactiveUsers)}</p>
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.inactiveUsers')}</p>
+              <p className="text-3xl font-bold text-red-600 dark:text-red-400">{formatDecimal(stats.inactiveUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
@@ -644,8 +642,8 @@ const Users = () => {
               <Unlock className="h-7 w-7 text-white" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">معلق</p>
-              <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">{formatDecimal(stats.suspendedUsers)}</p>
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.suspendedUsers')}</p>
+              <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">{formatDecimal(stats.suspendedUsers, currentLanguage)}</p>
             </div>
           </div>
         </div>
@@ -656,9 +654,9 @@ const Users = () => {
               <Crown className="h-7 w-7 text-white" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">المديرون</p>
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.admins')}</p>
               <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                {formatDecimal(stats.roleStats.find(r => r.id === 'admin')?.count || 0)}
+                {formatDecimal(stats.roleStats.find(r => r.id === 'admin')?.count || 0, currentLanguage)}
               </p>
             </div>
           </div>
@@ -670,9 +668,9 @@ const Users = () => {
               <Crown className="h-7 w-7 text-white" />
             </div>
             <div className="mr-4">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">صلاحيات كاملة</p>
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{t('users.fullPermissions')}</p>
               <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
-                {formatDecimal(users?.filter(u => u.permissions?.includes('all')).length || 0)}
+                {formatDecimal(users?.filter(u => u.permissions?.includes('all')).length || 0, currentLanguage)}
               </p>
             </div>
           </div>
@@ -684,17 +682,17 @@ const Users = () => {
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <Filter className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            البحث والفلترة
+            {t('users.searchAndFilter')}
           </h3>
           <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-bold">
-            فلترة متقدمة
+            {t('users.advancedFilter')}
           </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <Search className="w-4 h-4 text-blue-600" />
-              البحث
+              {t('common.search')}
             </label>
             <div className="relative">
               <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
@@ -702,7 +700,7 @@ const Users = () => {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="البحث بالاسم أو البريد أو الهاتف..."
+                placeholder={t('users.searchPlaceholder')}
                 className="w-full pr-12 px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 font-semibold transition-all"
               />
             </div>
@@ -711,14 +709,14 @@ const Users = () => {
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <Shield className="w-4 h-4 text-blue-600" />
-              الدور
+              {t('users.role')}
             </label>
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
               className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-semibold transition-all"
             >
-              <option value="all">جميع الأدوار</option>
+              <option value="all">{t('users.allRoles')}</option>
               {roles.map(role => (
                 <option key={role.id} value={role.id}>{role.name}</option>
               ))}
@@ -728,17 +726,17 @@ const Users = () => {
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <Filter className="w-4 h-4 text-blue-600" />
-              الحالة
+              {t('users.status')}
             </label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-semibold transition-all"
             >
-              <option value="all">جميع الحالات</option>
-              <option value="active">✅ نشط</option>
-              <option value="inactive">❌ غير نشط</option>
-              <option value="suspended">⏸️ معلق</option>
+              <option value="all">{t('users.allStatuses')}</option>
+              <option value="active">{t('users.statusTypes.active')}</option>
+              <option value="inactive">{t('users.statusTypes.inactive')}</option>
+              <option value="suspended">{t('users.statusTypes.suspended')}</option>
             </select>
           </div>
         </div>
@@ -754,7 +752,7 @@ const Users = () => {
               }}
               className="px-5 py-2.5 text-sm font-bold text-gray-700 dark:text-gray-300 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 hover:from-gray-200 hover:to-gray-300 dark:hover:from-gray-600 dark:hover:to-gray-500 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105"
             >
-              ✖️ مسح الفلاتر
+              {t('users.clearFilters')}
             </button>
           </div>
         )}
@@ -765,20 +763,20 @@ const Users = () => {
         {loading ? (
           <div className="col-span-full flex flex-col items-center py-12">
             <RefreshCw className="h-8 w-8 text-blue-600 animate-spin mb-2" />
-            <p className="text-gray-500">جاري تحميل المستخدمين...</p>
+            <p className="text-gray-500">{t('users.loading')}</p>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="col-span-full flex flex-col items-center py-12">
             <UsersIcon className="h-12 w-12 text-gray-400 mb-2" />
-            <p className="text-gray-500">لا توجد مستخدمين</p>
+            <p className="text-gray-500">{t('users.noUsers')}</p>
             {(searchTerm || filterRole !== 'all' || filterStatus !== 'all') ? (
-              <p className="text-sm text-gray-400">جرب تغيير معايير البحث</p>
+              <p className="text-sm text-gray-400">{t('users.tryDifferentSearch')}</p>
             ) : (
               <button
                 onClick={() => setShowAddUser(true)}
                 className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 text-sm font-medium mt-2"
               >
-                إضافة أول مستخدم
+                {t('users.addFirstUser')}
               </button>
             )}
           </div>

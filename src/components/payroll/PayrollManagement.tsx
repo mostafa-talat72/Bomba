@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Select, DatePicker, Tag, Space, Descriptions, message, Tabs, InputNumber, Input, Card, Statistic, Row, Col, Divider } from 'antd';
 import { Plus, Eye, Check, DollarSign, Lock, Unlock, Printer, FileText, TrendingUp, TrendingDown } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
-import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
+import { useOrganization } from '../../context/OrganizationContext';
 import 'dayjs/locale/ar';
-
-dayjs.locale('ar');
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -50,6 +52,9 @@ interface Payroll {
 }
 
 const PayrollManagement: React.FC = () => {
+  const { t } = useTranslation();
+  const { currentLanguage } = useLanguage();
+  const { getCurrencySymbol } = useOrganization();
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -64,6 +69,16 @@ const PayrollManagement: React.FC = () => {
   const [form] = Form.useForm();
   const [payForm] = Form.useForm();
   const [bulkForm] = Form.useForm();
+
+  // Helper functions to format currency with current language
+  const currency = () => getCurrencySymbol(currentLanguage);
+  const formatCurrency = (amount: number) => {
+    return `${amount.toFixed(2)} ${currency()}`;
+  };
+
+  useEffect(() => {
+    dayjs.locale(currentLanguage);
+  }, [currentLanguage]);
 
   useEffect(() => {
     fetchPayrolls();
@@ -85,7 +100,7 @@ const PayrollManagement: React.FC = () => {
         setPayrolls([]);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل كشوف الرواتب');
+      message.error(t('payroll.payrollManagement.messages.loadError'));
       setPayrolls([]);
     } finally {
       setLoading(false);
@@ -101,7 +116,7 @@ const PayrollManagement: React.FC = () => {
         setEmployees([]);
       }
     } catch (error: any) {
-      message.error('فشل في تحميل الموظفين');
+      message.error(t('payroll.payrollManagement.messages.loadEmployeesError'));
       setEmployees([]);
     }
   };
@@ -118,7 +133,7 @@ const PayrollManagement: React.FC = () => {
         setStats(null);
       }
     } catch (error: any) {
-      console.error('فشل في تحميل الإحصائيات');
+      console.error(t('payroll.payrollManagement.messages.loadStatsError'));
       setStats(null);
     }
   };
@@ -134,12 +149,12 @@ const PayrollManagement: React.FC = () => {
         year
       });
       
-      message.success('تم إنشاء كشف الراتب بنجاح');
+      message.success(t('payroll.payrollManagement.messages.generateSuccess'));
       setIsGenerateModalVisible(false);
       form.resetFields();
       fetchPayrolls();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في إنشاء كشف الراتب');
+      message.error(error.response?.data?.error || t('payroll.payrollManagement.messages.generateError'));
     }
   };
 
@@ -149,17 +164,17 @@ const PayrollManagement: React.FC = () => {
       setSelectedPayroll(response.data);
       setIsViewModalVisible(true);
     } catch (error: any) {
-      message.error('فشل في تحميل التفاصيل');
+      message.error(t('payroll.payrollManagement.messages.loadDetailsError'));
     }
   };
 
   const handleApprove = async (id: string) => {
     try {
       await api.post(`/payroll/payrolls/${id}/approve`);
-      message.success('تم اعتماد كشف الراتب');
+      message.success(t('payroll.payrollManagement.messages.approveSuccess'));
       fetchPayrolls();
     } catch (error: any) {
-      message.error('فشل في الاعتماد');
+      message.error(t('payroll.payrollManagement.messages.approveError'));
     }
   };
 
@@ -168,12 +183,12 @@ const PayrollManagement: React.FC = () => {
     
     try {
       await api.post(`/payroll/payrolls/${selectedPayroll._id}/pay`, values);
-      message.success('تم دفع الراتب بنجاح');
+      message.success(t('payroll.payrollManagement.messages.paySuccess'));
       setIsPayModalVisible(false);
       payForm.resetFields();
       fetchPayrolls();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في دفع الراتب');
+      message.error(error.response?.data?.error || t('payroll.payrollManagement.messages.payError'));
     }
   };
 
@@ -192,12 +207,12 @@ const PayrollManagement: React.FC = () => {
       
       // If the API returns a PDF URL or base64, handle it here
       if (response.success && response.data) {
-        message.success('تم إنشاء كشف الراتب');
+        message.success(t('payroll.payrollManagement.messages.printSuccess'));
         // You can open the PDF in a new window or download it
         // window.open(response.data.pdfUrl, '_blank');
       }
     } catch (error: any) {
-      message.error('فشل في طباعة كشف الراتب');
+      message.error(t('payroll.payrollManagement.messages.printError'));
     }
   };
 
@@ -213,32 +228,32 @@ const PayrollManagement: React.FC = () => {
         year
       });
       
-      message.success('تم إنشاء كشوف الرواتب بنجاح');
+      message.success(t('payroll.payrollManagement.messages.bulkGenerateSuccess'));
       setIsBulkGenerateModalVisible(false);
       bulkForm.resetFields();
       fetchPayrolls();
       fetchStats();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في إنشاء كشوف الرواتب');
+      message.error(error.response?.data?.error || t('payroll.payrollManagement.messages.bulkGenerateError'));
     }
   };
 
   const handleLock = async (id: string) => {
     Modal.confirm({
-      title: 'قفل كشف الراتب',
-      content: 'هل أنت متأكد من قفل هذا الكشف؟ لن يمكن تعديله بعد القفل.',
-      okText: 'قفل',
-      cancelText: 'إلغاء',
+      title: t('payroll.payrollManagement.confirmLock.title'),
+      content: t('payroll.payrollManagement.confirmLock.content'),
+      okText: t('payroll.payrollManagement.confirmLock.okText'),
+      cancelText: t('payroll.payrollManagement.confirmLock.cancelText'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.post(`/payroll/payrolls/${id}/lock`, {
-            reason: 'إقفال نهاية الشهر'
+            reason: t('payroll.payrollManagement.confirmLock.reason')
           });
-          message.success('تم قفل كشف الراتب');
+          message.success(t('payroll.payrollManagement.messages.lockSuccess'));
           fetchPayrolls();
         } catch (error: any) {
-          message.error('فشل في القفل');
+          message.error(t('payroll.payrollManagement.messages.lockError'));
         }
       }
     });
@@ -246,19 +261,19 @@ const PayrollManagement: React.FC = () => {
 
   const handleUnlock = async (id: string) => {
     Modal.confirm({
-      title: 'فك قفل كشف الراتب',
-      content: 'هل أنت متأكد من فك قفل هذا الكشف؟',
-      okText: 'فك القفل',
-      cancelText: 'إلغاء',
+      title: t('payroll.payrollManagement.confirmUnlock.title'),
+      content: t('payroll.payrollManagement.confirmUnlock.content'),
+      okText: t('payroll.payrollManagement.confirmUnlock.okText'),
+      cancelText: t('payroll.payrollManagement.confirmUnlock.cancelText'),
       onOk: async () => {
         try {
           await api.post(`/payroll/payrolls/${id}/unlock`, {
-            reason: 'تعديل البيانات'
+            reason: t('payroll.payrollManagement.confirmUnlock.reason')
           });
-          message.success('تم فك قفل كشف الراتب');
+          message.success(t('payroll.payrollManagement.messages.unlockSuccess'));
           fetchPayrolls();
         } catch (error: any) {
-          message.error('فشل في فك القفل');
+          message.error(t('payroll.payrollManagement.messages.unlockError'));
         }
       }
     });
@@ -277,62 +292,62 @@ const PayrollManagement: React.FC = () => {
 
   const getStatusName = (status: string) => {
     const names: any = {
-      draft: 'مسودة',
-      pending: 'قيد المراجعة',
-      approved: 'معتمد',
-      paid: 'مدفوع',
-      locked: 'مقفل'
+      draft: t('payroll.payrollManagement.status.draft'),
+      pending: t('payroll.payrollManagement.status.pending'),
+      approved: t('payroll.payrollManagement.status.approved'),
+      paid: t('payroll.payrollManagement.status.paid'),
+      locked: t('payroll.payrollManagement.status.locked')
     };
     return names[status] || status;
   };
 
   const columns = [
     {
-      title: 'رقم الكشف',
+      title: t('payroll.payrollManagement.table.payrollId'),
       dataIndex: 'payrollId',
       key: 'payrollId',
       render: (id: string) => <span className="font-mono text-sm">{id}</span>
     },
     {
-      title: 'الموظف',
+      title: t('payroll.payrollManagement.table.employee'),
       dataIndex: 'employeeName',
       key: 'employeeName',
       render: (name: string) => <span className="font-medium">{name}</span>
     },
     {
-      title: 'الشهر',
+      title: t('payroll.payrollManagement.table.month'),
       dataIndex: 'month',
       key: 'month',
-      render: (month: string) => dayjs(month).format('MMMM YYYY')
+      render: (month: string) => dayjs(month).locale(currentLanguage).format('MMMM YYYY')
     },
     {
-      title: 'الإجمالي',
+      title: t('payroll.payrollManagement.table.gross'),
       dataIndex: ['summary', 'grossSalary'],
       key: 'grossSalary',
       render: (amount: number) => (
-        <span className="font-medium">{amount.toFixed(2)} جنيه</span>
+        <span className="font-medium">{amount.toFixed(2)} {t('common.currency')}</span>
       )
     },
     {
-      title: 'الخصومات',
+      title: t('payroll.payrollManagement.table.deductions'),
       dataIndex: ['summary', 'totalDeductions'],
       key: 'totalDeductions',
       render: (amount: number) => (
-        <span className="text-red-600">-{amount.toFixed(2)} جنيه</span>
+        <span className="text-red-600">-{amount.toFixed(2)} {t('common.currency')}</span>
       )
     },
     {
-      title: 'الصافي',
+      title: t('payroll.payrollManagement.table.net'),
       dataIndex: ['summary', 'netSalary'],
       key: 'netSalary',
       render: (amount: number) => (
         <span className="font-bold text-green-600 text-lg">
-          {amount.toFixed(2)} جنيه
+          {amount.toFixed(2)} {t('common.currency')}
         </span>
       )
     },
     {
-      title: 'الحالة',
+      title: t('payroll.payrollManagement.table.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
@@ -340,7 +355,7 @@ const PayrollManagement: React.FC = () => {
       )
     },
     {
-      title: 'الإجراءات',
+      title: t('payroll.payrollManagement.table.actions'),
       key: 'actions',
       fixed: 'right' as const,
       width: 200,
@@ -352,7 +367,7 @@ const PayrollManagement: React.FC = () => {
             icon={<Eye size={14} />}
             onClick={() => handleView(record)}
           >
-            عرض
+            {t('payroll.payrollManagement.actions.view')}
           </Button>
           {record.status === 'draft' && (
             <Button
@@ -361,7 +376,7 @@ const PayrollManagement: React.FC = () => {
               icon={<Check size={14} />}
               onClick={() => handleApprove(record._id)}
             >
-              اعتماد
+              {t('payroll.payrollManagement.actions.approve')}
             </Button>
           )}
           {record.status === 'approved' && (
@@ -375,7 +390,7 @@ const PayrollManagement: React.FC = () => {
                 setIsPayModalVisible(true);
               }}
             >
-              دفع
+              {t('payroll.payrollManagement.actions.pay')}
             </Button>
           )}
           {record.status === 'paid' && (
@@ -386,7 +401,7 @@ const PayrollManagement: React.FC = () => {
               icon={<Lock size={14} />}
               onClick={() => handleLock(record._id)}
             >
-              قفل
+              {t('payroll.payrollManagement.actions.lock')}
             </Button>
           )}
           {record.status === 'locked' && (
@@ -396,7 +411,7 @@ const PayrollManagement: React.FC = () => {
               icon={<Unlock size={14} />}
               onClick={() => handleUnlock(record._id)}
             >
-              فك القفل
+              {t('payroll.payrollManagement.actions.unlock')}
             </Button>
           )}
           <Button
@@ -405,7 +420,7 @@ const PayrollManagement: React.FC = () => {
             icon={<Printer size={14} />}
             onClick={() => handlePrint(record._id)}
           >
-            طباعة
+            {t('payroll.payrollManagement.actions.print')}
           </Button>
         </Space>
       )
@@ -420,7 +435,7 @@ const PayrollManagement: React.FC = () => {
           <Col span={6}>
             <Card>
               <Statistic
-                title="إجمالي الكشوف"
+                title={t('payroll.payrollManagement.statistics.totalPayrolls')}
                 value={stats.total}
                 prefix={<FileText size={20} />}
                 valueStyle={{ color: '#1890ff' }}
@@ -430,9 +445,9 @@ const PayrollManagement: React.FC = () => {
           <Col span={6}>
             <Card>
               <Statistic
-                title="إجمالي المستحقات"
+                title={t('payroll.payrollManagement.statistics.totalGross')}
                 value={stats.totalGrossSalary}
-                suffix="جنيه"
+                suffix={currency()}
                 precision={2}
                 valueStyle={{ color: '#52c41a' }}
                 prefix={<TrendingUp size={20} />}
@@ -442,9 +457,9 @@ const PayrollManagement: React.FC = () => {
           <Col span={6}>
             <Card>
               <Statistic
-                title="إجمالي الخصومات"
+                title={t('payroll.payrollManagement.statistics.totalDeductions')}
                 value={stats.totalDeductions}
-                suffix="جنيه"
+                suffix={currency()}
                 precision={2}
                 valueStyle={{ color: '#ff4d4f' }}
                 prefix={<TrendingDown size={20} />}
@@ -454,9 +469,9 @@ const PayrollManagement: React.FC = () => {
           <Col span={6}>
             <Card>
               <Statistic
-                title="صافي المدفوعات"
+                title={t('payroll.payrollManagement.statistics.totalNet')}
                 value={stats.totalNetSalary}
-                suffix="جنيه"
+                suffix={currency()}
                 precision={2}
                 valueStyle={{ color: '#faad14' }}
                 prefix={<DollarSign size={20} />}
@@ -472,22 +487,22 @@ const PayrollManagement: React.FC = () => {
           <Space>
             <DatePicker
               picker="month"
-              placeholder="تصفية بالشهر"
+              placeholder={t('payroll.payrollManagement.filters.filterByMonth')}
               onChange={(date) => setFilterMonth(date ? date.format('YYYY-MM') : '')}
               style={{ width: 200 }}
             />
             <Select
-              placeholder="تصفية بالحالة"
+              placeholder={t('payroll.payrollManagement.filters.filterByStatus')}
               value={filterStatus}
               onChange={setFilterStatus}
               style={{ width: 150 }}
               allowClear
             >
-              <Option value="draft">مسودة</Option>
-              <Option value="pending">قيد المراجعة</Option>
-              <Option value="approved">معتمد</Option>
-              <Option value="paid">مدفوع</Option>
-              <Option value="locked">مقفل</Option>
+              <Option value="draft">{t('payroll.payrollManagement.status.draft')}</Option>
+              <Option value="pending">{t('payroll.payrollManagement.status.pending')}</Option>
+              <Option value="approved">{t('payroll.payrollManagement.status.approved')}</Option>
+              <Option value="paid">{t('payroll.payrollManagement.status.paid')}</Option>
+              <Option value="locked">{t('payroll.payrollManagement.status.locked')}</Option>
             </Select>
           </Space>
 
@@ -497,14 +512,14 @@ const PayrollManagement: React.FC = () => {
               icon={<Plus size={16} />}
               onClick={() => setIsBulkGenerateModalVisible(true)}
             >
-              إنشاء دفعة
+              {t('payroll.payrollManagement.buttons.bulkGenerate')}
             </Button>
             <Button
               type="primary"
               icon={<Plus size={16} />}
               onClick={() => setIsGenerateModalVisible(true)}
             >
-              إنشاء كشف راتب
+              {t('payroll.payrollManagement.buttons.generatePayroll')}
             </Button>
           </Space>
         </div>
@@ -517,25 +532,25 @@ const PayrollManagement: React.FC = () => {
           dataSource={payrolls}
           rowKey="_id"
           loading={loading}
-          pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `إجمالي ${total} كشف` }}
+          pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => t('payroll.payrollManagement.table.totalPayrolls', { count: total }) }}
           scroll={{ x: 1200 }}
         />
       </Card>
 
       {/* Generate Modal */}
       <Modal
-        title="إنشاء كشف راتب"
+        title={t('payroll.payrollManagement.modals.generate.title')}
         open={isGenerateModalVisible}
         onCancel={() => setIsGenerateModalVisible(false)}
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={handleGenerate}>
           <Form.Item
-            label="الموظف"
+            label={t('payroll.payrollManagement.modals.generate.employee')}
             name="employeeId"
-            rules={[{ required: true, message: 'الرجاء اختيار الموظف' }]}
+            rules={[{ required: true, message: t('payroll.payrollManagement.modals.generate.employeeRequired') }]}
           >
-            <Select placeholder="اختر موظف" showSearch optionFilterProp="children">
+            <Select placeholder={t('payroll.payrollManagement.modals.generate.selectEmployee')} showSearch optionFilterProp="children">
               {employees.map((emp: any) => (
                 <Option key={emp._id} value={emp._id}>
                   {emp.personalInfo.name}
@@ -545,9 +560,9 @@ const PayrollManagement: React.FC = () => {
           </Form.Item>
 
           <Form.Item
-            label="الشهر"
+            label={t('payroll.payrollManagement.modals.generate.month')}
             name="month"
-            rules={[{ required: true, message: 'الرجاء اختيار الشهر' }]}
+            rules={[{ required: true, message: t('payroll.payrollManagement.modals.generate.monthRequired') }]}
           >
             <DatePicker picker="month" style={{ width: '100%' }} />
           </Form.Item>
@@ -555,10 +570,10 @@ const PayrollManagement: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                إنشاء
+                {t('payroll.payrollManagement.modals.generate.create')}
               </Button>
               <Button onClick={() => setIsGenerateModalVisible(false)}>
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </Space>
           </Form.Item>
@@ -567,7 +582,7 @@ const PayrollManagement: React.FC = () => {
 
       {/* Bulk Generate Modal */}
       <Modal
-        title="إنشاء كشوف رواتب دفعة واحدة"
+        title={t('payroll.payrollManagement.modals.bulkGenerate.title')}
         open={isBulkGenerateModalVisible}
         onCancel={() => setIsBulkGenerateModalVisible(false)}
         footer={null}
@@ -575,13 +590,13 @@ const PayrollManagement: React.FC = () => {
       >
         <Form form={bulkForm} layout="vertical" onFinish={handleBulkGenerate}>
           <Form.Item
-            label="الموظفين"
+            label={t('payroll.payrollManagement.modals.bulkGenerate.employees')}
             name="employeeIds"
-            rules={[{ required: true, message: 'الرجاء اختيار الموظفين' }]}
+            rules={[{ required: true, message: t('payroll.payrollManagement.modals.bulkGenerate.employeesRequired') }]}
           >
             <Select
               mode="multiple"
-              placeholder="اختر الموظفين"
+              placeholder={t('payroll.payrollManagement.modals.bulkGenerate.selectEmployees')}
               showSearch
               optionFilterProp="children"
               filterOption={(input, option: any) =>
@@ -597,9 +612,9 @@ const PayrollManagement: React.FC = () => {
           </Form.Item>
 
           <Form.Item
-            label="الشهر"
+            label={t('payroll.payrollManagement.modals.bulkGenerate.month')}
             name="month"
-            rules={[{ required: true, message: 'الرجاء اختيار الشهر' }]}
+            rules={[{ required: true, message: t('payroll.payrollManagement.modals.bulkGenerate.monthRequired') }]}
           >
             <DatePicker picker="month" style={{ width: '100%' }} />
           </Form.Item>
@@ -607,10 +622,10 @@ const PayrollManagement: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                إنشاء الكشوف
+                {t('payroll.payrollManagement.modals.bulkGenerate.createPayrolls')}
               </Button>
               <Button onClick={() => setIsBulkGenerateModalVisible(false)}>
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </Space>
           </Form.Item>
@@ -621,7 +636,7 @@ const PayrollManagement: React.FC = () => {
       <Modal
         title={
           <div className="flex items-center justify-between">
-            <span>تفاصيل كشف الراتب</span>
+            <span>{t('payroll.payrollManagement.viewModal.title')}</span>
             {selectedPayroll && (
               <Tag color={getStatusColor(selectedPayroll.status)}>
                 {getStatusName(selectedPayroll.status)}
@@ -639,13 +654,13 @@ const PayrollManagement: React.FC = () => {
             {/* Header Info */}
             <Card className="mb-4" size="small">
               <Descriptions column={3} size="small">
-                <Descriptions.Item label="الموظف">
+                <Descriptions.Item label={t('payroll.payrollManagement.viewModal.employee')}>
                   <span className="font-medium">{selectedPayroll.employeeName}</span>
                 </Descriptions.Item>
-                <Descriptions.Item label="الشهر">
-                  {dayjs(selectedPayroll.month).format('MMMM YYYY')}
+                <Descriptions.Item label={t('payroll.payrollManagement.viewModal.month')}>
+                  {dayjs(selectedPayroll.month).locale(currentLanguage).format('MMMM YYYY')}
                 </Descriptions.Item>
-                <Descriptions.Item label="رقم الكشف">
+                <Descriptions.Item label={t('payroll.payrollManagement.viewModal.payrollId')}>
                   <span className="font-mono text-sm">{selectedPayroll.payrollId}</span>
                 </Descriptions.Item>
               </Descriptions>
@@ -656,16 +671,16 @@ const PayrollManagement: React.FC = () => {
               items={[
                 {
                   key: 'summary',
-                  label: 'الملخص',
+                  label: t('payroll.payrollManagement.viewModal.tabs.summary'),
                   children: (
                     <>
                       <Row gutter={16} className="mb-4">
                         <Col span={8}>
                           <Card>
                             <Statistic
-                              title="إجمالي المستحقات"
+                              title={t('payroll.payrollManagement.viewModal.grossSalary')}
                               value={selectedPayroll.summary.grossSalary}
-                              suffix="جنيه"
+                              suffix={currency()}
                               precision={2}
                               valueStyle={{ color: '#52c41a' }}
                             />
@@ -674,9 +689,9 @@ const PayrollManagement: React.FC = () => {
                         <Col span={8}>
                           <Card>
                             <Statistic
-                              title="إجمالي الخصومات"
+                              title={t('payroll.payrollManagement.viewModal.totalDeductions')}
                               value={selectedPayroll.summary.totalDeductions}
-                              suffix="جنيه"
+                              suffix={currency()}
                               precision={2}
                               valueStyle={{ color: '#ff4d4f' }}
                             />
@@ -685,9 +700,9 @@ const PayrollManagement: React.FC = () => {
                         <Col span={8}>
                           <Card>
                             <Statistic
-                              title="صافي المستحق"
+                              title={t('payroll.payrollManagement.viewModal.netSalary')}
                               value={selectedPayroll.summary.netSalary}
-                              suffix="جنيه"
+                              suffix={currency()}
                               precision={2}
                               valueStyle={{ color: '#1890ff', fontSize: '24px', fontWeight: 'bold' }}
                             />
@@ -704,7 +719,7 @@ const PayrollManagement: React.FC = () => {
                                 <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded">
                                   <div className="text-sm text-gray-600 dark:text-gray-300 mb-1">مرحل من الشهر السابق</div>
                                   <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                                    {(selectedPayroll.summary.carriedForwardFromPrevious || 0).toFixed(2)} جنيه
+                                    {formatCurrency((selectedPayroll.summary.carriedForwardFromPrevious || 0))}
                                   </div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                     (تم خصمه من هذا الشهر)
@@ -717,7 +732,7 @@ const PayrollManagement: React.FC = () => {
                                 <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded">
                                   <div className="text-sm text-gray-600 dark:text-gray-300 mb-1">مرحل للشهر التالي</div>
                                   <div className="text-xl font-bold text-red-600 dark:text-red-400">
-                                    {(selectedPayroll.summary.carriedForwardToNext || 0).toFixed(2)} جنيه
+                                    {formatCurrency((selectedPayroll.summary.carriedForwardToNext || 0))}
                                   </div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                     (لم يمكن خصمه من هذا الشهر)
@@ -737,7 +752,7 @@ const PayrollManagement: React.FC = () => {
                                     <div key={idx} className="text-xs p-2 bg-gray-50 dark:bg-gray-800 rounded mb-1">
                                       <div className="flex justify-between">
                                         <span>{adv.reason}</span>
-                                        <span className="font-medium">{adv.remainingToCarryforward.toFixed(2)} جنيه</span>
+                                        <span className="font-medium">{formatCurrency(adv.remainingToCarryforward)}</span>
                                       </div>
                                       <div className="text-gray-500 dark:text-gray-400 mt-1">
                                         المبلغ الأصلي: {adv.originalAmount.toFixed(2)} | المخصوم: {adv.deductedThisMonth.toFixed(2)}
@@ -754,7 +769,7 @@ const PayrollManagement: React.FC = () => {
                                     <div key={idx} className="text-xs p-2 bg-gray-50 dark:bg-gray-800 rounded mb-1">
                                       <div className="flex justify-between">
                                         <span>{ded.reason}</span>
-                                        <span className="font-medium">{ded.remainingToCarryforward.toFixed(2)} جنيه</span>
+                                        <span className="font-medium">{formatCurrency(ded.remainingToCarryforward)}</span>
                                       </div>
                                       <div className="text-gray-500 dark:text-gray-400 mt-1">
                                         المبلغ الأصلي: {ded.originalAmount.toFixed(2)} | المخصوم: {ded.deductedThisMonth.toFixed(2)}
@@ -773,12 +788,12 @@ const PayrollManagement: React.FC = () => {
 
                 {
                   key: 'earnings',
-                  label: 'المستحقات',
+                  label: t('payroll.payrollManagement.viewModal.tabs.earnings'),
                   children: (
                     <Descriptions bordered column={1} size="small">
                       <Descriptions.Item label="الراتب الأساسي">
                         <div className="flex justify-between items-center">
-                          <span>{selectedPayroll.earnings?.basic?.amount.toFixed(2)} جنيه</span>
+                          <span>{formatCurrency(selectedPayroll.earnings?.basic?.amount)}</span>
                           <span className="text-xs text-gray-500">
                             {selectedPayroll.earnings?.basic?.calculation}
                           </span>
@@ -791,13 +806,13 @@ const PayrollManagement: React.FC = () => {
                             {selectedPayroll.earnings?.allowances?.map((allowance: any, index: number) => (
                               <div key={index} className="flex justify-between py-1">
                                 <span>{allowance.name}</span>
-                                <span>{allowance.amount.toFixed(2)} جنيه</span>
+                                <span>{formatCurrency(allowance.amount)}</span>
                               </div>
                             ))}
                             <Divider className="my-2" />
                             <div className="flex justify-between font-medium">
                               <span>الإجمالي</span>
-                              <span>{selectedPayroll.earnings?.allowancesTotal.toFixed(2)} جنيه</span>
+                              <span>{formatCurrency(selectedPayroll.earnings?.allowancesTotal)}</span>
                             </div>
                           </div>
                         </Descriptions.Item>
@@ -806,9 +821,9 @@ const PayrollManagement: React.FC = () => {
                       {selectedPayroll.earnings?.overtime?.amount > 0 && (
                         <Descriptions.Item label="الساعات الإضافية">
                           <div className="flex justify-between items-center">
-                            <span>{selectedPayroll.earnings?.overtime?.amount.toFixed(2)} جنيه</span>
+                            <span>{formatCurrency(selectedPayroll.earnings?.overtime?.amount)}</span>
                             <span className="text-xs text-gray-500">
-                              {selectedPayroll.earnings?.overtime?.hours} ساعة × {selectedPayroll.earnings?.overtime?.rate.toFixed(2)} جنيه
+                              {selectedPayroll.earnings?.overtime?.hours} ساعة × {formatCurrency(selectedPayroll.earnings?.overtime?.rate)}
                             </span>
                           </div>
                         </Descriptions.Item>
@@ -817,9 +832,9 @@ const PayrollManagement: React.FC = () => {
                       {selectedPayroll.earnings?.commission?.amount > 0 && (
                         <Descriptions.Item label="العمولة">
                           <div className="flex justify-between items-center">
-                            <span>{selectedPayroll.earnings?.commission?.amount.toFixed(2)} جنيه</span>
+                            <span>{formatCurrency(selectedPayroll.earnings?.commission?.amount)}</span>
                             <span className="text-xs text-gray-500">
-                              {selectedPayroll.earnings?.commission?.rate}% من {selectedPayroll.earnings?.commission?.salesAmount} جنيه
+                              {selectedPayroll.earnings?.commission?.rate}% من {formatCurrency(selectedPayroll.earnings?.commission?.salesAmount)}
                             </span>
                           </div>
                         </Descriptions.Item>
@@ -832,7 +847,7 @@ const PayrollManagement: React.FC = () => {
                               <div key={index} className="py-1">
                                 <div className="flex justify-between">
                                   <span>{bonus.name}</span>
-                                  <span>{bonus.amount.toFixed(2)} جنيه</span>
+                                  <span>{formatCurrency(bonus.amount)}</span>
                                 </div>
                                 {bonus.reason && (
                                   <div className="text-xs text-gray-500 mt-1">{bonus.reason}</div>
@@ -842,7 +857,7 @@ const PayrollManagement: React.FC = () => {
                             <Divider className="my-2" />
                             <div className="flex justify-between font-medium">
                               <span>الإجمالي</span>
-                              <span>{selectedPayroll.earnings?.bonusesTotal.toFixed(2)} جنيه</span>
+                              <span>{formatCurrency(selectedPayroll.earnings?.bonusesTotal)}</span>
                             </div>
                           </div>
                         </Descriptions.Item>
@@ -853,12 +868,12 @@ const PayrollManagement: React.FC = () => {
 
                 {
                   key: 'deductions',
-                  label: 'الخصومات',
+                  label: t('payroll.payrollManagement.viewModal.tabs.deductions'),
                   children: (
                     <Descriptions bordered column={1} size="small">
                       <Descriptions.Item label="التأمينات الاجتماعية">
                         <div className="flex justify-between items-center">
-                          <span>{selectedPayroll.deductions?.insurance?.amount?.toFixed(2)} جنيه</span>
+                          <span>{formatCurrency(selectedPayroll.deductions?.insurance?.amount || 0)}</span>
                           <span className="text-xs text-gray-500">
                             {selectedPayroll.deductions?.insurance?.rate}% من الأساسي
                           </span>
@@ -867,7 +882,7 @@ const PayrollManagement: React.FC = () => {
                       
                       <Descriptions.Item label="الضرائب">
                         <div className="flex justify-between items-center">
-                          <span>{selectedPayroll.deductions?.tax?.amount?.toFixed(2)} جنيه</span>
+                          <span>{formatCurrency(selectedPayroll.deductions?.tax?.amount || 0)}</span>
                           <span className="text-xs text-gray-500">
                             {selectedPayroll.deductions?.tax?.rate}%
                           </span>
@@ -881,7 +896,7 @@ const PayrollManagement: React.FC = () => {
                               <div key={index} className="py-1">
                                 <div className="flex justify-between">
                                   <span>{dayjs(item.date).format('DD/MM/YYYY')}</span>
-                                  <span>{item.amount.toFixed(2)} جنيه</span>
+                                  <span>{formatCurrency(item.amount)}</span>
                                 </div>
                                 {item.reason && (
                                   <div className="text-xs text-gray-500 mt-1">{item.reason}</div>
@@ -891,7 +906,7 @@ const PayrollManagement: React.FC = () => {
                             <Divider className="my-2" />
                             <div className="flex justify-between font-medium">
                               <span>الإجمالي</span>
-                              <span>{selectedPayroll.deductions?.absenceTotal.toFixed(2)} جنيه</span>
+                              <span>{formatCurrency(selectedPayroll.deductions?.absenceTotal)}</span>
                             </div>
                           </div>
                         </Descriptions.Item>
@@ -904,10 +919,10 @@ const PayrollManagement: React.FC = () => {
                               <div key={index} className="py-1">
                                 <div className="flex justify-between">
                                   <span>قسط {adv.installmentNumber} من {adv.totalInstallments}</span>
-                                  <span>{adv.amount.toFixed(2)} جنيه</span>
+                                  <span>{formatCurrency(adv.amount)}</span>
                                 </div>
                                 <div className="text-xs text-gray-500 mt-1">
-                                  المتبقي: {adv.remainingAfter.toFixed(2)} جنيه
+                                  المتبقي: {formatCurrency(adv.remainingAfter)}
                                 </div>
                                 {adv.reason && (
                                   <div className="text-xs text-gray-500">{adv.reason}</div>
@@ -917,7 +932,7 @@ const PayrollManagement: React.FC = () => {
                             <Divider className="my-2" />
                             <div className="flex justify-between font-medium">
                               <span>الإجمالي</span>
-                              <span>{selectedPayroll.deductions?.advancesTotal.toFixed(2)} جنيه</span>
+                              <span>{formatCurrency(selectedPayroll.deductions?.advancesTotal)}</span>
                             </div>
                           </div>
                         </Descriptions.Item>
@@ -927,7 +942,7 @@ const PayrollManagement: React.FC = () => {
                 },
                 {
                   key: 'attendance',
-                  label: 'الحضور',
+                  label: t('payroll.payrollManagement.viewModal.tabs.attendance'),
                   children: (
                     <>
                       <Descriptions bordered column={2} size="small" className="mb-4">
@@ -1007,7 +1022,7 @@ const PayrollManagement: React.FC = () => {
                                     <td className="border border-gray-300 dark:border-gray-600 px-2 py-1">
                                       {record.dailySalary !== undefined && record.dailySalary > 0 ? (
                                         <span className="text-green-600 dark:text-green-400 font-bold">
-                                          {record.dailySalary.toFixed(2)} جنيه
+                                          {formatCurrency(record.dailySalary)}
                                         </span>
                                       ) : '-'}
                                     </td>
@@ -1029,14 +1044,14 @@ const PayrollManagement: React.FC = () => {
                 <div>
                   <div className="text-sm text-gray-600">صافي المستحق</div>
                   <div className="text-3xl font-bold text-green-600">
-                    {selectedPayroll.summary.netSalary.toFixed(2)} جنيه
+                    {formatCurrency(selectedPayroll.summary.netSalary)}
                   </div>
                 </div>
                 {selectedPayroll.summary.unpaidBalance > 0 && (
                   <div className="text-right">
                     <div className="text-sm text-gray-600">المتبقي</div>
                     <div className="text-xl font-bold text-orange-600">
-                      {selectedPayroll.summary.unpaidBalance.toFixed(2)} جنيه
+                      {formatCurrency(selectedPayroll.summary.unpaidBalance)}
                     </div>
                   </div>
                 )}
@@ -1059,7 +1074,7 @@ const PayrollManagement: React.FC = () => {
             name="amount"
             rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
           >
-            <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} />
+            <InputNumber style={{ width: '100%' }} min={0} />
           </Form.Item>
 
           <Form.Item

@@ -1,39 +1,41 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
+import { formatDecimal, formatCurrency as formatCurrencyUtil } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
+import type { TFunction } from 'i18next';
 
-// دالة لتحديد الرابط المناسب للـ QR Code حسب الأولوية
+// Function to determine the appropriate link for QR Code based on priority
 const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string } | null => {
   if (!socialLinks) return null;
   
-  // ترتيب الأولوية مع أسماء المنصات بالعربية
+  // Priority order with platform names
   const priorityOrder = [
-    { key: 'facebook', name: 'فيسبوك' },
-    { key: 'instagram', name: 'انستغرام' }, 
-    { key: 'location', name: 'خرائط جوجل' },
-    { key: 'whatsapp', name: 'واتساب' },
-    { key: 'telegram', name: 'تليجرام' },
-    { key: 'twitter', name: 'تويتر' },
-    { key: 'linkedin', name: 'لينكد إن' },
-    { key: 'youtube', name: 'يوتيوب' },
-    { key: 'tiktok', name: 'تيك توك' }
+    { key: 'facebook', name: 'Facebook' },
+    { key: 'instagram', name: 'Instagram' }, 
+    { key: 'location', name: 'Google Maps' },
+    { key: 'whatsapp', name: 'WhatsApp' },
+    { key: 'telegram', name: 'Telegram' },
+    { key: 'twitter', name: 'Twitter' },
+    { key: 'linkedin', name: 'LinkedIn' },
+    { key: 'youtube', name: 'YouTube' },
+    { key: 'tiktok', name: 'TikTok' }
   ];
   
   for (const platform of priorityOrder) {
     if (socialLinks[platform.key] && socialLinks[platform.key].trim() !== '') {
       let link = socialLinks[platform.key].trim();
       
-      // تنسيق رابط الواتساب إذا كان رقم هاتف
+      // Format WhatsApp link if it's a phone number
       if (platform.key === 'whatsapp' && !link.startsWith('http')) {
-        // إزالة الرموز غير المرغوب فيها من رقم الهاتف
+        // Remove unwanted characters from phone number
         const phoneNumber = link.replace(/[^\d+]/g, '');
         link = `https://wa.me/${phoneNumber}`;
       }
       
-      // التأكد من أن الرابط يبدأ بـ http أو https
+      // Ensure link starts with http or https
       if (!link.startsWith('http://') && !link.startsWith('https://')) {
-        // إضافة https:// للروابط التي لا تحتوي على بروتوكول
+        // Add https:// for links without protocol
         if (platform.key === 'location' && link.includes('maps.google')) {
           link = link.startsWith('//') ? `https:${link}` : `https://${link}`;
         } else if (platform.key !== 'whatsapp') {
@@ -48,7 +50,7 @@ const getSocialLinkForQR = (socialLinks: any): { link: string; platform: string 
   return null;
 };
 
-// دالة لإنشاء QR Code
+// Function to generate QR Code
 const generateQRCode = async (text: string): Promise<string> => {
   try {
     const qrCodeDataURL = await QRCode.toDataURL(text, {
@@ -68,21 +70,26 @@ const generateQRCode = async (text: string): Promise<string> => {
   }
 };
 
-export const printBill = async (bill: Bill, fallbackOrganizationName?: string) => {
-  // جلب اسم المنشأة من بيانات الفاتورة أو استخدام الاحتياطي
-  let organizationName = fallbackOrganizationName || 'نظام إدارة المقاهي';
+export const printBill = async (
+  bill: Bill, 
+  fallbackOrganizationName?: string,
+  language: string = 'ar',
+  t: TFunction = ((key: string) => key) as TFunction
+) => {
+  // Get establishment name from bill data or use fallback
+  let organizationName = fallbackOrganizationName || t('billPrint.defaultEstablishment') || 'Cafe Management System';
   let organizationData: any = null;
   let qrCodeDataURL = '';
   
-  // إذا كانت المنشأة موجودة في بيانات الفاتورة
+  // If organization exists in bill data
   if (bill.organization) {
     if (typeof bill.organization === 'object' && bill.organization.name && (bill.organization as any).socialLinks) {
-      // إذا كانت المنشأة populated object بالكامل
+      // If organization is a fully populated object
       organizationName = bill.organization.name;
       organizationData = bill.organization;
     
     } else if (typeof bill.organization === 'object' && (bill.organization._id || bill.organization.name)) {
-      // إذا كانت المنشأة object لكن غير محملة بالكامل
+      // If organization is an object but not fully loaded
       const orgId = bill.organization._id;
       organizationName = bill.organization.name || organizationName;
       try {
@@ -91,7 +98,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           organizationName = orgResponse.data.name || organizationName;
           organizationData = orgResponse.data;
         } else {
-          // إذا فشل جلب المنشأة المحددة، نجرب جلب منشأة المستخدم الحالي
+          // If fetching specific organization fails, try fetching current user's organization
           const fallbackOrgResponse = await api.getOrganization();
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
             organizationName = fallbackOrgResponse.data.name || organizationName;
@@ -100,7 +107,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         }
       } catch (error) {
         console.warn('Failed to fetch organization data for object ID:', error);
-        // محاولة أخيرة لجلب بيانات المنشأة الحالية
+        // Last attempt to fetch current organization data
         try {
           const fallbackOrgResponse = await api.getOrganization();
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
@@ -112,15 +119,15 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         }
       }
     } else if (typeof bill.organization === 'string') {
-      // إذا كانت المنشأة string ID فقط، نحاول جلب البيانات باستخدام ID المحدد
+      // If organization is just a string ID, try to fetch data using the specific ID
       try {
-        // استخدام endpoint مخصص للحصول على بيانات منشأة محددة
+        // Use dedicated endpoint to get specific organization data
         const orgResponse = await api.getOrganizationById(bill.organization);
         if (orgResponse.success && orgResponse.data) {
           organizationName = orgResponse.data.name || organizationName;
           organizationData = orgResponse.data;
         } else {
-          // إذا فشل جلب المنشأة المحددة، نجرب جلب منشأة المستخدم الحالي
+          // If fetching specific organization fails, try fetching current user's organization
           const fallbackOrgResponse = await api.getOrganization();
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
             organizationName = fallbackOrgResponse.data.name || organizationName;
@@ -129,7 +136,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         }
       } catch (error) {
         console.warn('Failed to fetch organization data:', error);
-        // محاولة أخيرة لجلب بيانات المنشأة الحالية
+        // Last attempt to fetch current organization data
         try {
           const fallbackOrgResponse = await api.getOrganization();
           if (fallbackOrgResponse.success && fallbackOrgResponse.data) {
@@ -142,7 +149,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
       }
     }
   } else {
-    // محاولة جلب بيانات المنشأة من المستخدم الحالي
+    // Try to fetch organization data from current user
     try {
       const orgResponse = await api.getOrganization();
       if (orgResponse.success && orgResponse.data) {
@@ -154,46 +161,47 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     }
   }
   
-  // إنشاء QR Code إذا كانت بيانات المنشأة متوفرة
+  // Generate QR Code if organization data is available
   let qrInfo: { link: string; platform: string } | null = null;
   if (organizationData && organizationData.socialLinks) {
     qrInfo = getSocialLinkForQR(organizationData.socialLinks);
     if (qrInfo) {
       qrCodeDataURL = await generateQRCode(qrInfo.link);
-    } else {
     }
-  } else {
   }
   
-  // إنشاء QR Code احتياطي إذا لم يتم العثور على روابط اجتماعية
+  // Generate fallback QR Code if no social links found
   if (!qrCodeDataURL && organizationData) {
     let fallbackText = organizationName;
     
-    // إضافة معلومات إضافية إذا كانت متوفرة
+    // Add additional information if available
     if (organizationData.phone) {
-      fallbackText += `\nهاتف: ${organizationData.phone}`;
+      fallbackText += `\n${t('billPrint.phone')}: ${organizationData.phone}`;
     }
     if (organizationData.address) {
-      fallbackText += `\nالعنوان: ${organizationData.address}`;
+      fallbackText += `\n${t('billPrint.address')}: ${organizationData.address}`;
     }
     if (organizationData.email) {
-      fallbackText += `\nإيميل: ${organizationData.email}`;
+      fallbackText += `\n${t('billPrint.email')}: ${organizationData.email}`;
     }
     
     qrCodeDataURL = await generateQRCode(fallbackText);
-    qrInfo = { link: fallbackText, platform: 'معلومات المنشأة' };
+    qrInfo = { link: fallbackText, platform: t('billPrint.organizationInfo') };
   }
   
-  // إنشاء QR Code أساسي إذا لم يتم العثور على أي بيانات
-  if (!qrCodeDataURL && organizationName && organizationName !== 'نظام إدارة المقاهي') {
+  // Generate basic QR Code if no data found
+  if (!qrCodeDataURL && organizationName && organizationName !== t('billPrint.defaultEstablishment')) {
     qrCodeDataURL = await generateQRCode(organizationName);
-    qrInfo = { link: organizationName, platform: 'اسم المنشأة' };
+    qrInfo = { link: organizationName, platform: t('billPrint.organizationName') };
   }
   
-  // Format date in Arabic
+  const dir = language === 'ar' ? 'rtl' : 'ltr';
+  const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
+  
+  // Format date
   const formatDate = (dateString: string | Date) => {
     const date = new Date(dateString);
-    return date.toLocaleString('ar-EG', {
+    return date.toLocaleString(locale, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -203,24 +211,16 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     });
   };
 
-
-
-  // Format number without currency - no decimals
+  // Format number without currency
   const formatNumber = (amount: number | undefined | null) => {
     const safeAmount = amount ?? 0;
-    const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    const rounded = Math.round(safeAmount);
-    const formatted = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return formatted.replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]);
+    return formatDecimal(Math.round(safeAmount), language);
   };
 
-  // Format quantity with Arabic numerals
+  // Format quantity
   const formatQuantity = (qty: number) => {
-    const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    return qty.toString().replace(/\d/g, (digit) => arabicNumerals[parseInt(digit)]);
+    return formatDecimal(qty, language);
   };
-
-
 
   // Generate order items table
   const generateOrderItemsTable = (orders: Order[], itemPayments?: ItemPayment[], billStatus?: string, billPaid?: number, billTotal?: number) => {
@@ -255,14 +255,14 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     }).join('');
     
     return `
-      <div class="section-title">الطلبات</div>
+      <div class="section-title">${t('billPrint.orders')}</div>
       <table class="items-table">
         <thead>
           <tr>
-            <th class="col-name" style="width: 50%;">الصنف</th>
-            <th class="col-quantity" style="width: 16.67%;">الكمية</th>
-            <th class="col-paid-qty" style="width: 16.67%;">مدفوع</th>
-            <th class="col-total" style="width: 16.66%;">الإجمالي</th>
+            <th class="col-name" style="width: 50%;">${t('billPrint.item')}</th>
+            <th class="col-quantity" style="width: 16.67%;">${t('billPrint.quantity')}</th>
+            <th class="col-paid-qty" style="width: 16.67%;">${t('billPrint.paid')}</th>
+            <th class="col-total" style="width: 16.66%;">${t('billPrint.total')}</th>
           </tr>
         </thead>
         <tbody>
@@ -301,10 +301,12 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
       const isPaidFully = remainingAmount === 0 && finalCost > 0;
       const statusIcon = isPaidFully ? '✓' : paidAmount > 0 ? '◐' : '○';
       
+      const durationText = language === 'ar' ? 'س' : language === 'fr' ? 'h' : 'h';
+      
       return `
         <tr>
-          <td class="item-name">${statusIcon} ${session.deviceName || session.deviceNumber || 'غير محدد'}</td>
-          <td class="item-quantity">${formatQuantity(parseFloat(duration.toFixed(1)))} س</td>
+          <td class="item-name">${statusIcon} ${session.deviceName || session.deviceNumber || t('billPrint.unspecified')}</td>
+          <td class="item-quantity">${formatQuantity(parseFloat(duration.toFixed(1)))} ${durationText}</td>
           <td class="item-paid">${formatNumber(paidAmount)}</td>
           <td class="item-total">${formatNumber(finalCost)}</td>
         </tr>
@@ -312,14 +314,14 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     }).join('');
     
     return `
-      <div class="section-title">الجلسات</div>
+      <div class="section-title">${t('billPrint.sessions')}</div>
       <table class="items-table sessions-table">
         <thead>
           <tr>
-            <th class="col-name" style="width: 40%;">الجهاز</th>
-            <th class="col-quantity" style="width: 20%;">المدة</th>
-            <th class="col-paid" style="width: 20%;">مدفوع</th>
-            <th class="col-total" style="width: 20%;">الإجمالي</th>
+            <th class="col-name" style="width: 40%;">${t('billPrint.device')}</th>
+            <th class="col-quantity" style="width: 20%;">${t('billPrint.duration')}</th>
+            <th class="col-paid" style="width: 20%;">${t('billPrint.paid')}</th>
+            <th class="col-total" style="width: 20%;">${t('billPrint.total')}</th>
           </tr>
         </thead>
         <tbody>
@@ -329,14 +331,32 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     `;
   };
 
+  // Get currency from localStorage
+  const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
+  
+  // Get currency symbol based on language
+  const getCurrencySymbolForLanguage = (curr: string, lang: string): string => {
+    const symbols: { [key: string]: { [lang: string]: string } } = {
+      'EGP': { 'ar': 'ج.م', 'en': 'EGP', 'fr': 'EGP' },
+      'SAR': { 'ar': 'ر.س', 'en': 'SAR', 'fr': 'SAR' },
+      'AED': { 'ar': 'د.إ', 'en': 'AED', 'fr': 'AED' },
+      'USD': { 'ar': '$', 'en': '$', 'fr': '$' },
+      'EUR': { 'ar': '€', 'en': '€', 'fr': '€' },
+      'GBP': { 'ar': '£', 'en': '£', 'fr': '£' }
+    };
+    return symbols[curr]?.[lang] || curr;
+  };
+  
+  const currencySymbol = getCurrencySymbolForLanguage(organizationCurrency, language);
+
   // Main receipt HTML
   const receiptHTML = `
     <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
+    <html dir="${dir}" lang="${language}">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>فاتورة ${bill.billNumber || ''}</title>
+      <title>${t('billPrint.title')} ${bill.billNumber || ''}</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
         * { 
@@ -354,6 +374,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           width: auto;
           max-width: auto;
           text-align: center;
+          direction: ${dir};
         }
         .header { 
           text-align: center; 
@@ -423,7 +444,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         .items-table .item-name {
           text-align: center;
           font-weight: 700;
-          padding-left: 5px;
+          padding-${dir === 'rtl' ? 'right' : 'left'}: 5px;
           width: 50% !important;
         }
         .items-table .item-quantity {
@@ -450,7 +471,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         }
         .items-table th:first-child {
           text-align: center;
-          padding-left: 5px;
+          padding-${dir === 'rtl' ? 'right' : 'left'}: 5px;
         }
         .total-section { 
           margin-top: 12px;
@@ -589,11 +610,11 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
     </head>
     <body>
       <div class="header">
-        ${organizationName ? `<div class="org-name">${organizationName}</div>` : '<div class="org-name">نظام إدارة المقاهي</div>'}
-        <div class="title">فاتورة ${bill.billNumber || ''}</div>
+        ${organizationName ? `<div class="org-name">${organizationName}</div>` : `<div class="org-name">${t('billPrint.defaultEstablishment')}</div>`}
+        <div class="title">${t('billPrint.title')} ${bill.billNumber || ''}</div>
         <div class="info">${formatDate(bill.createdAt || new Date())}</div>
-        ${bill.customerName ? `<div class="info">العميل: ${bill.customerName}</div>` : ''}
-        ${bill.customerPhone ? `<div class="info">الهاتف: ${bill.customerPhone}</div>` : ''}
+        ${bill.customerName ? `<div class="info">${t('billPrint.customer')}: ${bill.customerName}</div>` : ''}
+        ${bill.customerPhone ? `<div class="info">${t('billPrint.phone')}: ${bill.customerPhone}</div>` : ''}
       </div>
 
       <div class="divider"></div>
@@ -607,38 +628,38 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
       <div class="total-section">
         ${bill.discount && bill.discount > 0 ? `
           <div class="total-row">
-            الخصم: ${formatNumber(bill.discount)}
+            ${t('billPrint.discount')}: ${formatNumber(bill.discount)}
           </div>
         ` : ''}
         ${bill.tax && bill.tax > 0 ? `
           <div class="total-row">
-            الضريبة: ${formatNumber(bill.tax)}
+            ${t('billPrint.tax')}: ${formatNumber(bill.tax)}
           </div>
         ` : ''}
         <div class="total-row grand-total">
-          الإجمالي: ${formatNumber(bill.total || 0)}
+          ${t('billPrint.total')}: ${formatNumber(bill.total || 0)} ${currencySymbol}
         </div>
         <div class="total-row paid">
-          المدفوع: ${formatNumber(bill.paid || 0)}
+          ${t('billPrint.paid')}: ${formatNumber(bill.paid || 0)} ${currencySymbol}
         </div>
         <div class="total-row remaining">
-          المتبقي: ${formatNumber(bill.remaining || 0)}
+          ${t('billPrint.remaining')}: ${formatNumber(bill.remaining || 0)} ${currencySymbol}
         </div>
       </div>
 
-      <div class="thank-you">شكراً لزيارتكم</div>
+      <div class="thank-you">${t('billPrint.thankYou')}</div>
       
       ${qrCodeDataURL && qrInfo ? `
         <div class="qr-section">
-          <img src="${qrCodeDataURL}" alt="QR Code للتواصل" class="qr-code" />
-          <div class="qr-text">للتواصل مع ${organizationName}</div>
-          <div class="qr-subtitle">عبر ${qrInfo.platform}</div>
+          <img src="${qrCodeDataURL}" alt="${t('billPrint.qrCode')}" class="qr-code" />
+          <div class="qr-text">${t('billPrint.contactVia')} ${organizationName}</div>
+          <div class="qr-subtitle">${t('billPrint.via')} ${qrInfo.platform}</div>
         </div>
       ` : ''}
       
       <div class="footer">
         <div>
-        <strong style="font-weight: 900; font-size: 14px;">تم تصميم وتطوير هذا النظام بواسطة مصطفى طلعت للحلول البرمجية | 01116626164</strong> </div>
+        <strong style="font-weight: 900; font-size: 14px;">${t('billPrint.footer')}</strong> </div>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">
@@ -655,7 +676,7 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
           cursor: pointer;
           border-radius: 4px;
         ">
-          طباعة الفاتورة
+          ${t('billPrint.printButton')}
         </button>
       </div>
     </body>
@@ -731,7 +752,12 @@ export const printBill = async (bill: Bill, fallbackOrganizationName?: string) =
         }, 50);
       };
     } else {
-      alert('الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة');
+      const alertMsg = language === 'ar' 
+        ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
+        : language === 'fr'
+        ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
+        : 'Please allow pop-ups to print the bill';
+      alert(alertMsg);
     }
   }
 };

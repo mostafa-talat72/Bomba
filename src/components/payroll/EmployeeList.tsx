@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Tag, Input, Select, Modal, Form, InputNumber, message, Card, Row, Col, Empty, Spin, DatePicker } from 'antd';
-import { Plus, Trash2, Search, User, Phone, Briefcase, DollarSign } from 'lucide-react';
+import { Button, Tag, Input, Select, Modal, Form, InputNumber, message, Card, Row, Col, Empty, Spin, DatePicker, ConfigProvider } from 'antd';
+import { Plus, Trash2, Search, User, Phone, Briefcase } from 'lucide-react';
 import api from '../../services/api';
 import EmployeeProfile from './EmployeeProfile';
-import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
-import dayjs from 'dayjs';
+import { numberOnlyInputProps } from '../../utils/inputHelpers';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
 
 const { Option } = Select;
 
@@ -35,6 +39,8 @@ interface EmployeeListProps {
 }
 
 const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -43,6 +49,19 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [form] = Form.useForm();
+
+  // Get locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      case 'en':
+      default:
+        return enUS;
+    }
+  };
 
   useEffect(() => {
     fetchEmployees();
@@ -63,7 +82,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
         setEmployees([]);
       }
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تحميل الموظفين');
+      message.error(error.response?.data?.error || t('payroll.employeeList.messages.loadError'));
       setEmployees([]);
     } finally {
       setLoading(false);
@@ -81,28 +100,28 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
 
   const handleDelete = async (id: string) => {
     Modal.confirm({
-      title: 'ماذا تريد أن تفعل؟',
+      title: t('payroll.employeeList.deleteModal.title'),
       content: (
         <div className="space-y-2">
-          <p>اختر الإجراء المناسب لهذا الموظف:</p>
+          <p>{t('payroll.employeeList.deleteModal.description')}</p>
           <ul className="list-disc list-inside space-y-1 text-sm">
-            <li><strong>إنهاء الخدمة:</strong> سيتم الاحتفاظ بجميع البيانات والسجلات</li>
-            <li><strong>حذف نهائي:</strong> سيتم حذف الموظف وجميع بياناته بشكل دائم</li>
+            <li><strong>{t('payroll.employeeList.deleteModal.terminate')}:</strong> {t('payroll.employeeList.deleteModal.terminateInfo')}</li>
+            <li><strong>{t('payroll.employeeList.deleteModal.permanentDelete')}:</strong> {t('payroll.employeeList.deleteModal.deleteInfo')}</li>
           </ul>
         </div>
       ),
-      okText: 'إنهاء الخدمة',
-      cancelText: 'إلغاء',
+      okText: t('payroll.employeeList.deleteModal.terminate'),
+      cancelText: t('payroll.employeeList.deleteModal.cancel'),
       okButtonProps: { danger: false, type: 'primary' },
       onOk: async () => {
         try {
           await api.put(`/payroll/employees/${id}`, {
             employment: { status: 'terminated' }
           });
-          message.success('تم إنهاء خدمة الموظف بنجاح');
+          message.success(t('payroll.employeeList.messages.terminateSuccess'));
           fetchEmployees();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في إنهاء خدمة الموظف');
+          message.error(error.response?.data?.error || t('payroll.employeeList.messages.terminateError'));
         }
       },
       footer: (_, { OkBtn, CancelBtn }) => (
@@ -114,24 +133,24 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
             onClick={() => {
               Modal.destroyAll();
               Modal.confirm({
-                title: 'تأكيد الحذف النهائي',
-                content: 'هل أنت متأكد من حذف هذا الموظف نهائياً؟ لا يمكن التراجع عن هذا الإجراء!',
-                okText: 'حذف نهائي',
-                cancelText: 'إلغاء',
+                title: t('payroll.employeeList.deleteModal.confirmDeleteTitle'),
+                content: t('payroll.employeeList.deleteModal.confirmDeleteMessage'),
+                okText: t('payroll.employeeList.deleteModal.permanentDelete'),
+                cancelText: t('payroll.employeeList.deleteModal.cancel'),
                 okButtonProps: { danger: true },
                 onOk: async () => {
                   try {
                     await api.delete(`/payroll/employees/${id}`);
-                    message.success('تم حذف الموظف بنجاح');
+                    message.success(t('payroll.employeeList.messages.deleteSuccess'));
                     fetchEmployees();
                   } catch (error: any) {
-                    message.error(error.response?.data?.error || 'فشل في حذف الموظف');
+                    message.error(error.response?.data?.error || t('payroll.employeeList.messages.deleteError'));
                   }
                 }
               });
             }}
           >
-            حذف نهائي
+            {t('payroll.employeeList.deleteModal.permanentDelete')}
           </Button>
         </div>
       )
@@ -162,22 +181,34 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
       };
 
       await api.post('/payroll/employees', data);
-      message.success('تم إضافة الموظف بنجاح');
+      message.success(t('payroll.employeeList.messages.addSuccess'));
       setIsModalVisible(false);
       fetchEmployees();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في حفظ البيانات');
+      message.error(error.response?.data?.error || t('payroll.employeeList.messages.saveError'));
     }
   };
 
   const getCompensationDisplay = (employee: Employee) => {
     if (employee.employment.type === 'monthly') {
-      return `${employee.compensation.monthly} جنيه/شهر`;
+      return `${employee.compensation.monthly} ${t('payroll.employeeList.compensation.perMonth')}`;
     } else if (employee.employment.type === 'daily') {
-      return `${employee.compensation.daily} جنيه/يوم`;
+      return `${employee.compensation.daily} ${t('payroll.employeeList.compensation.perDay')}`;
     } else {
-      return `${employee.compensation.hourly} جنيه/ساعة`;
+      return `${employee.compensation.hourly} ${t('payroll.employeeList.compensation.perHour')}`;
     }
+  };
+
+  const getDepartmentName = (dept: string) => {
+    return t(`payroll.employeeList.departments.${dept}`, dept);
+  };
+
+  const getEmploymentType = (type: string) => {
+    return t(`payroll.employeeList.employmentTypes.${type}`, type);
+  };
+
+  const getStatusName = (status: string) => {
+    return t(`payroll.employeeList.status.${status}`, status);
   };
 
   const handleCardClick = (employeeId: string) => {
@@ -194,12 +225,12 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
   }
 
   return (
-    <div>
+    <div dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Filters */}
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex flex-wrap gap-4">
           <Input
-            placeholder="بحث بالاسم أو الهاتف..."
+            placeholder={t('payroll.employeeList.search')}
             prefix={<Search size={16} className="text-gray-400" />}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
@@ -208,36 +239,36 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
             style={{ width: 300 }}
           />
           <Select
-            placeholder="الحالة"
+            placeholder={t('payroll.employeeList.filters.status')}
             value={filterStatus}
             onChange={setFilterStatus}
             style={{ width: 150 }}
             allowClear
             className="dark:bg-gray-700"
           >
-            <Option value="active">نشط</Option>
-            <Option value="suspended">موقوف</Option>
-            <Option value="terminated">منتهي</Option>
+            <Option value="active">{t('payroll.employeeList.status.active')}</Option>
+            <Option value="suspended">{t('payroll.employeeList.status.suspended')}</Option>
+            <Option value="terminated">{t('payroll.employeeList.status.terminated')}</Option>
           </Select>
           <Select
-            placeholder="القسم"
+            placeholder={t('payroll.employeeList.filters.department')}
             value={filterDepartment}
             onChange={setFilterDepartment}
             style={{ width: 150 }}
             allowClear
             className="dark:bg-gray-700"
           >
-            <Option value="kitchen">المطبخ</Option>
-            <Option value="cashier">الكاشير</Option>
-            <Option value="waiter">الخدمة</Option>
-            <Option value="admin">الإدارة</Option>
-            <Option value="gaming">الألعاب</Option>
+            <Option value="kitchen">{t('payroll.employeeList.departments.kitchen')}</Option>
+            <Option value="cashier">{t('payroll.employeeList.departments.cashier')}</Option>
+            <Option value="waiter">{t('payroll.employeeList.departments.waiter')}</Option>
+            <Option value="admin">{t('payroll.employeeList.departments.admin')}</Option>
+            <Option value="gaming">{t('payroll.employeeList.departments.gaming')}</Option>
           </Select>
           <Button type="primary" onClick={handleSearch}>
-            بحث
+            {t('payroll.employeeList.searchButton')}
           </Button>
           <Button type="primary" icon={<Plus size={16} />} onClick={handleAdd}>
-            إضافة موظف
+            {t('payroll.employeeList.addEmployee')}
           </Button>
         </div>
       </Card>
@@ -249,7 +280,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
         </div>
       ) : employees.length === 0 ? (
         <Card className="dark:bg-gray-800 dark:border-gray-700">
-          <Empty description="لا يوجد موظفين" />
+          <Empty description={t('payroll.employeeList.empty')} />
         </Card>
       ) : (
         <Row gutter={[16, 16]}>
@@ -269,7 +300,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
                     }}
                     className="dark:text-red-400"
                   >
-                    حذف
+                    {t('payroll.employeeList.deleteButton')}
                   </Button>
                 ]}
               >
@@ -320,85 +351,98 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
       )}
 
       {/* Add Modal */}
-      <Modal
-        title="إضافة موظف"
-        open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
-        footer={null}
-        width={600}
-        className="dark:bg-gray-800"
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
+      <ConfigProvider direction={isRTL ? 'rtl' : 'ltr'} locale={getAntdLocale()}>
+        <Modal
+          title={t('payroll.employeeList.addEmployee')}
+          open={isModalVisible}
+          onCancel={() => setIsModalVisible(false)}
+          footer={null}
+          width={600}
+          className="dark:bg-gray-800"
         >
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleSubmit}
+          >
           <Form.Item
-            label={<span className="dark:text-gray-200">الاسم</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.name')}</span>}
             name="name"
-            rules={[{ required: true, message: 'الرجاء إدخال الاسم' }]}
+            rules={[{ required: true, message: t('payroll.employeeList.form.nameRequired') }]}
           >
-            <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+            <Input 
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
+              dir={isRTL ? 'rtl' : 'ltr'}
+            />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">الهاتف</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.phone')}</span>}
             name="phone"
-            rules={[{ required: true, message: 'الرجاء إدخال الهاتف' }]}
+            rules={[{ required: true, message: t('payroll.employeeList.form.phoneRequired') }]}
           >
-            <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+            <Input 
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
+              dir={isRTL ? 'rtl' : 'ltr'}
+            />
           </Form.Item>
 
-          <Form.Item label={<span className="dark:text-gray-200">الرقم القومي</span>} name="nationalId">
-            <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+          <Form.Item label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.nationalId')}</span>} name="nationalId">
+            <Input 
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
+              dir={isRTL ? 'rtl' : 'ltr'}
+            />
           </Form.Item>
 
           <Form.Item 
-            label={<span className="dark:text-gray-200">تاريخ التوظيف</span>} 
+            label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.hireDate')}</span>} 
             name="hireDate"
-            rules={[{ required: true, message: 'الرجاء اختيار تاريخ التوظيف' }]}
+            rules={[{ required: true, message: t('payroll.employeeList.form.hireDateRequired') }]}
           >
             <DatePicker 
               style={{ width: '100%' }} 
               format="YYYY-MM-DD"
-              placeholder="اختر تاريخ التوظيف"
+              placeholder={t('payroll.employeeList.form.hireDatePlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">نوع التوظيف</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.employmentType')}</span>}
             name="type"
-            rules={[{ required: true, message: 'الرجاء اختيار نوع التوظيف' }]}
+            rules={[{ required: true, message: t('payroll.employeeList.form.employmentTypeRequired') }]}
           >
             <Select className="dark:bg-gray-700">
-              <Option value="monthly">شهري</Option>
-              <Option value="daily">يومي</Option>
-              <Option value="hourly">بالساعة</Option>
+              <Option value="monthly">{t('payroll.employeeList.employmentTypes.monthly')}</Option>
+              <Option value="daily">{t('payroll.employeeList.employmentTypes.daily')}</Option>
+              <Option value="hourly">{t('payroll.employeeList.employmentTypes.hourly')}</Option>
             </Select>
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">القسم</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.department')}</span>}
             name="department"
-            rules={[{ required: true, message: 'الرجاء اختيار القسم' }]}
+            rules={[{ required: true, message: t('payroll.employeeList.form.departmentRequired') }]}
           >
             <Select className="dark:bg-gray-700">
-              <Option value="kitchen">المطبخ</Option>
-              <Option value="cashier">الكاشير</Option>
-              <Option value="waiter">الخدمة</Option>
-              <Option value="admin">الإدارة</Option>
-              <Option value="gaming">الألعاب</Option>
-              <Option value="other">أخرى</Option>
+              <Option value="kitchen">{t('payroll.employeeList.departments.kitchen')}</Option>
+              <Option value="cashier">{t('payroll.employeeList.departments.cashier')}</Option>
+              <Option value="waiter">{t('payroll.employeeList.departments.waiter')}</Option>
+              <Option value="admin">{t('payroll.employeeList.departments.admin')}</Option>
+              <Option value="gaming">{t('payroll.employeeList.departments.gaming')}</Option>
+              <Option value="other">{t('payroll.employeeList.departments.other')}</Option>
             </Select>
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">الوظيفة</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.position')}</span>}
             name="position"
-            rules={[{ required: true, message: 'الرجاء إدخال الوظيفة' }]}
+            rules={[{ required: true, message: t('payroll.employeeList.form.positionRequired') }]}
           >
-            <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+            <Input 
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
+              dir={isRTL ? 'rtl' : 'ltr'}
+            />
           </Form.Item>
 
           <Form.Item
@@ -410,17 +454,17 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
               return (
                 <>
                   {type === 'monthly' && (
-                    <Form.Item label={<span className="dark:text-gray-200">الراتب الشهري</span>} name="monthly">
+                    <Form.Item label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.monthlySalary')}</span>} name="monthly">
                       <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
                     </Form.Item>
                   )}
                   {type === 'daily' && (
-                    <Form.Item label={<span className="dark:text-gray-200">الأجر اليومي</span>} name="daily">
+                    <Form.Item label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.dailyWage')}</span>} name="daily">
                       <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
                     </Form.Item>
                   )}
                   {type === 'hourly' && (
-                    <Form.Item label={<span className="dark:text-gray-200">الأجر بالساعة</span>} name="hourly">
+                    <Form.Item label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.hourlyWage')}</span>} name="hourly">
                       <InputNumber {...numberOnlyInputProps} style={{ width: '100%' }} min={0} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
                     </Form.Item>
                   )}
@@ -430,9 +474,9 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
           </Form.Item>
 
           <Form.Item 
-            label={<span className="dark:text-gray-200">سعر الساعة الإضافية (جنيه)</span>} 
+            label={<span className="dark:text-gray-200">{t('payroll.employeeList.form.overtimeRate')}</span>} 
             name="overtimeHourlyRate"
-            tooltip="المبلغ الذي يحصل عليه الموظف عن كل ساعة إضافية"
+            tooltip={t('payroll.employeeList.form.overtimeRateTooltip')}
           >
             <InputNumber 
               {...numberOnlyInputProps} style={{ width: '100%' }} 
@@ -445,48 +489,18 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit">
-                حفظ
+                {t('payroll.employeeList.form.save')}
               </Button>
               <Button onClick={() => setIsModalVisible(false)}>
-                إلغاء
+                {t('payroll.employeeList.form.cancel')}
               </Button>
             </div>
           </Form.Item>
         </Form>
       </Modal>
+      </ConfigProvider>
     </div>
   );
-};
-
-// Helper functions
-const getDepartmentName = (dept: string) => {
-  const names: any = {
-    kitchen: 'المطبخ',
-    cashier: 'الكاشير',
-    waiter: 'الخدمة',
-    admin: 'الإدارة',
-    gaming: 'الألعاب',
-    other: 'أخرى'
-  };
-  return names[dept] || dept;
-};
-
-const getEmploymentType = (type: string) => {
-  const types: any = {
-    monthly: 'شهري',
-    daily: 'يومي',
-    hourly: 'بالساعة'
-  };
-  return types[type] || type;
-};
-
-const getStatusName = (status: string) => {
-  const statuses: any = {
-    active: 'نشط',
-    suspended: 'موقوف',
-    terminated: 'منتهي'
-  };
-  return statuses[status] || status;
 };
 
 export default EmployeeList;

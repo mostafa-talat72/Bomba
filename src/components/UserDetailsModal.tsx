@@ -2,6 +2,8 @@ import React from 'react';
 import { X, User, Mail, Phone, MapPin, Calendar, RefreshCw, Crown, Shield, Edit } from 'lucide-react';
 import { User as UserType } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
 
 interface Role {
   id: string;
@@ -43,6 +45,8 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
   getAccessiblePages,
   getPageDisplayName,
 }) => {
+  const { t } = useTranslation();
+  const { currentLanguage, isRTL } = useLanguage();
   const { canEditUser } = useApp();
   
   if (!isOpen || !user) return null;
@@ -50,11 +54,24 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
   const roleInfo = getRoleInfo(user.role);
   const canEdit = canEditUser(user);
 
+  const formatDate = (date?: Date | string) => {
+    if (!date) return t('users.notSpecified');
+    const dateObj = new Date(date);
+    
+    if (currentLanguage === 'ar') {
+      return dateObj.toLocaleDateString('ar-EG');
+    } else if (currentLanguage === 'fr') {
+      return dateObj.toLocaleDateString('fr-FR');
+    } else {
+      return dateObj.toLocaleDateString('en-US');
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div 
         className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-slideUp"
-        dir="rtl"
+        dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
         <div 
@@ -107,7 +124,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
             <div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <User className="w-5 h-5 text-blue-600" />
-                معلومات المستخدم
+                {t('users.details.userInfo')}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 rounded-xl border-2 border-gray-200 dark:border-gray-600">
@@ -116,7 +133,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                       <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">البريد الإلكتروني</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.form.email')}</p>
                       <p className="text-sm font-bold text-gray-900 dark:text-white">{user.email}</p>
                     </div>
                   </div>
@@ -128,8 +145,8 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                       <Phone className="w-5 h-5 text-green-600 dark:text-green-400" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">رقم الهاتف</p>
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">{user.phone || 'غير محدد'}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.details.phoneNumber')}</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">{user.phone || t('users.notSpecified')}</p>
                     </div>
                   </div>
                 </div>
@@ -140,9 +157,9 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                       <Calendar className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">تاريخ الانضمام</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.details.joinDate')}</p>
                       <p className="text-sm font-bold text-gray-900 dark:text-white">
-                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString('ar-EG') : 'غير محدد'}
+                        {formatDate(user.createdAt)}
                       </p>
                     </div>
                   </div>
@@ -155,9 +172,9 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                         <RefreshCw className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">آخر دخول</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.lastLogin')}</p>
                         <p className="text-sm font-bold text-gray-900 dark:text-white">
-                          {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('ar-EG') : 'غير محدد'}
+                          {formatDate(user.lastLogin)}
                         </p>
                       </div>
                     </div>
@@ -171,7 +188,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                         <MapPin className="w-5 h-5 text-red-600 dark:text-red-400" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold mb-1">العنوان</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold mb-1">{t('users.details.address')}</p>
                         <p className="text-sm font-bold text-gray-900 dark:text-white">{user.address}</p>
                       </div>
                     </div>
@@ -185,7 +202,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                   <User className="w-5 h-5 text-green-600" />
-                  المعلومات المهنية
+                  {t('users.details.professionalInfo')}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {user.department && (
@@ -195,7 +212,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                           <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">القسم</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.details.department')}</p>
                           <p className="text-sm font-bold text-gray-900 dark:text-white">{user.department}</p>
                         </div>
                       </div>
@@ -209,7 +226,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                           <Crown className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">المنصب</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.details.position')}</p>
                           <p className="text-sm font-bold text-gray-900 dark:text-white">{user.position}</p>
                         </div>
                       </div>
@@ -223,9 +240,9 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                           <Calendar className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">تاريخ التوظيف</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.details.hireDate')}</p>
                           <p className="text-sm font-bold text-gray-900 dark:text-white">
-                            {new Date(user.hireDate).toLocaleDateString('ar-EG')}
+                            {formatDate(user.hireDate)}
                           </p>
                         </div>
                       </div>
@@ -239,8 +256,8 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                           <Shield className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">الراتب</p>
-                          <p className="text-sm font-bold text-gray-900 dark:text-white">{user.salary.toLocaleString()} جنيه</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{t('users.details.salary')}</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">{user.salary.toLocaleString()} {t('common.currency')}</p>
                         </div>
                       </div>
                     </div>
@@ -254,7 +271,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                   <User className="w-5 h-5 text-amber-600" />
-                  ملاحظات
+                  {t('users.details.notes')}
                 </h3>
                 <div className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-2 border-amber-200 dark:border-amber-800 rounded-xl">
                   <p className="text-sm text-amber-900 dark:text-amber-200 leading-relaxed">{user.notes}</p>
@@ -266,7 +283,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
             <div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Crown className="w-5 h-5 text-purple-600" />
-                الصلاحيات
+                {t('users.permissions.title')}
               </h3>
               {user.permissions.includes('all') ? (
                 <div className="p-5 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-2 border-purple-200 dark:border-purple-800 rounded-xl">
@@ -275,15 +292,15 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                       <Crown className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                     </div>
                     <div>
-                      <p className="text-lg font-bold text-purple-900 dark:text-purple-200">جميع الصلاحيات</p>
-                      <p className="text-sm text-purple-700 dark:text-purple-400">وصول كامل لجميع ميزات النظام</p>
+                      <p className="text-lg font-bold text-purple-900 dark:text-purple-200">{t('users.permissions.all')}</p>
+                      <p className="text-sm text-purple-700 dark:text-purple-400">{t('users.details.fullAccess')}</p>
                     </div>
                   </div>
                 </div>
               ) : user.permissions.length === 0 ? (
                 <div className="p-5 bg-gray-50 dark:bg-gray-700/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-center">
                   <Shield className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500 dark:text-gray-400 font-semibold">لا توجد صلاحيات محددة</p>
+                  <p className="text-gray-500 dark:text-gray-400 font-semibold">{t('users.noPermissions')}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -318,7 +335,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
             <div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-blue-600" />
-                الصفحات المتاحة
+                {t('users.details.accessiblePages')}
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                 {getAccessiblePages(user.permissions).length > 0 ? (
@@ -337,7 +354,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                   ))
                 ) : (
                   <div className="col-span-full p-5 bg-gray-50 dark:bg-gray-700/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-center">
-                    <p className="text-gray-500 dark:text-gray-400 font-semibold">لا توجد صفحات متاحة</p>
+                    <p className="text-gray-500 dark:text-gray-400 font-semibold">{t('users.details.noAccessiblePages')}</p>
                   </div>
                 )}
               </div>
@@ -359,7 +376,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                 <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
                 <div className="relative flex items-center justify-center gap-2">
                   <Edit className="w-5 h-5" />
-                  <span>تعديل المستخدم</span>
+                  <span>{t('users.editUser')}</span>
                 </div>
               </button>
             )}
@@ -367,7 +384,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
               onClick={onClose}
               className={`${canEdit ? '' : 'flex-1'} px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 font-bold`}
             >
-              إغلاق
+              {t('common.close')}
             </button>
           </div>
         </div>

@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider } from './context/LanguageContext';
+import { OrganizationProvider } from './context/OrganizationContext';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -223,15 +225,19 @@ const App = () => {
           v7_relativeSplatPath: true,
         }}
       >
-        <AppProvider>
-          <ThemeProvider>
-            <ToastManager>
-              <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
-                <RouteHandler />
-              </div>
-            </ToastManager>
-          </ThemeProvider>
-        </AppProvider>
+        <LanguageProvider>
+          <AppProvider>
+            <ThemeProvider>
+              <OrganizationProvider>
+                <ToastManager>
+                  <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
+                    <RouteHandler />
+                  </div>
+                </ToastManager>
+              </OrganizationProvider>
+            </ThemeProvider>
+          </AppProvider>
+        </LanguageProvider>
       </BrowserRouter>
     </ErrorBoundary>
   );

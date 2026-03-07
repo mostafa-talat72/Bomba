@@ -4,9 +4,14 @@ import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar,
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
+import 'dayjs/locale/fr';
 import { pdf } from '@react-pdf/renderer';
 import EmployeePDFDocument from './EmployeePDFDocument';
 import { numberOnlyInputProps } from '../../utils/inputHelpers';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
+import { useOrganization } from '../../context/OrganizationContext';
 import './EmployeeProfile.css';
 
 dayjs.locale('ar');
@@ -21,6 +26,13 @@ interface EmployeeProfileProps {
 }
 
 const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, onAdvanceAdded }) => {
+  const { t } = useTranslation();
+  const { currentLanguage, isRTL } = useLanguage();
+  const { getCurrencySymbol } = useOrganization();
+  
+  // Helper to get currency symbol with current language
+  const currency = () => getCurrencySymbol(currentLanguage);
+  
   const [employee, setEmployee] = useState<any>(null);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [advances, setAdvances] = useState<any[]>([]);
@@ -62,6 +74,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   // Advance and Deduction forms
   const [advanceForm] = Form.useForm();
   const [deductionForm] = Form.useForm();
+
+  useEffect(() => {
+    dayjs.locale(currentLanguage);
+  }, [currentLanguage]);
 
   useEffect(() => {
     if (employeeId) {
@@ -116,7 +132,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         setPayrollData(null);
       }
     } catch (error: any) {
-      console.error('فشل في تحميل بيانات الموظف:', error);
+      console.error(t('payroll.employeeProfile.messages.loadError'), error);
       setAttendance([]);
       setAdvances([]);
       setDeductions([]);
@@ -127,9 +143,18 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
     }
   };
 
+  const formatNumber = (num: number | string) => {
+    // تحويل الأرقام إلى عربية فقط إذا كانت اللغة الحالية عربية
+    if (currentLanguage === 'ar') {
+      const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+      return String(num).replace(/\d/g, (d) => arabicNumbers[parseInt(d)]);
+    }
+    return String(num);
+  };
+
   const toArabicNumbers = (num: number | string) => {
-    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    return String(num).replace(/\d/g, (d) => arabicNumbers[parseInt(d)]);
+    // للتوافق مع الكود القديم - استخدم formatNumber بدلاً منها
+    return formatNumber(num);
   };
 
   const calculateStats = () => {
@@ -168,11 +193,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
 
   const handlePayment = async () => {
     if (!paymentAmount || paymentAmount <= 0) {
-      message.error('الرجاء إدخال مبلغ صحيح');
+      message.error(t('payroll.employeeProfile.messages.invalidAmount'));
       return;
     }
     if (paymentAmount > stats.remainingBalance) {
-      message.error('المبلغ المطلوب أكبر من المتبقي');
+      message.error(t('payroll.employeeProfile.messages.amountExceedsBalance'));
       return;
     }
     try {
@@ -185,23 +210,23 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       });
       
       if (response.success) {
-        message.success(`تم صرف ${toArabicNumbers(paymentAmount)} جنيه بنجاح`);
+        message.success(t('payroll.employeeProfile.messages.paymentSuccess'));
         setPaymentModalVisible(false);
         setPaymentAmount(0);
         setPaymentDate(dayjs());
         fetchEmployeeData();
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error || error.message || 'فشل في تسجيل الدفعة';
+      const errorMessage = error.response?.data?.error || error.message || t('payroll.employeeProfile.messages.paymentError');
       message.error(errorMessage);
     }
   };
 
   const handleExportPDF = async () => {
     try {
-      message.loading('جاري إنشاء ملف PDF...', 0);
+      message.loading(t('payroll.employeeProfile.messages.exportingPDF'), 0);
       
-      const monthName = selectedMonth.format('MMMM YYYY');
+      const monthName = selectedMonth.locale(currentLanguage).format('MMMM YYYY');
       
       // إنشاء مستند PDF
       const blob = await pdf(
@@ -213,6 +238,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           advances={advances}
           deductions={deductions}
           payments={payments}
+          t={t}
+          currentLanguage={currentLanguage}
+          isRTL={isRTL}
+          currency={currency()}
         />
       ).toBlob();
       
@@ -225,11 +254,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       URL.revokeObjectURL(url);
       
       message.destroy();
-      message.success('تم تصدير التقرير بنجاح');
+      message.success(t('payroll.employeeProfile.messages.exportSuccess'));
     } catch (error) {
-      console.error('فشل في تصدير التقرير:', error);
+      console.error(t('payroll.employeeProfile.messages.exportError'), error);
       message.destroy();
-      message.error('فشل في تصدير التقرير');
+      message.error(t('payroll.employeeProfile.messages.exportError'));
     }
   };
 
@@ -238,7 +267,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       const phone = employee.personalInfo?.phone;
       
       if (!phone) {
-        message.error('لا يوجد رقم هاتف للموظف');
+        message.error(t('payroll.employeeProfile.messages.noPhone'));
         return;
       }
 
@@ -254,9 +283,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         }
       }
 
-      message.loading('جاري إنشاء ملف PDF...', 0);
+      message.loading(t('payroll.employeeProfile.messages.exportingPDF'), 0);
       
-      const monthName = selectedMonth.format('MMMM YYYY');
+      const monthName = selectedMonth.locale(currentLanguage).format('MMMM YYYY');
       
       // إنشاء مستند PDF
       const blob = await pdf(
@@ -268,6 +297,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           advances={advances}
           deductions={deductions}
           payments={payments}
+          t={t}
+          currentLanguage={currentLanguage}
+          isRTL={isRTL}
+          currency={currency()}
         />
       ).toBlob();
       
@@ -275,7 +308,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       
       // إنشاء رسالة WhatsApp
       const employeeName = employee.personalInfo?.name;
-      const whatsappMessage = `مرحباً ${employeeName}،\n\nإليك تقرير المرتبات الخاص بك لشهر ${monthName}\n\nالرصيد المتاح: ${stats.remainingBalance.toFixed(2)} جنيه`;
+      const whatsappMessage = `${t('payroll.employeeProfile.whatsappMessage.greeting')} ${employeeName}،\n\n${t('payroll.employeeProfile.whatsappMessage.reportFor')} ${monthName}\n\n${t('payroll.employeeProfile.availableBalance')}: ${toArabicNumbers(stats.remainingBalance.toFixed(2))} ${currency()}`;
       
       // فتح WhatsApp Web مع الرسالة
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
@@ -292,40 +325,40 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       window.open(whatsappUrl, '_blank');
       
       Modal.info({
-        title: '📱 إرسال التقرير عبر WhatsApp',
+        title: `📱 ${t('payroll.employeeProfile.whatsappModal.title')}`,
         content: (
           <div className="space-y-4">
             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-              <p className="font-bold text-green-700 dark:text-green-400 mb-2">✅ تم تنزيل الملف بنجاح!</p>
-              <p className="text-sm">اسم الملف: <strong>employee-report-{employeeName}-{selectedMonth.format('YYYY-MM')}.pdf</strong></p>
+              <p className="font-bold text-green-700 dark:text-green-400 mb-2">✅ {t('payroll.employeeProfile.whatsappModal.fileDownloaded')}</p>
+              <p className="text-sm">{t('payroll.employeeProfile.whatsappModal.fileName')}: <strong>employee-report-{employeeName}-{selectedMonth.format('YYYY-MM')}.pdf</strong></p>
             </div>
             
             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="font-bold text-blue-700 dark:text-blue-400 mb-3">📋 خطوات الإرسال:</p>
+              <p className="font-bold text-blue-700 dark:text-blue-400 mb-3">📋 {t('payroll.employeeProfile.whatsappModal.steps')}:</p>
               <ol className="list-decimal mr-5 space-y-2 text-sm">
-                <li>في نافذة WhatsApp التي فتحت، اضغط على أيقونة <strong>المرفقات 📎</strong></li>
-                <li>اختر <strong>"مستند"</strong> أو <strong>"Document"</strong></li>
-                <li>اختر الملف الذي تم تنزيله للتو</li>
-                <li>اضغط <strong>إرسال ✓</strong></li>
+                <li>{t('payroll.employeeProfile.whatsappModal.step1')}</li>
+                <li>{t('payroll.employeeProfile.whatsappModal.step2')}</li>
+                <li>{t('payroll.employeeProfile.whatsappModal.step3')}</li>
+                <li>{t('payroll.employeeProfile.whatsappModal.step4')}</li>
               </ol>
             </div>
             
             <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
               <p className="text-sm text-gray-600 dark:text-gray-300">
-                📞 رقم الموظف: <strong className="text-blue-600 dark:text-blue-400">{phone}</strong>
+                📞 {t('payroll.employeeProfile.whatsappModal.employeePhone')}: <strong className="text-blue-600 dark:text-blue-400">{phone}</strong>
               </p>
             </div>
           </div>
         ),
-        okText: 'فهمت',
+        okText: t('payroll.employeeProfile.messages.understood'),
         width: 600,
         className: 'whatsapp-modal',
       });
       
     } catch (error) {
-      console.error('فشل في إرسال التقرير:', error);
+      console.error(t('payroll.employeeProfile.messages.sendError'), error);
       message.destroy();
-      message.error('فشل في إرسال التقرير');
+      message.error(t('payroll.employeeProfile.messages.sendError'));
     }
   };
 
@@ -352,30 +385,30 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         reason: values.reason,
         notes: values.notes
       });
-      message.success('تم تحديث الحضور بنجاح');
+      message.success(t('payroll.employeeProfile.messages.updateAttendanceSuccess'));
       setEditAttendanceModalVisible(false);
       setEditingAttendance(null);
       editForm.resetFields();
       fetchEmployeeData();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تحديث الحضور');
+      message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.updateAttendanceError'));
     }
   };
 
   const handleDeleteAttendance = async (id: string) => {
     Modal.confirm({
-      title: 'تأكيد الحذف',
-      content: 'هل أنت متأكد من حذف هذا السجل؟',
-      okText: 'حذف',
-      cancelText: 'إلغاء',
+      title: t('payroll.employeeProfile.confirmDelete.title'),
+      content: t('payroll.employeeProfile.confirmDelete.attendance'),
+      okText: t('payroll.employeeProfile.confirmDelete.okText'),
+      cancelText: t('payroll.employeeProfile.confirmDelete.cancelText'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.delete(`/payroll/attendance/${id}`);
-          message.success('تم حذف السجل بنجاح');
+          message.success(t('payroll.employeeProfile.messages.deleteAttendanceSuccess'));
           fetchEmployeeData();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في حذف السجل');
+          message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.deleteAttendanceError'));
         }
       }
     });
@@ -398,30 +431,30 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         reason: values.reason,
         requestDate: values.requestDate.format('YYYY-MM-DD')
       });
-      message.success('تم تحديث السلفة بنجاح');
+      message.success(t('payroll.employeeProfile.messages.updateAdvanceSuccess'));
       setEditAdvanceModalVisible(false);
       setEditingAdvance(null);
       editForm.resetFields();
       fetchEmployeeData();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تحديث السلفة');
+      message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.updateAdvanceError'));
     }
   };
 
   const handleDeleteAdvance = async (id: string) => {
     Modal.confirm({
-      title: 'تأكيد الحذف',
-      content: 'هل أنت متأكد من حذف هذه السلفة؟',
-      okText: 'حذف',
-      cancelText: 'إلغاء',
+      title: t('payroll.employeeProfile.confirmDelete.title'),
+      content: t('payroll.employeeProfile.confirmDelete.advance'),
+      okText: t('payroll.employeeProfile.confirmDelete.okText'),
+      cancelText: t('payroll.employeeProfile.confirmDelete.cancelText'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.delete(`/payroll/advances/${id}`);
-          message.success('تم حذف السلفة بنجاح');
+          message.success(t('payroll.employeeProfile.messages.deleteAdvanceSuccess'));
           fetchEmployeeData();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في حذف السلفة');
+          message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.deleteAdvanceError'));
         }
       }
     });
@@ -446,30 +479,30 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         type: values.type,
         date: values.date.format('YYYY-MM-DD')
       });
-      message.success('تم تحديث الخصم بنجاح');
+      message.success(t('payroll.employeeProfile.messages.updateDeductionSuccess'));
       setEditDeductionModalVisible(false);
       setEditingDeduction(null);
       editForm.resetFields();
       fetchEmployeeData();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تحديث الخصم');
+      message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.updateDeductionError'));
     }
   };
 
   const handleDeleteDeduction = async (id: string) => {
     Modal.confirm({
-      title: 'تأكيد الحذف',
-      content: 'هل أنت متأكد من حذف هذا الخصم؟',
-      okText: 'حذف',
-      cancelText: 'إلغاء',
+      title: t('payroll.employeeProfile.confirmDelete.title'),
+      content: t('payroll.employeeProfile.confirmDelete.deduction'),
+      okText: t('payroll.employeeProfile.confirmDelete.okText'),
+      cancelText: t('payroll.employeeProfile.confirmDelete.cancelText'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.delete(`/payroll/deductions/${id}`);
-          message.success('تم حذف الخصم بنجاح');
+          message.success(t('payroll.employeeProfile.messages.deleteDeductionSuccess'));
           fetchEmployeeData();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في حذف الخصم');
+          message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.deleteDeductionError'));
         }
       }
     });
@@ -494,30 +527,30 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         paymentDate: values.paymentDate.format('YYYY-MM-DD'),
         notes: values.notes
       });
-      message.success('تم تحديث الدفعة بنجاح');
+      message.success(t('payroll.employeeProfile.messages.updatePaymentSuccess'));
       setEditPaymentModalVisible(false);
       setEditingPayment(null);
       editForm.resetFields();
       fetchEmployeeData();
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تحديث الدفعة');
+      message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.updatePaymentError'));
     }
   };
 
   const handleDeletePayment = async (id: string) => {
     Modal.confirm({
-      title: 'تأكيد الحذف',
-      content: 'هل أنت متأكد من حذف هذه الدفعة؟',
-      okText: 'حذف',
-      cancelText: 'إلغاء',
+      title: t('payroll.employeeProfile.confirmDelete.title'),
+      content: t('payroll.employeeProfile.confirmDelete.payment'),
+      okText: t('payroll.employeeProfile.confirmDelete.okText'),
+      cancelText: t('payroll.employeeProfile.confirmDelete.cancelText'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await api.delete(`/payroll/payments/${id}`);
-          message.success('تم حذف الدفعة بنجاح');
+          message.success(t('payroll.employeeProfile.messages.deletePaymentSuccess'));
           fetchEmployeeData();
         } catch (error: any) {
-          message.error(error.response?.data?.error || 'فشل في حذف الدفعة');
+          message.error(error.response?.data?.error || t('payroll.employeeProfile.messages.deletePaymentError'));
         }
       }
     });
@@ -583,19 +616,19 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       if (needsTimes) {
         if (timeMode === 'same') {
           if (!values.checkIn) {
-            message.error('الرجاء تحديد وقت الحضور');
+            message.error(t('payroll.attendanceManagement.messages.checkInRequired'));
             return;
           }
         } else if (timeMode === 'different') {
           const missingTimes = dayTimes.filter(dt => !dt.checkIn);
           if (missingTimes.length > 0) {
-            message.error('الرجاء تحديد وقت الحضور لجميع الأيام');
+            message.error(t('payroll.attendanceManagement.messages.checkInRequiredAll'));
             return;
           }
         } else if (timeMode === 'groups') {
           const invalidGroups = timeGroups.filter(g => !g.checkIn || g.dates.length === 0);
           if (invalidGroups.length > 0) {
-            message.error('الرجاء تحديد الأيام والأوقات لجميع المجموعات');
+            message.error(t('payroll.attendanceManagement.messages.groupsInvalid'));
             return;
           }
         }
@@ -648,7 +681,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       }
       
       if (successCount > 0) {
-        message.success(`تم تسجيل الحضور لـ ${successCount} يوم بنجاح`);
+        message.success(t('payroll.attendanceManagement.messages.success', { count: successCount }));
         setAttendanceModalVisible(false);
         attendanceForm.resetFields();
         setDayTimes([]);
@@ -656,10 +689,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         setTimeMode('same');
         fetchEmployeeData();
       } else {
-        message.error('فشل في تسجيل الحضور');
+        message.error(t('payroll.attendanceManagement.messages.error'));
       }
     } catch (error: any) {
-      message.error(error.response?.data?.error || 'فشل في تسجيل الحضور');
+      message.error(error.response?.data?.error || t('payroll.attendanceManagement.messages.error'));
     }
   };
 
@@ -678,9 +711,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       };
       
       
-      const response = await api.post('/payroll/advances', payload);
+      await api.post('/payroll/advances', payload);
       
-      message.success('تم إضافة السلفة بنجاح');
+      message.success(t('payroll.advanceManagement.messages.submitSuccess'));
       setAdvanceModalVisible(false);
       advanceForm.resetFields();
       fetchEmployeeData();
@@ -693,7 +726,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       console.error('Advance error:', error);
       console.error('Error response:', error.response);
       console.error('Error data:', error.response?.data);
-      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'فشل في إضافة السلفة';
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || t('payroll.advanceManagement.messages.submitError');
       console.error('Error message:', errorMessage);
       message.error(errorMessage);
     }
@@ -714,16 +747,16 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       };
       
       
-      const response = await api.post('/payroll/deductions', payload);
+      await api.post('/payroll/deductions', payload);
       
-      message.success('تم إضافة الخصم بنجاح');
+      message.success(t('payroll.deductionsManagement.messages.addSuccess'));
       setDeductionModalVisible(false);
       deductionForm.resetFields();
       fetchEmployeeData();
     } catch (error: any) {
       console.error('Deduction error:', error);
       console.error('Error response:', error.response?.data);
-      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'فشل في إضافة الخصم';
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || t('payroll.deductionsManagement.messages.addError');
       message.error(errorMessage);
     }
   };
@@ -756,13 +789,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       const response = await api.put(`/payroll/employees/${employeeId}`, payload);
       
       if (response.success) {
-        message.success('تم تحديث بيانات الموظف بنجاح');
+        message.success(t('payroll.employeeProfile.messages.updateEmployeeSuccess'));
         setEditEmployeeModalVisible(false);
         editEmployeeForm.resetFields();
         fetchEmployeeData();
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error || error.message || 'فشل في تحديث بيانات الموظف';
+      const errorMessage = error.response?.data?.error || error.message || t('payroll.employeeProfile.messages.updateEmployeeError');
       message.error(errorMessage);
     }
   };
@@ -777,28 +810,48 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   };
 
   const getStatusName = (status: string) => {
-    const names: any = {
-      active: 'نشط', inactive: 'غير نشط', suspended: 'موقوف', pending: 'قيد الانتظار',
-      approved: 'معتمد', paid: 'مدفوع', completed: 'مكتمل', rejected: 'مرفوض',
-      present: 'حاضر', absent: 'غائب', late: 'متأخر', leave: 'إجازة', half_day: 'نصف يوم', weekly_off: 'إجازة أسبوعية'
+    const statusMap: any = {
+      active: t('payroll.employeeList.status.active'),
+      inactive: t('payroll.employeeList.status.suspended'),
+      suspended: t('payroll.employeeList.status.suspended'),
+      pending: t('payroll.advanceManagement.status.pending'),
+      approved: t('payroll.advanceManagement.status.approved'),
+      paid: t('payroll.advanceManagement.status.paid'),
+      completed: t('payroll.advanceManagement.status.completed'),
+      rejected: t('payroll.advanceManagement.status.rejected'),
+      present: t('payroll.attendanceManagement.status.present'),
+      absent: t('payroll.attendanceManagement.status.absent'),
+      late: t('payroll.attendanceManagement.status.late'),
+      leave: t('payroll.attendanceManagement.status.leave'),
+      half_day: t('payroll.attendanceManagement.status.half_day'),
+      weekly_off: t('payroll.attendanceManagement.status.weekly_off')
     };
-    return names[status] || status;
+    return statusMap[status] || status;
   };
 
   const getDepartmentName = (dept: string) => {
-    const names: any = {
-      kitchen: 'المطبخ', cashier: 'الكاشير', waiter: 'الخدمة',
-      admin: 'الإدارة', gaming: 'الألعاب', other: 'أخرى'
+    const deptMap: any = {
+      kitchen: t('payroll.employeeList.departments.kitchen'),
+      cashier: t('payroll.employeeList.departments.cashier'),
+      waiter: t('payroll.employeeList.departments.waiter'),
+      admin: t('payroll.employeeList.departments.admin'),
+      gaming: t('payroll.employeeList.departments.gaming'),
+      other: t('payroll.employeeList.departments.other')
     };
-    return names[dept] || dept;
+    return deptMap[dept] || dept;
   };
 
   const getDeductionTypeName = (type: string) => {
-    const types: any = {
-      absence: 'غياب', late: 'تأخير', penalty: 'جزاء',
-      loan: 'قرض', insurance: 'تأمينات', tax: 'ضرائب', other: 'أخرى'
+    const typeMap: any = {
+      absence: t('payroll.deductionsManagement.types.absence'),
+      late: t('payroll.deductionsManagement.types.late'),
+      penalty: t('payroll.deductionsManagement.types.penalty'),
+      loan: t('payroll.deductionsManagement.types.loan'),
+      insurance: t('payroll.deductionsManagement.types.insurance'),
+      tax: t('payroll.deductionsManagement.types.tax'),
+      other: t('payroll.deductionsManagement.types.other')
     };
-    return types[type] || type;
+    return typeMap[type] || type;
   };
 
 
@@ -814,18 +867,18 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   if (!employee) {
     return (
       <Card className="dark:bg-gray-800">
-        <Empty description="لم يتم العثور على بيانات الموظف" />
+        <Empty description={t('payroll.employeeProfile.empty.noEmployee')} />
       </Card>
     );
   }
 
   return (
-    <div className="employee-profile">
+    <div className="employee-profile" dir={isRTL ? 'rtl' : 'ltr'}>
       <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex flex-col gap-4">
           {/* Header Section */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <Button icon={<ArrowLeft size={20} />} onClick={onClose} type="text" className="dark:text-gray-300">رجوع</Button>
+            <Button icon={<ArrowLeft size={20} />} onClick={onClose} type="text" className="dark:text-gray-300">{t('payroll.employeeProfile.back')}</Button>
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
                 <User size={24} className="sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" />
@@ -852,7 +905,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm sm:text-base"
                 block
               >
-                الحضور والانصراف
+                {t('payroll.employeeProfile.tabs.attendance')}
               </Button>
               <Button 
                 type="default" 
@@ -862,7 +915,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm sm:text-base"
                 block
               >
-                السلف
+                {t('payroll.employeeProfile.tabs.advances')}
               </Button>
               <Button 
                 type="default" 
@@ -872,13 +925,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm sm:text-base"
                 block
               >
-                الخصومات
+                {t('payroll.employeeProfile.tabs.deductions')}
               </Button>
             </div>
             
             {/* Month Picker Row */}
             <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg w-full sm:w-auto">
-              <span className="text-gray-600 dark:text-gray-300 text-sm whitespace-nowrap">الشهر:</span>
+              <span className="text-gray-600 dark:text-gray-300 text-sm whitespace-nowrap">{t('payroll.employeeProfile.month')}:</span>
               <DatePicker 
                 picker="month" 
                 value={selectedMonth} 
@@ -897,7 +950,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         <div className="flex flex-col sm:flex-row justify-between items-start gap-3 mb-4">
           <h3 className="text-base sm:text-lg font-bold dark:text-gray-100 flex items-center gap-2">
             <User size={18} className="sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
-            بيانات الموظف
+            {t('payroll.employeeProfile.employeeData')}
           </h3>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button 
@@ -923,7 +976,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               }}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full sm:w-auto text-sm"
             >
-              تعديل البيانات
+              {t('payroll.employeeProfile.editData')}
             </Button>
             <Button 
               type="primary"
@@ -931,7 +984,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               onClick={() => setShowFinancials(!showFinancials)}
               className="w-full sm:w-auto text-sm"
             >
-              {showFinancials ? 'إخفاء البيانات المالية' : 'إظهار البيانات المالية'}
+              {showFinancials ? t('payroll.employeeProfile.hideFinancials') : t('payroll.employeeProfile.showFinancials')}
             </Button>
           </div>
         </div>
@@ -939,25 +992,25 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">الاسم</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.name')}</div>
               <div className="font-medium text-gray-800 dark:text-gray-200">{employee.personalInfo?.name}</div>
             </div>
           </Col>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">رقم الهاتف</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.phone')}</div>
               <div className="font-medium text-gray-800 dark:text-gray-200">{employee.personalInfo?.phone || '-'}</div>
             </div>
           </Col>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">الرقم القومي</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.nationalId')}</div>
               <div className="font-medium text-gray-800 dark:text-gray-200">{employee.personalInfo?.nationalId || '-'}</div>
             </div>
           </Col>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">تاريخ التعيين</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.hireDate')}</div>
               <div className="font-medium text-gray-800 dark:text-gray-200">
                 {employee.personalInfo?.hireDate ? dayjs(employee.personalInfo.hireDate).format('DD/MM/YYYY') : '-'}
               </div>
@@ -965,27 +1018,27 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Col>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">القسم</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.department')}</div>
               <div className="font-medium text-gray-800 dark:text-gray-200">{getDepartmentName(employee.employment?.department)}</div>
             </div>
           </Col>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">المنصب</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.position')}</div>
               <div className="font-medium text-gray-800 dark:text-gray-200">{employee.employment?.position}</div>
             </div>
           </Col>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">نوع التوظيف</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.employmentType')}</div>
               <div className="font-medium text-gray-800 dark:text-gray-200">
-                {employee.employment?.type === 'monthly' ? 'شهري' : employee.employment?.type === 'daily' ? 'يومي' : 'بالساعة'}
+                {employee.employment?.type === 'monthly' ? t('payroll.employeeList.employmentTypes.monthly') : employee.employment?.type === 'daily' ? t('payroll.employeeList.employmentTypes.daily') : t('payroll.employeeList.employmentTypes.hourly')}
               </div>
             </div>
           </Col>
           <Col xs={24} sm={12} md={8}>
             <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">الحالة</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.status')}</div>
               <div>
                 <Tag color={getStatusColor(employee.employment?.status)}>
                   {getStatusName(employee.employment?.status)}
@@ -1000,15 +1053,15 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 <div className="border-t border-gray-200 dark:border-gray-600 my-2"></div>
                 <h4 className="text-md font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
                   <DollarSign size={18} className="text-green-600" />
-                  البيانات المالية
+                  {t('payroll.employeeProfile.financialData')}
                 </h4>
               </Col>
               {employee.employment?.type === 'monthly' && (
                 <Col xs={24} sm={12} md={8}>
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">الراتب الشهري</div>
+                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">{t('payroll.employeeProfile.monthlySalary')}</div>
                     <div className="font-bold text-lg text-green-700 dark:text-green-400">
-                      {toArabicNumbers(employee.compensation?.monthly || 0)} جنيه
+                      {toArabicNumbers(employee.compensation?.monthly || 0)} {currency()}
                     </div>
                   </div>
                 </Col>
@@ -1016,9 +1069,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               {employee.employment?.type === 'daily' && (
                 <Col xs={24} sm={12} md={8}>
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">الأجر اليومي</div>
+                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">{t('payroll.employeeProfile.dailyWage')}</div>
                     <div className="font-bold text-lg text-green-700 dark:text-green-400">
-                      {toArabicNumbers(employee.compensation?.daily || 0)} جنيه
+                      {toArabicNumbers(employee.compensation?.daily || 0)} {currency()}
                     </div>
                   </div>
                 </Col>
@@ -1026,9 +1079,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               {employee.employment?.type === 'hourly' && (
                 <Col xs={24} sm={12} md={8}>
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">الأجر بالساعة</div>
+                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">{t('payroll.employeeProfile.hourlyWage')}</div>
                     <div className="font-bold text-lg text-green-700 dark:text-green-400">
-                      {toArabicNumbers(employee.compensation?.hourly || 0)} جنيه
+                      {toArabicNumbers(employee.compensation?.hourly || 0)} {currency()}
                     </div>
                   </div>
                 </Col>
@@ -1036,9 +1089,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               {employee.compensation?.overtimeHourlyRate > 0 && (
                 <Col xs={24} sm={12} md={8}>
                   <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">أجر الساعة الإضافية</div>
+                    <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">{t('payroll.employeeProfile.overtimeRate')}</div>
                     <div className="font-bold text-lg text-blue-700 dark:text-blue-400">
-                      {toArabicNumbers(employee.compensation?.overtimeHourlyRate || 0)} جنيه
+                      {toArabicNumbers(employee.compensation?.overtimeHourlyRate || 0)} {currency()}
                     </div>
                   </div>
                 </Col>
@@ -1052,32 +1105,32 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         <Row gutter={[16, 16]} className="mb-4">
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">مرحل من أشهر سابقة</span>} value={toArabicNumbers(stats.carriedForward.toFixed(2))} suffix="جنيه" prefix={<TrendingUp size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: stats.carriedForward > 0 ? '#fa8c16' : '#8c8c8c', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">{t('payroll.employeeProfile.carriedForward')}</span>} value={toArabicNumbers(stats.carriedForward.toFixed(2))} suffix={currency()} prefix={<TrendingUp size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: stats.carriedForward > 0 ? '#fa8c16' : '#8c8c8c', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">مرتب الشهر الحالي</span>} value={toArabicNumbers(stats.currentMonthSalary.toFixed(2))} suffix="جنيه" prefix={<DollarSign size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#52c41a', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">{t('payroll.employeeProfile.currentMonthSalary')}</span>} value={toArabicNumbers(stats.currentMonthSalary.toFixed(2))} suffix={currency()} prefix={<DollarSign size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#52c41a', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">سلف الشهر</span>} value={toArabicNumbers(stats.currentMonthAdvances.toFixed(2))} suffix="جنيه" prefix={<AlertCircle size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#faad14', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">{t('payroll.employeeProfile.monthAdvances')}</span>} value={toArabicNumbers(stats.currentMonthAdvances.toFixed(2))} suffix={currency()} prefix={<AlertCircle size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#faad14', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">خصومات الشهر</span>} value={toArabicNumbers(stats.currentMonthDeductions.toFixed(2))} suffix="جنيه" prefix={<AlertCircle size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#ff4d4f', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">{t('payroll.employeeProfile.monthDeductions')}</span>} value={toArabicNumbers(stats.currentMonthDeductions.toFixed(2))} suffix={currency()} prefix={<AlertCircle size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#ff4d4f', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
-            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">المرتب المصروف</span>} value={toArabicNumbers(stats.currentMonthPaid.toFixed(2))} suffix="جنيه" prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#722ed1', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">{t('payroll.employeeProfile.paidSalary')}</span>} value={toArabicNumbers(stats.currentMonthPaid.toFixed(2))} suffix={currency()} prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#722ed1', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
-            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm font-bold">الرصيد المتاح</span>} value={toArabicNumbers(stats.remainingBalance.toFixed(2))} suffix="جنيه" prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#1890ff', fontSize: '20px', fontWeight: 'bold' }} className="[&_.ant-statistic-content]:text-lg sm:[&_.ant-statistic-content]:text-xl" />
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm font-bold">{t('payroll.employeeProfile.availableBalance')}</span>} value={toArabicNumbers(stats.remainingBalance.toFixed(2))} suffix={currency()} prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#1890ff', fontSize: '20px', fontWeight: 'bold' }} className="[&_.ant-statistic-content]:text-lg sm:[&_.ant-statistic-content]:text-xl" />
           </Card>
         </Col>
       </Row>
@@ -1087,11 +1140,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
           <div className="flex flex-col gap-4">
             <div>
-              <h3 className="text-base sm:text-lg font-bold dark:text-gray-100">الرصيد المتاح للصرف</h3>
-              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 mt-2">{toArabicNumbers(stats.remainingBalance.toFixed(2))} جنيه</p>
+              <h3 className="text-base sm:text-lg font-bold dark:text-gray-100">{t('payroll.employeeProfile.availableBalanceTitle')}</h3>
+              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 mt-2">{toArabicNumbers(stats.remainingBalance.toFixed(2))} {currency()}</p>
               {!isCurrentMonth && (
                 <p className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 mt-1">
-                  لا يمكن صرف مرتب إلا للشهر الحالي
+                  {t('payroll.employeeProfile.cannotPayNonCurrentMonth')}
                 </p>
               )}
             </div>
@@ -1104,7 +1157,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm"
                 block
               >
-                تصدير PDF
+                {t('payroll.employeeProfile.exportPDF')}
               </Button>
               <Button 
                 type="default"
@@ -1115,7 +1168,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 style={{ backgroundColor: '#25D366', borderColor: '#25D366', color: 'white' }}
                 block
               >
-                إرسال عبر WhatsApp
+                {t('payroll.employeeProfile.sendWhatsApp')}
               </Button>
               <Button 
                 type="primary" 
@@ -1126,7 +1179,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 className="w-full text-sm sm:col-span-2 lg:col-span-1"
                 block
               >
-                صرف جزء من المرتب
+                {t('payroll.employeeProfile.payPartialSalary')}
               </Button>
             </div>
           </div>
@@ -1141,30 +1194,30 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           items={[
             {
               key: '1',
-              label: 'الحضور والانصراف',
+              label: t('payroll.employeeProfile.tabs.attendance'),
               children: (
                 <Table
                   dataSource={attendance}
                   rowKey="_id"
                   loading={loading}
-                  locale={{ emptyText: 'لا توجد سجلات حضور' }}
+                  locale={{ emptyText: t('payroll.employeeProfile.empty.attendance') }}
                   pagination={{ pageSize: 10 }}
                   className="dark:bg-gray-800"
                   scroll={{ x: 800 }}
                 >
                   <Table.Column
-                    title="التاريخ"
+                    title={t('payroll.employeeProfile.table.date')}
                     dataIndex="date"
                     key="date"
                     render={(date) => dayjs(date).format('DD/MM/YYYY')}
                   />
                   <Table.Column
-                    title="اليوم"
+                    title={t('payroll.employeeProfile.table.day')}
                     dataIndex="day"
                     key="day"
                   />
                   <Table.Column
-                    title="الحالة"
+                    title={t('payroll.employeeProfile.table.status')}
                     dataIndex="status"
                     key="status"
                     render={(status) => (
@@ -1174,31 +1227,31 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     )}
                   />
                   <Table.Column
-                    title="الحضور"
+                    title={t('payroll.employeeProfile.table.checkIn')}
                     dataIndex="checkIn"
                     key="checkIn"
                     render={(time) => time || '-'}
                   />
                   <Table.Column
-                    title="الانصراف"
+                    title={t('payroll.employeeProfile.table.checkOut')}
                     dataIndex="checkOut"
                     key="checkOut"
                     render={(time) => time || '-'}
                   />
                   <Table.Column
-                    title="الساعات"
+                    title={t('payroll.employeeProfile.table.hours')}
                     dataIndex="hours"
                     key="hours"
                     render={(hours) => hours ? toArabicNumbers(hours.toFixed(1)) : '-'}
                   />
                   <Table.Column
-                    title="المرتب اليومي"
+                    title={t('payroll.employeeProfile.table.dailySalary')}
                     dataIndex="dailySalary"
                     key="dailySalary"
-                    render={(salary) => salary ? `${toArabicNumbers(salary.toFixed(2))} جنيه` : '-'}
+                    render={(salary) => salary ? `${toArabicNumbers(salary.toFixed(2))} ${currency()}` : '-'}
                   />
                   <Table.Column
-                    title="الإجراءات"
+                    title={t('payroll.employeeProfile.table.actions')}
                     key="actions"
                     render={(_, record: any) => (
                       <div className="flex gap-2">
@@ -1208,7 +1261,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleEditAttendance(record)}
                           className="dark:text-blue-400"
                         >
-                          تعديل
+                          {t('payroll.employeeProfile.table.edit')}
                         </Button>
                         <Button
                           type="link"
@@ -1217,7 +1270,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleDeleteAttendance(record._id)}
                           className="dark:text-red-400"
                         >
-                          حذف
+                          {t('payroll.employeeProfile.table.delete')}
                         </Button>
                       </div>
                     )}
@@ -1227,36 +1280,36 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             },
             {
               key: '2',
-              label: 'السلف',
+              label: t('payroll.employeeProfile.tabs.advances'),
               children: (
                 <Table
                   dataSource={advances}
                   rowKey="_id"
                   loading={loading}
-                  locale={{ emptyText: 'لا توجد سلف' }}
+                  locale={{ emptyText: t('payroll.employeeProfile.empty.advances') }}
                   pagination={{ pageSize: 10 }}
                   className="dark:bg-gray-800"
                   scroll={{ x: 700 }}
                 >
                   <Table.Column
-                    title="التاريخ"
+                    title={t('payroll.employeeProfile.table.date')}
                     dataIndex="requestDate"
                     key="requestDate"
                     render={(date) => dayjs(date).format('DD/MM/YYYY')}
                   />
                   <Table.Column
-                    title="المبلغ"
+                    title={t('payroll.employeeProfile.table.amount')}
                     dataIndex="amount"
                     key="amount"
-                    render={(amount) => `${toArabicNumbers(amount)} جنيه`}
+                    render={(amount) => `${toArabicNumbers(amount)} ${currency()}`}
                   />
                   <Table.Column
-                    title="السبب"
+                    title={t('payroll.employeeProfile.table.reason')}
                     dataIndex="reason"
                     key="reason"
                   />
                   <Table.Column
-                    title="الحالة"
+                    title={t('payroll.employeeProfile.table.status')}
                     dataIndex="status"
                     key="status"
                     render={(status) => (
@@ -1266,16 +1319,16 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     )}
                   />
                   <Table.Column
-                    title="المتبقي"
+                    title={t('payroll.employeeProfile.table.remaining')}
                     key="remaining"
                     render={(_, record: any) => 
                       record.repayment?.remainingAmount 
-                        ? `${toArabicNumbers(record.repayment.remainingAmount)} جنيه`
+                        ? `${toArabicNumbers(record.repayment.remainingAmount)} ${currency()}`
                         : '-'
                     }
                   />
                   <Table.Column
-                    title="الإجراءات"
+                    title={t('payroll.employeeProfile.table.actions')}
                     key="actions"
                     render={(_, record: any) => (
                       <div className="flex gap-2">
@@ -1285,7 +1338,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleEditAdvance(record)}
                           className="dark:text-blue-400"
                         >
-                          تعديل
+                          {t('payroll.employeeProfile.table.edit')}
                         </Button>
                         <Button
                           type="link"
@@ -1294,7 +1347,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleDeleteAdvance(record._id)}
                           className="dark:text-red-400"
                         >
-                          حذف
+                          {t('payroll.employeeProfile.table.delete')}
                         </Button>
                       </div>
                     )}
@@ -1304,42 +1357,42 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             },
             {
               key: '3',
-              label: 'الخصومات',
+              label: t('payroll.employeeProfile.tabs.deductions'),
               children: (
                 <Table
                   dataSource={deductions}
                   rowKey="_id"
                   loading={loading}
-                  locale={{ emptyText: 'لا توجد خصومات' }}
+                  locale={{ emptyText: t('payroll.employeeProfile.empty.deductions') }}
                   pagination={{ pageSize: 10 }}
                   className="dark:bg-gray-800"
                   scroll={{ x: 600 }}
                 >
                   <Table.Column
-                    title="التاريخ"
+                    title={t('payroll.employeeProfile.table.date')}
                     dataIndex="date"
                     key="date"
                     render={(date) => dayjs(date).format('DD/MM/YYYY')}
                   />
                   <Table.Column
-                    title="النوع"
+                    title={t('payroll.employeeProfile.table.type')}
                     dataIndex="type"
                     key="type"
                     render={(type) => getDeductionTypeName(type)}
                   />
                   <Table.Column
-                    title="المبلغ"
+                    title={t('payroll.employeeProfile.table.amount')}
                     dataIndex="amount"
                     key="amount"
-                    render={(amount) => `${toArabicNumbers(amount)} جنيه`}
+                    render={(amount) => `${toArabicNumbers(amount)} ${currency()}`}
                   />
                   <Table.Column
-                    title="السبب"
+                    title={t('payroll.employeeProfile.table.reason')}
                     dataIndex="reason"
                     key="reason"
                   />
                   <Table.Column
-                    title="الإجراءات"
+                    title={t('payroll.employeeProfile.table.actions')}
                     key="actions"
                     render={(_, record: any) => (
                       <div className="flex gap-2">
@@ -1349,7 +1402,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleEditDeduction(record)}
                           className="dark:text-blue-400"
                         >
-                          تعديل
+                          {t('payroll.employeeProfile.table.edit')}
                         </Button>
                         <Button
                           type="link"
@@ -1358,7 +1411,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleDeleteDeduction(record._id)}
                           className="dark:text-red-400"
                         >
-                          حذف
+                          {t('payroll.employeeProfile.table.delete')}
                         </Button>
                       </div>
                     )}
@@ -1368,43 +1421,43 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             },
             {
               key: '4',
-              label: 'المدفوعات',
+              label: t('payroll.employeeProfile.tabs.payments'),
               children: (
                 <Table
                   dataSource={payments}
                   rowKey="_id"
                   loading={loading}
-                  locale={{ emptyText: 'لا توجد مدفوعات' }}
+                  locale={{ emptyText: t('payroll.employeeProfile.empty.payments') }}
                   pagination={{ pageSize: 10 }}
                   className="dark:bg-gray-800"
                   scroll={{ x: 600 }}
                 >
                   <Table.Column
-                    title="التاريخ"
+                    title={t('payroll.employeeProfile.table.date')}
                     dataIndex="paymentDate"
                     key="paymentDate"
                     render={(date) => dayjs(date).format('DD/MM/YYYY')}
                   />
                   <Table.Column
-                    title="المبلغ"
+                    title={t('payroll.employeeProfile.table.amount')}
                     dataIndex="amount"
                     key="amount"
-                    render={(amount) => `${toArabicNumbers(amount)} جنيه`}
+                    render={(amount) => `${toArabicNumbers(amount)} ${currency()}`}
                   />
                   <Table.Column
-                    title="الطريقة"
+                    title={t('payroll.employeeProfile.table.method')}
                     dataIndex="method"
                     key="method"
-                    render={(method) => method === 'cash' ? 'نقدي' : method === 'card' ? 'بطاقة' : 'تحويل'}
+                    render={(method) => t(`payroll.employeeProfile.paymentMethods.${method}`)}
                   />
                   <Table.Column
-                    title="ملاحظات"
+                    title={t('payroll.employeeProfile.table.notes')}
                     dataIndex="notes"
                     key="notes"
                     render={(notes) => notes || '-'}
                   />
                   <Table.Column
-                    title="الإجراءات"
+                    title={t('payroll.employeeProfile.table.actions')}
                     key="actions"
                     render={(_, record: any) => (
                       <div className="flex gap-2">
@@ -1414,7 +1467,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleEditPayment(record)}
                           className="dark:text-blue-400"
                         >
-                          تعديل
+                          {t('payroll.employeeProfile.table.edit')}
                         </Button>
                         <Button
                           type="link"
@@ -1423,7 +1476,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           onClick={() => handleDeletePayment(record._id)}
                           className="dark:text-red-400"
                         >
-                          حذف
+                          {t('payroll.employeeProfile.table.delete')}
                         </Button>
                       </div>
                     )}
@@ -1441,7 +1494,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Edit size={20} />
-            <span>تعديل الحضور</span>
+            <span>{t('payroll.attendanceManagement.editAttendance')}</span>
           </div>
         }
         open={editAttendanceModalVisible}
@@ -1456,7 +1509,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdateAttendance}>
           <Form.Item
-            label={<span className="dark:text-gray-200">التاريخ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.date')}</span>}
             name="date"
           >
             <DatePicker 
@@ -1469,24 +1522,24 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">الحالة</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.status')}</span>}
             name="status"
-            rules={[{ required: true, message: 'الرجاء اختيار الحالة' }]}
+            rules={[{ required: true, message: t('payroll.attendanceManagement.messages.statusRequired') }]}
           >
             <Select className="dark:bg-gray-700" size="large">
-              <Option value="present">حضور</Option>
-              <Option value="absent">غياب</Option>
-              <Option value="late">تأخير</Option>
-              <Option value="leave">إجازة</Option>
-              <Option value="half_day">نصف يوم</Option>
-              <Option value="weekly_off">إجازة أسبوعية</Option>
+              <Option value="present">{t('payroll.attendanceManagement.status.present')}</Option>
+              <Option value="absent">{t('payroll.attendanceManagement.status.absent')}</Option>
+              <Option value="late">{t('payroll.attendanceManagement.status.late')}</Option>
+              <Option value="leave">{t('payroll.attendanceManagement.status.leave')}</Option>
+              <Option value="half_day">{t('payroll.attendanceManagement.status.half_day')}</Option>
+              <Option value="weekly_off">{t('payroll.attendanceManagement.status.weekly_off')}</Option>
             </Select>
           </Form.Item>
 
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item 
-                label={<span className="dark:text-gray-200">وقت الحضور</span>} 
+                label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.checkIn')}</span>} 
                 name="checkIn"
               >
                 <TimePicker 
@@ -1500,7 +1553,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             </Col>
             <Col span={12}>
               <Form.Item 
-                label={<span className="dark:text-gray-200">وقت الانصراف</span>} 
+                label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.checkOut')}</span>} 
                 name="checkOut"
               >
                 <TimePicker 
@@ -1515,27 +1568,27 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Row>
 
           <Form.Item 
-            label={<span className="dark:text-gray-200">السبب</span>} 
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>} 
             name="reason"
           >
             <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
           </Form.Item>
 
-          <Form.Item label={<span className="dark:text-gray-200">ملاحظات</span>} name="notes">
+          <Form.Item label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.notes')}</span>} name="notes">
             <TextArea rows={3} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
           </Form.Item>
 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                حفظ
+                {t('common.save')}
               </Button>
               <Button onClick={() => {
                 setEditAttendanceModalVisible(false);
                 setEditingAttendance(null);
                 editForm.resetFields();
               }} size="large">
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
@@ -1547,7 +1600,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Edit size={20} />
-            <span>تعديل السلفة</span>
+            <span>{t('payroll.advanceManagement.editAdvance')}</span>
           </div>
         }
         open={editAdvanceModalVisible}
@@ -1562,9 +1615,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdateAdvance}>
           <Form.Item
-            label={<span className="dark:text-gray-200">المبلغ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.amount')}</span>}
             name="amount"
-            rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.amountRequired') }]}
           >
             <InputNumber
               {...numberOnlyInputProps} style={{ width: '100%' }}
@@ -1576,15 +1629,15 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">السبب</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>}
             name="reason"
-            rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.reasonRequired') }]}
           >
             <TextArea rows={3} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">تاريخ الطلب</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.requestDate')}</span>}
             name="requestDate"
           >
             <DatePicker
@@ -1598,14 +1651,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                حفظ
+                {t('common.save')}
               </Button>
               <Button onClick={() => {
                 setEditAdvanceModalVisible(false);
                 setEditingAdvance(null);
                 editForm.resetFields();
               }} size="large">
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
@@ -1617,7 +1670,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Edit size={20} />
-            <span>تعديل الخصم</span>
+            <span>{t('payroll.deductionsManagement.editDeduction')}</span>
           </div>
         }
         open={editDeductionModalVisible}
@@ -1632,25 +1685,25 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdateDeduction}>
           <Form.Item
-            label={<span className="dark:text-gray-200">النوع</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.type')}</span>}
             name="type"
-            rules={[{ required: true, message: 'الرجاء اختيار النوع' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.messages.typeRequired') }]}
           >
             <Select className="dark:bg-gray-700" size="large">
-              <Option value="absence">غياب</Option>
-              <Option value="late">تأخير</Option>
-              <Option value="penalty">جزاء</Option>
-              <Option value="loan">قرض</Option>
-              <Option value="insurance">تأمينات</Option>
-              <Option value="tax">ضرائب</Option>
-              <Option value="other">أخرى</Option>
+              <Option value="absence">{t('payroll.deductionsManagement.types.absence')}</Option>
+              <Option value="late">{t('payroll.attendanceManagement.status.late')}</Option>
+              <Option value="penalty">{t('payroll.deductionsManagement.types.penalty')}</Option>
+              <Option value="loan">{t('payroll.deductionsManagement.types.loan')}</Option>
+              <Option value="insurance">{t('payroll.deductionsManagement.types.insurance')}</Option>
+              <Option value="tax">{t('payroll.deductionsManagement.types.tax')}</Option>
+              <Option value="other">{t('payroll.deductionsManagement.types.other')}</Option>
             </Select>
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">المبلغ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.amount')}</span>}
             name="amount"
-            rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.amountRequired') }]}
           >
             <InputNumber
               {...numberOnlyInputProps} style={{ width: '100%' }}
@@ -1662,7 +1715,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">التاريخ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.date')}</span>}
             name="date"
           >
             <DatePicker
@@ -1674,9 +1727,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">السبب</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>}
             name="reason"
-            rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.reasonRequired') }]}
           >
             <TextArea rows={3} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
           </Form.Item>
@@ -1684,14 +1737,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                حفظ
+                {t('common.save')}
               </Button>
               <Button onClick={() => {
                 setEditDeductionModalVisible(false);
                 setEditingDeduction(null);
                 editForm.resetFields();
               }} size="large">
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
@@ -1703,7 +1756,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Edit size={20} />
-            <span>تعديل الدفعة</span>
+            <span>{t('payroll.payrollHistory.editPayment')}</span>
           </div>
         }
         open={editPaymentModalVisible}
@@ -1718,9 +1771,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdatePayment}>
           <Form.Item
-            label={<span className="dark:text-gray-200">المبلغ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.amount')}</span>}
             name="amount"
-            rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.amountRequired') }]}
           >
             <InputNumber
               {...numberOnlyInputProps} style={{ width: '100%' }}
@@ -1732,18 +1785,18 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">طريقة الدفع</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.method')}</span>}
             name="method"
           >
             <Select className="dark:bg-gray-700" size="large">
-              <Option value="cash">نقدي</Option>
-              <Option value="card">بطاقة</Option>
-              <Option value="transfer">تحويل</Option>
+              <Option value="cash">{t('payroll.employeeProfile.paymentMethods.cash')}</Option>
+              <Option value="card">{t('payroll.employeeProfile.paymentMethods.card')}</Option>
+              <Option value="transfer">{t('payroll.employeeProfile.paymentMethods.transfer')}</Option>
             </Select>
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">تاريخ الصرف</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.payrollHistory.paymentDate')}</span>}
             name="paymentDate"
           >
             <DatePicker
@@ -1755,7 +1808,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">ملاحظات</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.notes')}</span>}
             name="notes"
           >
             <TextArea rows={3} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
@@ -1764,14 +1817,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                حفظ
+                {t('common.save')}
               </Button>
               <Button onClick={() => {
                 setEditPaymentModalVisible(false);
                 setEditingPayment(null);
                 editForm.resetFields();
               }}>
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
@@ -1782,7 +1835,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Wallet size={20} />
-            <span>صرف جزء من المرتب</span>
+            <span>{t('payroll.employeeProfile.payPartialSalary')}</span>
           </div>
         }
         open={paymentModalVisible} 
@@ -1792,8 +1845,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           setPaymentDate(dayjs()); 
         }} 
         onOk={handlePayment} 
-        okText="صرف" 
-        cancelText="إلغاء" 
+        okText={t('payroll.payrollHistory.pay')} 
+        cancelText={t('common.cancel')} 
         className="professional-modal success-modal"
         width={500}
       >
@@ -1801,13 +1854,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <div className="info-box success">
             <div className="flex items-center gap-2 mb-2">
               <Wallet size={18} />
-              <span className="font-bold">الرصيد المتاح</span>
+              <span className="font-bold">{t('payroll.employeeProfile.availableBalance')}</span>
             </div>
-            <div className="text-2xl font-bold">{toArabicNumbers(stats.remainingBalance.toFixed(2))} جنيه</div>
+            <div className="text-2xl font-bold">{toArabicNumbers(stats.remainingBalance.toFixed(2))} {currency()}</div>
           </div>
           
           <div>
-            <label className="block text-sm font-medium mb-2 dark:text-gray-200">المبلغ المطلوب صرفه</label>
+            <label className="block text-sm font-medium mb-2 dark:text-gray-200">{t('payroll.payrollHistory.amountToPay')}</label>
             <InputNumber 
               {...numberOnlyInputProps}
               value={paymentAmount} 
@@ -1816,21 +1869,21 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               max={stats.remainingBalance} 
               style={{ width: '100%' }} 
               className="dark:bg-gray-700 dark:border-gray-600" 
-              placeholder="أدخل المبلغ"
+              placeholder={t('payroll.advanceManagement.enterAmount')}
               size="large"
               prefix={<DollarSign size={16} className="text-gray-400" />}
             />
           </div>
           
           <div>
-            <label className="block text-sm font-medium mb-2 dark:text-gray-200">تاريخ الصرف</label>
+            <label className="block text-sm font-medium mb-2 dark:text-gray-200">{t('payroll.payrollHistory.paymentDate')}</label>
             <DatePicker 
               value={paymentDate} 
               onChange={(date) => date && setPaymentDate(date)} 
               format="YYYY-MM-DD" 
               style={{ width: '100%' }} 
               className="dark:bg-gray-700 dark:border-gray-600"
-              placeholder="اختر تاريخ الصرف"
+              placeholder={t('payroll.payrollHistory.selectPaymentDate')}
               size="large"
               disabledDate={(current) => {
                 if (!current) return false;
@@ -1854,7 +1907,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Calendar size={20} />
-            <span>تسجيل حضور</span>
+            <span>{t('payroll.attendanceManagement.addAttendance')}</span>
           </div>
         }
         open={attendanceModalVisible}
@@ -1871,33 +1924,33 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       >
         <Form form={attendanceForm} layout="vertical" onFinish={handleSubmitAttendance}>
           <Form.Item
-            label={<span className="dark:text-gray-200">الأيام (يمكن اختيار عدة أيام)</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.selectDays')}</span>}
             name="dates"
-            rules={[{ required: true, message: 'الرجاء اختيار الأيام' }]}
+            rules={[{ required: true, message: t('payroll.attendanceManagement.messages.daysRequired') }]}
           >
             <DatePicker
               multiple
               style={{ width: '100%' }}
               format="YYYY-MM-DD"
               className="dark:bg-gray-700 dark:border-gray-600"
-              placeholder="اختر يوم أو أكثر"
+              placeholder={t('payroll.attendanceManagement.selectDaysPlaceholder')}
               onChange={handleDatesChange}
               size="large"
             />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">الحالة</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.status')}</span>}
             name="status"
-            rules={[{ required: true, message: 'الرجاء اختيار الحالة' }]}
+            rules={[{ required: true, message: t('payroll.attendanceManagement.messages.statusRequired') }]}
           >
             <Select className="dark:bg-gray-700" size="large">
-              <Option value="present">حضور</Option>
-              <Option value="absent">غياب</Option>
-              <Option value="late">تأخير</Option>
-              <Option value="leave">إجازة</Option>
-              <Option value="half_day">نصف يوم</Option>
-              <Option value="weekly_off">إجازة أسبوعية</Option>
+              <Option value="present">{t('payroll.attendanceManagement.status.present')}</Option>
+              <Option value="absent">{t('payroll.attendanceManagement.status.absent')}</Option>
+              <Option value="late">{t('payroll.attendanceManagement.status.late')}</Option>
+              <Option value="leave">{t('payroll.attendanceManagement.status.leave')}</Option>
+              <Option value="half_day">{t('payroll.attendanceManagement.status.half_day')}</Option>
+              <Option value="weekly_off">{t('payroll.attendanceManagement.status.weekly_off')}</Option>
             </Select>
           </Form.Item>
 
@@ -1918,7 +1971,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                           <div className="flex items-center gap-2 mb-4">
                             <Calendar size={20} className="text-blue-600 dark:text-blue-400" />
                             <span className="text-base font-bold text-blue-900 dark:text-blue-200">
-                              اختر طريقة تحديد الأوقات:
+                              {t('payroll.attendanceManagement.selectTimeMode')}:
                             </span>
                           </div>
                           <div className="flex flex-col gap-3">
@@ -1939,10 +1992,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                 <div className={`font-bold text-base mb-1 ${
                                   timeMode === 'same' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'
                                 }`}>
-                                  ⏰ نفس الوقت لجميع الأيام
+                                  ⏰ {t('payroll.attendanceManagement.sameTimeForAll')}
                                 </div>
                                 <div className="text-xs text-gray-600 dark:text-gray-400">
-                                  سيتم تطبيق نفس وقت الحضور والانصراف على جميع الأيام المختارة
+                                  {t('payroll.attendanceManagement.sameTimeDescription')}
                                 </div>
                               </div>
                               {timeMode === 'same' && (
@@ -1976,10 +2029,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                 <div className={`font-bold text-base mb-1 ${
                                   timeMode === 'groups' ? 'text-purple-700 dark:text-purple-300' : 'text-gray-800 dark:text-gray-200'
                                 }`}>
-                                  📋 مجموعات أيام بأوقات مختلفة
+                                  📋 {t('payroll.attendanceManagement.groupsWithDifferentTimes')}
                                 </div>
                                 <div className="text-xs text-gray-600 dark:text-gray-400">
-                                  يمكنك تقسيم الأيام إلى مجموعات، كل مجموعة لها وقت خاص
+                                  {t('payroll.attendanceManagement.groupsDescription')}
                                 </div>
                               </div>
                               {timeMode === 'groups' && (
@@ -2008,10 +2061,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                 <div className={`font-bold text-base mb-1 ${
                                   timeMode === 'different' ? 'text-green-700 dark:text-green-300' : 'text-gray-800 dark:text-gray-200'
                                 }`}>
-                                  📅 وقت مختلف لكل يوم
+                                  📅 {t('payroll.attendanceManagement.differentTimePerDay')}
                                 </div>
                                 <div className="text-xs text-gray-600 dark:text-gray-400">
-                                  يمكنك تحديد وقت حضور وانصراف مختلف لكل يوم على حدة
+                                  {t('payroll.attendanceManagement.differentTimeDescription')}
                                 </div>
                               </div>
                               {timeMode === 'different' && (
@@ -2030,28 +2083,28 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                         <div className="mb-4">
                           <div className="form-section-header mb-3">
                             <Calendar size={18} />
-                            <span>أوقات الحضور والانصراف</span>
+                            <span>{t('payroll.attendanceManagement.checkInOutTimes')}</span>
                           </div>
                           <Row gutter={16}>
                             <Col span={12}>
                               <Form.Item 
-                                label={<span className="dark:text-gray-200">وقت الحضور</span>} 
+                                label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.checkIn')}</span>} 
                                 name="checkIn"
-                                rules={status === 'present' || status === 'late' ? [{ required: true, message: 'مطلوب' }] : []}
+                                rules={status === 'present' || status === 'late' ? [{ required: true, message: t('common.required') }] : []}
                               >
                                 <TimePicker 
                                   style={{ width: '100%' }} 
                                   format="hh:mm A"
                                   use12Hours
                                   className="dark:bg-gray-700 dark:border-gray-600"
-                                  placeholder="اختر الوقت"
+                                  placeholder={t('payroll.attendanceManagement.selectTime')}
                                   size="large"
                                 />
                               </Form.Item>
                             </Col>
                             <Col span={12}>
                               <Form.Item 
-                                label={<span className="dark:text-gray-200">وقت الانصراف</span>} 
+                                label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.checkOut')}</span>} 
                                 name="checkOut"
                               >
                                 <TimePicker 
@@ -2059,7 +2112,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                   format="hh:mm A"
                                   use12Hours
                                   className="dark:bg-gray-700 dark:border-gray-600"
-                                  placeholder="اختر الوقت"
+                                  placeholder={t('payroll.attendanceManagement.selectTime')}
                                   size="large"
                                 />
                               </Form.Item>
@@ -2072,7 +2125,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                         <div className="space-y-3">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                              المجموعات ({toArabicNumbers(timeGroups.length)})
+                              {t('payroll.attendanceManagement.groups')} ({toArabicNumbers(timeGroups.length)})
                             </span>
                             <Button 
                               type="dashed" 
@@ -2080,7 +2133,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                               onClick={addTimeGroup}
                               className="dark:border-gray-600 dark:text-gray-200"
                             >
-                              + إضافة مجموعة
+                              + {t('payroll.attendanceManagement.addGroup')}
                             </Button>
                           </div>
                           
@@ -2100,25 +2153,25 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                         size="small"
                                         onClick={() => removeTimeGroup(group.id)}
                                       >
-                                        حذف
+                                        {t('common.delete')}
                                       </Button>
                                     )
                                   }
                                   title={
                                     <span className="dark:text-gray-200">
-                                      المجموعة {toArabicNumbers(index + 1)}
+                                      {t('payroll.attendanceManagement.group')} {toArabicNumbers(index + 1)}
                                     </span>
                                   }
                                 >
                                   <div className="space-y-3">
                                     <div>
                                       <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                        اختر الأيام *
+                                        {t('payroll.attendanceManagement.selectDaysRequired')}
                                       </div>
                                       <Select
                                         mode="multiple"
                                         style={{ width: '100%' }}
-                                        placeholder="اختر الأيام لهذه المجموعة"
+                                        placeholder={t('payroll.attendanceManagement.selectDaysForGroup')}
                                         value={group.dates}
                                         onChange={(values) => updateTimeGroup(group.id, 'dates', values)}
                                         className="dark:bg-gray-600"
@@ -2146,13 +2199,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                     <Row gutter={8}>
                                       <Col span={12}>
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                          وقت الحضور *
+                                          {t('payroll.attendanceManagement.checkInRequired')}
                                         </div>
                                         <TimePicker
                                           style={{ width: '100%' }}
                                           format="hh:mm A"
                                           use12Hours
-                                          placeholder="اختر الوقت"
+                                          placeholder={t('payroll.attendanceManagement.selectTime')}
                                           value={group.checkIn}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkIn', time)}
                                           className="dark:bg-gray-600 dark:border-gray-500"
@@ -2160,13 +2213,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                       </Col>
                                       <Col span={12}>
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                          وقت الانصراف
+                                          {t('payroll.attendanceManagement.checkOut')}
                                         </div>
                                         <TimePicker
                                           style={{ width: '100%' }}
                                           format="hh:mm A"
                                           use12Hours
-                                          placeholder="اختر الوقت"
+                                          placeholder={t('payroll.attendanceManagement.selectTime')}
                                           value={group.checkOut}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkOut', time)}
                                           className="dark:bg-gray-600 dark:border-gray-500"
@@ -2176,7 +2229,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                     
                                     {group.dates.length > 0 && (
                                       <div className="text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-600">
-                                        {toArabicNumbers(group.dates.length)} يوم محدد
+                                        {toArabicNumbers(group.dates.length)} {t('payroll.attendanceManagement.daySelected')}
                                       </div>
                                     )}
                                   </div>
@@ -2190,7 +2243,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                       {timeMode === 'different' && dayTimes.length > 0 && (
                         <div className="space-y-3 max-h-96 overflow-y-auto p-3 border-2 border-blue-200 dark:border-blue-800 rounded-lg bg-gray-50 dark:bg-gray-900/50">
                           <div className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-200 sticky top-0 bg-gray-50 dark:bg-gray-900/50 pb-2">
-                            حدد أوقات الحضور والانصراف لكل يوم:
+                            {t('payroll.attendanceManagement.setTimesForEachDay')}:
                           </div>
                           {dayTimes.map((dayTime, index) => (
                             <Card 
@@ -2208,17 +2261,17 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                   </div>
                                 </div>
                                 <div className="text-xs text-gray-400 dark:text-gray-500">
-                                  اليوم {toArabicNumbers(index + 1)} من {toArabicNumbers(dayTimes.length)}
+                                  {t('payroll.attendanceManagement.day')} {toArabicNumbers(index + 1)} {t('common.from')} {toArabicNumbers(dayTimes.length)}
                                 </div>
                               </div>
                               <Row gutter={8}>
                                 <Col span={12}>
-                                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">وقت الحضور *</div>
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.attendanceManagement.checkInRequired')}</div>
                                   <TimePicker
                                     style={{ width: '100%' }}
                                     format="hh:mm A"
                                     use12Hours
-                                    placeholder="اختر الوقت"
+                                    placeholder={t('payroll.attendanceManagement.selectTime')}
                                     value={dayTime.checkIn}
                                     onChange={(time) => handleDayTimeChange(index, 'checkIn', time)}
                                     className="dark:bg-gray-600 dark:border-gray-500"
@@ -2226,12 +2279,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                   />
                                 </Col>
                                 <Col span={12}>
-                                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">وقت الانصراف</div>
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.attendanceManagement.checkOut')}</div>
                                   <TimePicker
                                     style={{ width: '100%' }}
                                     format="hh:mm A"
                                     use12Hours
-                                    placeholder="اختر الوقت"
+                                    placeholder={t('payroll.attendanceManagement.selectTime')}
                                     value={dayTime.checkOut}
                                     onChange={(time) => handleDayTimeChange(index, 'checkOut', time)}
                                     className="dark:bg-gray-600 dark:border-gray-500"
@@ -2249,15 +2302,15 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                   {(status === 'absent' || status === 'late' || status === 'leave') && (
                     <>
                       <Form.Item 
-                        label={<span className="dark:text-gray-200">السبب</span>} 
+                        label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>} 
                         name="reason"
-                        rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+                        rules={[{ required: true, message: t('payroll.advanceManagement.messages.reasonRequired') }]}
                       >
                         <Input 
                           placeholder={
-                            status === 'absent' ? 'سبب الغياب...' :
-                            status === 'late' ? 'سبب التأخير...' :
-                            'سبب الإجازة...'
+                            status === 'absent' ? t('payroll.attendanceManagement.absenceReason') :
+                            status === 'late' ? t('payroll.attendanceManagement.lateReason') :
+                            t('payroll.attendanceManagement.leaveReason')
                           }
                           className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
                         />
@@ -2266,7 +2319,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                       <Form.Item name="excused" valuePropName="checked">
                         <label className="flex items-center gap-2 cursor-pointer dark:text-gray-200">
                           <input type="checkbox" className="w-4 h-4" />
-                          <span>بعذر مقبول</span>
+                          <span>{t('payroll.attendanceManagement.excused')}</span>
                         </label>
                       </Form.Item>
                     </>
@@ -2276,10 +2329,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             }}
           </Form.Item>
 
-          <Form.Item label={<span className="dark:text-gray-200">ملاحظات إضافية</span>} name="notes">
+          <Form.Item label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.additionalNotes')}</span>} name="notes">
             <TextArea 
               rows={3} 
-              placeholder="ملاحظات إضافية..." 
+              placeholder={t('payroll.attendanceManagement.additionalNotesPlaceholder')} 
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" 
             />
           </Form.Item>
@@ -2287,7 +2340,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                حفظ
+                {t('common.save')}
               </Button>
               <Button 
                 onClick={() => {
@@ -2299,7 +2352,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 }} 
                 size="large"
               >
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
@@ -2311,7 +2364,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Plus size={20} />
-            <span>طلب سلفة جديدة</span>
+            <span>{t('payroll.advanceManagement.requestAdvance')}</span>
           </div>
         }
         open={advanceModalVisible}
@@ -2327,19 +2380,19 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <div className="info-box warning mb-4">
             <div className="flex items-center gap-2">
               <AlertCircle size={18} />
-              <span className="font-medium">سيتم خصم السلفة من المرتبات القادمة</span>
+              <span className="font-medium">{t('payroll.advanceManagement.advanceWillBeDeducted')}</span>
             </div>
           </div>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">المبلغ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.amount')}</span>}
             name="amount"
-            rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.amountRequired') }]}
           >
             <InputNumber
               {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
-              placeholder="المبلغ بالجنيه"
+              placeholder={t('payroll.advanceManagement.amountInCurrency')}
               className="dark:bg-gray-700 dark:border-gray-600"
               size="large"
               prefix={<DollarSign size={16} className="text-gray-400" />}
@@ -2347,30 +2400,30 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">السبب</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>}
             name="reason"
-            rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.reasonRequired') }]}
           >
             <TextArea
               rows={3}
-              placeholder="سبب طلب السلفة..."
+              placeholder={t('payroll.advanceManagement.advanceReason')}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             />
           </Form.Item>
 
           <div className="form-section-header">
             <Calendar size={18} />
-            <span>طريقة السداد</span>
+            <span>{t('payroll.advanceManagement.repaymentMethod')}</span>
           </div>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">طريقة السداد</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.repaymentMethod')}</span>}
             name="repaymentMethod"
             initialValue="installments"
           >
             <Select className="dark:bg-gray-700" size="large">
-              <Option value="full">دفعة واحدة</Option>
-              <Option value="installments">أقساط شهرية</Option>
+              <Option value="full">{t('payroll.advanceManagement.repaymentMethods.full')}</Option>
+              <Option value="installments">{t('payroll.advanceManagement.repaymentMethods.installments')}</Option>
             </Select>
           </Form.Item>
 
@@ -2385,14 +2438,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               return (
                 method === 'installments' && (
                   <Form.Item
-                    label={<span className="dark:text-gray-200">عدد الأقساط</span>}
+                    label={<span className="dark:text-gray-200">{t('payroll.advanceManagement.installments')}</span>}
                     name="installments"
-                    rules={[{ required: true, message: 'الرجاء إدخال عدد الأقساط' }]}
+                    rules={[{ required: true, message: t('payroll.advanceManagement.messages.installmentsRequired') }]}
                   >
                     <InputNumber
                       {...numberOnlyInputProps} style={{ width: '100%' }}
                       min={1}
-                      placeholder="عدد الأقساط الشهرية"
+                      placeholder={t('payroll.advanceManagement.monthlyInstallments')}
                       className="dark:bg-gray-700 dark:border-gray-600"
                       size="large"
                     />
@@ -2405,13 +2458,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                تقديم الطلب
+                {t('payroll.advanceManagement.submitRequest')}
               </Button>
               <Button onClick={() => {
                 setAdvanceModalVisible(false);
                 advanceForm.resetFields();
               }} size="large">
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
@@ -2423,7 +2476,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <Minus size={20} />
-            <span>إضافة خصم</span>
+            <span>{t('payroll.deductionsManagement.addDeduction')}</span>
           </div>
         }
         open={deductionModalVisible}
@@ -2439,35 +2492,35 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <div className="info-box error mb-4">
             <div className="flex items-center gap-2">
               <AlertCircle size={18} />
-              <span className="font-medium">سيتم خصم المبلغ من مرتب الموظف</span>
+              <span className="font-medium">{t('payroll.deductionsManagement.amountWillBeDeducted')}</span>
             </div>
           </div>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">نوع الخصم</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.deductionsManagement.deductionType')}</span>}
             name="type"
-            rules={[{ required: true, message: 'الرجاء اختيار نوع الخصم' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.messages.typeRequired') }]}
           >
             <Select className="dark:bg-gray-700" size="large">
-              <Option value="absence">غياب</Option>
-              <Option value="late">تأخير</Option>
-              <Option value="penalty">جزاء</Option>
-              <Option value="loan">قرض</Option>
-              <Option value="insurance">تأمينات</Option>
-              <Option value="tax">ضرائب</Option>
-              <Option value="other">أخرى</Option>
+              <Option value="absence">{t('payroll.deductionsManagement.types.absence')}</Option>
+              <Option value="late">{t('payroll.attendanceManagement.status.late')}</Option>
+              <Option value="penalty">{t('payroll.deductionsManagement.types.penalty')}</Option>
+              <Option value="loan">{t('payroll.deductionsManagement.types.loan')}</Option>
+              <Option value="insurance">{t('payroll.deductionsManagement.types.insurance')}</Option>
+              <Option value="tax">{t('payroll.deductionsManagement.types.tax')}</Option>
+              <Option value="other">{t('payroll.deductionsManagement.types.other')}</Option>
             </Select>
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">المبلغ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.amount')}</span>}
             name="amount"
-            rules={[{ required: true, message: 'الرجاء إدخال المبلغ' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.amountRequired') }]}
           >
             <InputNumber
               {...numberOnlyInputProps} style={{ width: '100%' }}
               min={0}
-              placeholder="المبلغ بالجنيه"
+              placeholder={t('payroll.advanceManagement.amountInCurrency')}
               className="dark:bg-gray-700 dark:border-gray-600"
               size="large"
               prefix={<DollarSign size={16} className="text-gray-400" />}
@@ -2475,26 +2528,26 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">التاريخ</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.date')}</span>}
             name="date"
-            rules={[{ required: true, message: 'الرجاء اختيار التاريخ' }]}
+            rules={[{ required: true, message: t('payroll.deductionsManagement.messages.dateRequired') }]}
           >
             <DatePicker
               style={{ width: '100%' }}
-              placeholder="اختر التاريخ"
+              placeholder={t('common.selectDate')}
               className="dark:bg-gray-700 dark:border-gray-600"
               size="large"
             />
           </Form.Item>
 
           <Form.Item
-            label={<span className="dark:text-gray-200">السبب</span>}
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>}
             name="reason"
-            rules={[{ required: true, message: 'الرجاء إدخال السبب' }]}
+            rules={[{ required: true, message: t('payroll.advanceManagement.messages.reasonRequired') }]}
           >
             <TextArea
               rows={3}
-              placeholder="سبب الخصم..."
+              placeholder={t('payroll.deductionsManagement.deductionReason')}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             />
           </Form.Item>
@@ -2502,13 +2555,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <Form.Item>
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit" size="large">
-                إضافة
+                {t('common.add')}
               </Button>
               <Button onClick={() => {
                 setDeductionModalVisible(false);
                 deductionForm.resetFields();
               }} size="large">
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
@@ -2520,7 +2573,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         title={
           <div className="flex items-center gap-2">
             <User size={20} />
-            <span>تعديل بيانات الموظف</span>
+            <span>{t('payroll.employeeList.editEmployee')}</span>
           </div>
         }
         open={editEmployeeModalVisible}
@@ -2536,23 +2589,23 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <div className="mb-4">
             <div className="form-section-header">
               <User size={18} />
-              <span>المعلومات الشخصية</span>
+              <span>{t('payroll.employeeList.personalInfo')}</span>
             </div>
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">الاسم</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.name')}</span>}
                   name="name"
-                  rules={[{ required: true, message: 'الرجاء إدخال الاسم' }]}
+                  rules={[{ required: true, message: t('payroll.employeeList.messages.nameRequired') }]}
                 >
                   <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
                 </Form.Item>
               </Col>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">رقم الهاتف</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.phone')}</span>}
                   name="phone"
-                  rules={[{ required: true, message: 'الرجاء إدخال رقم الهاتف' }]}
+                  rules={[{ required: true, message: t('payroll.employeeList.messages.phoneRequired') }]}
                 >
                   <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" prefix={<Phone size={16} className="text-gray-400" />} />
                 </Form.Item>
@@ -2562,7 +2615,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">الرقم القومي</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.nationalId')}</span>}
                   name="nationalId"
                 >
                   <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
@@ -2570,7 +2623,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               </Col>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">تاريخ التعيين</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.hireDate')}</span>}
                   name="hireDate"
                 >
                   <DatePicker
@@ -2584,7 +2637,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             </Row>
 
             <Form.Item
-              label={<span className="dark:text-gray-200">العنوان</span>}
+              label={<span className="dark:text-gray-200">{t('payroll.employeeList.address')}</span>}
               name="address"
             >
               <TextArea rows={2} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
@@ -2594,30 +2647,30 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <div className="mb-4 pt-4 border-t border-gray-200 dark:border-gray-600">
             <div className="form-section-header">
               <Briefcase size={18} />
-              <span>بيانات التوظيف</span>
+              <span>{t('payroll.employeeList.employmentInfo')}</span>
             </div>
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">القسم</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.department')}</span>}
                   name="department"
-                  rules={[{ required: true, message: 'الرجاء اختيار القسم' }]}
+                  rules={[{ required: true, message: t('payroll.employeeList.messages.departmentRequired') }]}
                 >
                   <Select className="dark:bg-gray-700" size="large">
-                    <Option value="kitchen">المطبخ</Option>
-                    <Option value="cashier">الكاشير</Option>
-                    <Option value="waiter">الخدمة</Option>
-                    <Option value="admin">الإدارة</Option>
-                    <Option value="gaming">الألعاب</Option>
-                    <Option value="other">أخرى</Option>
+                    <Option value="kitchen">{t('payroll.employeeList.departments.kitchen')}</Option>
+                    <Option value="cashier">{t('payroll.employeeList.departments.cashier')}</Option>
+                    <Option value="waiter">{t('payroll.employeeList.departments.waiter')}</Option>
+                    <Option value="admin">{t('payroll.employeeList.departments.admin')}</Option>
+                    <Option value="gaming">{t('payroll.employeeList.departments.gaming')}</Option>
+                    <Option value="other">{t('payroll.deductionsManagement.types.other')}</Option>
                   </Select>
                 </Form.Item>
               </Col>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">المنصب</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.position')}</span>}
                   name="position"
-                  rules={[{ required: true, message: 'الرجاء إدخال المنصب' }]}
+                  rules={[{ required: true, message: t('payroll.employeeList.messages.positionRequired') }]}
                 >
                   <Input className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" size="large" />
                 </Form.Item>
@@ -2627,27 +2680,27 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">نوع التوظيف</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.employmentType')}</span>}
                   name="type"
-                  rules={[{ required: true, message: 'الرجاء اختيار نوع التوظيف' }]}
+                  rules={[{ required: true, message: t('payroll.employeeList.messages.typeRequired') }]}
                 >
                   <Select className="dark:bg-gray-700" size="large">
-                    <Option value="monthly">شهري</Option>
-                    <Option value="daily">يومي</Option>
-                    <Option value="hourly">بالساعة</Option>
+                    <Option value="monthly">{t('payroll.employeeList.employmentTypes.monthly')}</Option>
+                    <Option value="daily">{t('payroll.employeeList.employmentTypes.daily')}</Option>
+                    <Option value="hourly">{t('payroll.employeeList.employmentTypes.hourly')}</Option>
                   </Select>
                 </Form.Item>
               </Col>
               <Col span={12}>
                 <Form.Item
-                  label={<span className="dark:text-gray-200">الحالة</span>}
+                  label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.status')}</span>}
                   name="status"
-                  rules={[{ required: true, message: 'الرجاء اختيار الحالة' }]}
+                  rules={[{ required: true, message: t('payroll.attendanceManagement.messages.statusRequired') }]}
                 >
                   <Select className="dark:bg-gray-700" size="large">
-                    <Option value="active">نشط</Option>
-                    <Option value="suspended">موقوف</Option>
-                    <Option value="terminated">منتهي</Option>
+                    <Option value="active">{t('payroll.employeeList.status.active')}</Option>
+                    <Option value="suspended">{t('payroll.employeeList.status.suspended')}</Option>
+                    <Option value="terminated">{t('payroll.employeeList.status.terminated')}</Option>
                   </Select>
                 </Form.Item>
               </Col>
@@ -2657,7 +2710,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <div className="pt-4 border-t border-gray-200 dark:border-gray-600">
             <div className="form-section-header">
               <DollarSign size={18} />
-              <span>التعويضات</span>
+              <span>{t('payroll.employeeList.compensation')}</span>
             </div>
             
             <Form.Item
@@ -2672,14 +2725,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     {employmentType === 'monthly' && (
                       <Col span={12}>
                         <Form.Item
-                          label={<span className="dark:text-gray-200">الراتب الشهري</span>}
+                          label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.monthlySalary')}</span>}
                           name="monthly"
-                          rules={[{ required: true, message: 'الرجاء إدخال الراتب' }]}
+                          rules={[{ required: true, message: t('payroll.employeeList.messages.salaryRequired') }]}
                         >
                           <InputNumber
                             {...numberOnlyInputProps} style={{ width: '100%' }}
                             min={0}
-                            placeholder="الراتب بالجنيه"
+                            placeholder={t('payroll.employeeList.salaryInCurrency')}
                             className="dark:bg-gray-700 dark:border-gray-600"
                             size="large"
                             prefix={<DollarSign size={16} className="text-gray-400" />}
@@ -2691,14 +2744,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     {employmentType === 'daily' && (
                       <Col span={12}>
                         <Form.Item
-                          label={<span className="dark:text-gray-200">الأجر اليومي</span>}
+                          label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.dailyWage')}</span>}
                           name="daily"
-                          rules={[{ required: true, message: 'الرجاء إدخال الأجر' }]}
+                          rules={[{ required: true, message: t('payroll.employeeList.messages.wageRequired') }]}
                         >
                           <InputNumber
                             {...numberOnlyInputProps} style={{ width: '100%' }}
                             min={0}
-                            placeholder="الأجر بالجنيه"
+                            placeholder={t('payroll.employeeList.wageInCurrency')}
                             className="dark:bg-gray-700 dark:border-gray-600"
                             size="large"
                             prefix={<DollarSign size={16} className="text-gray-400" />}
@@ -2710,15 +2763,17 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     {employmentType === 'hourly' && (
                       <Col span={12}>
                         <Form.Item
-                          label={<span className="dark:text-gray-200">الأجر بالساعة</span>}
+                          label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.hourlyWage')}</span>}
                           name="hourly"
-                          rules={[{ required: true, message: 'الرجاء إدخال الأجر' }]}
+                          rules={[{ required: true, message: t('payroll.employeeList.messages.wageRequired') }]}
                         >
                           <InputNumber
                             {...numberOnlyInputProps} style={{ width: '100%' }}
                             min={0}
-                            placeholder="الأجر بالجنيه"
+                            placeholder={t('payroll.employeeList.wageInCurrency')}
                             className="dark:bg-gray-700 dark:border-gray-600"
+                            size="large"
+                            prefix={<DollarSign size={16} className="text-gray-400" />}
                           />
                         </Form.Item>
                       </Col>
@@ -2726,14 +2781,16 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     
                     <Col span={12}>
                       <Form.Item
-                        label={<span className="dark:text-gray-200">أجر الساعة الإضافية</span>}
+                        label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.overtimeRate')}</span>}
                         name="overtimeHourlyRate"
                       >
                         <InputNumber
                           {...numberOnlyInputProps} style={{ width: '100%' }}
                           min={0}
-                          placeholder="الأجر بالجنيه"
+                          placeholder={t('payroll.employeeList.wageInCurrency')}
                           className="dark:bg-gray-700 dark:border-gray-600"
+                          size="large"
+                          prefix={<DollarSign size={16} className="text-gray-400" />}
                         />
                       </Form.Item>
                     </Col>
@@ -2746,13 +2803,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           <Form.Item className="mt-6">
             <div className="flex gap-2">
               <Button type="primary" htmlType="submit">
-                حفظ التعديلات
+                {t('common.saveChanges')}
               </Button>
               <Button onClick={() => {
                 setEditEmployeeModalVisible(false);
                 editEmployeeForm.resetFields();
               }}>
-                إلغاء
+                {t('common.cancel')}
               </Button>
             </div>
           </Form.Item>
