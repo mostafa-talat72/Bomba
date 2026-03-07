@@ -48,7 +48,13 @@ i18n.on('languageChanged', (lng) => {
   if (language) {
     document.documentElement.lang = lng;
     document.documentElement.dir = language.dir;
-    document.body.dir = language.dir;
+    
+    // Check if user is authenticated
+    const token = localStorage.getItem('token');
+    // For auth pages or not logged in, keep body as ltr
+    const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
+    document.body.dir = (!token || isAuthPage) ? 'ltr' : language.dir;
+    
     localStorage.setItem('language', lng);
   }
 });

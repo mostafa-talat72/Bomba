@@ -27,8 +27,13 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         
         // Apply direction to document
         document.documentElement.dir = language.dir;
-        document.body.dir = language.dir;
         document.documentElement.lang = lng;
+        
+        // Check if user is authenticated
+        const token = localStorage.getItem('token');
+        // For auth pages or not logged in, keep body as ltr
+        const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
+        document.body.dir = (!token || isAuthPage) ? 'ltr' : language.dir;
         
         // Store in localStorage
         localStorage.setItem('language', lng);
@@ -64,7 +69,13 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         // Apply language and direction to document
         document.documentElement.lang = lang;
         document.documentElement.dir = language.dir;
-        document.body.dir = language.dir;
+        
+        // Check if user is authenticated
+        const token = localStorage.getItem('token');
+        // For auth pages or not logged in, keep body as ltr
+        const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
+        document.body.dir = (!token || isAuthPage) ? 'ltr' : language.dir;
+        
         setIsRTL(language.dir === 'rtl');
         
         // Store in localStorage
@@ -73,7 +84,6 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         // Save to database if requested (default: true)
         if (saveToDatabase) {
           try {
-            const token = localStorage.getItem('token');
             if (token) {
               await api.updateGeneralSettings({ language: lang });
             }

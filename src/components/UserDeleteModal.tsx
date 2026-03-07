@@ -31,6 +31,9 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
   if (!isOpen || !user) return null;
 
   const isAdmin = user.role === 'admin';
+  
+  // Helper function to get input direction class
+  const getInputDirClass = () => isRTL ? 'text-right' : 'text-left';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -104,9 +107,10 @@ const UserDeleteModal: React.FC<UserDeleteModalProps> = ({
                 value={password}
                 onChange={(e) => onPasswordChange(e.target.value)}
                 placeholder={t('users.delete.passwordPlaceholder')}
-                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all font-semibold"
+                className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all font-semibold ${getInputDirClass()}`}
                 autoFocus
                 disabled={loading}
+                dir={isRTL ? 'rtl' : 'ltr'}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {t('users.delete.adminWarning')}

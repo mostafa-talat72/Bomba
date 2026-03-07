@@ -69,6 +69,9 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
   
   if (!isOpen) return null;
 
+  // Helper function to get input direction class
+  const getInputDirClass = () => isRTL ? 'text-right' : 'text-left';
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div 
@@ -135,7 +138,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   onChange={onInputChange}
                   required
                   placeholder={t('users.form.fullNamePlaceholder')}
-                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 />
               </div>
 
@@ -152,7 +156,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   onChange={onInputChange}
                   required
                   placeholder="user@example.com"
-                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                  dir="ltr"
                 />
               </div>
 
@@ -171,7 +176,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   required={!isEditing}
                   minLength={6}
                   placeholder={isEditing ? t('users.form.leaveEmptyIfNoChange') : t('users.form.passwordPlaceholder')}
-                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 />
               </div>
 
@@ -190,7 +196,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                     required
                     minLength={6}
                     placeholder={t('users.form.confirmPasswordPlaceholder')}
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                    className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                   />
                 </div>
               )}
@@ -207,7 +214,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   value={formData.phone}
                   onChange={onInputChange}
                   placeholder={t('users.form.phonePlaceholder')}
-                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                  dir="ltr"
                 />
               </div>
 
@@ -222,7 +230,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   value={formData.role}
                   onChange={onInputChange}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 >
                   {roles.map(role => (
                     <option key={role.id} value={role.id}>{role.name}</option>
@@ -240,7 +249,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   value={formData.status}
                   onChange={onInputChange}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 >
                   <option value="active">{t('users.statusTypes.active')}</option>
                   <option value="inactive">{t('users.statusTypes.inactive')}</option>
@@ -260,7 +270,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   onChange={onInputChange}
                   rows={2}
                   placeholder={t('users.form.addressPlaceholder')}
-                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none ${getInputDirClass()}`}
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 />
               </div>
             </div>
@@ -283,7 +294,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                     value={formData.department}
                     onChange={onInputChange}
                     placeholder={t('users.form.departmentPlaceholder')}
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                    className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                   />
                 </div>
 
@@ -298,7 +310,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                     value={formData.position}
                     onChange={onInputChange}
                     placeholder={t('users.form.positionPlaceholder')}
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                    className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                   />
                 </div>
 
@@ -312,7 +325,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                     name="hireDate"
                     value={formData.hireDate}
                     onChange={onInputChange}
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                    className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                    dir="ltr"
                   />
                 </div>
 
@@ -329,7 +343,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                     placeholder={t('users.form.salaryPlaceholder')}
                     min="0"
                     step="100"
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold"
+                    className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                    dir="ltr"
                   />
                 </div>
 
@@ -344,7 +359,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                     onChange={onInputChange}
                     rows={3}
                     placeholder={t('users.form.notesPlaceholder')}
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
+                    className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none ${getInputDirClass()}`}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                   />
                 </div>
               </div>

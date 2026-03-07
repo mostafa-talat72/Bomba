@@ -1,5 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
+import { useLanguage } from '../context/LanguageContext';
 
 interface FormData {
   name: string;
@@ -17,6 +20,8 @@ interface FormErrors {
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { isRTL } = useLanguage();
 
   // State management
   const [formData, setFormData] = useState<FormData>({
@@ -61,31 +66,31 @@ const Register: React.FC = () => {
     const newErrors: FormErrors = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'اسم المالك مطلوب';
+      newErrors.name = t('auth.ownerNameRequired');
     }
 
     if (!formData.businessName.trim()) {
-      newErrors.businessName = 'اسم المنشأة مطلوب';
+      newErrors.businessName = t('auth.businessNameRequired');
     }
 
     if (!formData.email.trim()) {
-      newErrors.email = 'البريد الإلكتروني مطلوب';
+      newErrors.email = t('auth.emailRequired');
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {
-        newErrors.email = 'البريد الإلكتروني غير صحيح';
+        newErrors.email = t('auth.emailInvalid');
       }
     }
 
     if (!formData.password.trim()) {
-      newErrors.password = 'كلمة المرور مطلوبة';
+      newErrors.password = t('auth.passwordRequired');
     } else if (formData.password.length < 6) {
-      newErrors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+      newErrors.password = t('auth.passwordMinLength');
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [formData]);
+  }, [formData, t]);
 
   // Handle form submission
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -116,7 +121,7 @@ const Register: React.FC = () => {
       const data = await response.json();
 
       if (data.success) {
-        setSuccessMessage('تم إرسال رابط التفعيل إلى بريدك الإلكتروني. يرجى تفعيل الحساب قبل تسجيل الدخول.');
+        setSuccessMessage(t('auth.verificationSent'));
         // Don't clear form immediately to show success message
         setFormData({
           name: '',
@@ -127,21 +132,21 @@ const Register: React.FC = () => {
         setErrors({});
       } else {
         if (data.message?.includes('فشل إرسال رسالة التفعيل')) {
-          setErrors({ email: 'تعذر إرسال رسالة التفعيل. يرجى التأكد من صحة البريد أو المحاولة لاحقًا.' });
+          setErrors({ email: t('auth.verificationFailed') });
         } else if (data.message?.includes('موجود')) {
-          setErrors({ email: 'البريد الإلكتروني مسجل بالفعل في النظام.' });
+          setErrors({ email: t('auth.emailAlreadyExists') });
         } else {
-          setErrors({ email: data.message || 'حدث خطأ أثناء التسجيل.' });
+          setErrors({ email: data.message || t('auth.registerError') });
         }
       }
     } catch {
       setErrors({
-        email: 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.'
+        email: t('auth.registerError')
       });
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, validateForm, clearForm]);
+  }, [formData, validateForm, t]);
 
   // Auto-focus name field on mount
   useEffect(() => {
@@ -162,6 +167,11 @@ const Register: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-4">
+      {/* Language Switcher - Top Corner (RTL/LTR aware) */}
+      <div className={`fixed top-4 z-50 ${isRTL ? 'left-4' : 'right-4'}`}>
+        <LanguageSwitcherAuth />
+      </div>
+
       <div className="relative w-full max-w-md">
         {/* Background decoration */}
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-3xl blur-3xl"></div>
@@ -176,10 +186,10 @@ const Register: React.FC = () => {
               </svg>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">
-              تسجيل منشأة جديدة
+              {t('auth.registerNewBusiness')}
             </h1>
             <p className="text-white/80 text-sm">
-              ابدأ رحلتك مع نظام بومبا
+              {t('auth.startYourJourney')}
             </p>
           </div>
 
@@ -211,76 +221,76 @@ const Register: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Owner Name Field */}
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-3 text-right">
-                اسم المالك
+              <label className={`block text-sm font-medium text-white/90 mb-3 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {t('auth.ownerName')}
               </label>
               <input
                 ref={nameInputRef}
                 type="text"
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
-                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-right text-white placeholder-white/50 ${
+                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all ${isRTL ? 'text-right' : 'text-left'} text-white placeholder-white/50 ${
                   errors.name ? 'border-red-400' : 'border-white/20'
                 }`}
-                placeholder="أدخل اسم المالك"
+                placeholder={t('auth.ownerNamePlaceholder')}
                 disabled={isSubmitting}
                 autoComplete="name"
-                dir="rtl"
+                dir={isRTL ? 'rtl' : 'ltr'}
               />
               {errors.name && (
-                <p className="mt-2 text-sm text-red-300 text-right">{errors.name}</p>
+                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.name}</p>
               )}
             </div>
 
             {/* Business Name Field */}
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-3 text-right">
-                اسم المنشأة
+              <label className={`block text-sm font-medium text-white/90 mb-3 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {t('auth.businessName')}
               </label>
               <input
                 type="text"
                 value={formData.businessName}
                 onChange={(e) => handleInputChange('businessName', e.target.value)}
-                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-right text-white placeholder-white/50 ${
+                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all ${isRTL ? 'text-right' : 'text-left'} text-white placeholder-white/50 ${
                   errors.businessName ? 'border-red-400' : 'border-white/20'
                 }`}
-                placeholder="أدخل اسم المنشأة"
+                placeholder={t('auth.businessNamePlaceholder')}
                 disabled={isSubmitting}
                 autoComplete="organization"
-                dir="rtl"
+                dir={isRTL ? 'rtl' : 'ltr'}
               />
               {errors.businessName && (
-                <p className="mt-2 text-sm text-red-300 text-right">{errors.businessName}</p>
+                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.businessName}</p>
               )}
             </div>
 
             {/* Email Field */}
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-3 text-right">
-                البريد الإلكتروني
+              <label className={`block text-sm font-medium text-white/90 mb-3 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {t('common.email')}
               </label>
               <input
                 ref={emailInputRef}
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
-                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-right text-white placeholder-white/50 ${
+                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all ${isRTL ? 'text-right' : 'text-left'} text-white placeholder-white/50 ${
                   errors.email ? 'border-red-400' : 'border-white/20'
                 }`}
-                placeholder="أدخل بريدك الإلكتروني"
+                placeholder={t('auth.emailPlaceholder')}
                 disabled={isSubmitting}
                 autoComplete="email"
-                dir="rtl"
+                dir={isRTL ? 'rtl' : 'ltr'}
               />
               {errors.email && (
-                <p className="mt-2 text-sm text-red-300 text-right">{errors.email}</p>
+                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.email}</p>
               )}
             </div>
 
             {/* Password Field */}
             <div>
-              <label className="block text-sm font-medium text-white/90 mb-3 text-right">
-                كلمة المرور
+              <label className={`block text-sm font-medium text-white/90 mb-3 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {t('common.password')}
               </label>
               <div className="relative">
                 <input
@@ -288,21 +298,21 @@ const Register: React.FC = () => {
                   type={showPassword ? "text" : "password"}
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
-                  className={`w-full px-4 py-4 pr-12 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-right text-white placeholder-white/50 ${
+                  className={`w-full px-4 py-4 ${isRTL ? 'pl-12' : 'pr-12'} bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all ${isRTL ? 'text-right' : 'text-left'} text-white placeholder-white/50 ${
                     errors.password ? 'border-red-400' : 'border-white/20'
                   }`}
-                  placeholder="أدخل كلمة المرور"
+                  placeholder={t('auth.passwordPlaceholder')}
                   disabled={isSubmitting}
                   autoComplete="new-password"
-                  dir="rtl"
+                  dir={isRTL ? 'rtl' : 'ltr'}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute left-4 top-1/2 transform -translate-y-1/2 p-2 text-white/60 hover:text-white transition-colors"
+                  className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-1/2 transform -translate-y-1/2 p-2 text-white/60 hover:text-white transition-colors`}
                   disabled={isSubmitting}
-                  aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
-                  title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                  title={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                 >
                   {showPassword ? (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -317,7 +327,7 @@ const Register: React.FC = () => {
                 </button>
               </div>
               {errors.password && (
-                <p className="mt-2 text-sm text-red-300 text-right">{errors.password}</p>
+                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.password}</p>
               )}
             </div>
 
@@ -334,10 +344,10 @@ const Register: React.FC = () => {
               {isSubmitting ? (
                 <div className="flex items-center justify-center gap-3">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>جاري التسجيل...</span>
+                  <span>{t('auth.registering')}</span>
                 </div>
               ) : (
-                <span>تسجيل</span>
+                <span>{t('auth.registerButton')}</span>
               )}
             </button>
           </form>
@@ -350,7 +360,7 @@ const Register: React.FC = () => {
               disabled={isSubmitting}
               className="text-white/80 hover:text-white font-medium text-sm transition-colors disabled:opacity-50"
             >
-              لديك حساب بالفعل؟ تسجيل الدخول
+              {t('auth.haveAccount')}
             </button>
           </div>
         </div>

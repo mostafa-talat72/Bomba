@@ -1427,9 +1427,9 @@ const Cafe: React.FC = () => {
             
             <div className="p-3 sm:p-6">
               {loading && tableSections.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">جاري التحميل...</div>
+                <div className="text-center py-8 text-gray-500">{t('common.loading')}</div>
               ) : tableSections.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">لا توجد أقسام</div>
+                <div className="text-center py-8 text-gray-500">{t('cafe.noSections')}</div>
               ) : (
                 <div className="space-y-4 sm:space-y-6">
                   {activeTableSections.map(section => {
