@@ -61,11 +61,12 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const changeLanguage = async (lang: string, saveToDatabase: boolean = true) => {
     try {
-      await i18n.changeLanguage(lang);
-      setCurrentLanguage(lang);
-      
       const language = languages.find(l => l.code === lang);
       if (language) {
+        // Update state immediately before async operations
+        setCurrentLanguage(lang);
+        setIsRTL(language.dir === 'rtl');
+        
         // Apply language and direction to document
         document.documentElement.lang = lang;
         document.documentElement.dir = language.dir;
@@ -76,12 +77,13 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
         document.body.dir = (!token || isAuthPage) ? 'ltr' : language.dir;
         
-        setIsRTL(language.dir === 'rtl');
-        
         // Store in localStorage
         localStorage.setItem('language', lang);
         
-        // Save to database if requested (default: true)
+        // Change i18n language (this triggers re-render)
+        await i18n.changeLanguage(lang);
+        
+        // Save to database if requested (default: true) - do this last
         if (saveToDatabase) {
           try {
             if (token) {

@@ -2305,7 +2305,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         {isActivePeriod ? t('gaming.activePeriod') : t('gaming.endedPeriod')}
                       </span>
                     </div>
-                    {!isActivePeriod && (
+                    {!isActivePeriod && period.to && (
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600 dark:text-gray-400">{t('gaming.currentEndTime')}:</span>
                         <span className="font-medium text-gray-900 dark:text-gray-100">
@@ -2318,17 +2318,20 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                     <div className="mt-4 pt-3 border-t border-purple-200 dark:border-purple-600">
                       <h5 className="text-sm font-bold text-purple-800 dark:text-purple-200 mb-2">{t('gaming.adjacentPeriods')}:</h5>
                       <div className="space-y-1 text-xs">
-                        {selectedPeriodIndex > 0 && (
-                          <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/30 rounded">
-                            <span>{t('gaming.previousPeriod')} ({formatDecimal(controllersHistory[selectedPeriodIndex - 1].controllers, i18n.language)} {t('gaming.controllers')}):</span>
-                            <span className="font-medium">
-                              {controllersHistory[selectedPeriodIndex - 1].to
-                                ? `${t('gaming.ends')}: ${formatDateTime(new Date(controllersHistory[selectedPeriodIndex - 1].to))}`
-                                : t('gaming.activePeriod')
-                              }
-                            </span>
-                          </div>
-                        )}
+                        {selectedPeriodIndex > 0 && (() => {
+                          const prevPeriod = controllersHistory[selectedPeriodIndex - 1];
+                          return (
+                            <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/30 rounded">
+                              <span>{t('gaming.previousPeriod')} ({formatDecimal(prevPeriod.controllers, i18n.language)} {t('gaming.controllers')}):</span>
+                              <span className="font-medium">
+                                {prevPeriod.to
+                                  ? `${t('gaming.ends')}: ${formatDateTime(new Date(prevPeriod.to))}`
+                                  : t('gaming.activePeriod')
+                                }
+                              </span>
+                            </div>
+                          );
+                        })()}
                         {selectedPeriodIndex < controllersHistory.length - 1 && (
                           <div className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/30 rounded">
                             <span>{t('gaming.nextPeriod')} ({formatDecimal(controllersHistory[selectedPeriodIndex + 1].controllers, i18n.language)} {t('gaming.controllers')}):</span>

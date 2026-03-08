@@ -18,18 +18,45 @@ const OrganizationSchema = new mongoose.Schema({
     phone: { type: String, default: "" },
     email: { type: String, default: "" },
     website: { type: String, default: "" },
-    
+
     // إعدادات العملة والمنطقة الزمنية
-    currency: { 
-        type: String, 
-        enum: ["EGP", "SAR", "AED", "USD", "EUR", "GBP"],
-        default: "EGP" 
+    currency: {
+        type: String,
+        enum: [
+            // Africa
+            'DZD', 'AOA', 'BWP', 'BIF', 'XAF', 'XOF', 'KMF', 'CDF', 'DJF', 'EGP', 
+            'ERN', 'ETB', 'GMD', 'GHS', 'GNF', 'KES', 'LSL', 'LRD', 'LYD', 'MGA', 
+            'MWK', 'MUR', 'MAD', 'MZN', 'NAD', 'NGN', 'RWF', 'STN', 'SCR', 'SLL', 
+            'SOS', 'ZAR', 'SSP', 'SDG', 'SZL', 'TZS', 'TND', 'UGX', 'ZMW', 'ZWL', 'MRU',
+            
+            // Americas
+            'ARS', 'AWG', 'BSD', 'BBD', 'BZD', 'BMD', 'BOB', 'BRL', 'CAD', 'KYD', 
+            'CLP', 'COP', 'CRC', 'CUP', 'DOP', 'XCD', 'SVC', 'FKP', 'GTQ', 'GYD', 
+            'HTG', 'HNL', 'JMD', 'MXN', 'NIO', 'PAB', 'PYG', 'PEN', 'SRD', 'TTD', 
+            'USD', 'UYU', 'VES',
+            
+            // Asia
+            'AFN', 'AMD', 'AZN', 'BHD', 'BDT', 'BTN', 'BND', 'KHR', 'CNY', 'GEL', 
+            'HKD', 'INR', 'IDR', 'IRR', 'IQD', 'ILS', 'JPY', 'JOD', 'KZT', 'KWD', 
+            'KGS', 'LAK', 'LBP', 'MOP', 'MYR', 'MVR', 'MNT', 'MMK', 'NPR', 'KPW', 
+            'OMR', 'PKR', 'PHP', 'QAR', 'SAR', 'SGD', 'KRW', 'LKR', 'SYP', 'TWD', 
+            'TJS', 'THB', 'TMT', 'AED', 'UZS', 'VND', 'YER',
+            
+            // Europe
+            'ALL', 'EUR', 'BAM', 'BGN', 'HRK', 'CZK', 'DKK', 'GBP', 'HUF', 'ISK', 
+            'CHF', 'MDL', 'MKD', 'NOK', 'PLN', 'RON', 'RUB', 'RSD', 'SEK', 'TRY', 
+            'UAH', 'GIP', 'BYN',
+            
+            // Oceania
+            'AUD', 'FJD', 'NZD', 'PGK', 'WST', 'SBD', 'TOP', 'VUV', 'XPF'
+        ],
+        default: "EGP"
     },
-    timezone: { 
-        type: String, 
-        default: "Africa/Cairo" 
+    timezone: {
+        type: String,
+        default: "Africa/Cairo"
     },
-    
+
     // الروابط الاجتماعية
     socialLinks: {
         facebook: { type: String, default: "" },
@@ -42,7 +69,7 @@ const OrganizationSchema = new mongoose.Schema({
         telegram: { type: String, default: "" },
         location: { type: String, default: "" }
     },
-    
+
     // إعدادات الصلاحيات
     permissions: {
         allowManagersToEditOrganization: { type: Boolean, default: false },
@@ -57,17 +84,23 @@ const OrganizationSchema = new mongoose.Schema({
             ref: "User"
         }]
     },
-    
+
     // إعدادات التقارير والإيميلات
     reportSettings: {
         dailyReportEnabled: { type: Boolean, default: true },
         dailyReportStartTime: { type: String, default: "08:00" }, // وقت بداية فترة التقرير (24 ساعة من هذا الوقت)
         dailyReportSendTime: { type: String, default: "09:00" }, // وقت إرسال التقرير عبر الإيميل
-        dailyReportEmails: [{ 
+        dailyReportEmails: [{
             email: { type: String, required: true },
-            language: { 
-                type: String, 
-                enum: ['ar', 'en', 'fr'],
+            language: {
+                type: String,
+                // Accept any valid ISO 639-1/639-2 language code (2-3 lowercase letters)
+                validate: {
+                    validator: function(v) {
+                        return /^[a-z]{2,3}$/.test(v);
+                    },
+                    message: props => `${props.value} is not a valid language code!`
+                },
                 default: 'ar'
             }
         }], // قائمة الإيميلات المستقبلة مع اللغة المفضلة لكل مستلم
@@ -77,61 +110,61 @@ const OrganizationSchema = new mongoose.Schema({
             ref: "User"
         }]
     },
-    
+
     // معلومات إضافية
     logo: { type: String, default: "" },
     websiteUrl: { type: String, default: "" },
     workingHours: {
-        monday: { 
-            open: String, 
-            close: String, 
+        monday: {
+            open: String,
+            close: String,
             closed: { type: Boolean, default: false },
             is24Hours: { type: Boolean, default: false }
         },
-        tuesday: { 
-            open: String, 
-            close: String, 
+        tuesday: {
+            open: String,
+            close: String,
             closed: { type: Boolean, default: false },
             is24Hours: { type: Boolean, default: false }
         },
-        wednesday: { 
-            open: String, 
-            close: String, 
+        wednesday: {
+            open: String,
+            close: String,
             closed: { type: Boolean, default: false },
             is24Hours: { type: Boolean, default: false }
         },
-        thursday: { 
-            open: String, 
-            close: String, 
+        thursday: {
+            open: String,
+            close: String,
             closed: { type: Boolean, default: false },
             is24Hours: { type: Boolean, default: false }
         },
-        friday: { 
-            open: String, 
-            close: String, 
+        friday: {
+            open: String,
+            close: String,
             closed: { type: Boolean, default: false },
             is24Hours: { type: Boolean, default: false }
         },
-        saturday: { 
-            open: String, 
-            close: String, 
+        saturday: {
+            open: String,
+            close: String,
             closed: { type: Boolean, default: false },
             is24Hours: { type: Boolean, default: false }
         },
-        sunday: { 
-            open: String, 
-            close: String, 
+        sunday: {
+            open: String,
+            close: String,
             closed: { type: Boolean, default: false },
             is24Hours: { type: Boolean, default: false }
         }
     },
-    
+
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 });
 
 // تحديث updatedAt عند الحفظ
-OrganizationSchema.pre('save', function(next) {
+OrganizationSchema.pre('save', function (next) {
     this.updatedAt = new Date();
     next();
 });

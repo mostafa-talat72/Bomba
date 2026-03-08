@@ -1,3 +1,5 @@
+import { getCurrencySymbol } from './formatters';
+
 interface OrderItem {
   _id: string;
   name: string;
@@ -269,11 +271,7 @@ const printAllSectionsInOnePage = (
         <div class="total">
           إجمالي القسم: <strong>${formattedTotal}</strong> ${(() => {
             const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
-            const currencySymbols: { [key: string]: string } = {
-              'EGP': 'ج.م', 'SAR': 'ر.س', 'AED': 'د.إ',
-              'USD': '$', 'EUR': '€', 'GBP': '£'
-            };
-            return currencySymbols[organizationCurrency] || organizationCurrency;
+            return getCurrencySymbol(organizationCurrency, 'ar');
           })()}
         </div>
 
@@ -791,11 +789,7 @@ const printSectionOrder = (
         });
         
         const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
-        const currencySymbols: { [key: string]: string } = {
-          'EGP': 'ج.م', 'SAR': 'ر.س', 'AED': 'د.إ',
-          'USD': '$', 'EUR': '€', 'GBP': '£'
-        };
-        const currencySymbol = currencySymbols[organizationCurrency] || organizationCurrency;
+        const currencySymbol = getCurrencySymbol(organizationCurrency, 'ar');
 
         return `
           <div class="total">

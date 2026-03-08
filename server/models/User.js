@@ -137,7 +137,13 @@ const userSchema = new mongoose.Schema(
             },
             language: {
                 type: String,
-                enum: ["ar", "en", "fr"],
+                // Accept any valid ISO 639-1/639-2 language code (2-3 lowercase letters)
+                validate: {
+                    validator: function(v) {
+                        return /^[a-z]{2,3}$/.test(v);
+                    },
+                    message: props => `${props.value} is not a valid language code!`
+                },
                 default: "ar",
             },
         },

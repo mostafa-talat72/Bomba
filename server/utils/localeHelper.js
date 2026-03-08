@@ -1,6 +1,13 @@
+import { getCurrencySymbol as getCurrencySymbolShared } from '../../shared/currencySymbols.js';
 import { ar } from 'date-fns/locale/ar';
 import { enUS } from 'date-fns/locale/en-US';
 import { fr } from 'date-fns/locale/fr';
+
+/**
+ * Get currency symbol based on currency code and language
+ * Re-export from shared module for convenience
+ */
+export const getCurrencySymbol = getCurrencySymbolShared;
 
 /**
  * Get user's locale string for date formatting
@@ -116,47 +123,3 @@ export const getDateFnsLocaleFromLanguage = (language) => {
 export const isLanguageRTL = (language) => {
     return language === 'ar';
 };
-
-/**
- * Get currency symbol based on currency code and language
- * @param {string} currencyCode - Currency code (EGP, SAR, AED, USD, EUR, GBP)
- * @param {string} language - Language code (ar, en, fr)
- * @returns {string} Currency symbol
- */
-export const getCurrencySymbol = (currencyCode, language = 'ar') => {
-    const symbols = {
-        'EGP': {
-            'ar': 'ج.م',
-            'en': 'EGP',
-            'fr': 'EGP'
-        },
-        'SAR': {
-            'ar': 'ر.س',
-            'en': 'SAR',
-            'fr': 'SAR'
-        },
-        'AED': {
-            'ar': 'د.إ',
-            'en': 'AED',
-            'fr': 'AED'
-        },
-        'USD': {
-            'ar': '$',
-            'en': '$',
-            'fr': '$'
-        },
-        'EUR': {
-            'ar': '€',
-            'en': '€',
-            'fr': '€'
-        },
-        'GBP': {
-            'ar': '£',
-            'en': '£',
-            'fr': '£'
-        }
-    };
-    
-    return symbols[currencyCode]?.[language] || currencyCode;
-};
-

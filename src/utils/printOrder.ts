@@ -1,4 +1,4 @@
-import { formatDecimal, formatCurrency as formatCurrencyUtil } from './formatters';
+import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol } from './formatters';
 import type { TFunction } from 'i18next';
 
 interface OrderItem {
@@ -235,20 +235,8 @@ const printAllSectionsInOnePage = (
     // Get currency from localStorage
     const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
     
-    // Get currency symbol based on language
-    const getCurrencySymbolForLanguage = (curr: string, lang: string): string => {
-      const symbols: { [key: string]: { [lang: string]: string } } = {
-        'EGP': { 'ar': 'ج.م', 'en': 'EGP', 'fr': 'EGP' },
-        'SAR': { 'ar': 'ر.س', 'en': 'SAR', 'fr': 'SAR' },
-        'AED': { 'ar': 'د.إ', 'en': 'AED', 'fr': 'AED' },
-        'USD': { 'ar': '$', 'en': '$', 'fr': '$' },
-        'EUR': { 'ar': '€', 'en': '€', 'fr': '€' },
-        'GBP': { 'ar': '£', 'en': '£', 'fr': '£' }
-      };
-      return symbols[curr]?.[lang] || curr;
-    };
-    
-    const currencySymbol = getCurrencySymbolForLanguage(organizationCurrency, language);
+    // Get currency symbol using the imported function
+    const currencySymbol = getCurrencySymbol(organizationCurrency, language);
 
     return `
       <div class="section-block" style="page-break-after: always; margin-bottom: 2px;">

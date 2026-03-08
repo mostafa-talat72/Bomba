@@ -1,3 +1,5 @@
+import { getCurrencySymbol } from './formatters';
+
 interface OrderItem {
   _id: string;
   name: string;
@@ -294,15 +296,7 @@ export const printKitchenOrder = (order: Order, establishmentName: string = 'ا�
         
         // Get currency from localStorage
         const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
-        const currencySymbols: { [key: string]: string } = {
-          'EGP': 'ج.م',
-          'SAR': 'ر.س',
-          'AED': 'د.إ',
-          'USD': '$',
-          'EUR': '€',
-          'GBP': '£'
-        };
-        const currencySymbol = currencySymbols[organizationCurrency] || organizationCurrency;
+        const currencySymbol = getCurrencySymbol(organizationCurrency, 'ar');
 
         return `
           <div class="total">

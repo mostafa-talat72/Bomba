@@ -7,6 +7,11 @@ import { useTheme } from '../context/ThemeContext';
 import { useOrganization } from '../context/OrganizationContext';
 import { ReportSettingsSection } from '../components/ReportSettingsSection';
 import { PayrollPermissionsSection } from '../components/PayrollPermissionsSection';
+import { WORLD_TIMEZONES } from '../../shared/timezones';
+import { getCurrencyName } from '../../shared/currencyNames';
+import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols';
+import { getTimezoneName } from '../../shared/timezoneNames';
+import { WORLD_LANGUAGES } from '../../shared/languages';
 
 // Type for alert messages
 type AlertType = 'success' | 'error' | 'info' | 'warning';
@@ -106,7 +111,7 @@ const Settings: FC = () => {
   const { t } = useTranslation();
   const { currentLanguage, isRTL, changeLanguage } = useLanguage();
   const { isDarkMode, toggleDarkMode, setTheme } = useTheme();
-  const { refreshOrganizationSettings } = useOrganization();
+  const { refreshOrganizationSettings, setCurrency, setTimezone } = useOrganization();
   const { user, updateUserProfile, changePassword, updateNotificationSettings, updateGeneralSettings, getNotificationSettings, getGeneralSettings, getOrganization, updateOrganization, updateOrganizationPermissions, canEditOrganization, getAvailableManagers, getReportSettings, updateReportSettings, canManageReports, sendReportNow, canManagePayroll, updatePayrollPermissions } = useApp();
   
   // UI State
@@ -597,10 +602,20 @@ const Settings: FC = () => {
     try {
       const success = await updateOrganization(organization);
       if (success) {
+        // Update OrganizationContext immediately with new values
+        if (organization.currency) {
+          setCurrency(organization.currency);
+        }
+        if (organization.timezone) {
+          setTimezone(organization.timezone);
+        }
+        
         // Refresh organization settings in OrganizationContext
         await refreshOrganizationSettings();
         
         showAlertMessage(t('settings.organization.success'));
+        
+        // Changes are now applied immediately without reload
       } else {
         showAlertMessage(t('settings.organization.errors.updateFailed'), 'error');
       }
@@ -1124,9 +1139,11 @@ const Settings: FC = () => {
                         onChange={(e) => setGeneralSettings({ ...generalSettings, language: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
-                        <option value="ar">{t('settings.general.languageAr')}</option>
-                        <option value="en">{t('settings.general.languageEn')}</option>
-                        <option value="fr">{t('settings.general.languageFr')}</option>
+                        {WORLD_LANGUAGES.map((lang) => (
+                          <option key={lang.code} value={lang.code}>
+                            {lang.nativeName} ({lang.name})
+                          </option>
+                        ))}
                         </select>
                       </div>
 
@@ -1275,9 +1292,11 @@ const Settings: FC = () => {
                           onChange={(e) => setOrganization({ ...organization, timezone: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         >
-                          <option value="Africa/Cairo">{t('settings.general.timezoneCairo')}</option>
-                          <option value="Asia/Riyadh">{t('settings.general.timezoneRiyadh')}</option>
-                          <option value="Asia/Dubai">{t('settings.general.timezoneDubai')}</option>
+                          {WORLD_TIMEZONES.map((tz: string) => (
+                            <option key={tz} value={tz}>
+                              {getTimezoneName(tz, currentLanguage)}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div>
@@ -1289,10 +1308,11 @@ const Settings: FC = () => {
                           onChange={(e) => setOrganization({ ...organization, currency: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         >
-                          <option value="EGP">{t('settings.general.currencyEGP')}</option>
-                          <option value="SAR">{t('settings.general.currencySAR')}</option>
-                          <option value="AED">{t('settings.general.currencyAED')}</option>
-                          <option value="USD">{t('settings.general.currencyUSD')}</option>
+                          {Object.keys(CURRENCY_SYMBOLS).map((currencyCode) => (
+                            <option key={currencyCode} value={currencyCode}>
+                              {getCurrencyName(currencyCode, currentLanguage)} ({CURRENCY_SYMBOLS[currencyCode][currentLanguage as 'ar' | 'en' | 'fr'] || CURRENCY_SYMBOLS[currencyCode]['ar']})
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -1867,7 +1887,20 @@ const Settings: FC = () => {
                           const payrollData = await payrollResponse.json();
                           
                           if (orgSuccess && payrollResponse.ok && payrollData.success) {
+                            // Update OrganizationContext immediately with new values
+                            if (organization.currency) {
+                              setCurrency(organization.currency);
+                            }
+                            if (organization.timezone) {
+                              setTimezone(organization.timezone);
+                            }
+                            
+                            // Refresh organization settings
+                            await refreshOrganizationSettings();
+                            
                             showAlertMessage(t('settings.organization.saveAllSettings'));
+                            
+                            // Changes are now applied immediately without reload
                           } else if (!orgSuccess) {
                             showAlertMessage(t('settings.organization.errors.saveOrgFailed'), 'error');
                           } else {

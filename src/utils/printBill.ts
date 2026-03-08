@@ -1,6 +1,6 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
-import { formatDecimal, formatCurrency as formatCurrencyUtil } from './formatters';
+import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
 import type { TFunction } from 'i18next';
@@ -336,20 +336,8 @@ export const printBill = async (
   // Get currency from localStorage
   const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
   
-  // Get currency symbol based on language
-  const getCurrencySymbolForLanguage = (curr: string, lang: string): string => {
-    const symbols: { [key: string]: { [lang: string]: string } } = {
-      'EGP': { 'ar': 'ج.م', 'en': 'EGP', 'fr': 'EGP' },
-      'SAR': { 'ar': 'ر.س', 'en': 'SAR', 'fr': 'SAR' },
-      'AED': { 'ar': 'د.إ', 'en': 'AED', 'fr': 'AED' },
-      'USD': { 'ar': '$', 'en': '$', 'fr': '$' },
-      'EUR': { 'ar': '€', 'en': '€', 'fr': '€' },
-      'GBP': { 'ar': '£', 'en': '£', 'fr': '£' }
-    };
-    return symbols[curr]?.[lang] || curr;
-  };
-  
-  const currencySymbol = getCurrencySymbolForLanguage(organizationCurrency, language);
+  // Get currency symbol based on language using the imported function
+  const currencySymbol = getCurrencySymbol(organizationCurrency, language);
 
   // Main receipt HTML
   const receiptHTML = `

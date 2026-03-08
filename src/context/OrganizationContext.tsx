@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from '../services/api';
 import { formatDateInTimezone } from '../utils/timezoneHelper';
+import { getCurrencySymbol as getCurrencySymbolUtil } from '../utils/formatters';
 
 interface OrganizationContextType {
   currency: string;
@@ -78,40 +79,8 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     // Get current language from localStorage if not provided
     const currentLang = language || localStorage.getItem('i18nextLng') || 'ar';
     
-    const symbols: { [key: string]: { [lang: string]: string } } = {
-      'EGP': {
-        'ar': 'ج.م',
-        'en': 'EGP',
-        'fr': 'EGP'
-      },
-      'SAR': {
-        'ar': 'ر.س',
-        'en': 'SAR',
-        'fr': 'SAR'
-      },
-      'AED': {
-        'ar': 'د.إ',
-        'en': 'AED',
-        'fr': 'AED'
-      },
-      'USD': {
-        'ar': '$',
-        'en': '$',
-        'fr': '$'
-      },
-      'EUR': {
-        'ar': '€',
-        'en': '€',
-        'fr': '€'
-      },
-      'GBP': {
-        'ar': '£',
-        'en': '£',
-        'fr': '£'
-      }
-    };
-    
-    return symbols[currency]?.[currentLang] || currency;
+    // Use the imported function from formatters.ts
+    return getCurrencySymbolUtil(currency, currentLang);
   };
 
   const formatCurrency = (amount: number): string => {

@@ -1,24 +1,39 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { WORLD_LANGUAGES } from '../../shared/languages';
 
 import ar from './locales/ar.json';
 import en from './locales/en.json';
 import fr from './locales/fr.json';
 
-// Language resources
-const resources = {
+// Create a base translation object with common keys
+const createBaseTranslation = () => {
+  // For languages without full translations, use English as fallback
+  return en;
+};
+
+// Language resources - dynamically create resources for all languages
+const resources: Record<string, { translation: any }> = {
   ar: { translation: ar },
   en: { translation: en },
   fr: { translation: fr },
 };
 
-// Supported languages configuration
-export const languages = [
-  { code: 'ar', name: 'العربية', dir: 'rtl', flag: '🇸🇦' },
-  { code: 'en', name: 'English', dir: 'ltr', flag: '🇬🇧' },
-  { code: 'fr', name: 'Français', dir: 'ltr', flag: '🇫🇷' },
-];
+// Add all other languages with English as fallback
+WORLD_LANGUAGES.forEach((lang) => {
+  if (!resources[lang.code]) {
+    resources[lang.code] = { translation: createBaseTranslation() };
+  }
+});
+
+// Supported languages configuration - use all world languages
+export const languages = WORLD_LANGUAGES.map(lang => ({
+  code: lang.code,
+  name: lang.nativeName,
+  dir: lang.rtl ? 'rtl' : 'ltr',
+  flag: '', // Can be added later if needed
+}));
 
 i18n
   .use(LanguageDetector) // Detect user language

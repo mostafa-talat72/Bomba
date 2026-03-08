@@ -130,8 +130,8 @@ export const updateGeneralSettings = async (req, res) => {
             });
         }
 
-        // Validate language if provided
-        if (language && !['ar', 'en', 'fr'].includes(language)) {
+        // Validate language if provided - accept any valid language code (2-3 characters)
+        if (language && !/^[a-z]{2,3}$/.test(language)) {
             return res.status(400).json({
                 success: false,
                 message: "قيمة اللغة غير صحيحة",

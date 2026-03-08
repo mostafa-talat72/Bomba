@@ -1,3 +1,5 @@
+import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols.js';
+
 /**
  * تحويل الأرقام الإنجليزية إلى العربية
  */
@@ -10,40 +12,7 @@ const convertToArabicNumbers = (str: string): string => {
  * Get currency symbol based on currency code and language
  */
 export const getCurrencySymbol = (currencyCode: string, language: string = 'ar'): string => {
-    const symbols: { [key: string]: { [lang: string]: string } } = {
-        'EGP': {
-            'ar': 'ج.م',
-            'en': 'EGP',
-            'fr': 'EGP'
-        },
-        'SAR': {
-            'ar': 'ر.س',
-            'en': 'SAR',
-            'fr': 'SAR'
-        },
-        'AED': {
-            'ar': 'د.إ',
-            'en': 'AED',
-            'fr': 'AED'
-        },
-        'USD': {
-            'ar': '$',
-            'en': '$',
-            'fr': '$'
-        },
-        'EUR': {
-            'ar': '€',
-            'en': '€',
-            'fr': '€'
-        },
-        'GBP': {
-            'ar': '£',
-            'en': '£',
-            'fr': '£'
-        }
-    };
-    
-    return symbols[currencyCode]?.[language] || currencyCode;
+    return CURRENCY_SYMBOLS[currencyCode]?.[language] || currencyCode;
 };
 
 /**
