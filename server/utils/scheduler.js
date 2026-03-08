@@ -36,7 +36,7 @@ const setupNotificationCleanupScheduler = () => {
         },
         {
             scheduled: true,
-            timezone: "Africa/Cairo", // توقيت القاهرة
+            timezone: "UTC", // Use UTC for system-wide cleanup tasks
         }
     );
 
@@ -247,6 +247,8 @@ const generateDailyReportForOrganization = async (organization) => {
         if (now < endOfReport) {
             endOfReport.setDate(endOfReport.getDate() - 1);
         }
+        // Get organization timezone (default to Africa/Cairo if not set)
+        const orgTimezone = organization.timezone || 'Africa/Cairo';
         
         const startOfReport = new Date(endOfReport);
         startOfReport.setDate(startOfReport.getDate() - 1); // 24 hours before
@@ -255,9 +257,9 @@ const generateDailyReportForOrganization = async (organization) => {
         const formatForLog = (date) => {
             return {
                 iso: date.toISOString(),
-                local: date.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
-                date: date.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }),
-                time: date.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo' })
+                local: date.toLocaleString('ar-EG', { timeZone: orgTimezone }),
+                date: date.toLocaleDateString('ar-EG', { timeZone: orgTimezone }),
+                time: date.toLocaleTimeString('ar-EG', { timeZone: orgTimezone })
             };
         };
 
@@ -266,7 +268,7 @@ const generateDailyReportForOrganization = async (organization) => {
             currentTime: formatForLog(now),
             reportStart: formatForLog(startOfReport),
             reportEnd: formatForLog(endOfReport),
-            timezone: 'Africa/Cairo (GMT+2)'
+            timezone: `${orgTimezone}`
         });
 
         // Get emails from organization settings
@@ -540,6 +542,9 @@ const generateMonthlyReportForOrganization = async (organization) => {
             endOfReport.setMonth(endOfReport.getMonth() - 1);
         }
         
+        // Get organization timezone (default to Africa/Cairo if not set)
+        const orgTimezone = organization.timezone || 'Africa/Cairo';
+        
         // Start: First day of previous month at configured time
         const startOfReport = new Date(endOfReport);
         startOfReport.setMonth(startOfReport.getMonth() - 1);
@@ -548,9 +553,9 @@ const generateMonthlyReportForOrganization = async (organization) => {
         const formatForLog = (date) => {
             return {
                 iso: date.toISOString(),
-                local: date.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }),
-                date: date.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }),
-                time: date.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo' })
+                local: date.toLocaleString('ar-EG', { timeZone: orgTimezone }),
+                date: date.toLocaleDateString('ar-EG', { timeZone: orgTimezone }),
+                time: date.toLocaleTimeString('ar-EG', { timeZone: orgTimezone })
             };
         };
 
@@ -559,7 +564,7 @@ const generateMonthlyReportForOrganization = async (organization) => {
             currentTime: formatForLog(now),
             reportStart: formatForLog(startOfReport),
             reportEnd: formatForLog(endOfReport),
-            timezone: 'Africa/Cairo (GMT+2)'
+            timezone: `${orgTimezone}`
         });
 
         // Get emails from organization settings (same as daily report)
@@ -952,6 +957,9 @@ const scheduleDailyReportForOrganization = (organization) => {
             existingTask.stop();
         }
         
+        // Get organization timezone (default to Africa/Cairo if not set)
+        const orgTimezone = organization.timezone || 'Africa/Cairo';
+        
         // Schedule new task
         const task = cron.schedule(cronPattern, async () => {
             Logger.info(
@@ -959,14 +967,14 @@ const scheduleDailyReportForOrganization = (organization) => {
                 {
                     organizationId: organization._id,
                     scheduledTime: sendTimeStr,
-                    currentTime: new Date().toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' })
+                    currentTime: new Date().toLocaleString('ar-EG', { timeZone: orgTimezone })
                 }
             );
             
             await generateDailyReportForOrganization(organization);
         }, {
             scheduled: true,
-            timezone: "Africa/Cairo"
+            timezone: orgTimezone
         });
         
         scheduledReportTasks.set(organization._id.toString(), task);
@@ -1321,7 +1329,7 @@ const setupSessionCleanupScheduler = async () => {
         }
     }, {
         scheduled: true,
-        timezone: "Africa/Cairo"
+        timezone: "UTC" // Use UTC for system-wide subscription checks
     });
 
     Logger.info("✅ Session cleanup scheduler initialized (every 30 seconds)");

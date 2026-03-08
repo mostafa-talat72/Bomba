@@ -1432,6 +1432,7 @@
       "languageEn": "English",
       "languageFr": "Français",
       "timezone": "Timezone",
+      "timezoneDescription": "Select the organization's timezone to adjust dates and times",
       "timezoneCairo": "Cairo (GMT+2)",
       "timezoneRiyadh": "Riyadh (GMT+3)",
       "timezoneDubai": "Dubai (GMT+4)",

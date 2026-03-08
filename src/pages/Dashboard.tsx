@@ -3,6 +3,7 @@ import { Gamepad2, Monitor, ShoppingCart, Receipt, TrendingUp, Clock, Users, Dol
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
+import { useOrganization } from '../context/OrganizationContext';
 import api from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { translateActivityMessage } from '../utils/activityTranslator';
@@ -45,6 +46,7 @@ interface DashboardStats {
 const Dashboard = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { formatDate, formatTime } = useOrganization();
   const { sessions, orders, bills, isAuthenticated, getRecentActivity, refreshData } = useApp();
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
@@ -299,27 +301,18 @@ const Dashboard = () => {
             <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
               <Calendar className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               <span className="text-orange-100 font-medium">
-                {new Date().toLocaleDateString(
-                  isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
-                  {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  }
-                )}
+                {formatDate(new Date(), {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
               </span>
             </div>
             <div className="flex items-center bg-white bg-opacity-20 rounded-lg px-4 py-2">
               <Clock className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               <span className="text-orange-100 font-medium">
-                {new Date().toLocaleTimeString(
-                  isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
-                  {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  }
-                )}
+                {formatTime(new Date())}
               </span>
             </div>
           </div>
@@ -396,10 +389,7 @@ const Dashboard = () => {
                         <div className={isRTL ? 'mr-4' : 'ml-4'}>
                           <p className="font-bold text-gray-900 dark:text-gray-100 text-lg">{session.deviceName}</p>
                           <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                            {t('dashboard.startedAt')}: {startTime.toLocaleTimeString(
-                              isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
-                              { hour: '2-digit', minute: '2-digit' }
-                            )}
+                            {t('dashboard.startedAt')}: {formatTime(startTime)}
                           </p>
                           <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
                             {t('dashboard.duration')}: {hours > 0 ? `${formatDecimal(hours, i18n.language)}${t('dashboard.hours')} ${formatDecimal(minutes, i18n.language)}${t('dashboard.minutes')}` : `${formatDecimal(minutes, i18n.language)}${t('dashboard.minutes')}`}

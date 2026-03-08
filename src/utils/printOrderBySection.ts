@@ -171,7 +171,9 @@ const printAllSectionsInOnePage = (
   if (!printWindow) return;
 
   const now = new Date();
+  const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
   const dateTimeString = now.toLocaleString('ar-EG', {
+    timeZone: organizationTimezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -205,7 +207,7 @@ const printAllSectionsInOnePage = (
           ${isUpdatedOrder ? `
           <div class="update-banner">
             <span>🔄 تم تحديث الطلب</span>
-            <small>${new Date(order.updatedAt).toLocaleString('ar-EG')}</small>
+            <small>${new Date(order.updatedAt).toLocaleString('ar-EG', { timeZone: organizationTimezone })}</small>
           </div>` : ''}
           <div style="font-size: 16px; font-weight: bold; margin: 5px 0;">فاتورة طلب</div>
         </div>
@@ -525,7 +527,9 @@ const printSectionOrder = (
   if (!printWindow) return;
 
   const now = new Date();
+  const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
   const dateTimeString = now.toLocaleString('ar-EG', {
+    timeZone: organizationTimezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -718,7 +722,7 @@ const printSectionOrder = (
         ${isUpdatedOrder ? `
         <div class="update-banner">
           <span>🔄 تم تحديث الطلب</span>
-          <small>${new Date(order.updatedAt).toLocaleString('ar-EG')}</small>
+          <small>${new Date(order.updatedAt).toLocaleString('ar-EG', { timeZone: organizationTimezone })}</small>
         </div>` : ''}
         <div style="font-size: 16px; font-weight: bold; margin: 5px 0;">فاتورة طلب</div>
       </div>

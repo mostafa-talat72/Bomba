@@ -27,7 +27,6 @@ const OrganizationSchema = new mongoose.Schema({
     },
     timezone: { 
         type: String, 
-        enum: ["Africa/Cairo", "Asia/Riyadh", "Asia/Dubai"],
         default: "Africa/Cairo" 
     },
     

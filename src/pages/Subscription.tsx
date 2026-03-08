@@ -121,6 +121,7 @@ const plans: SubscriptionPlan[] = [
 const Subscription = () => {
   const { t } = useTranslation();
   const { currentLanguage, isRTL } = useLanguage();
+  const { formatDate: formatOrgDate } = useOrganization();
   const { subscriptionStatus, user } = useApp();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -232,13 +233,7 @@ const Subscription = () => {
 
   const formatDate = (date: string) => {
     const dateObj = new Date(date);
-    if (currentLanguage === 'ar') {
-      return dateObj.toLocaleDateString('ar-EG');
-    } else if (currentLanguage === 'fr') {
-      return dateObj.toLocaleDateString('fr-FR');
-    } else {
-      return dateObj.toLocaleDateString('en-US');
-    }
+    return formatOrgDate(dateObj);
   };
 
   const getCurrentPlanName = (planId: string) => {

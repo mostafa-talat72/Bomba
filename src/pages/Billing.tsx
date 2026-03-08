@@ -14,6 +14,7 @@ import { useBillAggregation } from '../hooks/useBillAggregation';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
@@ -121,6 +122,7 @@ const TableBillItem = memo(({
   getStatusColor, 
   getStatusText, 
   formatCurrency,
+  formatDate,
   getCustomerDisplay
 }: { 
   bill: Bill; 
@@ -132,6 +134,7 @@ const TableBillItem = memo(({
   getStatusColor: (status: string) => string;
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
+  formatDate: (date: Date | string, options?: Intl.DateTimeFormatOptions) => string;
   getCustomerDisplay: (bill: Bill) => string;
 }) => {
   const { t, i18n } = useTranslation();
@@ -166,7 +169,7 @@ const TableBillItem = memo(({
           <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {bill.createdAt ? new Date(bill.createdAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US') : '-'}
+              {bill.createdAt ? formatDate(bill.createdAt, { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
             </span>
             {bill.customerName && (
               <span className="flex items-center gap-1">
@@ -250,6 +253,7 @@ const TableBillItem = memo(({
 const Billing = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { formatDate, formatDateTime } = useOrganization();
   const location = useLocation();
   const { bills, fetchBills, cancelBill, addPartialPayment, showNotification, user, tables, fetchTables, fetchTableSections, tableSections, getTableStatus } = useApp();
 
@@ -2375,6 +2379,7 @@ const Billing = () => {
                         getStatusColor={getStatusColor}
                         getStatusText={getStatusText}
                         formatCurrency={formatCurrency}
+                        formatDate={formatDate}
                         getCustomerDisplay={getCustomerDisplay}
                       />
                     ))}
@@ -2512,7 +2517,7 @@ const Billing = () => {
                               </span>
                             </div>
                             <div className="text-xs text-red-700 dark:text-red-300 mb-3">
-                              <div>{t('billing.startTime')}: {new Date(session.startTime).toLocaleTimeString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}</div>
+                              <div>{t('billing.startTime')}: {formatTime(session.startTime)}</div>
                               <div>{t('billing.duration')}: {(() => {
                                 const start = new Date(session.startTime);
                                 const now = new Date();
@@ -2987,7 +2992,7 @@ const Billing = () => {
                           <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
                             <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">{t('billing.creationDate')}</div>
                             <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                              {selectedBill?.createdAt ? new Date(selectedBill.createdAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US') : '-'}
+                              {selectedBill?.createdAt ? formatDate(selectedBill.createdAt) : '-'}
                             </div>
                           </td>
                         </tr>
@@ -3455,7 +3460,7 @@ const Billing = () => {
                                   {formatCurrency(payment.amount)} - {t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`)}
                                 </span>
                                 <span className="text-gray-500 dark:text-gray-500 text-xs whitespace-nowrap">
-                                  {new Date(payment.paidAt).toLocaleString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
+                                  {formatDateTime(payment.paidAt)}
                                 </span>
                               </div>
                             ))}

@@ -28,6 +28,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 import NotificationCenter from './NotificationCenter';
 import PermissionGuard from './PermissionGuard';
 import LanguageSwitcher from './LanguageSwitcher';
@@ -42,6 +43,7 @@ interface NotificationRead {
 const Layout = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { formatDate: formatOrgDate } = useOrganization();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { user, logout, sessions, orders, notifications, subscriptionStatus } = useApp();
@@ -442,15 +444,12 @@ const Layout = () => {
                 <NotificationCenter />
               </PermissionGuard>
               <div className="hidden sm:block text-sm text-gray-500 dark:text-gray-400">
-                {new Date().toLocaleDateString(
-                  isRTL ? 'ar-EG' : (i18n.language === 'fr' ? 'fr-FR' : 'en-US'),
-                  {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  }
-                )}
+                {formatOrgDate(new Date(), {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
               </div>
             </div>
           </div>

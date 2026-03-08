@@ -7,6 +7,7 @@ import { useApp } from '../context/AppContext';
 import ConfirmDialog from './ConfirmDialog';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 
 interface PaymentHistoryItem {
   amount: number;
@@ -68,6 +69,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
   const { showNotification } = useApp();
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { formatDate: formatOrgDate } = useOrganization();
   const [showIncreaseModal, setShowIncreaseModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [additionalAmount, setAdditionalAmount] = useState('');
@@ -246,7 +248,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.costDetails.date')}</span>
               <span className="text-sm text-gray-900 dark:text-white">
-                {new Date(cost.date).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US', { 
+                {formatOrgDate(cost.date, { 
                   day: 'numeric', 
                   month: 'long', 
                   year: 'numeric' 
@@ -257,7 +259,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.costDetails.dueDate')}</span>
                 <span className="text-sm text-gray-900 dark:text-white">
-                  {new Date(cost.dueDate).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US', { 
+                  {formatOrgDate(cost.dueDate, { 
                     day: 'numeric', 
                     month: 'long', 
                     year: 'numeric' 
@@ -323,7 +325,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
                           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mt-2">
                             <Clock className="w-4 h-4" />
                             <span>
-                              {new Date(increase.addedAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US', { 
+                              {formatOrgDate(increase.addedAt, { 
                                 day: 'numeric', 
                                 month: 'long', 
                                 year: 'numeric',
@@ -402,7 +404,7 @@ const CostDetailsModal = ({ isOpen, onClose, cost, onRefresh, onEdit, onDelete, 
                           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                             <Clock className="w-4 h-4" />
                             <span>
-                              {new Date(payment.paidAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US', { 
+                              {formatOrgDate(payment.paidAt, { 
                                 day: 'numeric', 
                                 month: 'long', 
                                 year: 'numeric',

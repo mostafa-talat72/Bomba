@@ -4,6 +4,7 @@ import { User as UserType } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 
 interface RoleInfo {
   id: string;
@@ -47,6 +48,7 @@ const UserCard: React.FC<UserCardProps> = ({
 }) => {
   const { t } = useTranslation();
   const { currentLanguage, isRTL } = useLanguage();
+  const { formatDate: formatOrgDate } = useOrganization();
   const { canDeleteUsers, canManageUsers, canEditUser, canDeleteUser } = useApp();
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
@@ -71,27 +73,11 @@ const UserCard: React.FC<UserCardProps> = ({
 
   const formatLastLogin = (date?: Date) => {
     if (!date) return t('users.noLogin');
-    const dateObj = new Date(date);
-    
-    if (currentLanguage === 'ar') {
-      return dateObj.toLocaleDateString('ar-EG', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } else if (currentLanguage === 'fr') {
-      return dateObj.toLocaleDateString('fr-FR', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } else {
-      return dateObj.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    }
+    return formatOrgDate(new Date(date), {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
   return (

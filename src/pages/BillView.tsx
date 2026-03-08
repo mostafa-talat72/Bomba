@@ -365,14 +365,30 @@ const BillView = () => {
 
 	const formatDate = (dateString: string) => {
 		const language = localStorage.getItem('billViewLanguage') || 'ar';
+		// Use organization timezone from database
+		const timezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
 		const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
-		return new Date(dateString).toLocaleDateString(locale, {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		
+		try {
+			const date = new Date(dateString);
+			return date.toLocaleString(locale, {
+				timeZone: timezone,
+				year: 'numeric',
+				month: 'long',
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit'
+			});
+		} catch (error) {
+			console.error('Error formatting date:', error);
+			return new Date(dateString).toLocaleDateString(locale, {
+				year: 'numeric',
+				month: 'long',
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit'
+			});
+		}
 	};
 
 	const getOrderStatusText = (status: string) => {

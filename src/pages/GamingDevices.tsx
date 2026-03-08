@@ -1,8 +1,9 @@
-﻿﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Gamepad2, Monitor, Play, Square, Users, Plus, Table as TableIcon, X, Edit, Trash2, Clock } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
 import { SessionCostDisplay } from '../components/SessionCostDisplay';
@@ -12,15 +13,19 @@ import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
 import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 
 // Configure dayjs
 dayjs.extend(utc);
+dayjs.extend(timezone);
 
-// دالة لتنسيق الوقت حسب اللغة
-const formatTimeByLocale = (dateTime: dayjs.Dayjs, locale: string): string => {
+// Format time based on locale with proper number formatting and timezone support
+const formatTimeByLocale = (dateTime: dayjs.Dayjs, locale: string, tz?: string): string => {
   dayjs.locale(locale);
-  const formatted = dateTime.format('DD/MM/YYYY - hh:mm A');
-  
+  // If timezone is provided, convert to that timezone, otherwise use the datetime as-is
+  const timeInZone = tz ? dateTime.tz(tz) : dateTime;
+  const formatted = timeInZone.format('DD/MM/YYYY - hh:mm A');
+
   if (locale === 'ar') {
     const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
     return formatted
@@ -28,18 +33,18 @@ const formatTimeByLocale = (dateTime: dayjs.Dayjs, locale: string): string => {
       .replace('AM', 'ص')
       .replace('PM', 'م');
   }
-  
+
   return formatted;
 };
 
-// دالة لترجمة اسم العميل الافتراضي بناءً على اللغة الحالية
+// ???? ?????? ??? ?????? ????????? ????? ??? ????? ???????
 const translateDefaultCustomerName = (customerName: string, deviceType: string, deviceNumber: string | number, t: any): string => {
-  // إذا كان الاسم فارغاً، نرجع فارغ
+  // ??? ??? ????? ??????? ???? ????
   if (!customerName || customerName.trim() === '') {
     return '';
   }
 
-  // أنماط أسماء العملاء الافتراضية بالعربية
+  // Arabic patterns for default customer names
   const arabicPatterns = {
     customer: /^عميل\s*\((.+)\)$/i,
     playstationCustomer: /^عميل بلايستيشن\s+PS/i,
@@ -47,7 +52,7 @@ const translateDefaultCustomerName = (customerName: string, deviceType: string, 
     table: /^طاولة\s+\d+$/i,
   };
 
-  // أنماط أسماء العملاء الافتراضية بالإنجليزية
+  // ????? ????? ??????? ?????????? ???????????
   const englishPatterns = {
     customer: /^Customer\s*\((.+)\)$/i,
     playstationCustomer: /^PlayStation Customer\s+PS/i,
@@ -55,7 +60,7 @@ const translateDefaultCustomerName = (customerName: string, deviceType: string, 
     table: /^Table\s+\d+$/i,
   };
 
-  // أنماط أسماء العملاء الافتراضية بالفرنسية
+  // ????? ????? ??????? ?????????? ?????????
   const frenchPatterns = {
     customer: /^Client\s*\((.+)\)$/i,
     playstationCustomer: /^Client PlayStation\s+PS/i,
@@ -63,14 +68,14 @@ const translateDefaultCustomerName = (customerName: string, deviceType: string, 
     table: /^Table\s+\d+$/i,
   };
 
-  // التحقق من النمط وترجمته
-  // نمط "عميل (اسم الجهاز)"
+  // ?????? ?? ????? ???????
+  // ??? "???? (??? ??????)"
   let match = customerName.match(arabicPatterns.customer) ||
               customerName.match(englishPatterns.customer) ||
               customerName.match(frenchPatterns.customer);
 
   if (match && match[1]) {
-    // استخراج اسم الجهاز من داخل الأقواس
+    // ??????? ??? ?????? ?? ???? ???????
     const deviceName = match[1];
     return `${t('gaming.defaultCustomerName')} (${deviceName})`;
   }
@@ -78,26 +83,26 @@ const translateDefaultCustomerName = (customerName: string, deviceType: string, 
   if (arabicPatterns.playstationCustomer.test(customerName) ||
       englishPatterns.playstationCustomer.test(customerName) ||
       frenchPatterns.playstationCustomer.test(customerName)) {
-    // عميل بلايستيشن
+    // ???? ?????????
     return `${t('gaming.playstationCustomer')} PS${deviceNumber}`;
   }
 
   if (arabicPatterns.computerCustomer.test(customerName) ||
       englishPatterns.computerCustomer.test(customerName) ||
       frenchPatterns.computerCustomer.test(customerName)) {
-    // عميل كمبيوتر
+    // ???? ???????
     return `${t('gaming.computerCustomer')} PC${deviceNumber}`;
   }
 
   if (arabicPatterns.table.test(customerName) ||
       englishPatterns.table.test(customerName) ||
       frenchPatterns.table.test(customerName)) {
-    // اسم طاولة
+    // ??? ?????
     const tableNumber = customerName.match(/\d+/)?.[0] || '';
     return `${t('gaming.table')} ${tableNumber}`;
   }
 
-  // إذا لم يكن اسماً افتراضياً، نرجع الاسم كما هو
+  // ??? ?? ??? ????? ?????????? ???? ????? ??? ??
   return customerName;
 };
 
@@ -109,6 +114,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const location = useLocation();
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { timezone, formatDateTime } = useOrganization();
   const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, fetchTables, fetchTableSections, fetchSessions } = useApp();
   
   // Get currency from localStorage and format it based on language
@@ -159,20 +165,20 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   );
   const [addDeviceError, setAddDeviceError] = useState<string | null>(null);
 
-  // جلسة جديدة
+  // ???? ?????
   const [showNewSession, setShowNewSession] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [selectedControllers, setSelectedControllers] = useState<number | null>(null);
 
-  // ربط بطاولة
+  // ??? ??????
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   
-  // ربط الجلسة بطاولة بعد بدء الجلسة
+  // ??? ?????? ?????? ??? ??? ??????
   const [showLinkTableModal, setShowLinkTableModal] = useState(false);
   const [selectedSessionForLink, setSelectedSessionForLink] = useState<Session | null>(null);
   const [linkingTable, setLinkingTable] = useState(false);
 
-  // فك ربط الجلسة من الطاولة
+  // ?? ??? ?????? ?? ???????
   const [showUnlinkTableModal, setShowUnlinkTableModal] = useState(false);
   const [selectedSessionForUnlink, setSelectedSessionForUnlink] = useState<Session | null>(null);
   const [unlinkingTable, setUnlinkingTable] = useState(false);
@@ -184,20 +190,20 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const [updatingControllers, setUpdatingControllers] = useState<Record<string, boolean>>({});
   const [isAddingDevice, setIsAddingDevice] = useState(false);
   
-  // حالات التعديل والحذف
+  // ????? ??????? ??????
   const [showEditDevice, setShowEditDevice] = useState(false);
   const [editingDevice, setEditingDevice] = useState<any>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deviceToDelete, setDeviceToDelete] = useState<any>(null);
   const [isDeletingDevice, setIsDeletingDevice] = useState(false);
 
-  // نافذة تعديل وقت بدء الجلسة
+  // ????? ????? ??? ??? ??????
   const [showEditStartTimeModal, setShowEditStartTimeModal] = useState(false);
   const [selectedSessionForEditTime, setSelectedSessionForEditTime] = useState<Session | null>(null);
   const [newStartTime, setNewStartTime] = useState('');
   const [isUpdatingStartTime, setIsUpdatingStartTime] = useState(false);
 
-  // نافذة تعديل وقت فترة الدراعات
+  // ????? ????? ??? ???? ????????
   const [showEditPeriodTimeModal, setShowEditPeriodTimeModal] = useState(false);
   const [selectedSessionForPeriodEdit, setSelectedSessionForPeriodEdit] = useState<Session | null>(null);
   const [selectedPeriodIndex, setSelectedPeriodIndex] = useState<number>(0);
@@ -205,11 +211,11 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const [newPeriodEndTime, setNewPeriodEndTime] = useState('');
   const [isUpdatingPeriodTime, setIsUpdatingPeriodTime] = useState(false);
 
-  // نافذة تأكيد تعديل عدد الأذرع
+  // ????? ????? ????? ??? ??????
   const [showControllersConfirm, setShowControllersConfirm] = useState(false);
   const [controllersChangeData, setControllersChangeData] = useState<{sessionId: string, newCount: number, oldCount: number, deviceName: string} | null>(null);
 
-  // نافذة تأكيد إنهاء الجلسة
+  // ????? ????? ????? ??????
   const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false);
   const [sessionToEnd, setSessionToEnd] = useState<Session | null>(null);
   const [customerNameForEnd, setCustomerNameForEnd] = useState('');
@@ -218,14 +224,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const [isInitialLoading, setIsInitialLoading] = useState(sessions.length === 0);
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
-  // إضافة أجهزة
+  // ????? ?????
   const [devices, setDevices] = useState<Device[]>([]);
   
   // Track if we've loaded data for this page visit
   const hasLoadedRef = useRef(false);
   const lastPathRef = useRef(location.pathname);
 
-  // تحميل الأجهزة
+  // ????? ???????
   const loadDevices = async () => {
     try {
       const response = await api.getDevices({ type: deviceType });
@@ -245,7 +251,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   }, [location.pathname, deviceType]);
 
-  // تحميل البيانات بشكل تدريجي
+  // ????? ???????? ???? ??????
   useEffect(() => {
     let isMounted = true;
     
@@ -296,7 +302,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     };
   }, [user, location.pathname, deviceType]);
 
-  // إغلاق النافذة بمفتاح Escape
+  // ????? ??????? ?????? Escape
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -318,7 +324,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [showNewSession, loadingSession, showLinkTableModal]);
 
-  // دوال التعديل والحذف
+  // ???? ??????? ??????
   const handleEditDevice = (device: any) => {
     const activeSession = sessions.find(session => 
       session.deviceId === device._id && session.status === 'active'
@@ -370,7 +376,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // إضافة جهاز جديد
+  // ????? ???? ????
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddDeviceError(null);
@@ -452,7 +458,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // بدء جلسة جديدة
+  // ??? ???? ?????
   const openSessionModal = (device: Device) => {
     setSelectedDevice(device);
     setSelectedControllers(null);
@@ -502,15 +508,15 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
       if (session && (session.id || session._id)) {
         try {
-          // تحديث حالة الجهاز
+          // ????? ???? ??????
           await api.updateDeviceStatus(selectedDevice.id, { status: 'active' });
           
-          // تحديث جميع البيانات بالترتيب الصحيح
+          // ????? ???? ???????? ???????? ??????
           await Promise.all([
             loadDevices(),
-            fetchSessions(), // مهم جداً: تحديث الجلسات لإظهار الطاولة المرتبطة
+            fetchSessions(), // ??? ????: ????? ??????? ?????? ??????? ????????
             fetchBills(),
-            fetchTables() // تحديث حالة الطاولات
+            fetchTables() // ????? ???? ????????
           ]);
           
           showNotification(t('gaming.sessionStartedSuccess'), 'success');
@@ -533,7 +539,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       const errorMessage = apiError?.response?.data?.error || apiError?.response?.data?.message || apiError?.message || t('gaming.sessionStartedError');
       
       let userFriendlyMessage = errorMessage;
-      if (errorMessage.includes('in use') || errorMessage.includes('مستخدم')) {
+      if (errorMessage.includes('in use') || errorMessage.includes('قيد الاستخدام')) {
         userFriendlyMessage = t('gaming.deviceInUse');
       } else if (errorMessage.includes('not found') || errorMessage.includes('غير موجود')) {
         userFriendlyMessage = t('gaming.deviceNotFound');
@@ -548,7 +554,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // تعديل وقت بدء الجلسة
+  // ????? ??? ??? ??????
   const handleEditStartTime = async () => {
     if (!selectedSessionForEditTime || !newStartTime) {
       showNotification(t('gaming.newStartTime') + ' ' + t('gaming.required'), 'error');
@@ -558,8 +564,9 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     try {
       setIsUpdatingStartTime(true);
       
-      const localDateTime = dayjs(newStartTime);
-      const currentTime = dayjs();
+      // Convert local time from organization timezone to UTC
+      const localDateTime = dayjs.tz(newStartTime, timezone);
+      const currentTime = dayjs().tz(timezone);
       
       if (localDateTime.isAfter(currentTime)) {
         showNotification(t('gaming.cannotEditFutureTime'), 'error');
@@ -571,17 +578,12 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         showNotification(t('gaming.cannotEditFutureTime'), 'error');
         return;
       }
-
-      const year = localDateTime.year();
-      const month = localDateTime.month();
-      const day = localDateTime.date();
-      const hour = localDateTime.hour();
-      const minute = localDateTime.minute();
       
-      const localDate = new Date(year, month, day, hour, minute);
+      // ????? ??? UTC ??????? ???????
+      const utcDateTime = localDateTime.utc().toISOString();
       
       await api.updateSessionStartTime(selectedSessionForEditTime.id, {
-        startTime: localDate.toISOString()
+        startTime: utcDateTime
       });
 
       await fetchSessions();
@@ -604,12 +606,15 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const openEditStartTimeModal = (session: Session) => {
     setSelectedSessionForEditTime(session);
     
+    // ????? ??? ??? ?????? ?? UTC ??? ??????? ??????? ???????
     const utcStartTime = new Date(session.startTime);
-    const year = utcStartTime.getFullYear();
-    const month = String(utcStartTime.getMonth() + 1).padStart(2, '0');
-    const day = String(utcStartTime.getDate()).padStart(2, '0');
-    const hours = String(utcStartTime.getHours()).padStart(2, '0');
-    const minutes = String(utcStartTime.getMinutes()).padStart(2, '0');
+    const orgTime = new Date(utcStartTime.toLocaleString('en-US', { timeZone: timezone }));
+    
+    const year = orgTime.getFullYear();
+    const month = String(orgTime.getMonth() + 1).padStart(2, '0');
+    const day = String(orgTime.getDate()).padStart(2, '0');
+    const hours = String(orgTime.getHours()).padStart(2, '0');
+    const minutes = String(orgTime.getMinutes()).padStart(2, '0');
     
     const formattedTime = `${year}-${month}-${day}T${hours}:${minutes}`;
     setNewStartTime(formattedTime);
@@ -617,7 +622,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     setShowEditStartTimeModal(true);
   };
 
-  // إنهاء الجلسة
+  // ????? ??????
   const handleEndSession = async (sessionId: string) => {
     // Find the session
     const session = sessions.find(s => s.id === sessionId);
@@ -651,7 +656,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // تأكيد إنهاء الجلسة
+  // ????? ????? ??????
   const confirmEndSession = async () => {
     if (!sessionToEnd) return;
 
@@ -676,7 +681,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // فتح نافذة تأكيد تعديل عدد الأذرع (فتح نافذة التأكيد مباشرة)
+  // ??? ????? ????? ????? ??? ?????? (??? ????? ??????? ??????)
   const openControllersEditor = (session: Session) => {
     const currentCount = session.controllers ?? 1;
     setControllersChangeData({
@@ -688,7 +693,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     setShowControllersConfirm(true);
   };
 
-  // تغيير العدد داخل نافذة التأكيد
+  // ????? ????? ???? ????? ???????
   const changeControllersInModal = (newCount: number) => {
     if (!controllersChangeData) return;
     setControllersChangeData({
@@ -697,7 +702,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     });
   };
 
-  // تأكيد تعديل عدد الأذرع
+  // ????? ????? ??? ??????
   const confirmUpdateControllers = async () => {
     if (!controllersChangeData) return;
 
@@ -723,63 +728,53 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // دالة فتح نافذة تعديل وقت فترة الدراعات
+  // ???? ??? ????? ????? ??? ???? ????????
   const openEditPeriodTimeModal = (session: Session, periodIndex: number) => {
     setSelectedSessionForPeriodEdit(session);
     setSelectedPeriodIndex(periodIndex);
 
-    // الحصول على الفترة المحددة
+    // ?????? ??? ?????? ???????
     const period = session.controllersHistory?.[periodIndex];
     if (!period) {
       showNotification(t('gaming.periodTimeUpdatedError'), 'error');
       return;
     }
 
-    // تحويل وقت بداية الفترة من UTC إلى التوقيت المحلي للعرض
-    const utcStartTime = new Date(period.from);
-    const year = utcStartTime.getFullYear();
-    const month = String(utcStartTime.getMonth() + 1).padStart(2, '0');
-    const day = String(utcStartTime.getDate()).padStart(2, '0');
-    const hours = String(utcStartTime.getHours()).padStart(2, '0');
-    const minutes = String(utcStartTime.getMinutes()).padStart(2, '0');
-    const formattedStartTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+    // ????? ??? ????? ?????? ?? UTC ??? ??????? ??????? ???????
+    const orgStartTime = dayjs(period.from).tz(timezone);
+    const formattedStartTime = orgStartTime.format('YYYY-MM-DDTHH:mm');
     setNewPeriodStartTime(formattedStartTime);
 
-    // تحويل وقت نهاية الفترة إذا كانت موجودة
+    // ????? ??? ????? ?????? ??? ???? ??????
     if (period.to) {
-      const utcEndTime = new Date(period.to);
-      const endYear = utcEndTime.getFullYear();
-      const endMonth = String(utcEndTime.getMonth() + 1).padStart(2, '0');
-      const endDay = String(utcEndTime.getDate()).padStart(2, '0');
-      const endHours = String(utcEndTime.getHours()).padStart(2, '0');
-      const endMinutes = String(utcEndTime.getMinutes()).padStart(2, '0');
-      const formattedEndTime = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`;
+      const orgEndTime = dayjs.utc(period.to).tz(timezone);
+      const formattedEndTime = orgEndTime.format('YYYY-MM-DDTHH:mm');
       setNewPeriodEndTime(formattedEndTime);
     } else {
-      // الفترة النشطة - لا يوجد وقت نهاية
+      // ?????? ?????? - ?? ???? ??? ?????
       setNewPeriodEndTime('');
     }
 
     setShowEditPeriodTimeModal(true);
   };
 
-  // دالة تعديل وقت فترة الدراعات
+  // ???? ????? ??? ???? ????????
   const handleEditPeriodTime = async () => {
     if (!selectedSessionForPeriodEdit || !newPeriodStartTime) {
       showNotification(t('gaming.newPeriodStartTime') + ' ' + t('gaming.required'), 'error');
       return;
     }
 
-    // التحقق من الفترة المحددة
+    // ?????? ?? ?????? ???????
     const period = selectedSessionForPeriodEdit.controllersHistory?.[selectedPeriodIndex];
     if (!period) {
       showNotification(t('gaming.periodTimeUpdatedError'), 'error');
       return;
     }
 
-    const isActivePeriod = !period.to; // الفترة النشطة ليس لها وقت نهاية
+    const isActivePeriod = !period.to; // ?????? ?????? ??? ??? ??? ?????
 
-    // للفترات المنتهية، التحقق من وجود وقت النهاية
+    // ??????? ????????? ?????? ?? ???? ??? ???????
     if (!isActivePeriod && !newPeriodEndTime) {
       showNotification(t('gaming.newPeriodEndTime') + ' ' + t('gaming.required'), 'error');
       return;
@@ -788,37 +783,42 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     try {
       setIsUpdatingPeriodTime(true);
 
-      const localStartDateTime = dayjs(newPeriodStartTime);
-      const localEndDateTime = newPeriodEndTime ? dayjs(newPeriodEndTime) : null;
+      // ????? ????? ?????? ?? ??????? ??????? ??????? ??? UTC
+      const localStartDateTime = dayjs.tz(newPeriodStartTime, timezone);
+      const localEndDateTime = newPeriodEndTime ? dayjs.tz(newPeriodEndTime, timezone) : null;
 
-      // التحقق من أن وقت البداية ليس قبل بداية الجلسة
-      const sessionStartTime = dayjs(selectedSessionForPeriodEdit.startTime);
+      // ?????? ?? ?? ??? ??????? ??? ??? ????? ??????
+      const sessionStartTime = dayjs(selectedSessionForPeriodEdit.startTime).tz(timezone);
       if (localStartDateTime.isBefore(sessionStartTime)) {
         showNotification(t('gaming.periodTimeUpdatedError'), 'error');
         return;
       }
 
-      // التحقق من أن وقت النهاية بعد وقت البداية
+      // ?????? ?? ?? ??? ??????? ??? ??? ???????
       if (localEndDateTime && localEndDateTime.isBefore(localStartDateTime)) {
         showNotification(t('gaming.periodTimeUpdatedError'), 'error');
         return;
       }
 
-      // إعداد البيانات للإرسال - سيتم تعديل الفترات المجاورة تلقائياً في الباكند
+      // ????? ??? UTC ??????? ???????
+      const utcStartDateTime = localStartDateTime.utc().toISOString();
+      const utcEndDateTime = localEndDateTime ? localEndDateTime.utc().toISOString() : undefined;
+
+      // ????? ???????? ??????? - ???? ????? ??????? ???????? ???????? ?? ???????
       await api.updateControllersPeriodTime(
         selectedSessionForPeriodEdit.id,
         selectedPeriodIndex,
-        localStartDateTime.toISOString(),
-        localEndDateTime ? localEndDateTime.toISOString() : undefined
+        utcStartDateTime,
+        utcEndDateTime
       );
 
       showNotification(t('gaming.periodTimeUpdatedSuccess'), 'success');
 
-      // إعادة تحميل الجلسات لتحديث البيانات
+      // ????? ????? ??????? ?????? ????????
       await fetchSessions();
       await fetchBills();
       
-      // إغلاق النافذة وتنظيف البيانات
+      // ????? ??????? ?????? ????????
       setShowEditPeriodTimeModal(false);
       setSelectedSessionForPeriodEdit(null);
       setSelectedPeriodIndex(0);
@@ -833,7 +833,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // ربط الجلسة بطاولة
+  // ??? ?????? ??????
   const handleLinkTableToSession = async (session: Session, tableId: string | null) => {
     if (!tableId) {
       showNotification(t('gaming.pleaseSelectTable'), 'warning');
@@ -894,7 +894,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // فك ربط الجلسة من الطاولة
+  // ?? ??? ?????? ?? ???????
   const handleUnlinkTableFromSession = async () => {
     if (!selectedSessionForUnlink) return;
 
@@ -1071,7 +1071,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                               <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{formatDecimal(activeSession.controllers ?? 1, i18n.language)} {t('gaming.controllers')}</span>
                             </div>
 
-                            {/* تاريخ الدراعات */}
+                            {/* ????? ???????? */}
                             {activeSession.controllersHistory && activeSession.controllersHistory.length > 0 && (
                               <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-xl border-2 border-purple-300 dark:border-purple-700 shadow-sm">
                                 <h4 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
@@ -1081,8 +1081,6 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                 <div className="space-y-2 max-h-32 overflow-y-auto">
                                   {activeSession.controllersHistory.map((period, index) => {
                                     const isCurrentPeriod = !period.to;
-                                    const startTime = dayjs(period.from).utc().add(2, 'hour');
-                                    const endTime = period.to ? dayjs(period.to).utc().add(2, 'hour') : null;
                                     return (
                                       <div key={index} className={`flex items-center justify-between p-2 rounded-lg border ${
                                         isCurrentPeriod
@@ -1105,14 +1103,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                             )}
                                           </div>
                                           <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                            {t('gaming.from')}: {formatTimeByLocale(startTime, i18n.language)}
-                                            {endTime && (
-                                              <span> - {t('gaming.to')}: {formatTimeByLocale(endTime, i18n.language)}</span>
+                                            {t('gaming.from')}: {formatDateTime(period.from)}
+                                            {period.to && (
+                                              <span> - {t('gaming.to')}: {formatDateTime(period.to)}</span>
                                             )}
                                           </div>
                                         </div>
 
-                                        {/* زر تعديل وقت الفترة */}
+                                        {/* ?? ????? ??? ?????? */}
                                         <button
                                           onClick={() => openEditPeriodTimeModal(activeSession, index)}
                                           className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105 flex items-center justify-center"
@@ -1127,7 +1125,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                               </div>
                             )}
 
-                            {/* أزرار تعديل عدد الأذرع */}
+                            {/* ????? ????? ??? ?????? */}
                             <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 p-4 rounded-xl border-2 border-orange-300 dark:border-orange-700">
                               <p className="text-xs font-bold text-orange-900 dark:text-orange-100 mb-3 text-center">{t('gaming.editControllers')}</p>
                               <div className="flex items-center justify-center gap-3">
@@ -1171,7 +1169,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                           </>
                         )}
 
-                        {/* عرض حالة ربط الطاولة فقط (بدون أزرار) */}
+                        {/* ??? ???? ??? ??????? ??? (???? ?????) */}
                         {activeSession.bill && (() => {
                           const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
                           const billTable = bill ? (bill as any)?.table : null;
@@ -1214,11 +1212,11 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                     ) : null}
                   </div>
 
-                  {/* الأزرار دائماً في نهاية الكارت */}
+                  {/* ??????? ?????? ?? ????? ?????? */}
                   <div className="mt-4 space-y-2">
                     {activeSession ? (
                       <>
-                        {/* أزرار إضافية للجلسة النشطة */}
+                        {/* ????? ?????? ?????? ?????? */}
                         {(() => {
                           const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
                           const isLinkedToTable = bill ? !!(bill as any)?.table : false;
@@ -1250,7 +1248,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                                 <button
                                   onClick={() => {
                                     setSelectedSessionForUnlink(activeSession);
-                                    // ترجمة اسم العميل الافتراضي بناءً على اللغة الحالية
+                                    // ????? ??? ?????? ????????? ????? ??? ????? ???????
                                     const translatedName = translateDefaultCustomerName(
                                       activeSession.customerName || '',
                                       activeSession.deviceType,
@@ -1327,7 +1325,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                     )}
                   </div>
 
-                  {/* أزرار التعديل والحذف - للمدير فقط */}
+                  {/* ????? ??????? ?????? - ?????? ??? */}
                   {user?.role === 'admin' && (
                     <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                       <button
@@ -1365,7 +1363,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </>
       )}
 
-      {/* نافذة إضافة جهاز جديد */}
+      {/* ????? ????? ???? ???? */}
       {showAddDevice && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
@@ -1521,7 +1519,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة تعديل جهاز */}
+      {/* ????? ????? ???? */}
       {showEditDevice && editingDevice && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder}`}>
@@ -1661,13 +1659,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة تأكيد حذف الجهاز */}
+      {/* ????? ????? ??? ?????? */}
       {showDeleteConfirm && deviceToDelete && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">{t('gaming.confirmDeleteDevice')}</h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              {t('gaming.confirmDeleteDevice')} "{deviceToDelete.name}"؟ {t('common.cannotUndo')}.
+              {t('gaming.confirmDeleteDevice')} "{deviceToDelete.name}"? {t('common.cannotUndo')}.
             </p>
             <div className="flex gap-3">
               <button
@@ -1696,7 +1694,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة بدء جلسة جديدة */}
+      {/* ????? ??? ???? ????? */}
       {showNewSession && selectedDevice && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className={`bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border-2 ${config.colors.headerBorder} animate-bounce-in`}>
@@ -1736,7 +1734,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               </div>
             </div>
 
-            {/* ربط بطاولة (اختياري) */}
+            {/* ??? ?????? (???????) */}
             <div className="mb-4">
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                 <TableIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
@@ -1752,13 +1750,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   return String(a.number).localeCompare(String(b.number), 'ar', { numeric: true });
                 }).map((table: any) => (
                   <option key={table.id || table._id} value={table._id}>
-                    🪑 {t('gaming.table', 'طاولة')} {table.number}
+                    {t('gaming.table')} {table.number}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* عدد الدراعات - للبلايستيشن فقط */}
+            {/* ??? ???????? - ??????????? ??? */}
             {deviceType === 'playstation' && (
               <div className="mb-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-4 rounded-xl border-2 border-green-200 dark:border-green-800">
                 <label className="block text-sm font-bold text-green-900 dark:text-green-100 mb-3 flex items-center gap-2">
@@ -1788,7 +1786,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 </div>
                 {!selectedControllers && (
                   <p className="text-xs text-green-700 dark:text-green-300 mt-3 text-center font-semibold">
-                    ⚠️ {t('gaming.pleaseSelectControllers')}
+                    ?? {t('gaming.pleaseSelectControllers')}
                   </p>
                 )}
               </div>
@@ -1847,7 +1845,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة ربط الجلسة بطاولة */}
+      {/* ????? ??? ?????? ?????? */}
       {showLinkTableModal && selectedSessionForLink && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-purple-200 dark:border-purple-800 animate-bounce-in">
@@ -1929,7 +1927,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   return String(a.number).localeCompare(String(b.number), 'ar', { numeric: true });
                 }).map((table: any) => (
                   <option key={table.id || table._id} value={table._id}>
-                    🪑 {t('gaming.table', 'طاولة')} {table.number}
+                    {t('gaming.table')} {table.number}
                   </option>
                 ))}
               </select>
@@ -1951,7 +1949,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة فك ربط الجلسة من الطاولة */}
+      {/* ????? ?? ??? ?????? ?? ??????? */}
       {showUnlinkTableModal && selectedSessionForUnlink && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 md:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -1985,7 +1983,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
             <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ {t('gaming.unlinkWarningMessage')}
+                ?? {t('gaming.unlinkWarningMessage')}
               </p>
             </div>
 
@@ -2047,7 +2045,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة تعديل وقت بدء الجلسة */}
+      {/* ????? ????? ??? ??? ?????? */}
       {showEditStartTimeModal && selectedSessionForEditTime && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 md:p-6 w-full max-w-md">
@@ -2129,7 +2127,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة تأكيد تعديل عدد الأذرع */}
+      {/* ????? ????? ????? ??? ?????? */}
       {showControllersConfirm && controllersChangeData && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-orange-200 dark:border-orange-800 animate-bounce-in">
@@ -2167,7 +2165,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 </div>
               </div>
 
-              {/* اختيار عدد الأذرع */}
+              {/* ?????? ??? ?????? */}
               <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 border-2 border-orange-300 dark:border-orange-700 rounded-xl p-4 shadow-sm">
                 <p className="text-orange-900 dark:text-orange-100 font-bold mb-3 text-center">{t('gaming.selectNewCount')}</p>
                 <div className="grid grid-cols-4 gap-3">
@@ -2208,7 +2206,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 )}
               </div>
 
-              {/* تحذير إعادة الحساب */}
+              {/* ????? ????? ?????? */}
               {controllersChangeData.newCount !== controllersChangeData.oldCount && (
                 <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-700 rounded-xl p-4 shadow-sm">
                   <p className="text-sm text-yellow-900 dark:text-yellow-100 font-semibold flex items-center gap-2">
@@ -2254,7 +2252,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة تعديل وقت فترة الدراعات */}
+      {/* ????? ????? ??? ???? ???????? */}
       {showEditPeriodTimeModal && selectedSessionForPeriodEdit && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
@@ -2285,7 +2283,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               </button>
             </div>
 
-            {/* معلومات الفترة الحالية */}
+            {/* ??????? ?????? ??????? */}
             <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-700">
               <h4 className="font-bold text-purple-900 dark:text-purple-100 mb-2">{t('gaming.periodInfo')}</h4>
               {selectedSessionForPeriodEdit.controllersHistory && selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] && (() => {
@@ -2311,12 +2309,12 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600 dark:text-gray-400">{t('gaming.currentEndTime')}:</span>
                         <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {formatTimeByLocale(dayjs(period.to).utc().add(2, 'hour'), i18n.language)}
+                          {formatDateTime(new Date(period.to))}
                         </span>
                       </div>
                     )}
 
-                    {/* معلومات الفترات المجاورة */}
+                    {/* ??????? ??????? ???????? */}
                     <div className="mt-4 pt-3 border-t border-purple-200 dark:border-purple-600">
                       <h5 className="text-sm font-bold text-purple-800 dark:text-purple-200 mb-2">{t('gaming.adjacentPeriods')}:</h5>
                       <div className="space-y-1 text-xs">
@@ -2325,7 +2323,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                             <span>{t('gaming.previousPeriod')} ({formatDecimal(controllersHistory[selectedPeriodIndex - 1].controllers, i18n.language)} {t('gaming.controllers')}):</span>
                             <span className="font-medium">
                               {controllersHistory[selectedPeriodIndex - 1].to
-                                ? `${t('gaming.ends')}: ${formatTimeByLocale(dayjs(controllersHistory[selectedPeriodIndex - 1].to).utc().add(2, 'hour'), i18n.language)}`
+                                ? `${t('gaming.ends')}: ${formatDateTime(new Date(controllersHistory[selectedPeriodIndex - 1].to))}`
                                 : t('gaming.activePeriod')
                               }
                             </span>
@@ -2335,7 +2333,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                           <div className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/30 rounded">
                             <span>{t('gaming.nextPeriod')} ({formatDecimal(controllersHistory[selectedPeriodIndex + 1].controllers, i18n.language)} {t('gaming.controllers')}):</span>
                             <span className="font-medium">
-                              {t('gaming.starts')}: {formatTimeByLocale(dayjs(controllersHistory[selectedPeriodIndex + 1].from).utc().add(2, 'hour'), i18n.language)}
+                              {t('gaming.starts')}: {formatDateTime(new Date(controllersHistory[selectedPeriodIndex + 1].from))}
                             </span>
                           </div>
                         )}
@@ -2346,9 +2344,9 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               })()}
             </div>
 
-            {/* حقول التعديل */}
+            {/* ???? ??????? */}
             <div className="space-y-4 mb-6">
-              {/* وقت البداية */}
+              {/* ??? ??????? */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                   {t('gaming.newPeriodStartTime')}
@@ -2363,13 +2361,13 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 {newPeriodStartTime && (
                   <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
                     <p className="text-sm text-purple-800 dark:text-purple-200 font-medium">
-                      📅 {t('gaming.newPeriodStartTime')}: {formatTimeByLocale(dayjs(newPeriodStartTime), i18n.language)}
+                      {t('gaming.newPeriodStartTime')}: {formatDateTime(new Date(newPeriodStartTime))}
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* وقت النهاية - يظهر فقط للفترات المنتهية */}
+              {/* ??? ??????? - ???? ??? ??????? ???????? */}
               {selectedSessionForPeriodEdit.controllersHistory &&
                 selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] &&
                 selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex].to && (
@@ -2387,7 +2385,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   {newPeriodEndTime && (
                     <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
                       <p className="text-sm text-purple-800 dark:text-purple-200 font-medium">
-                        📅 {t('gaming.newPeriodEndTime')}: {formatTimeByLocale(dayjs(newPeriodEndTime), i18n.language)}
+                        {t('gaming.newPeriodEndTime')}: {formatDateTime(new Date(newPeriodEndTime))}
                       </p>
                     </div>
                   )}
@@ -2395,16 +2393,16 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
               )}
             </div>
 
-            {/* تحذير */}
+            {/* ????? */}
             <div className="mb-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ {t('gaming.periodTimeWarning')}
+                ?? {t('gaming.periodTimeWarning')}
               </p>
               {selectedSessionForPeriodEdit.controllersHistory &&
                 selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex] &&
                 !selectedSessionForPeriodEdit.controllersHistory[selectedPeriodIndex].to && (
                 <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                  ℹ️ {t('gaming.activePeriodInfo')}
+                  ?? {t('gaming.activePeriodInfo')}
                 </p>
               )}
               <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 rounded border border-blue-200 dark:border-blue-600">
@@ -2412,14 +2410,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                   {t('gaming.autoAdjustTitle')}:
                 </p>
                 <ul className="text-xs text-blue-700 dark:text-blue-300 mt-1 space-y-1">
-                  <li>• {t('gaming.autoAdjustStart')}</li>
-                  <li>• {t('gaming.autoAdjustEnd')}</li>
-                  <li>• {t('gaming.autoAdjustNoGaps')}</li>
+                  <li>? {t('gaming.autoAdjustStart')}</li>
+                  <li>? {t('gaming.autoAdjustEnd')}</li>
+                  <li>? {t('gaming.autoAdjustNoGaps')}</li>
                 </ul>
               </div>
             </div>
 
-            {/* الأزرار */}
+            {/* ??????? */}
             <div className="flex flex-col sm:flex-row gap-3 justify-end">
               <button
                 onClick={() => {
@@ -2463,7 +2461,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         </div>
       )}
 
-      {/* نافذة تأكيد إنهاء الجلسة */}
+      {/* ????? ????? ????? ?????? */}
       {showEndSessionConfirm && sessionToEnd && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-red-200 dark:border-red-800 animate-bounce-in">
@@ -2519,7 +2517,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
 
               <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-700 rounded-xl">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200 text-center">
-                  ⚠️ {t('gaming.endSessionWarning')}
+                  ?? {t('gaming.endSessionWarning')}
                 </p>
               </div>
             </div>

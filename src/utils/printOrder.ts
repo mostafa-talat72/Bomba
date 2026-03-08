@@ -204,7 +204,9 @@ const printAllSectionsInOnePage = (
 ) => {
   const now = new Date();
   const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
+  const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
   const dateTimeString = now.toLocaleString(locale, {
+    timeZone: organizationTimezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -256,7 +258,7 @@ const printAllSectionsInOnePage = (
           ${isUpdatedOrder ? `
           <div class="update-banner">
             <span>🔄 ${t('orderPrint.orderUpdated')}</span>
-            <small>${new Date(order.updatedAt!).toLocaleString(locale)}</small>
+            <small>${new Date(order.updatedAt!).toLocaleString(locale, { timeZone: organizationTimezone })}</small>
           </div>` : ''}
         </div>
 

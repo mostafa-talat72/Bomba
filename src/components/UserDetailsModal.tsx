@@ -47,6 +47,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const { currentLanguage, isRTL } = useLanguage();
+  const { formatDate: formatOrgDate } = useOrganization();
   const { canEditUser } = useApp();
   
   if (!isOpen || !user) return null;
@@ -56,15 +57,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
 
   const formatDate = (date?: Date | string) => {
     if (!date) return t('users.notSpecified');
-    const dateObj = new Date(date);
-    
-    if (currentLanguage === 'ar') {
-      return dateObj.toLocaleDateString('ar-EG');
-    } else if (currentLanguage === 'fr') {
-      return dateObj.toLocaleDateString('fr-FR');
-    } else {
-      return dateObj.toLocaleDateString('en-US');
-    }
+    return formatOrgDate(new Date(date));
   };
 
   return (

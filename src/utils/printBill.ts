@@ -198,10 +198,12 @@ export const printBill = async (
   const dir = language === 'ar' ? 'rtl' : 'ltr';
   const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
   
-  // Format date
+  // Format date - uses organization timezone
   const formatDate = (dateString: string | Date) => {
     const date = new Date(dateString);
+    const organizationTimezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
     return date.toLocaleString(locale, {
+      timeZone: organizationTimezone,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

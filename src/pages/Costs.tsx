@@ -22,6 +22,7 @@ import '../styles/modern-costs.css';
 import '../styles/modern-enhancements.css';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { DatePicker, ConfigProvider } from 'antd';
 import dayjs from 'dayjs';
 import arEG from 'antd/locale/ar_EG';
@@ -87,6 +88,7 @@ interface Cost {
 const Costs = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { formatDate } = useOrganization();
   const { showNotification } = useApp();
   const [costs, setCosts] = useState<Cost[]>([]);
   const [categories, setCategories] = useState<CostCategory[]>([]);
@@ -937,7 +939,7 @@ const Costs = () => {
                 {dateFrom && (
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-medium">
                     <Clock className="w-3.5 h-3.5" />
-                    {t('costs.dateLabels.from')} {new Date(dateFrom).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
+                    {t('costs.dateLabels.from')} {formatDate(dateFrom, { year: 'numeric', month: 'short', day: 'numeric' })}
                     <button onClick={() => setDateFrom('')} className="hover:text-green-900 dark:hover:text-green-200">
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -946,7 +948,7 @@ const Costs = () => {
                 {dateTo && (
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-sm font-medium">
                     <Clock className="w-3.5 h-3.5" />
-                    {t('costs.dateLabels.to')} {new Date(dateTo).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
+                    {t('costs.dateLabels.to')} {formatDate(dateTo, { year: 'numeric', month: 'short', day: 'numeric' })}
                     <button onClick={() => setDateTo('')} className="hover:text-orange-900 dark:hover:text-orange-200">
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -1110,7 +1112,7 @@ const Costs = () => {
                   {/* Date */}
                   <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
                     <Clock className="w-3.5 h-3.5" />
-                    <span>{new Date(cost.date).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US', { 
+                    <span>{formatDate(cost.date, { 
                       day: 'numeric', 
                       month: 'short', 
                       year: 'numeric' 

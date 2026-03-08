@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import PermissionGuard from '../components/PermissionGuard';
 import { formatDecimal } from '../utils/formatters';
 import { useTranslation } from 'react-i18next';
+import { useOrganization } from '../context/OrganizationContext';
 
 interface Notification {
   _id: string;
@@ -49,11 +50,8 @@ const NotificationManagement = () => {
     return new Intl.NumberFormat(locale).format(num);
   };
 
-  // Helper function to format dates based on language
-  const formatDate = (date: string) => {
-    const locale = i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US';
-    return new Date(date).toLocaleString(locale);
-  };
+  // Use formatDateTime from OrganizationContext for timezone support
+  const { formatDateTime } = useOrganization();
 
   // Helper function to get notification text based on current language
   const getNotificationText = (notification: Notification, field: 'title' | 'message') => {
@@ -380,7 +378,7 @@ const NotificationManagement = () => {
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">{getNotificationText(notification, 'message')}</p>
                       <div className="flex items-center space-x-4 space-x-reverse text-xs text-gray-500 dark:text-gray-400">
-                        <span>{formatDate(notification.createdAt)}</span>
+                        <span>{formatDateTime(notification.createdAt)}</span>
                         {notification.createdBy && notification.createdBy.name && (
                           <span>{t('notificationManagement.createdBy', { name: notification.createdBy.name })}</span>
                         )}

@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import NotificationSound from './NotificationSound';
 import { formatDecimal } from '../utils/formatters';
 import { useTranslation } from 'react-i18next';
+import { useOrganization } from '../context/OrganizationContext';
 
 interface Notification {
   _id: string;
@@ -54,11 +55,8 @@ const NotificationCenter: React.FC = () => {
     return new Intl.NumberFormat(locale).format(num);
   };
 
-  // Helper function to format dates based on language
-  const formatDate = (date: string) => {
-    const locale = i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US';
-    return new Date(date).toLocaleString(locale);
-  };
+  // Use formatDateTime from OrganizationContext for timezone support
+  const { formatDateTime } = useOrganization();
 
   // Helper function to get notification text based on current language
   const getNotificationText = (notification: Notification, field: 'title' | 'message') => {
@@ -606,7 +604,7 @@ const NotificationCenter: React.FC = () => {
                         isUnread(notification) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         <span>{notification.createdBy?.name}</span>
-                        <span>{formatDate(notification.createdAt)}</span>
+                        <span>{formatDateTime(notification.createdAt)}</span>
                       </div>
                     </div>
                   </div>

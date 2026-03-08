@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from '../services/api';
+import { formatDateInTimezone } from '../utils/timezoneHelper';
 
 interface OrganizationContextType {
   currency: string;
@@ -8,6 +9,9 @@ interface OrganizationContextType {
   setTimezone: (timezone: string) => void;
   formatCurrency: (amount: number) => string;
   getCurrencySymbol: (language?: string) => string;
+  formatDate: (date: Date | string, options?: Intl.DateTimeFormatOptions) => string;
+  formatDateTime: (date: Date | string) => string;
+  formatTime: (date: Date | string) => string;
   refreshOrganizationSettings: () => Promise<void>;
 }
 
@@ -28,6 +32,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       const savedCurrency = localStorage.getItem('organizationCurrency');
       const savedTimezone = localStorage.getItem('organizationTimezone');
       
+      
       if (savedCurrency) setCurrencyState(savedCurrency);
       if (savedTimezone) setTimezoneState(savedTimezone);
 
@@ -37,6 +42,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         const response = await api.getOrganization();
         if (response.success && response.data) {
           const { currency: dbCurrency, timezone: dbTimezone } = response.data;
+          
           
           if (dbCurrency) {
             setCurrencyState(dbCurrency);
@@ -120,6 +126,49 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     return `${formatted} ${symbol}`;
   };
 
+  const formatDate = (date: Date | string, options?: Intl.DateTimeFormatOptions): string => {
+    const currentLang = localStorage.getItem('i18nextLng') || 'ar';
+    const locale = currentLang === 'ar' ? 'ar-EG' : currentLang === 'fr' ? 'fr-FR' : 'en-US';
+    
+    const defaultOptions: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      ...options
+    };
+    
+    return formatDateInTimezone(date, timezone, locale, defaultOptions);
+  };
+
+  const formatDateTime = (date: Date | string): string => {
+    const currentLang = localStorage.getItem('i18nextLng') || 'ar';
+    const locale = currentLang === 'ar' ? 'ar-EG' : currentLang === 'fr' ? 'fr-FR' : 'en-US';
+    
+    
+    const result = formatDateInTimezone(date, timezone, locale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    
+    
+    return result;
+  };
+
+  const formatTime = (date: Date | string): string => {
+    const currentLang = localStorage.getItem('i18nextLng') || 'ar';
+    const locale = currentLang === 'ar' ? 'ar-EG' : currentLang === 'fr' ? 'fr-FR' : 'en-US';
+    
+    return formatDateInTimezone(date, timezone, locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   return (
     <OrganizationContext.Provider
       value={{
@@ -129,6 +178,9 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         setTimezone,
         formatCurrency,
         getCurrencySymbol,
+        formatDate,
+        formatDateTime,
+        formatTime,
         refreshOrganizationSettings,
       }}
     >

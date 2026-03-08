@@ -1427,6 +1427,7 @@
       "languageEn": "English",
       "languageFr": "Français",
       "timezone": "Fuseau horaire",
+      "timezoneDescription": "Sélectionnez le fuseau horaire de l'organisation pour ajuster les dates et heures",
       "timezoneCairo": "Le Caire (GMT+2)",
       "timezoneRiyadh": "Riyad (GMT+3)",
       "timezoneDubai": "Dubaï (GMT+4)",

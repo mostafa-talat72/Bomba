@@ -10,6 +10,7 @@ import { formatCurrency, formatDecimal, formatQuantity } from '../utils/formatte
 import { io, Socket } from 'socket.io-client';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 import { formatCurrency as formatCurrencyUtil } from '../utils/formatters';
 import { toast } from 'react-toastify';
 import { DatePicker, ConfigProvider } from 'antd';
@@ -25,24 +26,25 @@ import customParseFormat from 'dayjs/plugin/customParseFormat';
 // Configure dayjs
 dayjs.extend(customParseFormat);
 
-// Helper function to get current date/time in Cairo timezone (Egypt)
+// Helper function to get current date/time in organization timezone
 // Returns format: YYYY-MM-DDTHH:mm for datetime-local input
-const getCairoDateTime = () => {
+const getCairoDateTime = (timezone: string) => {
   const now = new Date();
-  // Convert to Cairo timezone (Africa/Cairo - UTC+2 or UTC+3 with DST)
-  const cairoTime = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
+  // Convert to organization timezone
+  const orgTime = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
   // Format as YYYY-MM-DDTHH:mm for datetime-local input
-  const year = cairoTime.getFullYear();
-  const month = String(cairoTime.getMonth() + 1).padStart(2, '0');
-  const day = String(cairoTime.getDate()).padStart(2, '0');
-  const hours = String(cairoTime.getHours()).padStart(2, '0');
-  const minutes = String(cairoTime.getMinutes()).padStart(2, '0');
+  const year = orgTime.getFullYear();
+  const month = String(orgTime.getMonth() + 1).padStart(2, '0');
+  const day = String(orgTime.getDate()).padStart(2, '0');
+  const hours = String(orgTime.getHours()).padStart(2, '0');
+  const minutes = String(orgTime.getMinutes()).padStart(2, '0');
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
 const Inventory = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
+  const { timezone, formatDate: formatOrgDate } = useOrganization();
   const {
     inventoryItems,
     fetchInventoryItems,
@@ -80,7 +82,7 @@ const Inventory = () => {
     quantity: '',
     reason: '',
     type: 'out' as 'out' | 'adjustment',
-    date: getCairoDateTime(),
+    date: getCairoDateTime(timezone),
   });
 
   // Search and filter states
@@ -121,7 +123,7 @@ const Inventory = () => {
     supplier: '',
     minStock: '',
     unit: '',
-    date: getCairoDateTime(),
+    date: getCairoDateTime(timezone),
     costStatus: 'pending',
     paidAmount: '',
     isRawMaterial: false,
@@ -548,7 +550,7 @@ const Inventory = () => {
       supplier: '',
       minStock: '',
       unit: '',
-      date: getCairoDateTime(),
+      date: getCairoDateTime(timezone),
       costStatus: 'pending',
       paidAmount: '',
       isRawMaterial: false
@@ -570,7 +572,7 @@ const Inventory = () => {
       supplier: item.supplier || '',
       minStock: String(item.minStock || ''),
       unit: normalizeUnit(item.unit || ''),
-      date: getCairoDateTime(),
+      date: getCairoDateTime(timezone),
       costStatus: 'pending',
       paidAmount: '',
       isRawMaterial: item.isRawMaterial || false,
@@ -640,7 +642,7 @@ const Inventory = () => {
       quantity: '',
       reason: '',
       type: 'out',
-      date: getCairoDateTime(),
+      date: getCairoDateTime(timezone),
     });
     setError('');
     setShowDeductModal(true);
@@ -703,7 +705,7 @@ const Inventory = () => {
           quantity: '',
           reason: '',
           type: 'out',
-          date: getCairoDateTime(),
+          date: getCairoDateTime(timezone),
         });
         setError('');
       } else {
@@ -722,23 +724,23 @@ const Inventory = () => {
     setEditingMovement(movement);
     
     // Convert movement timestamp to Cairo timezone
-    let cairoDateTime = '';
+    let orgDateTime = '';
     if (movement.timestamp) {
       const movementDate = new Date(movement.timestamp);
-      const cairoTime = new Date(movementDate.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
-      const year = cairoTime.getFullYear();
-      const month = String(cairoTime.getMonth() + 1).padStart(2, '0');
-      const day = String(cairoTime.getDate()).padStart(2, '0');
-      const hours = String(cairoTime.getHours()).padStart(2, '0');
-      const minutes = String(cairoTime.getMinutes()).padStart(2, '0');
-      cairoDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      const orgTime = new Date(movementDate.toLocaleString('en-US', { timeZone: timezone }));
+      const year = orgTime.getFullYear();
+      const month = String(orgTime.getMonth() + 1).padStart(2, '0');
+      const day = String(orgTime.getDate()).padStart(2, '0');
+      const hours = String(orgTime.getHours()).padStart(2, '0');
+      const minutes = String(orgTime.getMinutes()).padStart(2, '0');
+      orgDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
     }
     
     setEditMovementForm({
       quantity: movement.quantity.toString(),
       price: movement.price ? movement.price.toString() : '',
       reason: movement.reason || '',
-      date: cairoDateTime || getCairoDateTime(),
+      date: orgDateTime || getCairoDateTime(timezone),
     });
     setShowEditMovementModal(true);
   };
@@ -867,7 +869,7 @@ const Inventory = () => {
       supplier: '',
       minStock: '',
       unit: '',
-      date: getCairoDateTime(),
+      date: getCairoDateTime(timezone),
       costStatus: 'pending',
       paidAmount: '',
       isRawMaterial: false
@@ -969,7 +971,7 @@ const Inventory = () => {
             supplier: '',
             minStock: '',
             unit: '',
-            date: getCairoDateTime(),
+            date: getCairoDateTime(timezone),
             costStatus: 'pending',
             paidAmount: '',
             isRawMaterial: false,
@@ -1018,7 +1020,7 @@ const Inventory = () => {
             supplier: '',
             minStock: '',
             unit: '',
-            date: getCairoDateTime(),
+            date: getCairoDateTime(timezone),
             costStatus: 'pending',
             paidAmount: '',
             isRawMaterial: false,
@@ -1089,7 +1091,7 @@ const Inventory = () => {
           supplier: '',
           minStock: '',
           unit: '',
-          date: getCairoDateTime(),
+          date: getCairoDateTime(timezone),
           costStatus: 'pending',
           paidAmount: '',
           isRawMaterial: false,
@@ -2481,16 +2483,13 @@ const Inventory = () => {
                           <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {movement.timestamp || movement.date 
-                                ? new Date(movement.timestamp || movement.date).toLocaleDateString(
-                                    i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US',
-                                    {
-                                      year: 'numeric',
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    }
-                                  )
+                                ? formatOrgDate(movement.timestamp || movement.date, {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
                                 : t('inventory.movementsModal.notSpecified')}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">

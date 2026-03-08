@@ -1427,6 +1427,7 @@
       "languageEn": "English",
       "languageFr": "Français",
       "timezone": "المنطقة الزمنية",
+      "timezoneDescription": "اختر المنطقة الزمنية للمنشأة لضبط التواريخ والأوقات",
       "timezoneCairo": "القاهرة (GMT+2)",
       "timezoneRiyadh": "الرياض (GMT+3)",
       "timezoneDubai": "دبي (GMT+4)",
