@@ -1,12 +1,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, Printer } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
 import { printBill } from '../utils/printBill';
 import { useApp } from '../context/AppContext';
 import { io } from 'socket.io-client';
+import LanguageSwitcherBillView from '../components/LanguageSwitcherBillView';
+import { getDeviceTypeText, getSessionStatusText, getPaymentMethodText, formatDuration } from '../utils/billViewHelpers';
 
 interface OrderItem {
 	name: string;
@@ -194,6 +197,7 @@ const normalizeBillDates = (bill: Record<string, unknown>): BillDetails => ({
 const BillView = () => {
 	const { billId } = useParams<{ billId: string }>();
 	const { user } = useApp();
+	const { t } = useTranslation();
 	const [bill, setBill] = useState<BillDetails | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -224,14 +228,14 @@ const BillView = () => {
 
 		if (!billId) {
 
-			setError('معرف الفاتورة غير صحيح أو غير موجود. تأكد من صحة الرابط.');
+			setError(t('billView.invalidId'));
 			if (showLoading) setLoading(false);
 			return;
 		}
 
 		if (billId.length !== 24) {
 
-			setError('معرف الفاتورة غير صحيح أو غير موجود. تأكد من صحة الرابط.');
+			setError(t('billView.invalidId'));
 			if (showLoading) setLoading(false);
 			return;
 		}
@@ -244,10 +248,10 @@ const BillView = () => {
 			if (response.success && response.data) {
 				setBill(normalizeBillDates(response.data as unknown as Record<string, unknown>));
 			} else {
-				setError(response.message || 'لم يتم العثور على الفاتورة. تأكد من صحة الرابط أو أن الفاتورة لم تُحذف.');
+				setError(response.message || t('billView.notFound'));
 			}
 		} catch (err: unknown) {
-			setError('حدث خطأ في تحميل الفاتورة. تأكد من اتصالك بالخادم أو أعد المحاولة لاحقاً.');
+			setError(t('billView.loadError'));
 		} finally {
 			if (showLoading) setLoading(false);
 		}
@@ -355,12 +359,14 @@ const BillView = () => {
 
 	const formatCurrency = (amount: number) => {
 		const currency = localStorage.getItem('organizationCurrency') || 'EGP';
-		const language = localStorage.getItem('language') || 'ar';
+		const language = localStorage.getItem('billViewLanguage') || 'ar';
 		return formatCurrencyUtil(amount, language, currency);
 	};
 
 	const formatDate = (dateString: string) => {
-		return new Date(dateString).toLocaleDateString('ar-EG', {
+		const language = localStorage.getItem('billViewLanguage') || 'ar';
+		const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
+		return new Date(dateString).toLocaleDateString(locale, {
 			year: 'numeric',
 			month: 'long',
 			day: 'numeric',
@@ -370,14 +376,12 @@ const BillView = () => {
 	};
 
 	const getOrderStatusText = (status: string) => {
-		switch (status) {
-			case 'pending': return 'في الانتظار';
-			case 'preparing': return 'قيد التجهيز';
-			case 'ready': return 'جاهز';
-			case 'delivered': return 'تم التسليم';
-			case 'cancelled': return 'ملغي';
-			default: return 'غير معروف';
-		}
+		return t(`billView.orderStatus.${status}`) || t('billView.orderStatus.unknown');
+	};
+
+	const formatDecimalWithLocale = (value: number) => {
+		const language = localStorage.getItem('billViewLanguage') || 'ar';
+		return formatDecimal(value, language);
 	};
 
 	const getOrderStatusColor = (status: string) => {
@@ -407,7 +411,7 @@ const BillView = () => {
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
 					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 dark:border-orange-400 mx-auto mb-4"></div>
-					<p className="text-gray-600">جاري تحميل الفاتورة...</p>
+					<p className="text-gray-600">{t('billView.loading')}</p>
 				</div>
 			</div>
 		);
@@ -418,8 +422,8 @@ const BillView = () => {
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center max-w-md mx-auto px-4">
 					<AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-					<h1 className="text-2xl font-bold text-gray-900 mb-2">خطأ في تحميل الفاتورة</h1>
-					<p className="text-gray-600 mb-6">{error || 'لم يتم العثور على الفاتورة'}</p>
+					<h1 className="text-2xl font-bold text-gray-900 mb-2">{t('billView.error')}</h1>
+					<p className="text-gray-600 mb-6">{error || t('billView.notFound')}</p>
 				</div>
 			</div>
 		);
@@ -428,17 +432,22 @@ const BillView = () => {
 	return (
 		<div className="min-h-screen bg-gray-50 py-8">
 			<div className="max-w-lg mx-auto px-4">
+				{/* Language Switcher */}
+				<div className="mb-4 flex justify-end">
+					<LanguageSwitcherBillView />
+				</div>
+				
 				{/* Header */}
 				<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
 					<div className="flex items-center justify-between mb-4">
 						<div>
-							<h1 className="text-2xl font-bold text-gray-900 mb-1">فاتورة #{bill.billNumber}</h1>
-							<p className="text-gray-600 text-sm">{bill.customerName || 'عميل'}</p>
+							<h1 className="text-2xl font-bold text-gray-900 mb-1">{t('billView.title')} #{bill.billNumber}</h1>
+							<p className="text-gray-600 text-sm">{bill.customerName || t('billView.customer')}</p>
 							<p className="text-gray-400 text-xs">{formatDate(bill.createdAt)}</p>
 						</div>
 						<div className="flex flex-col items-end gap-2">
 							<span className={`px-3 py-1 rounded-full text-sm font-medium ${bill.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-								{bill.status === 'paid' ? 'مدفوع' : 'غير مدفوع'}
+								{bill.status === 'paid' ? t('billView.paid') : t('billView.unpaid')}
 							</span>
 							
 							{/* أزرار الإجراءات */}
@@ -446,11 +455,14 @@ const BillView = () => {
 								{/* زر الطباعة */}
 								<button
 									className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs flex items-center gap-1 transition-colors"
-									onClick={() => printBill(bill as any, user?.organizationName).catch(console.error)}
-									title="طباعة الفاتورة"
+									onClick={() => {
+										const billViewLang = localStorage.getItem('billViewLanguage') || 'ar';
+										printBill(bill as any, user?.organizationName, billViewLang, t).catch(console.error);
+									}}
+									title={t('billView.print')}
 								>
 									<Printer className="h-3 w-3" />
-									طباعة
+									{t('billView.print')}
 								</button>
 								
 								{/* زر عرض الطلبات */}
@@ -459,7 +471,7 @@ const BillView = () => {
 										className="px-3 py-1 bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white rounded text-xs transition-colors"
 										onClick={() => setShowOrdersModal(true)}
 									>
-										عرض جميع الطلبات
+										{t('billView.viewAllOrders')}
 									</button>
 								)}
 							</div>
@@ -472,12 +484,12 @@ const BillView = () => {
 								<table className="min-w-full text-sm text-right">
 									<thead>
 										<tr className="bg-gray-50">
-											<th className="py-2 px-2 font-medium text-gray-700">الصنف</th>
-											<th className="py-2 px-2 font-medium text-gray-700">الكمية</th>
-											<th className="py-2 px-2 font-medium text-gray-700">المدفوع</th>
-											<th className="py-2 px-2 font-medium text-gray-700">المتبقي</th>
-											<th className="py-2 px-2 font-medium text-gray-700">السعر</th>
-											<th className="py-2 px-2 font-medium text-gray-700">الإجمالي</th>
+											<th className="py-2 px-2 font-medium text-gray-700">{t('billView.item')}</th>
+											<th className="py-2 px-2 font-medium text-gray-700">{t('billView.quantity')}</th>
+											<th className="py-2 px-2 font-medium text-gray-700">{t('billView.paidQty')}</th>
+											<th className="py-2 px-2 font-medium text-gray-700">{t('billView.remainingQty')}</th>
+											<th className="py-2 px-2 font-medium text-gray-700">{t('billView.price')}</th>
+											<th className="py-2 px-2 font-medium text-gray-700">{t('billView.total')}</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -489,11 +501,11 @@ const BillView = () => {
 												<tr key={`${item.name}-${item.price}-${idx}`} className={`border-b last:border-b-0 ${colorClass} ${isFullyPaid ? 'bg-green-50' : ''}`}>
 													<td className="py-2 px-2 font-medium text-gray-900">
 														{item.name}
-														{isFullyPaid && <span className="mr-2 text-xs text-green-600 font-bold">✓ مدفوع بالكامل</span>}
+														{isFullyPaid && <span className="mr-2 text-xs text-green-600 font-bold">✓ {t('billView.fullyPaid')}</span>}
 													</td>
-													<td className="py-2 px-2">{formatDecimal(item.totalQuantity)}</td>
-													<td className="py-2 px-2 text-green-600 font-medium">{formatDecimal(item.paidQuantity)}</td>
-													<td className="py-2 px-2 text-orange-600 font-medium">{formatDecimal(item.remainingQuantity)}</td>
+													<td className="py-2 px-2">{formatDecimalWithLocale(item.totalQuantity)}</td>
+													<td className="py-2 px-2 text-green-600 font-medium">{formatDecimalWithLocale(item.paidQuantity)}</td>
+													<td className="py-2 px-2 text-orange-600 font-medium">{formatDecimalWithLocale(item.remainingQuantity)}</td>
 													<td className="py-2 px-2">{formatCurrency(item.price)}</td>
 													<td className="py-2 px-2">{formatCurrency(totalPrice)}</td>
 												</tr>
@@ -504,7 +516,7 @@ const BillView = () => {
 							</div>
 							{/* Orders Total */}
 							<div className="mt-4 flex justify-between items-center">
-								<span className="text-gray-700 font-medium">إجمالي تكلفة الطلبات:</span>
+								<span className="text-gray-700 font-medium">{t('billView.ordersTotal')}:</span>
 								<span className="font-bold text-orange-600 dark:text-orange-400">
 									{formatCurrency(getOrdersTotal(bill.orders))}
 								</span>
@@ -515,14 +527,14 @@ const BillView = () => {
 					{bill.sessions && bill.sessions.length > 0 && (
 						<div className="mt-6 mb-6">
 							<h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-								الجلسات
+								{t('billView.sessions')}
 								{(() => {
 									const hasActiveSession = bill.sessions.some(session => session.status === 'active');
 
 									return hasActiveSession && (
 										<div className="flex items-center gap-1">
 											<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-											<span className="text-sm text-red-600 font-bold">جلسة نشطة</span>
+											<span className="text-sm text-red-600 font-bold">{t('billView.activeSession')}</span>
 										</div>
 									);
 								})()}
@@ -538,30 +550,30 @@ const BillView = () => {
 										<div className="flex justify-between items-center mb-2">
 											<div>
 												<span className="font-bold text-orange-600 dark:text-orange-400">{session.deviceName}</span>
-												<span className="text-xs text-gray-500 ml-2">({session.deviceType === 'playstation' ? 'بلايستيشن' : session.deviceType === 'computer' ? 'كمبيوتر' : session.deviceType})</span>
+												<span className="text-xs text-gray-500 ml-2">({getDeviceTypeText(session.deviceType, t)})</span>
 											</div>
 											<div className={`px-2 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${session.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
 												{(() => {
 
 													return session.status === 'active' && <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>;
 												})()}
-												{session.status === 'active' ? 'نشط' : 'منتهية'}
+												{getSessionStatusText(session.status, t)}
 											</div>
 										</div>
 										<div className="flex flex-wrap gap-4 mb-2 text-sm">
 											<div>
-												<span className="text-gray-600">وقت البداية:</span>
+												<span className="text-gray-600">{t('billView.startTime')}:</span>
 												<span className="font-medium ml-1">{formatDate(session.startTime)}</span>
 											</div>
 											{session.endTime && (
 												<div>
-													<span className="text-gray-600">وقت الانتهاء:</span>
+													<span className="text-gray-600">{t('billView.endTime')}:</span>
 													<span className="font-medium ml-1">{formatDate(session.endTime)}</span>
 												</div>
 											)}
 											{session.status === 'active' && (
 												<div>
-													<span className="text-gray-600">المدة الحالية:</span>
+													<span className="text-gray-600">{t('billView.currentDuration')}:</span>
 													<span className="font-medium text-green-600 ml-1 animate-pulse">
 														{(() => {
 															const now = new Date();
@@ -569,7 +581,7 @@ const BillView = () => {
 															const diffMs = now.getTime() - start.getTime();
 															const hours = Math.floor(diffMs / (1000 * 60 * 60));
 															const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-															return `${formatDecimal(hours)}س ${formatDecimal(minutes)}د`;
+															return formatDuration(hours, minutes, t);
 														})()}
 													</span>
 												</div>
@@ -578,21 +590,21 @@ const BillView = () => {
 										{/* تفاصيل الكمبيوتر */}
 										{session.deviceType === 'playstation' && Array.isArray(session.controllersHistoryBreakdown) && session.controllersHistoryBreakdown.length > 0 ? (
 											<div className="mb-2">
-												<h4 className="font-medium text-blue-900 mb-2">التفاصيل:</h4>
+												<h4 className="font-medium text-blue-900 mb-2">{t('billView.details')}:</h4>
 												<table className="min-w-full text-xs text-right bg-blue-50 rounded">
 													<thead>
 														<tr>
-															<th className="py-1 px-2 font-medium text-blue-900">عدد الدراعات</th>
-															<th className="py-1 px-2 font-medium text-blue-900">المدة</th>
-															<th className="py-1 px-2 font-medium text-blue-900">سعر الساعة</th>
-															<th className="py-1 px-2 font-medium text-blue-900">التكلفة</th>
+															<th className="py-1 px-2 font-medium text-blue-900">{t('billView.controllers')}</th>
+															<th className="py-1 px-2 font-medium text-blue-900">{t('billView.duration')}</th>
+															<th className="py-1 px-2 font-medium text-blue-900">{t('billView.hourlyRate')}</th>
+															<th className="py-1 px-2 font-medium text-blue-900">{t('billView.cost')}</th>
 														</tr>
 													</thead>
 													<tbody>
 														{session.controllersHistoryBreakdown.map((period, idx) => (
 															<tr key={`${period.from}-${period.to}-${period.controllers}-${idx}`}>
-																<td className="py-1 px-2">{formatDecimal(period.controllers)}</td>
-																<td className="py-1 px-2">{(period.hours > 0 ? `${formatDecimal(period.hours)} ساعة` : '') + (period.minutes > 0 ? ` ${formatDecimal(period.minutes)} دقيقة` : '')}</td>
+																<td className="py-1 px-2">{formatDecimalWithLocale(period.controllers)}</td>
+																<td className="py-1 px-2">{formatDuration(period.hours, period.minutes, t)}</td>
 																<td className="py-1 px-2">{formatCurrency(period.hourlyRate)}</td>
 																<td className="py-1 px-2">{formatCurrency(Math.round(period.cost))}</td>
 															</tr>
@@ -602,7 +614,7 @@ const BillView = () => {
 											</div>
 										) : (session.deviceType === 'playstation' || session.deviceType === 'computer') ? (
 											<div className="mb-2">
-												<h4 className="font-medium text-blue-900 mb-2">التفاصيل:</h4>
+												<h4 className="font-medium text-blue-900 mb-2">{t('billView.details')}:</h4>
 
 												{/* جدول تفاصيل الجلسة */}
 												<div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -610,11 +622,11 @@ const BillView = () => {
 														<thead className="bg-gray-50">
 															<tr>
 																{session.deviceType === 'playstation' && (
-																	<th className="py-2 px-3 text-right font-medium text-gray-700">عدد الأذرع</th>
+																	<th className="py-2 px-3 text-right font-medium text-gray-700">{t('billView.controllers')}</th>
 																)}
-																<th className="py-2 px-3 text-right font-medium text-gray-700">المدة</th>
-																<th className="py-2 px-3 text-right font-medium text-gray-700">سعر الساعة</th>
-																<th className="py-2 px-3 text-right font-medium text-gray-700">التكلفة</th>
+																<th className="py-2 px-3 text-right font-medium text-gray-700">{t('billView.duration')}</th>
+																<th className="py-2 px-3 text-right font-medium text-gray-700">{t('billView.hourlyRate')}</th>
+																<th className="py-2 px-3 text-right font-medium text-gray-700">{t('billView.cost')}</th>
 															</tr>
 														</thead>
 														<tbody>
@@ -628,9 +640,9 @@ const BillView = () => {
 																					// عرض عدد الدراعات من آخر فترة في controllersHistory
 																					if (session.controllersHistory && session.controllersHistory.length > 0) {
 																						const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
-																						return formatDecimal(lastPeriod.controllers || session.controllers || 1);
+																						return formatDecimalWithLocale(lastPeriod.controllers || session.controllers || 1);
 																					}
-																					return formatDecimal(session.controllers || 1);
+																					return formatDecimalWithLocale(session.controllers || 1);
 																				})()}
 																			</span>
 																		</td>
@@ -653,7 +665,7 @@ const BillView = () => {
 																				const diffMs = now.getTime() - periodStart.getTime();
 																				const hours = Math.floor(diffMs / (1000 * 60 * 60));
 																				const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-																				return `${formatDecimal(hours)}س ${formatDecimal(minutes)}د`;
+																				return formatDuration(hours, minutes, t);
 																			})()}
 																		</span>
 																	</td>
@@ -721,7 +733,7 @@ const BillView = () => {
 																		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
 																		if (hours > 0 || minutes > 0) {
-																			duration = `${formatDecimal(hours)}س ${formatDecimal(minutes)}د`;
+																			duration = formatDuration(hours, minutes, t);
 																		}
 
 																		hourlyRate = getHourlyRateFromDevice(session, history.controllers);
@@ -733,7 +745,7 @@ const BillView = () => {
 																		<tr key={`history-${idx}`} className="border-b border-gray-100">
 																			{session.deviceType === 'playstation' && (
 																				<td className="py-2 px-3 text-right text-gray-700">
-																					{formatDecimal(history.controllers)}
+																					{formatDecimalWithLocale(history.controllers)}
 																				</td>
 																			)}
 																			<td className="py-2 px-3 text-right text-gray-700">{duration}</td>
@@ -783,7 +795,7 @@ const BillView = () => {
 														: 'bg-orange-50 border-orange-200'
 												}`}>
 													<span className="text-gray-800 font-bold">
-														{isActive ? 'الإجمالي الحالي:' : 'إجمالي تكلفة الجلسة:'}
+														{isActive ? t('billView.currentTotal') : t('billView.sessionTotal')}:
 													</span>
 													<span className={`font-bold text-lg ${
 														isActive 
@@ -799,35 +811,35 @@ const BillView = () => {
 										{/* عرض تفاصيل الدفع الجزئي للجلسة */}
 										{sessionPayment && sessionPayment.payments && sessionPayment.payments.length > 0 && (
 											<div className="mt-4 border-t border-gray-200 pt-4">
-												<h4 className="font-medium text-gray-900 mb-3">تفاصيل الدفع الجزئي:</h4>
+												<h4 className="font-medium text-gray-900 mb-3">{t('billView.partialPaymentDetails')}:</h4>
 												<div className="space-y-2 bg-blue-50 rounded-lg p-3">
 													<div className="flex justify-between items-center">
-														<span className="text-sm text-gray-700">التكلفة الإجمالية:</span>
+														<span className="text-sm text-gray-700">{t('billView.totalCost')}:</span>
 														<span className="text-sm font-medium">{formatCurrency(sessionPayment.sessionCost)}</span>
 													</div>
 													<div className="flex justify-between items-center">
-														<span className="text-sm text-gray-700">المدفوع:</span>
+														<span className="text-sm text-gray-700">{t('billView.paidAmount')}:</span>
 														<span className="text-sm font-medium text-green-600">{formatCurrency(sessionPayment.paidAmount)}</span>
 													</div>
 													<div className="flex justify-between items-center">
-														<span className="text-sm text-gray-700">المتبقي:</span>
+														<span className="text-sm text-gray-700">{t('billView.remainingAmount')}:</span>
 														<span className="text-sm font-medium text-orange-600">{formatCurrency(sessionPayment.remainingAmount)}</span>
 													</div>
 													{isSessionFullyPaid && (
 														<div className="flex items-center justify-center gap-2 mt-2 pt-2 border-t border-green-200">
-															<span className="text-sm font-bold text-green-600">✓ مدفوع بالكامل</span>
+															<span className="text-sm font-bold text-green-600">✓ {t('billView.fullyPaid')}</span>
 														</div>
 													)}
 													
 													{/* سجل الدفعات */}
 													<div className="mt-3 pt-3 border-t border-blue-200">
-														<h5 className="text-xs font-medium text-gray-700 mb-2">سجل الدفعات:</h5>
+														<h5 className="text-xs font-medium text-gray-700 mb-2">{t('billView.paymentHistory')}:</h5>
 														<div className="space-y-1">
 															{sessionPayment.payments.map((payment, idx) => (
 																<div key={idx} className="flex justify-between items-center text-xs bg-white rounded px-2 py-1">
 																	<span className="font-medium text-green-600">{formatCurrency(payment.amount)}</span>
 																	<span className="text-gray-500">{formatDate(payment.paidAt)}</span>
-																	<span className="text-gray-600">{payment.method === 'cash' ? 'نقدي' : payment.method === 'card' ? 'بطاقة' : 'تحويل'}</span>
+																	<span className="text-gray-600">{getPaymentMethodText(payment.method, t)}</span>
 																</div>
 															))}
 														</div>
@@ -844,32 +856,32 @@ const BillView = () => {
 					{/* Summary */}
 					<div className="mt-6 space-y-2 text-sm">
 						<div className="flex justify-between">
-							<span className="text-gray-600">الإجمالي:</span>
+							<span className="text-gray-600">{t('billView.subtotal')}:</span>
 							<span className="font-medium">{formatCurrency(bill.total)}</span>
 						</div>
 						{bill.discount > 0 && (
 							<div className="flex justify-between">
-								<span className="text-gray-600">الخصم:</span>
+								<span className="text-gray-600">{t('billView.discount')}:</span>
 								<span className="font-medium">{formatCurrency(bill.discount)}</span>
 							</div>
 						)}
 						{bill.tax > 0 && (
 							<div className="flex justify-between">
-								<span className="text-gray-600">الضريبة:</span>
+								<span className="text-gray-600">{t('billView.tax')}:</span>
 								<span className="font-medium">{formatCurrency(bill.tax)}</span>
 							</div>
 						)}
 						<div className="flex justify-between">
-							<span className="text-gray-600">المدفوع:</span>
+							<span className="text-gray-600">{t('billView.paidAmount')}:</span>
 							<span className="font-medium">{formatCurrency(bill.paid)}</span>
 						</div>
 						<div className="flex justify-between">
-							<span className="text-gray-600">المتبقي:</span>
+							<span className="text-gray-600">{t('billView.remaining')}:</span>
 							<span className="font-medium">{formatCurrency(bill.remaining)}</span>
 						</div>
 						{bill.notes && (
 							<div className="flex justify-between">
-								<span className="text-gray-600">ملاحظات:</span>
+								<span className="text-gray-600">{t('billView.notes')}:</span>
 								<span className="font-medium">{bill.notes}</span>
 							</div>
 						)}
@@ -882,42 +894,40 @@ const BillView = () => {
 				<div
 					className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
 					onClick={(e) => {
-						// أغلق النافذة إذا تم الضغط على الخلفية فقط وليس على محتوى النافذة
 						if (e.target === e.currentTarget) setShowOrdersModal(false);
 					}}
 				>
 					<div
 						className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative max-h-[90vh] flex flex-col"
-						style={{ direction: 'rtl' }}
 					>
 						<button
 							className="absolute top-2 left-2 text-gray-400 hover:text-gray-700 text-xl font-bold z-10"
 							onClick={() => setShowOrdersModal(false)}
 							tabIndex={0}
 						>×</button>
-						<h2 className="text-xl font-bold mb-4 text-center">جميع الطلبات المرتبطة بالفاتورة</h2>
+						<h2 className="text-xl font-bold mb-4 text-center">{t('billView.allOrders')}</h2>
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pr-1" style={{ maxHeight: '70vh' }}>
 							{bill.orders?.map((order) => (
 								<div key={order._id} className="bg-gray-50 rounded-lg shadow border p-4 flex flex-col gap-2">
 									<div className="flex items-center justify-between mb-2">
-										<span className="font-bold text-orange-600 dark:text-orange-400">طلب #{order.orderNumber}</span>
+										<span className="font-bold text-orange-600 dark:text-orange-400">{t('billView.order')} #{order.orderNumber}</span>
 										<span className={`px-2 py-1 rounded text-xs font-medium ${getOrderStatusColor(order.status)}`}>{getOrderStatusText(order.status)}</span>
 									</div>
 									{order.customerName && <div className="text-gray-600 text-xs">{order.customerName}</div>}
 									<div className="text-gray-500 text-xs mb-2">{formatDate(order.createdAt || '')}</div>
 									<div>
-										<span className="font-semibold text-sm">الأصناف:</span>
+										<span className="font-semibold text-sm">{t('billView.items')}:</span>
 										<ul className="list-disc pr-4 mt-1">
 											{order.items?.map((item, idx) => (
 												<li key={`${item.name}-${item.price}-${idx}`} className="text-xs text-gray-700">
-													{item.name} × {formatDecimal(item.quantity)} - {formatCurrency(item.price)}
+													{item.name} × {formatDecimalWithLocale(item.quantity)} - {formatCurrency(item.price)}
 												</li>
 											))}
 										</ul>
 									</div>
-									{order.notes && <div className="text-xs text-gray-500 mt-2">ملاحظات: {order.notes}</div>}
+									{order.notes && <div className="text-xs text-gray-500 mt-2">{t('billView.notes')}: {order.notes}</div>}
 									<div className="mt-2 flex justify-between items-center">
-										<span className="text-xs text-gray-600">الإجمالي: <span className="font-bold text-orange-600 dark:text-orange-400">{formatCurrency(order.finalAmount ?? order.totalAmount ?? 0)}</span></span>
+										<span className="text-xs text-gray-600">{t('billView.total')}: <span className="font-bold text-orange-600 dark:text-orange-400">{formatCurrency(order.finalAmount ?? order.totalAmount ?? 0)}</span></span>
 									</div>
 								</div>
 							))}
