@@ -673,12 +673,15 @@ export const sendLowStockAlert = async ({
 };
 
 // Send daily report with PDF attachment
-export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null, language = 'ar', currency = 'EGP') => {
+// adminEmails can be either:
+// - Array of strings (old format): ['email1@example.com', 'email2@example.com']
+// - Array of objects (new format): [{email: 'email1@example.com', language: 'ar'}, {email: 'email2@example.com', language: 'en'}]
+export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null, defaultLanguage = 'ar', currency = 'EGP') => {
     Logger.info("Starting daily report email sending", {
         adminEmailsCount: adminEmails?.length || 0,
         adminEmails: adminEmails,
         hasPdfBuffer: !!pdfBuffer,
-        language: language,
+        defaultLanguage: defaultLanguage,
         currency: currency,
         reportData: {
             organizationName: reportData.organizationName,
@@ -699,31 +702,57 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
     }
 
     try {
-        // Generate PDF if not provided
-        if (!pdfBuffer) {
-            const { generateDailyReportPDF } = await import('./pdfGenerator.js');
-            pdfBuffer = await generateDailyReportPDF(reportData);
+        // Normalize adminEmails to new format
+        const normalizedEmails = adminEmails.map(item => {
+            if (typeof item === 'string') {
+                // Old format: just email string
+                return { email: item, language: defaultLanguage };
+            } else if (item && typeof item === 'object' && item.email) {
+                // New format: object with email and language
+                return { email: item.email, language: item.language || defaultLanguage };
+            }
+            return null;
+        }).filter(Boolean);
+
+        if (normalizedEmails.length === 0) {
+            Logger.warn("No valid emails after normalization", { adminEmails });
+            return;
         }
-        
-        Logger.info("PDF ready for attachment", {
-            pdfSize: pdfBuffer.length,
-            organizationName: reportData.organizationName
+
+        Logger.info("Normalized email list", {
+            originalCount: adminEmails.length,
+            normalizedCount: normalizedEmails.length,
+            emails: normalizedEmails
         });
 
-        // Get email template with language and currency
-        const emailTemplate = emailTemplates.dailyReport({
-            ...reportData,
-            language,
-            currency
-        });
-
-        // Send email to each admin with PDF attachment
-        const sendPromises = adminEmails.map(async (email) => {
+        // Send email to each admin with PDF attachment in their preferred language
+        const sendPromises = normalizedEmails.map(async ({ email, language }) => {
             try {
+                // Generate PDF for this specific language if not provided or if we have multiple languages
+                let recipientPdfBuffer = pdfBuffer;
+                const hasMultipleLanguages = new Set(normalizedEmails.map(e => e.language)).size > 1;
+                
+                if (!pdfBuffer || hasMultipleLanguages) {
+                    const { generateDailyReportPDF } = await import('./pdfGenerator.js');
+                    recipientPdfBuffer = await generateDailyReportPDF(reportData, language, currency);
+                    Logger.info("Generated PDF for specific language", {
+                        email,
+                        language,
+                        pdfSize: recipientPdfBuffer.length
+                    });
+                }
+
                 const transporter = createTransporter();
                 if (!transporter) {
                     throw new Error("Email transporter not configured");
                 }
+
+                // Get email template with recipient's language and currency
+                const emailTemplate = emailTemplates.dailyReport({
+                    ...reportData,
+                    language,
+                    currency
+                });
 
                 const mailOptions = {
                     from: `"Bomba System" <${process.env.EMAIL_USER}>`,
@@ -733,7 +762,7 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                     attachments: [
                         {
                             filename: `daily-report-${reportData.date}.pdf`,
-                            content: pdfBuffer,
+                            content: recipientPdfBuffer,
                             contentType: 'application/pdf'
                         }
                     ]
@@ -741,9 +770,10 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
 
                 Logger.info("Sending daily report email", {
                     to: email,
+                    language,
                     subject: emailTemplate.subject,
                     hasAttachment: true,
-                    attachmentSize: pdfBuffer.length
+                    attachmentSize: recipientPdfBuffer.length
                 });
 
                 const result = await transporter.sendMail(mailOptions);
@@ -751,16 +781,18 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                 Logger.info("Daily report email sent successfully", {
                     messageId: result.messageId,
                     to: email,
+                    language
                 });
 
-                return { email, success: true, messageId: result.messageId };
+                return { email, language, success: true, messageId: result.messageId };
             } catch (error) {
                 Logger.error("Failed to send daily report email", {
                     to: email,
+                    language,
                     error: error.message,
                     stack: error.stack,
                 });
-                return { email, success: false, error: error.message };
+                return { email, language, success: false, error: error.message };
             }
         });
 
@@ -769,7 +801,7 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
         const failCount = results.filter(r => !r.success).length;
 
         Logger.info("Daily report email sending completed", {
-            total: adminEmails.length,
+            total: normalizedEmails.length,
             success: successCount,
             failed: failCount,
             results: results

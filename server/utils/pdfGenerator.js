@@ -1,6 +1,8 @@
 import React from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
+import { pdfTranslations } from './pdfTranslations.js';
+import { getCurrencySymbol, getLocaleFromLanguage } from './localeHelper.js';
 
 // تسجيل خط عربي - Noto Sans Arabic
 Font.register({
@@ -172,13 +174,29 @@ const styles = StyleSheet.create({
 /**
  * Generate PDF buffer for daily report
  * @param {Object} reportData - Report data
+ * @param {string} language - Language code (ar, en, fr)
+ * @param {string} currency - Currency code (EGP, USD, etc.)
  * @returns {Promise<Buffer>} PDF buffer
  */
-export const generateDailyReportPDF = async (reportData) => {
+export const generateDailyReportPDF = async (reportData, language = 'ar', currency = 'EGP') => {
     try {
-        console.log('📄 Generating PDF with @react-pdf/renderer...');
+        console.log('📄 Generating PDF with @react-pdf/renderer...', { language, currency });
         
         const { createElement: h } = React;
+        
+        // Get translations and currency symbol
+        const t = pdfTranslations[language] || pdfTranslations.ar;
+        const currencySymbol = getCurrencySymbol(currency, language);
+        const locale = getLocaleFromLanguage(language);
+        const isRTL = language === 'ar';
+        
+        // Helper to format numbers based on locale
+        const formatNumber = (num) => {
+            return Number(num || 0).toLocaleString(locale, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            });
+        };
         
         // Helper to create table rows for products
         const createProductRows = (products) => {
@@ -190,7 +208,7 @@ export const generateDailyReportPDF = async (reportData) => {
                     h(Text, { style: [styles.tableCell, { width: '10%' }] }, index + 1),
                     h(Text, { style: [styles.tableCell, { width: '50%' }] }, product.name),
                     h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
-                    h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, (product.revenue || 0).toFixed(2))
+                    h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue || 0))
                 ])
             );
         };
@@ -203,46 +221,46 @@ export const generateDailyReportPDF = async (reportData) => {
             h(Page, { size: 'A4', style: styles.page }, [
                 // Header
                 h(View, { style: styles.header }, [
-                    h(Text, { style: styles.title }, 'التقرير اليومي'),
+                    h(Text, { style: styles.title }, t.dailyReport.title),
                     h(Text, { style: styles.organizationName }, reportData.organizationName),
                     h(Text, { style: styles.subtitle }, reportData.reportPeriod || reportData.date)
                 ]),
 
                 // Net Profit - Highlighted
                 h(View, { style: styles.statCardFull }, [
-                    h(Text, { style: styles.statLabel }, 'صافي الربح'),
-                    h(Text, { style: styles.statValueLarge }, `${(reportData.netProfit || 0).toFixed(2)} ج.م`)
+                    h(Text, { style: styles.statLabel }, t.dailyReport.netProfit),
+                    h(Text, { style: styles.statValueLarge }, `${formatNumber(reportData.netProfit || 0)} ${currencySymbol}`)
                 ]),
 
                 // Financial Summary
                 h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, 'الملخص المالي'),
+                    h(Text, { style: styles.sectionTitle }, t.dailyReport.financialSummary),
                     h(View, { style: styles.statsGrid }, [
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, 'إجمالي الإيرادات'),
-                            h(Text, { style: styles.statValue }, `${(reportData.totalRevenue || 0).toFixed(2)} ج.م`)
+                            h(Text, { style: styles.statLabel }, t.dailyReport.totalRevenue),
+                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.totalRevenue || 0)} ${currencySymbol}`)
                         ]),
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, 'إجمالي التكاليف'),
-                            h(Text, { style: styles.statValue }, `${(reportData.totalCosts || 0).toFixed(2)} ج.م`)
+                            h(Text, { style: styles.statLabel }, t.dailyReport.totalCosts),
+                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.totalCosts || 0)} ${currencySymbol}`)
                         ])
                     ])
                 ]),
 
                 // Operations Summary
                 h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, 'ملخص العمليات'),
+                    h(Text, { style: styles.sectionTitle }, t.dailyReport.operationsSummary),
                     h(View, { style: styles.statsGrid }, [
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, 'عدد الطلبات'),
+                            h(Text, { style: styles.statLabel }, t.dailyReport.totalOrders),
                             h(Text, { style: styles.statValue }, reportData.totalOrders || 0)
                         ]),
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, 'عدد الجلسات'),
+                            h(Text, { style: styles.statLabel }, t.dailyReport.totalSessions),
                             h(Text, { style: styles.statValue }, reportData.totalSessions || 0)
                         ]),
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, 'إجمالي الفواتير'),
+                            h(Text, { style: styles.statLabel }, t.dailyReport.totalBills),
                             h(Text, { style: styles.statValue }, reportData.totalBills || 0)
                         ])
                     ])
@@ -250,32 +268,32 @@ export const generateDailyReportPDF = async (reportData) => {
 
                 // Revenue Breakdown
                 reportData.revenueByType && h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, 'تفصيل الإيرادات'),
+                    h(Text, { style: styles.sectionTitle }, t.dailyReport.revenueBreakdown),
                     h(View, { style: styles.statsGrid }, [
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, '🎮 بلايستيشن'),
-                            h(Text, { style: styles.statValue }, `${(reportData.revenueByType.playstation || 0).toFixed(2)} ج.م`)
+                            h(Text, { style: styles.statLabel }, t.dailyReport.playstation),
+                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.revenueByType.playstation || 0)} ${currencySymbol}`)
                         ]),
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, '💻 كمبيوتر'),
-                            h(Text, { style: styles.statValue }, `${(reportData.revenueByType.computer || 0).toFixed(2)} ج.م`)
+                            h(Text, { style: styles.statLabel }, t.dailyReport.computer),
+                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.revenueByType.computer || 0)} ${currencySymbol}`)
                         ]),
                         h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, '☕ كافيه'),
-                            h(Text, { style: styles.statValue }, `${(reportData.revenueByType.cafe || 0).toFixed(2)} ج.م`)
+                            h(Text, { style: styles.statLabel }, t.dailyReport.cafe),
+                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.revenueByType.cafe || 0)} ${currencySymbol}`)
                         ])
                     ])
                 ]),
 
                 // Top Products
                 reportData.topProducts && reportData.topProducts.length > 0 && h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, 'المنتجات الأكثر مبيعاً'),
+                    h(Text, { style: styles.sectionTitle }, t.dailyReport.topProducts),
                     h(View, { style: styles.table }, [
                         h(View, { style: styles.tableHeader }, [
-                            h(Text, { style: [styles.tableHeaderText, { width: '10%' }] }, '#'),
-                            h(Text, { style: [styles.tableHeaderText, { width: '50%' }] }, 'المنتج'),
-                            h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, 'الكمية'),
-                            h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, 'الإيراد')
+                            h(Text, { style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
+                            h(Text, { style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
+                            h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
+                            h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
                         ]),
                         ...createProductRows(reportData.topProducts)
                     ])
@@ -283,8 +301,8 @@ export const generateDailyReportPDF = async (reportData) => {
 
                 // Footer
                 h(View, { style: styles.footer }, [
-                    h(Text, null, `تم إنشاء التقرير في: ${new Date().toLocaleString('ar-EG')}`),
-                    h(Text, null, `© ${new Date().getFullYear()} نظام Bomba - جميع الحقوق محفوظة`)
+                    h(Text, null, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
+                    h(Text, null, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
                 ])
             ])
         );
@@ -295,7 +313,7 @@ export const generateDailyReportPDF = async (reportData) => {
                 h(Page, { size: 'A4', style: styles.page }, [
                     // Header
                     h(View, { style: styles.header }, [
-                        h(Text, { style: styles.title }, 'المنتجات حسب الأقسام'),
+                        h(Text, { style: styles.title }, t.dailyReport.productsBySections),
                         h(Text, { style: styles.subtitle }, reportData.organizationName)
                     ]),
 
@@ -304,14 +322,14 @@ export const generateDailyReportPDF = async (reportData) => {
                         h(View, { key: sectionIndex, style: styles.section }, [
                             h(View, { style: styles.sectionHeader }, [
                                 h(Text, { style: styles.sectionHeaderTitle }, section.sectionName),
-                                h(Text, { style: styles.sectionHeaderValue }, `${section.totalRevenue.toFixed(2)} ج.م`)
+                                h(Text, { style: styles.sectionHeaderValue }, `${formatNumber(section.totalRevenue)} ${currencySymbol}`)
                             ]),
                             h(View, { style: styles.table }, [
                                 h(View, { style: styles.tableHeader }, [
-                                    h(Text, { style: [styles.tableHeaderText, { width: '10%' }] }, '#'),
-                                    h(Text, { style: [styles.tableHeaderText, { width: '50%' }] }, 'المنتج'),
-                                    h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, 'الكمية'),
-                                    h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, 'الإيراد')
+                                    h(Text, { style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
+                                    h(Text, { style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
+                                    h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
+                                    h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
                                 ]),
                                 ...section.products.slice(0, 5).map((product, index) =>
                                     h(View, {
@@ -321,7 +339,7 @@ export const generateDailyReportPDF = async (reportData) => {
                                         h(Text, { style: [styles.tableCell, { width: '10%' }] }, index + 1),
                                         h(Text, { style: [styles.tableCell, { width: '50%' }] }, product.name),
                                         h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
-                                        h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, product.revenue.toFixed(2))
+                                        h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue))
                                     ])
                                 )
                             ])
@@ -330,8 +348,8 @@ export const generateDailyReportPDF = async (reportData) => {
 
                     // Footer
                     h(View, { style: styles.footer }, [
-                        h(Text, null, `تم إنشاء التقرير في: ${new Date().toLocaleString('ar-EG')}`),
-                        h(Text, null, `© ${new Date().getFullYear()} نظام Bomba - جميع الحقوق محفوظة`)
+                        h(Text, null, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
+                        h(Text, null, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
                     ])
                 ])
             );

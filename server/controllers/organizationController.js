@@ -446,10 +446,32 @@ export const updateReportSettings = async (req, res) => {
             });
         }
 
-        // Validate email format
+        // Validate email format (support both old and new format)
         if (dailyReportEmails && Array.isArray(dailyReportEmails)) {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            const invalidEmails = dailyReportEmails.filter(email => !emailRegex.test(email));
+            const invalidEmails = [];
+            
+            dailyReportEmails.forEach((item, index) => {
+                let email;
+                if (typeof item === 'string') {
+                    // Old format: just email string
+                    email = item;
+                } else if (item && typeof item === 'object' && item.email) {
+                    // New format: object with email and language
+                    email = item.email;
+                    // Validate language if provided
+                    if (item.language && !['ar', 'en', 'fr'].includes(item.language)) {
+                        invalidEmails.push({ index, email, reason: 'Invalid language. Must be ar, en, or fr' });
+                    }
+                } else {
+                    invalidEmails.push({ index, item, reason: 'Invalid format' });
+                    return;
+                }
+                
+                if (!emailRegex.test(email)) {
+                    invalidEmails.push({ index, email, reason: 'Invalid email format' });
+                }
+            });
             
             if (invalidEmails.length > 0) {
                 return res.status(400).json({

@@ -64,7 +64,14 @@ const OrganizationSchema = new mongoose.Schema({
         dailyReportEnabled: { type: Boolean, default: true },
         dailyReportStartTime: { type: String, default: "08:00" }, // وقت بداية فترة التقرير (24 ساعة من هذا الوقت)
         dailyReportSendTime: { type: String, default: "09:00" }, // وقت إرسال التقرير عبر الإيميل
-        dailyReportEmails: [{ type: String }], // قائمة الإيميلات المستقبلة
+        dailyReportEmails: [{ 
+            email: { type: String, required: true },
+            language: { 
+                type: String, 
+                enum: ['ar', 'en', 'fr'],
+                default: 'ar'
+            }
+        }], // قائمة الإيميلات المستقبلة مع اللغة المفضلة لكل مستلم
         lastReportSentAt: { type: Date }, // آخر مرة تم فيها إرسال التقرير
         authorizedToManageReports: [{ // المستخدمون المصرح لهم بإدارة إعدادات التقارير
             type: mongoose.Schema.Types.ObjectId,

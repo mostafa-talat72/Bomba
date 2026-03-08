@@ -1,0 +1,83 @@
+export const pdfTranslations = {
+    ar: {
+        dailyReport: {
+            title: 'التقرير اليومي',
+            netProfit: 'صافي الربح',
+            financialSummary: 'الملخص المالي',
+            totalRevenue: 'إجمالي الإيرادات',
+            totalCosts: 'إجمالي التكاليف',
+            operationsSummary: 'ملخص العمليات',
+            totalOrders: 'عدد الطلبات',
+            totalSessions: 'عدد الجلسات',
+            totalBills: 'إجمالي الفواتير',
+            revenueBreakdown: 'تفصيل الإيرادات',
+            playstation: '🎮 بلايستيشن',
+            computer: '💻 كمبيوتر',
+            cafe: '☕ كافيه',
+            topProducts: 'المنتجات الأكثر مبيعاً',
+            productsBySections: 'المنتجات حسب الأقسام',
+            number: '#',
+            product: 'المنتج',
+            quantity: 'الكمية',
+            revenue: 'الإيراد',
+            section: 'القسم',
+            createdAt: 'تم إنشاء التقرير في',
+            copyright: 'نظام Bomba - جميع الحقوق محفوظة',
+            noProducts: 'لا توجد منتجات'
+        }
+    },
+    en: {
+        dailyReport: {
+            title: 'Daily Report',
+            netProfit: 'Net Profit',
+            financialSummary: 'Financial Summary',
+            totalRevenue: 'Total Revenue',
+            totalCosts: 'Total Costs',
+            operationsSummary: 'Operations Summary',
+            totalOrders: 'Total Orders',
+            totalSessions: 'Total Sessions',
+            totalBills: 'Total Bills',
+            revenueBreakdown: 'Revenue Breakdown',
+            playstation: '🎮 PlayStation',
+            computer: '💻 Computer',
+            cafe: '☕ Cafe',
+            topProducts: 'Top Selling Products',
+            productsBySections: 'Products by Sections',
+            number: '#',
+            product: 'Product',
+            quantity: 'Quantity',
+            revenue: 'Revenue',
+            section: 'Section',
+            createdAt: 'Report created at',
+            copyright: 'Bomba System - All Rights Reserved',
+            noProducts: 'No products'
+        }
+    },
+    fr: {
+        dailyReport: {
+            title: 'Rapport Quotidien',
+            netProfit: 'Bénéfice Net',
+            financialSummary: 'Résumé Financier',
+            totalRevenue: 'Revenu Total',
+            totalCosts: 'Coûts Totaux',
+            operationsSummary: 'Résumé des Opérations',
+            totalOrders: 'Total des Commandes',
+            totalSessions: 'Total des Sessions',
+            totalBills: 'Total des Factures',
+            revenueBreakdown: 'Répartition des Revenus',
+            playstation: '🎮 PlayStation',
+            computer: '💻 Ordinateur',
+            cafe: '☕ Café',
+            topProducts: 'Produits les Plus Vendus',
+            productsBySections: 'Produits par Sections',
+            number: '#',
+            product: 'Produit',
+            quantity: 'Quantité',
+            revenue: 'Revenu',
+            section: 'Section',
+            createdAt: 'Rapport créé le',
+            copyright: 'Système Bomba - Tous Droits Réservés',
+            noProducts: 'Aucun produit'
+        }
+    }
+};
