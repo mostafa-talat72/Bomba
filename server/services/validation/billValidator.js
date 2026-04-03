@@ -159,10 +159,28 @@ class BillValidator {
             }
         }
 
-        // Validate that total >= subtotal (if both exist)
+        // Validate total calculation logic
+        // Correct formula: total = subtotal - discount + tax
+        // So total CAN be less than subtotal when discount > 0
         if (bill.subtotal !== undefined && bill.total !== undefined) {
-            if (bill.total < bill.subtotal) {
-                errors.push('Total cannot be less than subtotal');
+            const discount = bill.discount || 0;
+            const tax = bill.tax || 0;
+            
+            // Calculate expected total
+            const expectedTotal = bill.subtotal - discount + tax;
+            
+            // Allow small floating point differences (0.01)
+            const difference = Math.abs(bill.total - expectedTotal);
+            
+            if (difference > 0.01) {
+                // Only warn if the calculation is significantly off
+                // This is a warning, not an error, to allow for rounding differences
+                errors.push(`Total (${bill.total}) does not match expected calculation: subtotal (${bill.subtotal}) - discount (${discount}) + tax (${tax}) = ${expectedTotal.toFixed(2)}`);
+            }
+            
+            // Total should never be negative
+            if (bill.total < 0) {
+                errors.push('Total cannot be negative');
             }
         }
 

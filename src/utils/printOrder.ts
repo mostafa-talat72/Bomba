@@ -1,4 +1,5 @@
 import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol } from './formatters';
+import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
 
 interface OrderItem {

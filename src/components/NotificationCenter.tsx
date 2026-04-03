@@ -3,8 +3,10 @@ import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock } from 'l
 import { useApp } from '../context/AppContext';
 import NotificationSound from './NotificationSound';
 import { formatDecimal } from '../utils/formatters';
+import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../context/OrganizationContext';
+import i18n from '../i18n/config';
 
 interface Notification {
   _id: string;
@@ -51,7 +53,7 @@ const NotificationCenter: React.FC = () => {
 
   // Helper function to format numbers based on language
   const formatNumber = (num: number) => {
-    const locale = i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+    const locale = getLocaleFromLanguage(i18n.language);
     return new Intl.NumberFormat(locale).format(num);
   };
 

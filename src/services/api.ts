@@ -1684,7 +1684,8 @@ class ApiClient {
       const response = await this.request<any[]>(`/reports/recent-activity?${params}`);
       return response;
     } catch (error: unknown) {
-      throw new Error('فشل في جلب النشاط الأخير');
+      // Let the error propagate with its original message
+      throw error;
     }
   }
 

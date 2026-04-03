@@ -202,13 +202,13 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
         const createProductRows = (products) => {
             return products.slice(0, 10).map((product, index) =>
                 h(View, {
-                    key: index,
+                    key: `product-${index}`,
                     style: [styles.tableRow, index % 2 === 0 ? styles.tableRowEven : {}]
                 }, [
-                    h(Text, { style: [styles.tableCell, { width: '10%' }] }, index + 1),
-                    h(Text, { style: [styles.tableCell, { width: '50%' }] }, product.name),
-                    h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
-                    h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue || 0))
+                    h(Text, { key: `num-${index}`, style: [styles.tableCell, { width: '10%' }] }, index + 1),
+                    h(Text, { key: `name-${index}`, style: [styles.tableCell, { width: '50%' }] }, product.name),
+                    h(Text, { key: `qty-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
+                    h(Text, { key: `rev-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue || 0))
                 ])
             );
         };
@@ -221,79 +221,79 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
             h(Page, { size: 'A4', style: styles.page }, [
                 // Header
                 h(View, { style: styles.header }, [
-                    h(Text, { style: styles.title }, t.dailyReport.title),
-                    h(Text, { style: styles.organizationName }, reportData.organizationName),
-                    h(Text, { style: styles.subtitle }, reportData.reportPeriod || reportData.date)
+                    h(Text, { key: 'title', style: styles.title }, t.dailyReport.title),
+                    h(Text, { key: 'org', style: styles.organizationName }, reportData.organizationName),
+                    h(Text, { key: 'period', style: styles.subtitle }, reportData.reportPeriod || reportData.date)
                 ]),
 
                 // Net Profit - Highlighted
                 h(View, { style: styles.statCardFull }, [
-                    h(Text, { style: styles.statLabel }, t.dailyReport.netProfit),
-                    h(Text, { style: styles.statValueLarge }, `${formatNumber(reportData.netProfit || 0)} ${currencySymbol}`)
+                    h(Text, { key: 'profit-label', style: styles.statLabel }, t.dailyReport.netProfit),
+                    h(Text, { key: 'profit-value', style: styles.statValueLarge }, `${formatNumber(reportData.netProfit || 0)} ${currencySymbol}`)
                 ]),
 
                 // Financial Summary
                 h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, t.dailyReport.financialSummary),
-                    h(View, { style: styles.statsGrid }, [
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.totalRevenue),
-                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.totalRevenue || 0)} ${currencySymbol}`)
+                    h(Text, { key: 'fin-title', style: styles.sectionTitle }, t.dailyReport.financialSummary),
+                    h(View, { key: 'fin-grid', style: styles.statsGrid }, [
+                        h(View, { key: 'revenue-card', style: styles.statCard }, [
+                            h(Text, { key: 'revenue-label', style: styles.statLabel }, t.dailyReport.totalRevenue),
+                            h(Text, { key: 'revenue-value', style: styles.statValue }, `${formatNumber(reportData.totalRevenue || 0)} ${currencySymbol}`)
                         ]),
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.totalCosts),
-                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.totalCosts || 0)} ${currencySymbol}`)
+                        h(View, { key: 'costs-card', style: styles.statCard }, [
+                            h(Text, { key: 'costs-label', style: styles.statLabel }, t.dailyReport.totalCosts),
+                            h(Text, { key: 'costs-value', style: styles.statValue }, `${formatNumber(reportData.totalCosts || 0)} ${currencySymbol}`)
                         ])
                     ])
                 ]),
 
                 // Operations Summary
                 h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, t.dailyReport.operationsSummary),
-                    h(View, { style: styles.statsGrid }, [
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.totalOrders),
-                            h(Text, { style: styles.statValue }, reportData.totalOrders || 0)
+                    h(Text, { key: 'ops-title', style: styles.sectionTitle }, t.dailyReport.operationsSummary),
+                    h(View, { key: 'ops-grid', style: styles.statsGrid }, [
+                        h(View, { key: 'orders-card', style: styles.statCard }, [
+                            h(Text, { key: 'orders-label', style: styles.statLabel }, t.dailyReport.totalOrders),
+                            h(Text, { key: 'orders-value', style: styles.statValue }, reportData.totalOrders || 0)
                         ]),
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.totalSessions),
-                            h(Text, { style: styles.statValue }, reportData.totalSessions || 0)
+                        h(View, { key: 'sessions-card', style: styles.statCard }, [
+                            h(Text, { key: 'sessions-label', style: styles.statLabel }, t.dailyReport.totalSessions),
+                            h(Text, { key: 'sessions-value', style: styles.statValue }, reportData.totalSessions || 0)
                         ]),
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.totalBills),
-                            h(Text, { style: styles.statValue }, reportData.totalBills || 0)
+                        h(View, { key: 'bills-card', style: styles.statCard }, [
+                            h(Text, { key: 'bills-label', style: styles.statLabel }, t.dailyReport.totalBills),
+                            h(Text, { key: 'bills-value', style: styles.statValue }, reportData.totalBills || 0)
                         ])
                     ])
                 ]),
 
                 // Revenue Breakdown
                 reportData.revenueByType && h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, t.dailyReport.revenueBreakdown),
-                    h(View, { style: styles.statsGrid }, [
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.playstation),
-                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.revenueByType.playstation || 0)} ${currencySymbol}`)
+                    h(Text, { key: 'rev-title', style: styles.sectionTitle }, t.dailyReport.revenueBreakdown),
+                    h(View, { key: 'rev-grid', style: styles.statsGrid }, [
+                        h(View, { key: 'ps-card', style: styles.statCard }, [
+                            h(Text, { key: 'ps-label', style: styles.statLabel }, t.dailyReport.playstation),
+                            h(Text, { key: 'ps-value', style: styles.statValue }, `${formatNumber(reportData.revenueByType.playstation || 0)} ${currencySymbol}`)
                         ]),
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.computer),
-                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.revenueByType.computer || 0)} ${currencySymbol}`)
+                        h(View, { key: 'pc-card', style: styles.statCard }, [
+                            h(Text, { key: 'pc-label', style: styles.statLabel }, t.dailyReport.computer),
+                            h(Text, { key: 'pc-value', style: styles.statValue }, `${formatNumber(reportData.revenueByType.computer || 0)} ${currencySymbol}`)
                         ]),
-                        h(View, { style: styles.statCard }, [
-                            h(Text, { style: styles.statLabel }, t.dailyReport.cafe),
-                            h(Text, { style: styles.statValue }, `${formatNumber(reportData.revenueByType.cafe || 0)} ${currencySymbol}`)
+                        h(View, { key: 'cafe-card', style: styles.statCard }, [
+                            h(Text, { key: 'cafe-label', style: styles.statLabel }, t.dailyReport.cafe),
+                            h(Text, { key: 'cafe-value', style: styles.statValue }, `${formatNumber(reportData.revenueByType.cafe || 0)} ${currencySymbol}`)
                         ])
                     ])
                 ]),
 
                 // Top Products
                 reportData.topProducts && reportData.topProducts.length > 0 && h(View, { style: styles.section }, [
-                    h(Text, { style: styles.sectionTitle }, t.dailyReport.topProducts),
-                    h(View, { style: styles.table }, [
-                        h(View, { style: styles.tableHeader }, [
-                            h(Text, { style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
-                            h(Text, { style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
-                            h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
-                            h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
+                    h(Text, { key: 'top-title', style: styles.sectionTitle }, t.dailyReport.topProducts),
+                    h(View, { key: 'top-table', style: styles.table }, [
+                        h(View, { key: 'top-header', style: styles.tableHeader }, [
+                            h(Text, { key: 'h-num', style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
+                            h(Text, { key: 'h-prod', style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
+                            h(Text, { key: 'h-qty', style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
+                            h(Text, { key: 'h-rev', style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
                         ]),
                         ...createProductRows(reportData.topProducts)
                     ])
@@ -301,8 +301,8 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
 
                 // Footer
                 h(View, { style: styles.footer }, [
-                    h(Text, null, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
-                    h(Text, null, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
+                    h(Text, { key: 'footer-date' }, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
+                    h(Text, { key: 'footer-copy' }, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
                 ])
             ])
         );
@@ -310,36 +310,36 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
         // Page 2: Products by Section (if available)
         if (reportData.topProductsBySection && reportData.topProductsBySection.length > 0) {
             pages.push(
-                h(Page, { size: 'A4', style: styles.page }, [
+                h(Page, { key: 'page-2', size: 'A4', style: styles.page }, [
                     // Header
-                    h(View, { style: styles.header }, [
-                        h(Text, { style: styles.title }, t.dailyReport.productsBySections),
-                        h(Text, { style: styles.subtitle }, reportData.organizationName)
+                    h(View, { key: 'p2-header', style: styles.header }, [
+                        h(Text, { key: 'p2-title', style: styles.title }, t.dailyReport.productsBySections),
+                        h(Text, { key: 'p2-org', style: styles.subtitle }, reportData.organizationName)
                     ]),
 
                     // Sections
                     ...reportData.topProductsBySection.map((section, sectionIndex) =>
-                        h(View, { key: sectionIndex, style: styles.section }, [
-                            h(View, { style: styles.sectionHeader }, [
-                                h(Text, { style: styles.sectionHeaderTitle }, section.sectionName),
-                                h(Text, { style: styles.sectionHeaderValue }, `${formatNumber(section.totalRevenue)} ${currencySymbol}`)
+                        h(View, { key: `section-${sectionIndex}`, style: styles.section }, [
+                            h(View, { key: `sec-header-${sectionIndex}`, style: styles.sectionHeader }, [
+                                h(Text, { key: `sec-name-${sectionIndex}`, style: styles.sectionHeaderTitle }, section.sectionName),
+                                h(Text, { key: `sec-rev-${sectionIndex}`, style: styles.sectionHeaderValue }, `${formatNumber(section.totalRevenue)} ${currencySymbol}`)
                             ]),
-                            h(View, { style: styles.table }, [
-                                h(View, { style: styles.tableHeader }, [
-                                    h(Text, { style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
-                                    h(Text, { style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
-                                    h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
-                                    h(Text, { style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
+                            h(View, { key: `sec-table-${sectionIndex}`, style: styles.table }, [
+                                h(View, { key: `sec-thead-${sectionIndex}`, style: styles.tableHeader }, [
+                                    h(Text, { key: `sh-num-${sectionIndex}`, style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
+                                    h(Text, { key: `sh-prod-${sectionIndex}`, style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
+                                    h(Text, { key: `sh-qty-${sectionIndex}`, style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
+                                    h(Text, { key: `sh-rev-${sectionIndex}`, style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
                                 ]),
                                 ...section.products.slice(0, 5).map((product, index) =>
                                     h(View, {
-                                        key: index,
+                                        key: `sec-${sectionIndex}-prod-${index}`,
                                         style: [styles.tableRow, index % 2 === 0 ? styles.tableRowEven : {}]
                                     }, [
-                                        h(Text, { style: [styles.tableCell, { width: '10%' }] }, index + 1),
-                                        h(Text, { style: [styles.tableCell, { width: '50%' }] }, product.name),
-                                        h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
-                                        h(Text, { style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue))
+                                        h(Text, { key: `sp-num-${sectionIndex}-${index}`, style: [styles.tableCell, { width: '10%' }] }, index + 1),
+                                        h(Text, { key: `sp-name-${sectionIndex}-${index}`, style: [styles.tableCell, { width: '50%' }] }, product.name),
+                                        h(Text, { key: `sp-qty-${sectionIndex}-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
+                                        h(Text, { key: `sp-rev-${sectionIndex}-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue))
                                     ])
                                 )
                             ])
@@ -347,9 +347,9 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
                     ),
 
                     // Footer
-                    h(View, { style: styles.footer }, [
-                        h(Text, null, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
-                        h(Text, null, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
+                    h(View, { key: 'p2-footer', style: styles.footer }, [
+                        h(Text, { key: 'p2-footer-date' }, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
+                        h(Text, { key: 'p2-footer-copy' }, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
                     ])
                 ])
             );

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
 import { useLanguage } from '../context/LanguageContext';
+import { AUTH_ERROR_CODES, isValidErrorCode, getErrorMessageKey } from '../constants/errorCodes';
 
 interface FormData {
   email: string;
@@ -96,17 +97,21 @@ const Login: React.FC = () => {
         // Navigate to dashboard - AppContext will handle the authentication state
         navigate('/dashboard', { replace: true });
       } else {
-        const errorMessage = result.message || '';
-
-        if (errorMessage.includes('غير مفعل') || errorMessage.includes('pending')) {
-          setErrors({ email: t('auth.accountNotVerified') });
-          setShowResendLink(true);
-        } else if (errorMessage.includes('غير صحيحة') || errorMessage.includes('خطأ')) {
-          setErrors({ email: t('auth.invalidEmailOrPassword') });
-        } else if (errorMessage.includes('غير موجود')) {
-          setErrors({ email: t('auth.emailNotFound') });
+        // Check if the error message is an error code
+        const errorCode = result.message || '';
+        
+        if (isValidErrorCode(errorCode)) {
+          // Use translation for error code
+          const translatedError = t(getErrorMessageKey(errorCode));
+          setErrors({ email: translatedError });
+          
+          // Show resend link for NOT_VERIFIED error
+          if (errorCode === AUTH_ERROR_CODES.NOT_VERIFIED) {
+            setShowResendLink(true);
+          }
         } else {
-          setErrors({ email: errorMessage || t('auth.loginErrorGeneric') });
+          // Fallback: display the error message as-is (for backward compatibility)
+          setErrors({ email: errorCode || t('auth.loginErrorGeneric') });
         }
       }
     } catch {

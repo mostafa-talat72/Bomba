@@ -147,37 +147,88 @@ mongoose.connection.once("open", async () => {
         
         Logger.info("✅ Sync system initialized successfully");
         
-        // Perform bidirectional initial sync if enabled
-        const initialSyncEnabled = process.env.INITIAL_SYNC_ENABLED === 'true';
-        const initialSyncInterval = parseInt(process.env.INITIAL_SYNC_INTERVAL || '0', 10);
+        // Perform FULL bidirectional sync on startup (always enabled)
+        Logger.info("🔄 Starting automatic full bidirectional sync...");
         
-        if (initialSyncEnabled) {
-            Logger.info("🔄 Bidirectional initial sync is enabled");
-            
-            // Wait a bit for Atlas to connect
-            setTimeout(async () => {
-                const bidirectionalSync = new BidirectionalInitialSync(dualDatabaseManager);
+        // Import full sync service
+        const { default: fullSyncService } = await import('./services/sync/fullSyncService.js');
+        
+        // Wait for Atlas to connect
+        setTimeout(async () => {
+            try {
+                Logger.info("\n═══════════════════════════════════════════════════════════");
+                Logger.info("🚀 AUTOMATIC FULL SYNC - Starting...");
+                Logger.info("═══════════════════════════════════════════════════════════\n");
                 
-                // Perform bidirectional sync (both directions)
-                const result = await bidirectionalSync.performBidirectionalSync();
-                
-                if (result.success) {
-                    Logger.info("✅ Bidirectional initial sync completed");
+                // Check if Atlas is available
+                if (!dualDatabaseManager.isAtlasAvailable()) {
+                    Logger.warn("⚠️  Atlas not available yet, will retry...");
                     
-                    // Start periodic sync if configured
-                    if (initialSyncInterval > 0) {
-                        bidirectionalSync.startPeriodicSync(initialSyncInterval);
-                        Logger.info(`⏰ Periodic sync every ${initialSyncInterval}ms (${initialSyncInterval/1000}s)`);
-                    }
-                } else if (result.skipped) {
-                    Logger.info("ℹ️  Bidirectional sync skipped:", result.reason || 'Already running or not needed');
-                } else {
-                    Logger.warn("⚠️  Bidirectional sync failed, will retry automatically");
+                    // Retry mechanism
+                    const retryInterval = setInterval(async () => {
+                        if (dualDatabaseManager.isAtlasAvailable()) {
+                            clearInterval(retryInterval);
+                            await performFullSync();
+                        }
+                    }, 10000); // Retry every 10 seconds
+                    
+                    return;
                 }
-            }, 5000); // Wait 5 seconds for Atlas to connect
-        } else {
-            Logger.info("ℹ️  Bidirectional initial sync is disabled");
-        }
+                
+                await performFullSync();
+                
+                async function performFullSync() {
+                    try {
+                        // Perform full sync from Local to Atlas
+                        Logger.info("📤 Step 1/2: Syncing Local → Atlas...");
+                        const syncResult = await fullSyncService.startFullSync();
+                        
+                        Logger.info("\n✅ Full sync completed successfully!");
+                        Logger.info(`   Collections synced: ${syncResult.collectionsProcessed}`);
+                        Logger.info(`   Documents synced: ${syncResult.documentsSynced}`);
+                        Logger.info(`   Duration: ${syncResult.durationSeconds}s`);
+                        
+                        // Now perform bidirectional sync for ongoing changes
+                        Logger.info("\n📥 Step 2/2: Starting bidirectional sync (Atlas ⇄ Local)...");
+                        const bidirectionalSync = new BidirectionalInitialSync(dualDatabaseManager);
+                        const bidirResult = await bidirectionalSync.performBidirectionalSync();
+                        
+                        if (bidirResult.success) {
+                            Logger.info("✅ Bidirectional sync initialized");
+                        }
+                        
+                        Logger.info("\n═══════════════════════════════════════════════════════════");
+                        Logger.info("✅ AUTOMATIC FULL SYNC - Completed Successfully!");
+                        Logger.info("🔄 Continuous bidirectional sync is now active");
+                        Logger.info("═══════════════════════════════════════════════════════════\n");
+                        
+                        // Start periodic full sync if configured
+                        const initialSyncInterval = parseInt(process.env.INITIAL_SYNC_INTERVAL || '0', 10);
+                        if (initialSyncInterval > 0) {
+                            Logger.info(`⏰ Periodic full sync every ${initialSyncInterval}ms (${initialSyncInterval/1000}s)`);
+                            
+                            setInterval(async () => {
+                                try {
+                                    Logger.info("\n🔄 Periodic full sync starting...");
+                                    await fullSyncService.startFullSync();
+                                    Logger.info("✅ Periodic full sync completed");
+                                } catch (error) {
+                                    Logger.error("❌ Periodic full sync failed:", error.message);
+                                }
+                            }, initialSyncInterval);
+                        }
+                        
+                    } catch (error) {
+                        Logger.error("\n❌ Full sync failed:", error.message);
+                        Logger.warn("⚠️  Will retry on next server restart");
+                        Logger.warn("💡 One-way sync (Local → Atlas) will continue for new data");
+                    }
+                }
+                
+            } catch (error) {
+                Logger.error("❌ Error in automatic sync:", error.message);
+            }
+        }, 5000); // Wait 5 seconds for Atlas to connect
         
         // Initialize bidirectional sync if enabled (with delay to allow Atlas to connect)
         if (syncConfig.bidirectionalSync.enabled) {
@@ -189,7 +240,8 @@ mongoose.connection.once("open", async () => {
                 try {
                     await initializeBidirectionalSync();
                 } catch (error) {
-                    Logger.error("❌ Failed to initialize bidirectional sync on first attempt");
+                    Logger.warn("⚠️  Bidirectional sync not available on first attempt");
+                    Logger.info("   Reason: " + (error.message || 'Atlas connection not ready'));
                     Logger.info("   Will retry when Atlas connection is available");
                     
                     // Set up retry mechanism
@@ -323,8 +375,9 @@ async function initializeBidirectionalSync() {
         Logger.info("✅ Bidirectional sync initialized successfully");
         
     } catch (error) {
-        Logger.error("❌ Failed to initialize bidirectional sync:", error.message);
-        Logger.warn("⚠️ Falling back to one-way sync (Local → Atlas)");
+        Logger.warn("⚠️  Bidirectional sync not available:", error.message);
+        Logger.info("📝 Falling back to one-way sync (Local → Atlas)");
+        Logger.info("💡 This is normal if you're not using MongoDB Atlas");
         
         // Update Change Stream status to disconnected
         if (bidirectionalSyncMonitor) {
@@ -334,9 +387,9 @@ async function initializeBidirectionalSync() {
         // Log fallback status
         Logger.info("\n📊 Sync Status:");
         Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        Logger.info(`⚠️  Status: FALLBACK MODE`);
+        Logger.info(`✅ Status: ONE-WAY SYNC MODE`);
         Logger.info(`🔄 Direction: Local → Atlas (one-way only)`);
-        Logger.info(`❌ Bidirectional sync: Disabled due to error`);
+        Logger.info(`ℹ️  Bidirectional sync: Not available (requires Atlas)`);
         Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         
         throw error; // Re-throw to be caught by caller

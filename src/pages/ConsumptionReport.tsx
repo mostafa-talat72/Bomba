@@ -22,15 +22,33 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
+import 'dayjs/locale/es';
+import 'dayjs/locale/de';
+import 'dayjs/locale/it';
+import 'dayjs/locale/pt';
+import 'dayjs/locale/ru';
+import 'dayjs/locale/zh';
+import 'dayjs/locale/ja';
+import 'dayjs/locale/ko';
+import 'dayjs/locale/hi';
+import 'dayjs/locale/tr';
+import 'dayjs/locale/vi';
+import 'dayjs/locale/th';
+import 'dayjs/locale/pl';
+import 'dayjs/locale/nl';
+import 'dayjs/locale/he';
+import 'dayjs/locale/fa';
+import 'dayjs/locale/ur';
 import arEG from 'antd/locale/ar_EG';
 import enUS from 'antd/locale/en_US';
 import frFR from 'antd/locale/fr_FR';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { useApp } from '../context/AppContext';
+import { useRTL } from '../hooks/useRTL';
 import { Order, Session } from '../services/api';
 import api from '../services/api';
-import { formatDecimal, formatCurrency as formatCurrencyUtil } from '../utils/formatters';
+import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
 
 // Extend dayjs with plugins
 dayjs.extend(isSameOrAfter);
@@ -57,6 +75,7 @@ interface ConsumptionItem {
 
 const ConsumptionReport = () => {
   const { t, i18n } = useTranslation();
+  const rtl = useRTL();
   const { menuItems, fetchMenuItems, menuSections, fetchMenuSections, user } = useApp();
   
   // Helper function to format currency with organization settings
@@ -97,7 +116,7 @@ const ConsumptionReport = () => {
       title: t('consumptionReport.table.itemName'),
       dataIndex: 'name',
       key: 'name',
-      align: (i18n.language === 'ar' ? 'right' : 'left') as const,
+      align: (rtl.isRTL ? 'right' : 'left') as const,
       render: (text: string) => <span className="font-semibold text-gray-900 dark:text-gray-100">{text}</span>,
     },
     {
@@ -170,7 +189,7 @@ const ConsumptionReport = () => {
       ),
       sorter: (a: ConsumptionItem, b: ConsumptionItem) => a.total - b.total,
     },
-  ], [t, i18n.language]);
+  ], [t, rtl.isRTL, i18n.language]);
 
   const processOrdersAndSessions = useCallback((ordersToProcess: Order[], sessionsToProcess: Session[]) => {
     const itemsBySection: Record<string, ConsumptionItem[]> = {};
@@ -403,9 +422,10 @@ const ConsumptionReport = () => {
       const isRTL = i18n.language === 'ar';
       const dir = isRTL ? 'rtl' : 'ltr';
       
-      // Format date with locale
+      // Format date with locale and translated AM/PM
       const formatDate = (date: Dayjs) => {
-        return date.locale(i18n.language).format('YYYY/MM/DD - hh:mm A');
+        const formatted = date.locale(i18n.language).format('YYYY/MM/DD - hh:mm A');
+        return replaceAMPM(formatted);
       };
 
       // Get organization name from user or use default
@@ -779,9 +799,11 @@ const ConsumptionReport = () => {
       doc.setTextColor(0, 0, 0);
       doc.text('تقرير الاستهلاك', pageWidth / 2, 20, { align: 'center' });
 
-      // Add date range
+      // Add date range with translated AM/PM
       doc.setFontSize(12);
-      const dateRangeText = `الفترة من ${dateRange[0].format('YYYY/MM/DD HH:mm')} إلى ${dateRange[1].format('YYYY/MM/DD HH:mm')}`;
+      const startFormatted = replaceAMPM(dateRange[0].format('YYYY/MM/DD hh:mm A'));
+      const endFormatted = replaceAMPM(dateRange[1].format('YYYY/MM/DD hh:mm A'));
+      const dateRangeText = `الفترة من ${startFormatted} إلى ${endFormatted}`;
       doc.text(dateRangeText, pageWidth / 2, 30, { align: 'center' });
 
       // Add total sales
@@ -1011,7 +1033,7 @@ const ConsumptionReport = () => {
                 <Table.Summary.Cell
                   index={0}
                   colSpan={3}
-                  align={i18n.language === 'ar' ? 'right' : 'left'}
+                  align={rtl.isRTL ? 'right' : 'left'}
                   className="font-bold text-lg text-white py-4"
                 >
                   <span className="flex items-center gap-2">
@@ -1123,7 +1145,7 @@ const ConsumptionReport = () => {
                   <Table.Summary.Cell
                     index={0}
                     colSpan={3}
-                    align={i18n.language === 'ar' ? 'right' : 'left'}
+                    align={rtl.isRTL ? 'right' : 'left'}
                     className="font-bold text-lg text-white py-4"
                   >
                     <span className="flex items-center gap-2">
@@ -1262,7 +1284,7 @@ const ConsumptionReport = () => {
 
   return (
     <ConfigProvider
-      direction={i18n.language === 'ar' ? 'rtl' : 'ltr'}
+      direction={rtl.dir}
       locale={getAntdLocale(i18n.language)}
       theme={{
         token: {
@@ -1270,7 +1292,7 @@ const ConsumptionReport = () => {
         },
       }}
     >
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 transition-colors duration-300" dir={rtl.dir}>
       {/* Header Section */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1314,7 +1336,7 @@ const ConsumptionReport = () => {
       </div>
 
       {/* Date/Time Picker and Stats Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" dir={rtl.dir}>
         {/* Date/Time Picker Card */}
         <div className="lg:col-span-2">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300">
@@ -1391,13 +1413,13 @@ const ConsumptionReport = () => {
                   <div className="flex flex-col">
                     <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">{t('consumptionReport.dateRange.from')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {dateRange[0]?.locale(i18n.language).format('dddd، D MMMM YYYY [' + t('consumptionReport.dateRange.at') + '] hh:mm A')}
+                      {replaceAMPM(dateRange[0]?.locale(i18n.language).format('dddd، D MMMM YYYY [' + t('consumptionReport.dateRange.at') + '] hh:mm A'))}
                     </span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-sm font-semibold text-green-600 dark:text-green-400 mb-2">{t('consumptionReport.dateRange.to')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {dateRange[1]?.locale(i18n.language).format('dddd، D MMMM YYYY [' + t('consumptionReport.dateRange.at') + '] hh:mm A')}
+                      {replaceAMPM(dateRange[1]?.locale(i18n.language).format('dddd، D MMMM YYYY [' + t('consumptionReport.dateRange.at') + '] hh:mm A'))}
                     </span>
                   </div>
                 </div>

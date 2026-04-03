@@ -380,7 +380,7 @@ const Dashboard = () => {
                     <div key={session.id} className="flex items-center justify-between p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 rounded-xl border border-blue-100 dark:border-blue-700 hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
                       <div className="flex items-center">
                         <div className={`w-14 h-14 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center ${isRTL ? 'mr-4' : 'ml-4'}`}>
-                          {session.deviceType.includes('PlayStation') || session.deviceType.includes('بلايستيشن') ? (
+                          {session.deviceType.toLowerCase().includes('playstation') ? (
                             <Gamepad2 className="h-7 w-7 text-blue-600 dark:text-blue-400" />
                           ) : (
                             <Monitor className="h-7 w-7 text-blue-600 dark:text-blue-400" />

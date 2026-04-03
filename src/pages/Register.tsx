@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
 import { useLanguage } from '../context/LanguageContext';
+import { AUTH_ERROR_CODES, isValidErrorCode, getErrorMessageKey } from '../constants/errorCodes';
 
 interface FormData {
   name: string;
@@ -131,11 +132,15 @@ const Register: React.FC = () => {
         });
         setErrors({});
       } else {
-        if (data.message?.includes('فشل إرسال رسالة التفعيل')) {
-          setErrors({ email: t('auth.verificationFailed') });
-        } else if (data.message?.includes('موجود')) {
-          setErrors({ email: t('auth.emailAlreadyExists') });
+        // Check if the error is an error code
+        const errorCode = data.code || data.message || '';
+        
+        if (isValidErrorCode(errorCode)) {
+          // Use translation for error code
+          const translatedError = t(getErrorMessageKey(errorCode));
+          setErrors({ email: translatedError });
         } else {
+          // Fallback: display the error message as-is (for backward compatibility)
           setErrors({ email: data.message || t('auth.registerError') });
         }
       }

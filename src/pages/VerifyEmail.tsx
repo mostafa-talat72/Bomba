@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
+import { AUTH_ERROR_CODES, isValidErrorCode, getErrorMessageKey } from '../constants/errorCodes';
 
 const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -23,15 +24,31 @@ const VerifyEmail: React.FC = () => {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
         const res = await fetch(`${apiUrl}/auth/verify-email?token=${token}`);
         const data = await res.json();
+        
         if (data.success) {
           setStatus('success');
           setMessage(data.message || t('auth.verificationSuccessMessage'));
-        } else if (data.message && data.message.includes('الحساب مفعل بالفعل')) {
-          setStatus('success');
-          setMessage(t('auth.verificationAlreadyDone'));
         } else {
-          setStatus('error');
-          setMessage(data.message || t('auth.verificationFailedMessage'));
+          // Check if the error is an error code
+          const errorCode = data.code || data.message || '';
+          
+          if (isValidErrorCode(errorCode)) {
+            // Use translation for error code
+            const translatedError = t(getErrorMessageKey(errorCode));
+            
+            // ALREADY_VERIFIED is still a success case
+            if (errorCode === AUTH_ERROR_CODES.ALREADY_VERIFIED) {
+              setStatus('success');
+              setMessage(translatedError);
+            } else {
+              setStatus('error');
+              setMessage(translatedError);
+            }
+          } else {
+            // Fallback: display the error message as-is (for backward compatibility)
+            setStatus('error');
+            setMessage(data.message || t('auth.verificationFailedMessage'));
+          }
         }
       } catch {
         setStatus('error');

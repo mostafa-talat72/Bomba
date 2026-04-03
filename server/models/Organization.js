@@ -104,7 +104,8 @@ const OrganizationSchema = new mongoose.Schema({
                 default: 'ar'
             }
         }], // قائمة الإيميلات المستقبلة مع اللغة المفضلة لكل مستلم
-        lastReportSentAt: { type: Date }, // آخر مرة تم فيها إرسال التقرير
+        lastReportSentAt: { type: Date }, // آخر مرة تم فيها إرسال التقرير اليومي
+        lastMonthlyReportSentAt: { type: Date }, // آخر مرة تم فيها إرسال التقرير الشهري
         authorizedToManageReports: [{ // المستخدمون المصرح لهم بإدارة إعدادات التقارير
             type: mongoose.Schema.Types.ObjectId,
             ref: "User"

@@ -164,11 +164,12 @@ class ResumeTokenStorage {
 
                 // Validate token before returning
                 if (!this.validate(doc.token)) {
-                    Logger.warn('[ResumeTokenStorage] Stored token is invalid, clearing it');
+                    Logger.warn('[ResumeTokenStorage] ⚠️  Stored token is invalid - clearing automatically');
                     
-                    // Clear invalid token
+                    // Clear invalid token automatically
                     try {
                         await this.clear();
+                        Logger.info('[ResumeTokenStorage] ✅ Invalid token cleared automatically');
                     } catch (clearError) {
                         Logger.error('[ResumeTokenStorage] Error clearing invalid token:', clearError);
                     }
@@ -176,13 +177,22 @@ class ResumeTokenStorage {
                     return null;
                 }
 
-                // Check token age - if too old, might be expired
+                // Check token age - if too old, clear it automatically
                 const tokenAge = Date.now() - new Date(doc.timestamp).getTime();
                 const maxTokenAge = 7 * 24 * 60 * 60 * 1000; // 7 days
                 
                 if (tokenAge > maxTokenAge) {
-                    Logger.warn(`[ResumeTokenStorage] Token is ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} days old, might be expired`);
-                    // Don't clear automatically, let Change Stream handle it
+                    Logger.warn(`[ResumeTokenStorage] ⚠️  Token is ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} days old - clearing automatically`);
+                    
+                    // Clear old token automatically
+                    try {
+                        await this.clear();
+                        Logger.info('[ResumeTokenStorage] ✅ Old token cleared automatically');
+                    } catch (clearError) {
+                        Logger.error('[ResumeTokenStorage] Error clearing old token:', clearError);
+                    }
+                    
+                    return null;
                 }
 
                 Logger.debug('[ResumeTokenStorage] Resume token loaded successfully');

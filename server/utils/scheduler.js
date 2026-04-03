@@ -295,21 +295,38 @@ const generateDailyReportForOrganization = async (organization) => {
         const { default: MenuItem } = await import('../models/MenuItem.js');
         const { generateDailyReportPDF } = await import('./pdfGenerator.js');
 
+        // ✅ جلب البيانات بنفس طريقة صفحة تقرير الاستهلاك
         const [orders, sessions, costs] = await Promise.all([
+            // الطلبات: نستخدم createdAt (صحيح)
             Order.find({
-                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                createdAt: { $gte: startOfReport, $lte: endOfReport },
                 organization: organization._id,
             }).lean(),
+            // ✅ الجلسات: يجب استخدام endTime وليس createdAt (هذا هو الإصلاح!)
             Session.find({
-                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                endTime: { $gte: startOfReport, $lte: endOfReport },
                 status: "completed",
                 organization: organization._id,
             }).lean(),
             Cost.find({
-                date: { $gte: startOfReport, $lt: endOfReport },
+                date: { $gte: startOfReport, $lte: endOfReport },
                 organization: organization._id,
             }).lean(),
         ]);
+
+        Logger.info(`📊 Data fetched for ${organization.name}:`, {
+            ordersCount: orders.length,
+            sessionsCount: sessions.length,
+            costsCount: costs.length,
+            sessionsSample: sessions.slice(0, 3).map(s => ({
+                id: s._id,
+                deviceType: s.deviceType,
+                startTime: s.startTime,
+                endTime: s.endTime,
+                finalCost: s.finalCost,
+                status: s.status
+            }))
+        });
 
         // Calculate revenues
         const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
@@ -317,12 +334,46 @@ const generateDailyReportForOrganization = async (organization) => {
         const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
         const computerSessions = sessions.filter(s => s.deviceType === "computer");
         
-        const playstationRevenue = playstationSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
-        const computerRevenue = computerSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+        Logger.info(`🎮 Sessions breakdown for ${organization.name}:`, {
+            totalSessions: sessions.length,
+            playstationCount: playstationSessions.length,
+            computerCount: computerSessions.length,
+            playstationSample: playstationSessions.slice(0, 2).map(s => ({
+                id: s._id,
+                finalCost: s.finalCost,
+                endTime: s.endTime
+            })),
+            computerSample: computerSessions.slice(0, 2).map(s => ({
+                id: s._id,
+                finalCost: s.finalCost,
+                endTime: s.endTime
+            }))
+        });
+        
+        const playstationRevenue = playstationSessions.reduce((sum, s) => {
+            const cost = Number(s.finalCost) || 0;
+            Logger.info(`  PS Session ${s._id}: finalCost = ${s.finalCost}, converted = ${cost}`);
+            return sum + cost;
+        }, 0);
+        
+        const computerRevenue = computerSessions.reduce((sum, s) => {
+            const cost = Number(s.finalCost) || 0;
+            Logger.info(`  PC Session ${s._id}: finalCost = ${s.finalCost}, converted = ${cost}`);
+            return sum + cost;
+        }, 0);
         
         const totalRevenue = cafeRevenue + playstationRevenue + computerRevenue;
         const totalCosts = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
         const netProfit = totalRevenue - totalCosts;
+
+        Logger.info(`💰 Revenue calculation for ${organization.name}:`, {
+            cafeRevenue,
+            playstationRevenue,
+            computerRevenue,
+            totalRevenue,
+            totalCosts,
+            netProfit
+        });
 
         // Get top products
         const productSales = {};
@@ -419,8 +470,14 @@ const generateDailyReportForOrganization = async (organization) => {
                 .slice(0, 10)
         })).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
+        // Get organization owner's language and currency preferences BEFORE creating reportData
+        const owner = await User.findById(organization.owner).select('preferences').lean();
+        const ownerLanguage = owner?.preferences?.language || 'ar';
+        const organizationCurrency = organization.currency || 'EGP';
+        const ownerLocale = ownerLanguage === 'ar' ? 'ar-EG' : ownerLanguage === 'fr' ? 'fr-FR' : 'en-US';
+
         const reportData = {
-            date: startOfReport.toLocaleDateString("ar-EG"),
+            date: startOfReport.toLocaleDateString(ownerLocale),
             organizationName: organization.name,
             totalRevenue: totalRevenue || 0,
             totalCosts: totalCosts || 0,
@@ -428,7 +485,7 @@ const generateDailyReportForOrganization = async (organization) => {
             totalBills: orders.length + sessions.length,
             totalOrders: orders.length || 0,
             totalSessions: sessions.length || 0,
-            topProducts: topProducts,
+            topProducts: topProducts || [],
             topProductsBySection: topProductsBySection,
             revenueByType: {
                 playstation: playstationRevenue || 0,
@@ -437,41 +494,33 @@ const generateDailyReportForOrganization = async (organization) => {
             },
             startOfReport: startOfReport,
             endOfReport: endOfReport,
-            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})} 
-                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long'})}`,
+            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString(ownerLocale, {weekday: 'long', day: 'numeric', month: 'long'})} 
+                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString(ownerLocale, {weekday: 'long', day: 'numeric', month: 'long'})}`,
+            language: ownerLanguage,
+            currency: organizationCurrency
         };
 
-        Logger.info(`Organization "${organization.name}" - Report data summary:`, {
+        Logger.info(`✅ Report data prepared for ${organization.name}:`, {
             organizationId: organization._id,
             totalRevenue: reportData.totalRevenue,
             totalOrders: reportData.totalOrders,
             totalSessions: reportData.totalSessions,
             netProfit: reportData.netProfit,
             topProductsCount: reportData.topProducts.length,
-            sectionsCount: reportData.topProductsBySection.length
+            sectionsCount: reportData.topProductsBySection.length,
+            language: reportData.language,
+            currency: reportData.currency
         });
 
-        // Generate PDF
-        const pdfBuffer = await generateDailyReportPDF(reportData);
-
-        // Get organization owner's language and currency preferences
-        const owner = await User.findById(organization.owner).select('preferences').lean();
-        const ownerLanguage = owner?.preferences?.language || 'ar';
-        const organizationCurrency = organization.currency || 'EGP';
-
-        // Add language and currency to reportData
-        reportData.language = ownerLanguage;
-        reportData.currency = organizationCurrency;
-
-        // Send report via email with PDF attachment
-        await sendDailyReport(reportData, reportEmails, pdfBuffer);
+        // Send report via email with PDF attachment (email.js will generate PDFs per recipient language)
+        await sendDailyReport(reportData, reportEmails, null, ownerLanguage, organizationCurrency);
         
         // Update lastReportSentAt timestamp
         organization.reportSettings.lastReportSentAt = new Date();
         await organization.save();
         
         Logger.info(
-            `Daily report sent for organization: ${organization.name}`,
+            `✅ Daily report sent successfully for organization: ${organization.name}`,
             {
                 organizationId: organization._id,
                 emailCount: reportEmails.length,
@@ -481,7 +530,7 @@ const generateDailyReportForOrganization = async (organization) => {
         );
     } catch (error) {
         Logger.error(
-            `Failed to generate daily report for organization: ${organization.name}`,
+            `❌ Failed to generate daily report for organization: ${organization.name}`,
             {
                 organizationId: organization._id,
                 error: error.message,
@@ -590,21 +639,38 @@ const generateMonthlyReportForOrganization = async (organization) => {
         // Import required modules
         const { default: MenuItem } = await import('../models/MenuItem.js');
 
+        // ✅ جلب البيانات بنفس طريقة صفحة تقرير الاستهلاك
         const [orders, sessions, costs] = await Promise.all([
+            // الطلبات: نستخدم createdAt (صحيح)
             Order.find({
-                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                createdAt: { $gte: startOfReport, $lte: endOfReport },
                 organization: organization._id,
             }).lean(),
+            // ✅ الجلسات: يجب استخدام endTime وليس createdAt (هذا هو الإصلاح!)
             Session.find({
-                createdAt: { $gte: startOfReport, $lt: endOfReport },
+                endTime: { $gte: startOfReport, $lte: endOfReport },
                 status: "completed",
                 organization: organization._id,
             }).lean(),
             Cost.find({
-                date: { $gte: startOfReport, $lt: endOfReport },
+                date: { $gte: startOfReport, $lte: endOfReport },
                 organization: organization._id,
             }).lean(),
         ]);
+
+        Logger.info(`📊 Monthly data fetched for ${organization.name}:`, {
+            ordersCount: orders.length,
+            sessionsCount: sessions.length,
+            costsCount: costs.length,
+            sessionsSample: sessions.slice(0, 3).map(s => ({
+                id: s._id,
+                deviceType: s.deviceType,
+                startTime: s.startTime,
+                endTime: s.endTime,
+                finalCost: s.finalCost,
+                status: s.status
+            }))
+        });
 
         // Calculate revenues
         const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
@@ -612,12 +678,27 @@ const generateMonthlyReportForOrganization = async (organization) => {
         const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
         const computerSessions = sessions.filter(s => s.deviceType === "computer");
         
+        Logger.info(`🎮 Monthly sessions breakdown for ${organization.name}:`, {
+            totalSessions: sessions.length,
+            playstationCount: playstationSessions.length,
+            computerCount: computerSessions.length
+        });
+        
         const playstationRevenue = playstationSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
         const computerRevenue = computerSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
         
         const totalRevenue = cafeRevenue + playstationRevenue + computerRevenue;
         const totalCosts = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
         const netProfit = totalRevenue - totalCosts;
+
+        Logger.info(`💰 Monthly revenue calculation for ${organization.name}:`, {
+            cafeRevenue,
+            playstationRevenue,
+            computerRevenue,
+            totalRevenue,
+            totalCosts,
+            netProfit
+        });
 
         // Get top products
         const productSales = {};
@@ -718,8 +799,14 @@ const generateMonthlyReportForOrganization = async (organization) => {
         const daysInPeriod = Math.ceil((endOfReport - startOfReport) / (1000 * 60 * 60 * 24));
         const avgDailyRevenue = daysInPeriod > 0 ? totalRevenue / daysInPeriod : 0;
 
+        // Get organization owner's language and currency preferences BEFORE creating reportData
+        const owner = await User.findById(organization.owner).select('preferences').lean();
+        const ownerLanguage = owner?.preferences?.language || 'ar';
+        const organizationCurrency = organization.currency || 'EGP';
+        const ownerLocale = ownerLanguage === 'ar' ? 'ar-EG' : ownerLanguage === 'fr' ? 'fr-FR' : 'en-US';
+
         const reportData = {
-            month: startOfReport.toLocaleDateString("ar-EG", { month: "long", year: "numeric" }),
+            month: startOfReport.toLocaleDateString(ownerLocale, { month: "long", year: "numeric" }),
             organizationName: organization.name,
             totalRevenue: totalRevenue || 0,
             totalCosts: totalCosts || 0,
@@ -739,8 +826,10 @@ const generateMonthlyReportForOrganization = async (organization) => {
             daysInPeriod: daysInPeriod,
             startOfReport: startOfReport,
             endOfReport: endOfReport,
-            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString('ar-EG', {day: 'numeric', month: 'long', year: 'numeric'})} 
-                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString('ar-EG', {day: 'numeric', month: 'long', year: 'numeric'})}`,
+            reportPeriod: `من ${startTimeStr} يوم ${startOfReport.toLocaleDateString(ownerLocale, {day: 'numeric', month: 'long', year: 'numeric'})} 
+                         إلى ${startTimeStr} يوم ${endOfReport.toLocaleDateString(ownerLocale, {day: 'numeric', month: 'long', year: 'numeric'})}`,
+            language: ownerLanguage,
+            currency: organizationCurrency
         };
 
         Logger.info(`Organization "${organization.name}" - Monthly report data summary:`, {
@@ -750,16 +839,20 @@ const generateMonthlyReportForOrganization = async (organization) => {
             totalSessions: reportData.totalSessions,
             netProfit: reportData.netProfit,
             daysInPeriod: reportData.daysInPeriod,
-            avgDailyRevenue: reportData.avgDailyRevenue
+            avgDailyRevenue: reportData.avgDailyRevenue,
+            language: reportData.language,
+            currency: reportData.currency
         });
-
-        // Get organization owner's language and currency preferences
-        const owner = await User.findById(organization.owner).select('preferences').lean();
-        const ownerLanguage = owner?.preferences?.language || 'ar';
-        const organizationCurrency = organization.currency || 'EGP';
 
         // Send report via email (reuse sendMonthlyReport function)
         await sendMonthlyReport(reportData, reportEmails, ownerLanguage, organizationCurrency);
+        
+        // Update lastMonthlyReportSentAt timestamp
+        if (!organization.reportSettings) {
+            organization.reportSettings = {};
+        }
+        organization.reportSettings.lastMonthlyReportSentAt = new Date();
+        await organization.save();
         
         Logger.info(
             `Monthly report sent for organization: ${organization.name}`,
@@ -767,7 +860,8 @@ const generateMonthlyReportForOrganization = async (organization) => {
                 organizationId: organization._id,
                 emailCount: reportEmails.length,
                 emails: reportEmails,
-                month: reportData.month
+                month: reportData.month,
+                sentAt: organization.reportSettings.lastMonthlyReportSentAt
             }
         );
     } catch (error) {
@@ -1199,13 +1293,67 @@ const initializeOrganizationMonthlyReportSchedules = async () => {
             `Initializing monthly report schedules for ${organizations.length} organizations...`
         );
         
+        const now = new Date();
+        const currentDay = now.getDate();
+        let missedMonthlyReports = 0;
+        
         for (const organization of organizations) {
             scheduleMonthlyReportForOrganization(organization);
+            
+            // Check if we missed this month's report (if today is 1st and report wasn't sent yet)
+            if (currentDay === 1) {
+                const lastMonthlyReport = organization.reportSettings?.lastMonthlyReportSentAt;
+                const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                
+                // Check if report was already sent this month
+                const alreadySentThisMonth = lastMonthlyReport && new Date(lastMonthlyReport) >= thisMonth;
+                
+                if (!alreadySentThisMonth) {
+                    const sendTimeStr = organization.reportSettings?.dailyReportSendTime || "09:00";
+                    const [sendHour, sendMinute] = sendTimeStr.split(':').map(Number);
+                    const sendTime = sendHour * 60 + sendMinute;
+                    const currentTime = now.getHours() * 60 + now.getMinutes();
+                    
+                    // If scheduled time has passed today, send it now
+                    if (currentTime > sendTime) {
+                        Logger.info(
+                            `⚠️ Missed monthly report for organization: ${organization.name}. Sending now...`,
+                            {
+                                organizationId: organization._id,
+                                scheduledTime: sendTimeStr,
+                                currentTime: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+                                lastSentAt: lastMonthlyReport ? lastMonthlyReport.toLocaleString('ar-EG') : 'never'
+                            }
+                        );
+                        
+                        // Send the report immediately (don't await to avoid blocking)
+                        generateMonthlyReportForOrganization(organization).catch(error => {
+                            Logger.error(
+                                `Failed to send missed monthly report for organization: ${organization.name}`,
+                                {
+                                    organizationId: organization._id,
+                                    error: error.message
+                                }
+                            );
+                        });
+                        
+                        missedMonthlyReports++;
+                    }
+                }
+            }
         }
         
         Logger.info(
-            `✅ Initialized ${scheduledMonthlyReportTasks.size} monthly report schedules`
+            `✅ Initialized ${scheduledMonthlyReportTasks.size} monthly report schedules`,
+            {
+                totalOrganizations: organizations.length,
+                missedReports: missedMonthlyReports
+            }
         );
+        
+        if (missedMonthlyReports > 0) {
+            Logger.info(`📧 Sending ${missedMonthlyReports} missed monthly reports...`);
+        }
     } catch (error) {
         Logger.error("Failed to initialize organization monthly report schedules", {
             error: error.message

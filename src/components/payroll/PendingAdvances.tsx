@@ -10,6 +10,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../../context/LanguageContext';
 import { useOrganization } from '../../context/OrganizationContext';
+import { replaceAMPM } from '../../utils/formatters';
 
 dayjs.extend(relativeTime);
 
@@ -127,7 +128,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
           {d.format('DD/MM/YYYY')}
         </span>
         <span className="text-xs text-gray-500 dark:text-gray-400">
-          {d.format('hh:mm A')} • {d.fromNow()}
+          {replaceAMPM(d.format('hh:mm A'))} • {d.fromNow()}
         </span>
       </div>
     );

@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext';
 import api, { Device, Session } from '../services/api';
 import { SessionCostDisplay } from '../components/SessionCostDisplay';
 import { formatDecimal, formatCurrency, getCurrencySymbol } from '../utils/formatters';
+import { formatDateTime } from '../utils/timeFormat';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
@@ -24,17 +25,9 @@ const formatTimeByLocale = (dateTime: dayjs.Dayjs, locale: string, tz?: string):
   dayjs.locale(locale);
   // If timezone is provided, convert to that timezone, otherwise use the datetime as-is
   const timeInZone = tz ? dateTime.tz(tz) : dateTime;
-  const formatted = timeInZone.format('DD/MM/YYYY - hh:mm A');
-
-  if (locale === 'ar') {
-    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    return formatted
-      .replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)])
-      .replace('AM', 'ص')
-      .replace('PM', 'م');
-  }
-
-  return formatted;
+  
+  // Use the utility function for proper AM/PM translation
+  return formatDateTime(timeInZone, true);
 };
 
 // ???? ?????? ??? ?????? ????????? ????? ??? ????? ???????

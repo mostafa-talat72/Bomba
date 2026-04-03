@@ -3,6 +3,7 @@ import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
 import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
+import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
 
 // Function to determine the appropriate link for QR Code based on priority
@@ -196,7 +197,7 @@ export const printBill = async (
   }
   
   const dir = language === 'ar' ? 'rtl' : 'ltr';
-  const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
+  const locale = getLocaleFromLanguage(language);
   
   // Format date - uses organization timezone
   const formatDate = (dateString: string | Date) => {

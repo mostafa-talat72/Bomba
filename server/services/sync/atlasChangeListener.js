@@ -74,6 +74,7 @@ class AtlasChangeListener {
                 this.resumeToken = await this.resumeTokenStorage.load();
                 if (this.resumeToken) {
                     Logger.info('[AtlasChangeListener] Resume token loaded from storage');
+                    Logger.debug('[AtlasChangeListener] Token will be validated on first use');
                 } else {
                     Logger.info('[AtlasChangeListener] No resume token found, starting fresh');
                 }
@@ -81,6 +82,14 @@ class AtlasChangeListener {
                 Logger.error('[AtlasChangeListener] Error loading resume token:', error);
                 Logger.info('[AtlasChangeListener] Starting without resume token');
                 this.resumeToken = null;
+                
+                // Try to clear any corrupted token
+                try {
+                    await this.resumeTokenStorage.clear();
+                    Logger.info('[AtlasChangeListener] Cleared potentially corrupted token');
+                } catch (clearError) {
+                    Logger.error('[AtlasChangeListener] Error clearing token:', clearError);
+                }
             }
 
             // Get Atlas connection
@@ -131,7 +140,32 @@ class AtlasChangeListener {
             Logger.error('[AtlasChangeListener] Failed to start Change Stream:', error);
             this.isRunning = false;
             
-            // Schedule reconnection
+            // Check if error is due to invalid resume token
+            if (error.code === 260 || error.code === 286 || 
+                error.codeName === 'InvalidResumeToken' || 
+                error.codeName === 'ChangeStreamHistoryLost' || 
+                error.message?.includes('resume token') || 
+                error.message?.includes('resume point') ||
+                error.message?.includes('invalidate notification')) {
+                
+                Logger.warn('[AtlasChangeListener] ⚠️  Invalid resume token on startup - clearing automatically');
+                
+                try {
+                    const cleared = await this.resumeTokenStorage.clear();
+                    if (cleared) {
+                        this.resumeToken = null;
+                        Logger.info('[AtlasChangeListener] ✅ Resume token cleared automatically');
+                        
+                        // Retry start immediately without token
+                        Logger.info('[AtlasChangeListener] 🔄 Retrying start without resume token...');
+                        return await this.start();
+                    }
+                } catch (clearError) {
+                    Logger.error('[AtlasChangeListener] Error clearing invalid resume token:', clearError);
+                }
+            }
+            
+            // Schedule reconnection for other errors
             await this.scheduleReconnect();
             
             throw error;
@@ -158,20 +192,34 @@ class AtlasChangeListener {
             this.isRunning = false;
             
             // Check if error is due to invalid resume token
-            if (error.code === 286 || error.codeName === 'ChangeStreamHistoryLost' || 
-                error.message?.includes('resume token') || error.message?.includes('resume point')) {
-                Logger.error('[AtlasChangeListener] Resume token error detected, clearing token');
+            if (error.code === 260 || error.code === 286 || 
+                error.codeName === 'InvalidResumeToken' || 
+                error.codeName === 'ChangeStreamHistoryLost' || 
+                error.message?.includes('resume token') || 
+                error.message?.includes('resume point') ||
+                error.message?.includes('invalidate notification')) {
+                
+                Logger.warn('[AtlasChangeListener] ⚠️  Invalid resume token detected - clearing and restarting fresh');
                 
                 try {
-                    await this.resumeTokenStorage.handleInvalidToken('Resume token expired or invalid');
-                    this.resumeToken = null;
+                    // Clear the invalid token from storage
+                    const cleared = await this.resumeTokenStorage.clear();
+                    if (cleared) {
+                        this.resumeToken = null;
+                        Logger.info('[AtlasChangeListener] ✅ Resume token cleared successfully from storage');
+                    } else {
+                        Logger.error('[AtlasChangeListener] ❌ Failed to clear resume token from storage');
+                    }
                 } catch (clearError) {
                     Logger.error('[AtlasChangeListener] Error clearing invalid resume token:', clearError);
                 }
+                
+                // Reset reconnect attempts to start fresh
+                this.reconnectAttempts = 0;
             }
             
             // Schedule reconnection
-            this.scheduleReconnect();
+            await this.scheduleReconnect();
         });
 
         // Handle close
@@ -501,6 +549,21 @@ class AtlasChangeListener {
 
             // Wait for delay
             await new Promise(resolve => setTimeout(resolve, delay));
+
+            // Clear resume token if it was the cause of failure
+            // This ensures we start fresh on reconnection
+            if (this.resumeToken) {
+                Logger.info('[AtlasChangeListener] Clearing resume token before reconnection to start fresh');
+                try {
+                    await this.resumeTokenStorage.clear();
+                    this.resumeToken = null;
+                    Logger.info('[AtlasChangeListener] ✅ Resume token cleared for fresh start');
+                } catch (clearError) {
+                    Logger.error('[AtlasChangeListener] Error clearing resume token:', clearError);
+                    // Continue anyway without token
+                    this.resumeToken = null;
+                }
+            }
 
             // Attempt to start again
             await this.start();

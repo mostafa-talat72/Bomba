@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from '../services/api';
 import { formatDateInTimezone } from '../utils/timezoneHelper';
-import { getCurrencySymbol as getCurrencySymbolUtil } from '../utils/formatters';
+import { getCurrencySymbol as getCurrencySymbolUtil, replaceAMPM } from '../utils/formatters';
+import { getLocaleFromLanguage } from '../utils/localeMapper';
 
 interface OrganizationContextType {
   currency: string;
@@ -96,8 +97,8 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const formatDate = (date: Date | string, options?: Intl.DateTimeFormatOptions): string => {
-    const currentLang = localStorage.getItem('i18nextLng') || 'ar';
-    const locale = currentLang === 'ar' ? 'ar-EG' : currentLang === 'fr' ? 'fr-FR' : 'en-US';
+    const currentLang = localStorage.getItem('i18nextLng') || 'en';
+    const locale = getLocaleFromLanguage(currentLang);
     
     const defaultOptions: Intl.DateTimeFormatOptions = {
       year: 'numeric',
@@ -110,8 +111,8 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const formatDateTime = (date: Date | string): string => {
-    const currentLang = localStorage.getItem('i18nextLng') || 'ar';
-    const locale = currentLang === 'ar' ? 'ar-EG' : currentLang === 'fr' ? 'fr-FR' : 'en-US';
+    const currentLang = localStorage.getItem('i18nextLng') || 'en';
+    const locale = getLocaleFromLanguage(currentLang);
     
     
     const result = formatDateInTimezone(date, timezone, locale, {
@@ -128,14 +129,17 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const formatTime = (date: Date | string): string => {
-    const currentLang = localStorage.getItem('i18nextLng') || 'ar';
-    const locale = currentLang === 'ar' ? 'ar-EG' : currentLang === 'fr' ? 'fr-FR' : 'en-US';
+    const currentLang = localStorage.getItem('i18nextLng') || 'en';
+    const locale = getLocaleFromLanguage(currentLang);
     
-    return formatDateInTimezone(date, timezone, locale, {
+    const formatted = formatDateInTimezone(date, timezone, locale, {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
     });
+    
+    // Replace AM/PM with translated versions
+    return replaceAMPM(formatted);
   };
 
   return (

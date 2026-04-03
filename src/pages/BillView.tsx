@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
@@ -367,7 +368,7 @@ const BillView = () => {
 		const language = localStorage.getItem('billViewLanguage') || 'ar';
 		// Use organization timezone from database
 		const timezone = localStorage.getItem('organizationTimezone') || 'Africa/Cairo';
-		const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
+		const locale = getLocaleFromLanguage(language);
 		
 		try {
 			const date = new Date(dateString);

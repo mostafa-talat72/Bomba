@@ -2,18 +2,20 @@
  * Date formatting utilities with timezone support
  */
 
+import { getLocaleFromLanguage } from './localeMapper';
+
 /**
  * Format date with organization timezone
  */
 export const formatDateWithTimezone = (
   date: Date | string,
-  language: string = 'ar',
+  language: string = 'en',
   timezone: string = 'Africa/Cairo',
   options?: Intl.DateTimeFormatOptions
 ): string => {
   try {
     const dateObj = new Date(date);
-    const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
+    const locale = getLocaleFromLanguage(language);
     
     const defaultOptions: Intl.DateTimeFormatOptions = {
       year: 'numeric',

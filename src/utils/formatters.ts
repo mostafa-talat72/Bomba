@@ -1,4 +1,5 @@
 import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols.js';
+import i18n from '../i18n/config';
 
 /**
  * تحويل الأرقام الإنجليزية إلى العربية
@@ -9,10 +10,40 @@ const convertToArabicNumbers = (str: string): string => {
 };
 
 /**
+ * Get translated AM/PM labels from i18n
+ */
+const getTimeLabels = () => {
+    return {
+        am: i18n.t('reports.timeLabels.am'),
+        pm: i18n.t('reports.timeLabels.pm'),
+        at: i18n.t('reports.timeLabels.at')
+    };
+};
+
+/**
+ * Replace AM/PM in formatted time string with translated versions
+ */
+export const replaceAMPM = (formattedTime: string): string => {
+    const labels = getTimeLabels();
+    return formattedTime
+        .replace(/AM/gi, labels.am)
+        .replace(/PM/gi, labels.pm);
+};
+
+/**
  * Get currency symbol based on currency code and language
  */
 export const getCurrencySymbol = (currencyCode: string, language: string = 'ar'): string => {
-    return CURRENCY_SYMBOLS[currencyCode]?.[language] || currencyCode;
+    const currencyData = CURRENCY_SYMBOLS[currencyCode];
+    if (!currencyData) return currencyCode;
+    
+    // Try to get symbol for the requested language, fallback to 'en', then 'ar'
+    if (language in currencyData) {
+        return currencyData[language as keyof typeof currencyData];
+    }
+    
+    // Fallback: try 'en' first, then 'ar'
+    return currencyData['en'] || currencyData['ar'] || currencyCode;
 };
 
 /**

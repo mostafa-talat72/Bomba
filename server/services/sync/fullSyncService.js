@@ -164,7 +164,7 @@ class FullSyncService {
         const atlasDocs = await atlasCollection.find({}).toArray();
 
         Logger.info(
-            `   Local: ${localDocs.length} docs, Atlas: ${atlasDocs.length} docs`
+            `   📊 Local: ${localDocs.length} docs, Atlas: ${atlasDocs.length} docs`
         );
 
         this.progress.documentsCompared += localDocs.length + atlasDocs.length;
@@ -172,9 +172,13 @@ class FullSyncService {
         // Compare and sync
         const differences = await this.compareDocuments(localDocs, atlasDocs);
 
-        Logger.info(
-            `   Differences: ${differences.missingInAtlas.length} missing, ${differences.outdatedInAtlas.length} outdated`
-        );
+        if (differences.missingInAtlas.length > 0 || differences.outdatedInAtlas.length > 0) {
+            Logger.info(
+                `   🔍 Differences found: ${differences.missingInAtlas.length} missing, ${differences.outdatedInAtlas.length} outdated`
+            );
+        } else {
+            Logger.info(`   ✅ Already in sync - no changes needed`);
+        }
 
         // Sync missing documents
         if (differences.missingInAtlas.length > 0) {
@@ -327,7 +331,7 @@ class FullSyncService {
             return;
         }
 
-        Logger.info(`   📤 Syncing ${documents.length} missing documents...`);
+        Logger.info(`   📤 Syncing ${documents.length} missing documents to Atlas...`);
 
         // Batch insert for efficiency
         const batchSize = syncConfig.batchSize;
@@ -345,6 +349,10 @@ class FullSyncService {
                 await atlasCollection.insertMany(batch, { ordered: false });
                 synced += batch.length;
                 this.progress.documentsSynced += batch.length;
+                
+                // Show progress
+                const progress = ((synced / documents.length) * 100).toFixed(1);
+                Logger.info(`      ⏳ Progress: ${synced}/${documents.length} (${progress}%)`);
             } catch (error) {
                 // Handle duplicate key errors (document might have been synced already)
                 if (error.code === 11000) {
@@ -361,7 +369,7 @@ class FullSyncService {
             }
         }
 
-        Logger.info(`   ✅ Synced ${synced} missing documents`);
+        Logger.info(`   ✅ Successfully synced ${synced} missing documents`);
     }
 
     /**

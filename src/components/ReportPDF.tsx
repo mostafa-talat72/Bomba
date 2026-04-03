@@ -1,4 +1,5 @@
 import React from 'react';
+import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 
@@ -56,8 +57,8 @@ export const ReportPDF: React.FC<ReportPDFProps> = ({ reportType, data, dateRang
   
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const locales: Record<string, string> = { ar: 'ar-EG', en: 'en-US', fr: 'fr-FR' };
-    return date.toLocaleDateString(locales[language] || 'ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+    const locale = getLocaleFromLanguage(language);
+    return date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
   };
   
   const formatCurrency = (amount: number) => {

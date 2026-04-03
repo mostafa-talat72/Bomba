@@ -376,8 +376,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           await loadAndApplySettings();
           
           await refreshData();
-        } else if (response.message && (response.message.includes('توكن غير صالح') || response.message.includes('انتهت صلاحية الجلسة'))) {
-          // محاولة تجديد التوكن تلقائياً
+        } else if (!response.success && (response.status === 401 || response.statusCode === 401)) {
+          // محاولة تجديد التوكن تلقائياً عند الحصول على 401
           const refreshToken = localStorage.getItem('refreshToken');
           if (refreshToken) {
             try {

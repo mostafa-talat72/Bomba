@@ -1,4 +1,5 @@
 import { TFunction } from 'i18next';
+import { getLocaleFromLanguage } from './localeMapper';
 import { formatDecimal } from './formatters';
 
 export const getDeviceTypeText = (deviceType: string, t: TFunction): string => {

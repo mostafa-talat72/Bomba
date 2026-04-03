@@ -125,10 +125,14 @@ export const formatDateInTimezone = (
 ): string => {
   try {
     const dateObj = new Date(date);
-    return dateObj.toLocaleString(locale, {
+    const formatted = dateObj.toLocaleString(locale, {
       timeZone: timezone,
       ...options
     });
+    
+    // If the format includes time with AM/PM, we need to replace it with translated version
+    // This will be handled by the calling code using replaceAMPM from formatters
+    return formatted;
   } catch (error) {
     console.error('Error formatting date in timezone:', error);
     return new Date(date).toLocaleString(locale);

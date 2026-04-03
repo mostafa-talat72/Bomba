@@ -822,22 +822,34 @@ export const sendReportNow = async (req, res) => {
         // Fetch data using the SAME logic as Reports page
         // Get ALL orders (not just specific statuses)
         const orders = await Order.find({
-            createdAt: { $gte: startOfReport, $lt: endOfReport },
+            createdAt: { $gte: startOfReport, $lte: endOfReport },
             organization: organizationId,
         }).lean();
 
-        // Get completed sessions
+        // ✅ Get completed sessions - يجب استخدام endTime وليس createdAt!
         const sessions = await Session.find({
-            createdAt: { $gte: startOfReport, $lt: endOfReport },
+            endTime: { $gte: startOfReport, $lte: endOfReport },
             status: "completed",
             organization: organizationId,
         }).lean();
 
         // Get costs
         const costs = await Cost.find({
-            date: { $gte: startOfReport, $lt: endOfReport },
+            date: { $gte: startOfReport, $lte: endOfReport },
             organization: organizationId,
         }).lean();
+
+        console.log('📊 Data fetched:', {
+            ordersCount: orders.length,
+            sessionsCount: sessions.length,
+            costsCount: costs.length,
+            sessionsSample: sessions.slice(0, 2).map(s => ({
+                id: s._id,
+                deviceType: s.deviceType,
+                endTime: s.endTime,
+                finalCost: s.finalCost
+            }))
+        });
 
 
         // Calculate revenues using SAME logic as Reports page
@@ -846,12 +858,33 @@ export const sendReportNow = async (req, res) => {
         const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
         const computerSessions = sessions.filter(s => s.deviceType === "computer");
         
-        const playstationRevenue = playstationSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
-        const computerRevenue = computerSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+        console.log('🎮 Sessions breakdown:', {
+            totalSessions: sessions.length,
+            playstationCount: playstationSessions.length,
+            computerCount: computerSessions.length
+        });
+        
+        const playstationRevenue = playstationSessions.reduce((sum, s) => {
+            const cost = Number(s.finalCost) || 0;
+            return sum + cost;
+        }, 0);
+        
+        const computerRevenue = computerSessions.reduce((sum, s) => {
+            const cost = Number(s.finalCost) || 0;
+            return sum + cost;
+        }, 0);
         
         const totalRevenue = cafeRevenue + playstationRevenue + computerRevenue;
         const totalCosts = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
         const netProfit = totalRevenue - totalCosts;
+
+        console.log('💰 Revenue calculation:', {
+            cafeRevenue,
+            playstationRevenue,
+            computerRevenue,
+            totalRevenue,
+            netProfit
+        });
 
         // Get top products
         const productSales = {};
@@ -981,13 +1014,176 @@ export const sendReportNow = async (req, res) => {
         // Send report via email with PDF attachment
         await sendDailyReport(reportData, reportEmails, pdfBuffer, ownerLanguage, organizationCurrency);
 
+        // Check if today is the 1st of the month - send monthly report too
+        const today = new Date();
+        const isFirstDayOfMonth = today.getDate() === 1;
+        let monthlySent = false;
+        
+        if (isFirstDayOfMonth) {
+            try {
+                console.log('📅 First day of month detected - sending monthly report too...');
+                
+                const { sendMonthlyReport } = await import('../utils/email.js');
+                
+                // Calculate last month's period
+                const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+                lastMonthEnd.setHours(startHour, startMinute || 0, 0, 0);
+                
+                const lastMonthStart = new Date(lastMonthEnd);
+                lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+                
+                console.log('📊 Monthly report period:', {
+                    start: lastMonthStart.toLocaleString(userLocale),
+                    end: lastMonthEnd.toLocaleString(userLocale)
+                });
+                
+                // Fetch monthly data
+                const [monthlyOrders, monthlySessions, monthlyCosts] = await Promise.all([
+                    Order.find({
+                        createdAt: { $gte: lastMonthStart, $lt: lastMonthEnd },
+                        organization: organizationId,
+                    }).lean(),
+                    Session.find({
+                        endTime: { $gte: lastMonthStart, $lt: lastMonthEnd },
+                        status: "completed",
+                        organization: organizationId,
+                    }).lean(),
+                    Cost.find({
+                        date: { $gte: lastMonthStart, $lt: lastMonthEnd },
+                        organization: organizationId,
+                    }).lean(),
+                ]);
+                
+                // Calculate monthly revenues
+                const monthlyCafeRevenue = monthlyOrders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
+                const monthlyPlaystationSessions = monthlySessions.filter(s => s.deviceType === "playstation");
+                const monthlyComputerSessions = monthlySessions.filter(s => s.deviceType === "computer");
+                const monthlyPlaystationRevenue = monthlyPlaystationSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+                const monthlyComputerRevenue = monthlyComputerSessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+                const monthlyTotalRevenue = monthlyCafeRevenue + monthlyPlaystationRevenue + monthlyComputerRevenue;
+                const monthlyTotalCosts = monthlyCosts.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
+                const monthlyNetProfit = monthlyTotalRevenue - monthlyTotalCosts;
+                
+                // Get monthly top products
+                const monthlyProductSales = {};
+                monthlyOrders.forEach((order) => {
+                    if (!order.items || !Array.isArray(order.items)) return;
+                    order.items.forEach((item) => {
+                        if (!item.name) return;
+                        if (!monthlyProductSales[item.name]) {
+                            monthlyProductSales[item.name] = { quantity: 0, revenue: 0 };
+                        }
+                        const itemQuantity = Number(item.quantity) || 0;
+                        const itemPrice = Number(item.price) || 0;
+                        const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                        monthlyProductSales[item.name].quantity += itemQuantity;
+                        monthlyProductSales[item.name].revenue += itemTotal;
+                    });
+                });
+                
+                const monthlyTopProducts = Object.entries(monthlyProductSales)
+                    .map(([name, data]) => ({ name, ...data }))
+                    .sort((a, b) => b.revenue - a.revenue)
+                    .slice(0, 10);
+                
+                // Get monthly top products by section
+                const monthlySectionData = {};
+                monthlyOrders.forEach(order => {
+                    if (!order.items || !Array.isArray(order.items)) return;
+                    order.items.forEach(item => {
+                        if (!item.name) return;
+                        const menuItem = menuItemMap[item.name];
+                        let sectionId = 'other';
+                        let sectionName = 'أخرى';
+                        if (menuItem && menuItem.category && menuItem.category.section) {
+                            const section = menuItem.category.section;
+                            sectionId = section._id ? section._id.toString() : 'other';
+                            sectionName = section.name || 'أخرى';
+                        }
+                        if (!monthlySectionData[sectionId]) {
+                            monthlySectionData[sectionId] = {
+                                sectionId, sectionName, products: {}, totalRevenue: 0, totalQuantity: 0
+                            };
+                        }
+                        const itemPrice = Number(item.price) || 0;
+                        const itemQuantity = Number(item.quantity) || 0;
+                        const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                        if (!monthlySectionData[sectionId].products[item.name]) {
+                            monthlySectionData[sectionId].products[item.name] = { name: item.name, quantity: 0, revenue: 0 };
+                        }
+                        monthlySectionData[sectionId].products[item.name].quantity += itemQuantity;
+                        monthlySectionData[sectionId].products[item.name].revenue += itemTotal;
+                        monthlySectionData[sectionId].totalRevenue += itemTotal;
+                        monthlySectionData[sectionId].totalQuantity += itemQuantity;
+                    });
+                });
+                
+                const monthlyTopProductsBySection = Object.values(monthlySectionData).map(section => ({
+                    sectionId: section.sectionId,
+                    sectionName: section.sectionName,
+                    totalRevenue: section.totalRevenue,
+                    totalQuantity: section.totalQuantity,
+                    products: Object.values(section.products).sort((a, b) => b.revenue - a.revenue).slice(0, 10)
+                })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+                
+                const daysInPeriod = Math.ceil((lastMonthEnd - lastMonthStart) / (1000 * 60 * 60 * 24));
+                const avgDailyRevenue = daysInPeriod > 0 ? monthlyTotalRevenue / daysInPeriod : 0;
+                
+                const monthlyReportData = {
+                    month: lastMonthStart.toLocaleDateString(userLocale, { month: "long", year: "numeric" }),
+                    organizationName: organization.name,
+                    totalRevenue: monthlyTotalRevenue || 0,
+                    totalCosts: monthlyTotalCosts || 0,
+                    netProfit: monthlyNetProfit || 0,
+                    profitMargin: monthlyTotalRevenue > 0 ? ((monthlyNetProfit / monthlyTotalRevenue) * 100) : 0,
+                    totalBills: monthlyOrders.length + monthlySessions.length,
+                    totalOrders: monthlyOrders.length || 0,
+                    totalSessions: monthlySessions.length || 0,
+                    topProducts: monthlyTopProducts,
+                    topProductsBySection: monthlyTopProductsBySection,
+                    revenueByType: {
+                        playstation: monthlyPlaystationRevenue || 0,
+                        computer: monthlyComputerRevenue || 0,
+                        cafe: monthlyCafeRevenue || 0
+                    },
+                    avgDailyRevenue: avgDailyRevenue || 0,
+                    daysInPeriod: daysInPeriod,
+                    startOfReport: lastMonthStart,
+                    endOfReport: lastMonthEnd,
+                    reportPeriod: `من ${startTimeStr} يوم ${lastMonthStart.toLocaleDateString(userLocale, {day: 'numeric', month: 'long', year: 'numeric'})} 
+                                 إلى ${startTimeStr} يوم ${lastMonthEnd.toLocaleDateString(userLocale, {day: 'numeric', month: 'long', year: 'numeric'})}`,
+                    language: ownerLanguage,
+                    currency: organizationCurrency
+                };
+                
+                // Send monthly report
+                await sendMonthlyReport(monthlyReportData, reportEmails, ownerLanguage, organizationCurrency);
+                
+                // Update lastMonthlyReportSentAt
+                if (!organization.reportSettings) {
+                    organization.reportSettings = {};
+                }
+                organization.reportSettings.lastMonthlyReportSentAt = new Date();
+                await organization.save();
+                
+                monthlySent = true;
+                console.log('✅ Monthly report sent successfully');
+            } catch (monthlyError) {
+                console.error('❌ Error sending monthly report:', monthlyError);
+                // Don't fail the whole request if monthly report fails
+            }
+        }
+
         res.json({
             success: true,
-            message: `تم إرسال التقرير بنجاح إلى ${reportEmails.length} إيميل`,
+            message: monthlySent 
+                ? `تم إرسال التقرير اليومي والشهري بنجاح إلى ${reportEmails.length} إيميل`
+                : `تم إرسال التقرير اليومي بنجاح إلى ${reportEmails.length} إيميل`,
             data: {
                 emailsSent: reportEmails.length,
                 emails: reportEmails,
                 reportPeriod: reportData.reportPeriod,
+                monthlySent: monthlySent,
                 summary: {
                     totalRevenue: reportData.totalRevenue,
                     totalOrders: reportData.totalOrders,

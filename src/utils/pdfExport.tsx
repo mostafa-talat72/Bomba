@@ -51,7 +51,11 @@ export const exportReportToPDF = async (options: ExportPDFOptions): Promise<void
     URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Error exporting PDF:', error);
-    throw new Error('فشل في تصدير PDF');
+    // Use translation for error message
+    const errorMessage = typeof window !== 'undefined' && window.i18n 
+      ? window.i18n.t('errors.pdfExportFailed') 
+      : 'Failed to export PDF';
+    throw new Error(errorMessage);
   }
 };
 

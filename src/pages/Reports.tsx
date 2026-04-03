@@ -14,7 +14,7 @@ import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { exportReportToPDF, generatePDFFilename } from '../utils/pdfExport';
 import { useTranslation } from 'react-i18next';
-import { formatDecimal, formatCurrency as formatCurrencyUtil } from '../utils/formatters';
+import { formatDecimal, formatCurrency as formatCurrencyUtil, replaceAMPM } from '../utils/formatters';
 import { useCurrency } from '../hooks/useCurrency';
 import { useOrganization } from '../context/OrganizationContext';
 
@@ -1071,9 +1071,9 @@ const Reports = () => {
       const end = new Date(filter.endDate);
 
       if (filterType === 'custom') {
-        // Format with time for custom filter - use locale explicitly
-        const startFormatted = dateRange[0].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`);
-        const endFormatted = dateRange[1].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`);
+        // Format with time for custom filter - use locale explicitly with translated AM/PM
+        const startFormatted = replaceAMPM(dateRange[0].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`));
+        const endFormatted = replaceAMPM(dateRange[1].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`));
         return `${t('reports.from')} ${startFormatted} ${t('reports.to')} ${endFormatted}`;
       } else if (filterType === 'daily') {
         return `${t('reports.day')} ${formatDate(start)}`;
@@ -1424,13 +1424,13 @@ const Reports = () => {
                   <div className="flex flex-col">
                     <span className="text-sm text-blue-600 dark:text-blue-400 mb-1">{t('reports.from')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {dateRange[0].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`)}
+                      {replaceAMPM(dateRange[0].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`))}
                     </span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-sm text-blue-600 dark:text-blue-400 mb-1">{t('reports.to')}</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {dateRange[1].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`)}
+                      {replaceAMPM(dateRange[1].locale(i18n.language).format(`dddd، D MMMM YYYY [${t('reports.timeLabels.at')}] hh:mm A`))}
                     </span>
                   </div>
                 </div>

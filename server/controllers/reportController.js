@@ -59,11 +59,12 @@ export const getDashboardStats = async (req, res) => {
             },
         ]);
 
-        // Sessions statistics
+        // Sessions statistics - filter by endTime for completed sessions
         const sessionsData = await Session.aggregate([
             {
                 $match: {
-                    startTime: { $gte: startDate, $lte: endDate },
+                    endTime: { $gte: startDate, $lte: endDate },
+                    status: "completed",
                     organization: req.user.organization,
                 },
             },
@@ -649,12 +650,12 @@ export const getFinancialReport = async (req, res) => {
             },
         ]);
 
-        // Revenue from Sessions (PlayStation & Computer)
+        // Revenue from Sessions (PlayStation & Computer) - filter by endTime
         const sessionsRevenue = await Session.aggregate([
             {
                 $match: {
-                    createdAt: { $gte: startDate, $lte: endDate },
-                    status: { $in: ["completed"] }, // الجلسات المكتملة فقط
+                    endTime: { $gte: startDate, $lte: endDate },
+                    status: "completed",
                     organization: organizationId,
                 },
             },
@@ -740,11 +741,11 @@ export const getFinancialReport = async (req, res) => {
         const previousSessionsRevenue = await Session.aggregate([
             {
                 $match: {
-                    createdAt: {
+                    endTime: {
                         $gte: previousPeriod.startDate,
                         $lte: previousPeriod.endDate,
                     },
-                    status: { $in: ["completed"] },
+                    status: "completed",
                     organization: organizationId,
                 },
             },
@@ -1311,40 +1312,24 @@ const getSalesReportData = async (organization, startDate, endDate) => {
     // Ensure organization is an ObjectId, not an object
     const organizationId = organization._id || organization;
     
-
-    // Check total orders in DB for this organization (no date filter)
-    const totalOrdersInOrg = await Order.countDocuments({
-        organization: organizationId,
-    });
-    
-    // Check orders in date range
-    const ordersInRange = await Order.countDocuments({
-        createdAt: { $gte: startDate, $lte: endDate },
-        organization: organizationId,
-    });
-    
-    // Get ALL orders (not just specific statuses)
+    // Get ALL orders using the same logic as ConsumptionReport
     const orders = await Order.find({
         createdAt: { $gte: startDate, $lte: endDate },
         organization: organizationId,
-    });
+    }).lean();
 
-    
-
-    // Get completed sessions (gaming revenue)
+    // Get completed sessions using endTime (same as ConsumptionReport and /api/sessions endpoint)
     const sessions = await Session.find({
-        createdAt: { $gte: startDate, $lte: endDate },
+        endTime: { $gte: startDate, $lte: endDate },
         status: "completed",
         organization: organizationId,
-    });
+    }).lean();
 
-
-    // Calculate cafe revenue from orders
+    // Calculate cafe revenue from orders using finalAmount
     const cafeRevenue = orders.reduce((sum, order) => sum + (Number(order.finalAmount) || 0), 0);
     const totalOrders = orders.length;
 
-
-    // Calculate gaming revenue from sessions
+    // Calculate gaming revenue from sessions using finalCost (after discount)
     const playstationSessions = sessions.filter(s => s.deviceType === "playstation");
     const computerSessions = sessions.filter(s => s.deviceType === "computer");
     
@@ -1352,12 +1337,10 @@ const getSalesReportData = async (organization, startDate, endDate) => {
     const computerRevenue = computerSessions.reduce((sum, session) => sum + (Number(session.finalCost) || 0), 0);
     const gamingRevenue = playstationRevenue + computerRevenue;
 
-
     // Total revenue
     const totalRevenue = cafeRevenue + gamingRevenue;
     const totalTransactions = totalOrders + sessions.length;
     const avgOrderValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
-
 
     const revenueBreakdown = {
         playstation: playstationRevenue,
@@ -1365,7 +1348,7 @@ const getSalesReportData = async (organization, startDate, endDate) => {
         cafe: cafeRevenue,
     };
 
-    // Top products from orders
+    // Top products from orders - group by name
     const productSales = {};
     orders.forEach((order) => {
         if (!order.items || !Array.isArray(order.items)) return;
@@ -1374,23 +1357,25 @@ const getSalesReportData = async (organization, startDate, endDate) => {
             if (!item.name) return;
             
             if (!productSales[item.name]) {
-                productSales[item.name] = { quantity: 0, revenue: 0 };
+                productSales[item.name] = { 
+                    name: item.name,
+                    quantity: 0, 
+                    revenue: 0 
+                };
             }
             
             const itemQuantity = Number(item.quantity) || 0;
             const itemPrice = Number(item.price) || 0;
-            const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+            const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
             
             productSales[item.name].quantity += itemQuantity;
             productSales[item.name].revenue += itemTotal;
         });
     });
 
-    const topProducts = Object.entries(productSales)
-        .map(([name, data]) => ({ name, ...data }))
+    const topProducts = Object.values(productSales)
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 10);
-
 
     return {
         totalRevenue,
@@ -1532,22 +1517,33 @@ const getSessionsReportData = async (organization, startDate, endDate) => {
     // Ensure organization is an ObjectId, not an object
     const organizationId = organization._id || organization;
     
+    // Filter by endTime for completed sessions, only include completed sessions
     const sessions = await Session.find({
-        startTime: { $gte: startDate, $lte: endDate },
+        endTime: { $gte: startDate, $lte: endDate },
+        status: "completed",
         organization: organizationId,
     });
 
     const totalSessions = sessions.length;
+    // Use finalCost (after discount) instead of totalCost
     const totalRevenue = sessions.reduce(
-        (sum, session) => sum + session.finalCost,
+        (sum, session) => sum + (Number(session.finalCost) || 0),
         0
     );
 
     let totalDuration = 0;
     sessions.forEach((session) => {
-        if (session.startTime && session.endTime) {
-            const duration =
-                new Date(session.endTime) - new Date(session.startTime);
+        // Calculate duration from controllersHistory if available for more accuracy
+        if (session.controllersHistory && Array.isArray(session.controllersHistory) && session.controllersHistory.length > 0) {
+            session.controllersHistory.forEach((period) => {
+                const periodStart = new Date(period.from).getTime();
+                const periodEnd = period.to ? new Date(period.to).getTime() : (session.endTime ? new Date(session.endTime).getTime() : Date.now());
+                const periodDurationMs = periodEnd - periodStart;
+                totalDuration += periodDurationMs / (1000 * 60 * 60); // Convert to hours
+            });
+        } else if (session.startTime && session.endTime) {
+            // Fallback to simple calculation
+            const duration = new Date(session.endTime) - new Date(session.startTime);
             totalDuration += duration / (1000 * 60 * 60); // Convert to hours
         }
     });
@@ -1567,12 +1563,19 @@ const getSessionsReportData = async (organization, startDate, endDate) => {
             };
         }
         deviceStats[deviceType].sessions += 1;
-        deviceStats[deviceType].revenue += session.finalCost;
-        if (session.startTime && session.endTime) {
-            const duration =
-                new Date(session.endTime) - new Date(session.startTime);
-            deviceStats[deviceType].totalDuration +=
-                duration / (1000 * 60 * 60);
+        deviceStats[deviceType].revenue += (Number(session.finalCost) || 0);
+        
+        // Calculate duration from controllersHistory if available
+        if (session.controllersHistory && Array.isArray(session.controllersHistory) && session.controllersHistory.length > 0) {
+            session.controllersHistory.forEach((period) => {
+                const periodStart = new Date(period.from).getTime();
+                const periodEnd = period.to ? new Date(period.to).getTime() : (session.endTime ? new Date(session.endTime).getTime() : Date.now());
+                const periodDurationMs = periodEnd - periodStart;
+                deviceStats[deviceType].totalDuration += periodDurationMs / (1000 * 60 * 60);
+            });
+        } else if (session.startTime && session.endTime) {
+            const duration = new Date(session.endTime) - new Date(session.startTime);
+            deviceStats[deviceType].totalDuration += duration / (1000 * 60 * 60);
         }
     });
 
@@ -1729,17 +1732,28 @@ const getSessionsDataByType = async (organization, startDate, endDate, deviceTyp
         // Ensure organization is an ObjectId, not an object
         const organizationId = organization._id || organization;
         
+        // Filter by endTime for completed sessions
         const sessions = await Session.find({
-            createdAt: { $gte: startDate, $lte: endDate },
+            endTime: { $gte: startDate, $lte: endDate },
             deviceType,
-            status: { $in: ['completed', 'active'] },
+            status: 'completed',
             organization: organizationId
         }).lean();
 
         const totalSessions = sessions.length;
-        const totalRevenue = sessions.reduce((sum, s) => sum + (s.finalCost || 0), 0);
+        const totalRevenue = sessions.reduce((sum, s) => sum + (Number(s.finalCost) || 0), 0);
+        
+        // Calculate total duration using controllersHistory if available
         const totalDuration = sessions.reduce((sum, s) => {
-            if (s.startTime && s.endTime) {
+            if (s.controllersHistory && Array.isArray(s.controllersHistory) && s.controllersHistory.length > 0) {
+                let sessionDuration = 0;
+                s.controllersHistory.forEach((period) => {
+                    const periodStart = new Date(period.from).getTime();
+                    const periodEnd = period.to ? new Date(period.to).getTime() : (s.endTime ? new Date(s.endTime).getTime() : Date.now());
+                    sessionDuration += (periodEnd - periodStart);
+                });
+                return sum + sessionDuration;
+            } else if (s.startTime && s.endTime) {
                 return sum + (new Date(s.endTime) - new Date(s.startTime));
             }
             return sum;
@@ -1761,9 +1775,16 @@ const getSessionsDataByType = async (organization, startDate, endDate, deviceTyp
                 };
             }
             deviceStats[deviceName].sessionsCount++;
-            deviceStats[deviceName].revenue += session.finalCost || 0;
+            deviceStats[deviceName].revenue += Number(session.finalCost) || 0;
             
-            if (session.startTime && session.endTime) {
+            // Calculate duration using controllersHistory if available
+            if (session.controllersHistory && Array.isArray(session.controllersHistory) && session.controllersHistory.length > 0) {
+                session.controllersHistory.forEach((period) => {
+                    const periodStart = new Date(period.from).getTime();
+                    const periodEnd = period.to ? new Date(period.to).getTime() : (session.endTime ? new Date(session.endTime).getTime() : Date.now());
+                    deviceStats[deviceName].totalDuration += (periodEnd - periodStart);
+                });
+            } else if (session.startTime && session.endTime) {
                 deviceStats[deviceName].totalDuration += (new Date(session.endTime) - new Date(session.startTime));
             }
         });
@@ -1819,9 +1840,9 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
             organization: organizationId
         }).lean();
 
-        // Get completed sessions
+        // Get completed sessions - filter by endTime
         const sessions = await Session.find({
-            createdAt: { $gte: startDate, $lte: endDate },
+            endTime: { $gte: startDate, $lte: endDate },
             status: 'completed',
             organization: organizationId
         }).lean();
@@ -1883,10 +1904,10 @@ const getStaffPerformanceData = async (organization, startDate, endDate) => {
             organization: organizationId
         }).populate('createdBy', 'name').lean();
 
-        // Get completed sessions
+        // Get completed sessions - filter by endTime
         const sessions = await Session.find({
-            startTime: { $gte: startDate, $lte: endDate },
-            status: { $in: ['completed', 'active'] },
+            endTime: { $gte: startDate, $lte: endDate },
+            status: 'completed',
             organization: organizationId
         }).populate('createdBy', 'name').lean();
 

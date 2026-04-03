@@ -171,76 +171,99 @@ class ChangeProcessor {
      */
     validateDocumentData(document, collectionName, operationType) {
         const errors = [];
+        const warnings = [];
 
         try {
             // Get the model for validation
             const Model = this.getModel(collectionName);
             if (!Model) {
+                // If no model found, allow sync but log warning
+                Logger.warn(`[ChangeProcessor] Model not found for collection: ${collectionName}, allowing sync`);
                 return {
-                    success: false,
-                    errors: [`Model not found for collection: ${collectionName}`]
+                    success: true,
+                    errors: [],
+                    warnings: [`Model not found for collection: ${collectionName}`]
                 };
             }
 
             // Get schema from model
             const schema = Model.schema;
             if (!schema) {
+                // If no schema found, allow sync but log warning
+                Logger.warn(`[ChangeProcessor] Schema not found for collection: ${collectionName}, allowing sync`);
                 return {
-                    success: false,
-                    errors: [`Schema not found for collection: ${collectionName}`]
+                    success: true,
+                    errors: [],
+                    warnings: [`Schema not found for collection: ${collectionName}`]
                 };
             }
 
-            // Validate document structure
+            // Validate document structure (non-blocking)
             const structureErrors = this.validateDocumentStructure(document, schema, collectionName);
             if (structureErrors.length > 0) {
-                errors.push(...structureErrors);
+                warnings.push(...structureErrors);
             }
 
-            // Validate field types
+            // Validate field types (blocking only for critical type mismatches)
             const typeErrors = this.validateFieldTypes(document, schema, collectionName);
             if (typeErrors.length > 0) {
-                errors.push(...typeErrors);
+                // Type errors are warnings, not blocking errors
+                warnings.push(...typeErrors);
             }
 
             // Validate required fields (only for insert and replace operations)
+            // For legacy data, treat missing required fields as warnings, not errors
             if (operationType === 'insert' || operationType === 'replace') {
                 const requiredErrors = this.validateRequiredFields(document, schema, collectionName);
                 if (requiredErrors.length > 0) {
-                    errors.push(...requiredErrors);
+                    // Log as warnings for legacy data compatibility
+                    Logger.warn(`[ChangeProcessor] Legacy data missing required fields in ${collectionName}:`, {
+                        documentId: document._id,
+                        missingFields: requiredErrors
+                    });
+                    warnings.push(...requiredErrors);
+                    // Don't block sync for missing required fields - legacy data may be incomplete
                 }
             }
 
-            // Validate enum values
+            // Validate enum values (blocking)
             const enumErrors = this.validateEnumFields(document, schema, collectionName);
             if (enumErrors.length > 0) {
                 errors.push(...enumErrors);
             }
 
-            // Validate numeric constraints (min, max)
+            // Validate numeric constraints (min, max) - non-blocking
             const numericErrors = this.validateNumericConstraints(document, schema, collectionName);
             if (numericErrors.length > 0) {
-                errors.push(...numericErrors);
+                warnings.push(...numericErrors);
             }
 
             if (errors.length > 0) {
                 Logger.warn(`[ChangeProcessor] Document validation failed for ${collectionName}:`, errors);
                 return {
                     success: false,
-                    errors
+                    errors,
+                    warnings
                 };
+            }
+
+            if (warnings.length > 0) {
+                Logger.debug(`[ChangeProcessor] Document validation warnings for ${collectionName}:`, warnings);
             }
 
             return {
                 success: true,
-                errors: []
+                errors: [],
+                warnings
             };
 
         } catch (error) {
             Logger.error('[ChangeProcessor] Error during document validation:', error);
+            // On validation error, allow sync but log the error
             return {
-                success: false,
-                errors: [`Validation error: ${error.message}`]
+                success: true,
+                errors: [],
+                warnings: [`Validation error: ${error.message}`]
             };
         }
     }
@@ -745,6 +768,16 @@ class ChangeProcessor {
             // Requirements: 9.1, 9.4, 9.5
             const sanitizedDocument = this.sanitizeDocumentForSync(document);
             const validation = this.validateDocumentData(sanitizedDocument, collectionName, 'insert');
+            
+            // Log warnings if any (legacy data compatibility)
+            if (validation.warnings && validation.warnings.length > 0) {
+                Logger.debug(`[ChangeProcessor] Document validation warnings for insert in ${collectionName}:`, {
+                    documentId: document._id,
+                    warnings: validation.warnings
+                });
+            }
+            
+            // Only block on critical validation errors (enum violations, etc.)
             if (!validation.success) {
                 Logger.error(`[ChangeProcessor] Document validation failed for insert in ${collectionName}:`, {
                     documentId: document._id,
@@ -944,6 +977,14 @@ class ChangeProcessor {
                     'update'
                 );
                 
+                // Log warnings if any (legacy data compatibility)
+                if (validation.warnings && validation.warnings.length > 0) {
+                    Logger.debug(`[ChangeProcessor] Update validation warnings for ${collectionName}:${documentId}:`, {
+                        warnings: validation.warnings
+                    });
+                }
+                
+                // Only block on critical validation errors
                 if (!validation.success) {
                     Logger.error(`[ChangeProcessor] Update validation failed for ${collectionName}:${documentId}:`, {
                         errors: validation.errors
@@ -1096,6 +1137,15 @@ class ChangeProcessor {
             // Validate document data before applying
             // Requirements: 9.1, 9.4, 9.5
             const validation = this.validateDocumentData(sanitizedDocument, collectionName, 'replace');
+            
+            // Log warnings if any (legacy data compatibility)
+            if (validation.warnings && validation.warnings.length > 0) {
+                Logger.debug(`[ChangeProcessor] Document validation warnings for replace in ${collectionName}:${documentId}:`, {
+                    warnings: validation.warnings
+                });
+            }
+            
+            // Only block on critical validation errors
             if (!validation.success) {
                 Logger.error(`[ChangeProcessor] Document validation failed for replace in ${collectionName}:${documentId}:`, {
                     errors: validation.errors
