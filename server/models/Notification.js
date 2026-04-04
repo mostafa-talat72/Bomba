@@ -246,7 +246,8 @@ notificationSchema.statics.createSessionNotification = function (
             translations
         },
         createdBy,
-        organization: session.organization || (createdBy && createdBy.organization),
+        // Always get organization from session (session always has organization)
+        organization: session.organization,
     });
 };
 
@@ -306,7 +307,8 @@ notificationSchema.statics.createOrderNotification = function (
             translations
         },
         createdBy,
-        organization: order.organization || (createdBy && createdBy.organization),
+        // Always get organization from order (order always has organization)
+        organization: order.organization,
     };
 
     return new this(notificationData);
@@ -363,7 +365,8 @@ notificationSchema.statics.createInventoryNotification = function (
             translations
         },
         createdBy,
-        organization: item.organization || (createdBy && createdBy.organization),
+        // Always get organization from item (item always has organization)
+        organization: item.organization,
     });
 };
 
@@ -428,7 +431,8 @@ notificationSchema.statics.createBillingNotification = function (
             translations
         },
         createdBy,
-        organization: bill.organization || (createdBy && createdBy.organization),
+        // Always get organization from bill (bill always has organization)
+        organization: bill.organization,
     });
 };
 
