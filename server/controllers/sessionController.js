@@ -659,15 +659,19 @@ const sessionController = {
                     customerNameForBill = getTableName(tableNumber, userLanguage);
                     tableName = getTableName(tableNumber, userLanguage);
                     
-                    // البحث عن فاتورة موجودة للطاولة (غير مدفوعة بالكامل)
+                    // OPTIMIZED: البحث عن فاتورة موجودة للطاولة باستخدام index
                     const existingBill = await Bill.findOne({
                         table: table,
                         organization: req.user.organization,
                         status: { $in: ['draft', 'partial', 'overdue'] }
-                    }).sort({ createdAt: -1 }); // أحدث فاتورة
+                    })
+                    .select('_id billNumber billType status orders sessions') // جلب الحقول الضرورية فقط
+                    .sort({ createdAt: -1 })
+                    .lean(); // استخدام lean() لتحسين الأداء
 
                     if (existingBill) {
-                        bill = existingBill;
+                        // تحويل lean object إلى Mongoose document
+                        bill = await Bill.findById(existingBill._id);
                         Logger.info(`✓ تم العثور على فاتورة موجودة للطاولة ${tableNumber} - سيتم ربط الجلسة بها:`, {
                             billId: bill._id,
                             billNumber: bill.billNumber,

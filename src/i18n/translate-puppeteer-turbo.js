@@ -14,15 +14,14 @@ import { WORLD_LANGUAGES } from '../../shared/languages.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Languages that need translation
-const REMAINING_LANGUAGES = [
-  'as', 'ay', 'bm', 'ceb', 'co', 'cy', 'dv', 'ee', 'eo', 'fy', 'gd', 'gn', 
-  'haw', 'ht', 'ik', 'iu', 'jv', 'kl', 'kr', 'kri', 'ks', 'la', 'lb', 'lg', 
-  'ln', 'lu', 'mh', 'nd', 'ng', 'nr', 'nv', 'ny', 'oc', 'om', 'or', 'os', 
-  'pi', 'qu', 'rm', 'rw', 'sa', 'sd', 'sg', 'sm', 'sn', 'ss', 'st', 'su', 
-  'tg', 'ti', 'tk', 'tn', 'to', 'ts', 'tt', 'tw', 'ty', 'ug', 'uz', 've', 
-  'wa', 'wo', 'xh', 'yi', 'yo', 'za', 'zu'
-];
+// Get all languages from WORLD_LANGUAGES (excluding Arabic as it's the source language)
+const ALL_LANGUAGES = WORLD_LANGUAGES
+  .filter(lang => lang.code !== 'ar') // Exclude Arabic (source language)
+  .map(lang => lang.code);
+
+console.log(`📋 Total languages in WORLD_LANGUAGES: ${WORLD_LANGUAGES.length}`);
+console.log(`🌍 Languages to check/translate: ${ALL_LANGUAGES.length}`);
+console.log(`⏭️  Excluded (source language): ar\n`);
 
 const PARALLEL_BROWSERS = 3; // Reduced for better quality
 const DELAY_BETWEEN_STRINGS = 1000; // 1 second (better quality)
@@ -31,9 +30,10 @@ const CHECKPOINT_FILE = path.join(__dirname, '.translation-turbo-checkpoint.json
 console.log('🚀 TURBO MODE - Maximum Speed Translation!\n');
 console.log('⚙️  Configuration:');
 console.log(`   - Parallel browsers: ${PARALLEL_BROWSERS}`);
-console.log(`   - Languages to translate: ${REMAINING_LANGUAGES.length}`);
+console.log(`   - Total languages to check: ${ALL_LANGUAGES.length}`);
 console.log(`   - Delay between strings: ${DELAY_BETWEEN_STRINGS}ms`);
-console.log(`   - Mode: Headless (ultra fast)\n`);
+console.log(`   - Mode: Headless (ultra fast)`);
+console.log(`   - Verification: Full quality check on all languages\n`);
 
 let totalTranslated = 0;
 let totalSkipped = 0;
@@ -123,7 +123,7 @@ async function translateText(page, text, targetLang, retries = 0) {
   }
   
   try {
-    const url = `https://translate.google.com/?sl=en&tl=${targetLang}&text=${encodeURIComponent(text)}&op=translate`;
+    const url = `https://translate.google.com/?sl=ar&tl=${targetLang}&text=${encodeURIComponent(text)}&op=translate`;
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 15000 });
     
     // Wait longer for translation to actually load
@@ -247,7 +247,8 @@ async function translateStrings(page, strings, targetLang, langName, targetPath)
         languageName: langInfo?.nativeName || targetLang,
         translationStatus: 'in-progress',
         translationProgress: i,
-        fallbackLanguage: 'en',
+        fallbackLanguage: 'ar',
+        sourceLanguage: 'ar',
         note: 'Translated using Google Translate (TURBO Mode) - Interrupted',
         translatedAt: new Date().toISOString(),
         translatedBy: 'Google Translate (Puppeteer TURBO)'
@@ -283,8 +284,9 @@ async function translateStrings(page, strings, targetLang, langName, targetPath)
         languageName: langInfo?.nativeName || targetLang,
         translationStatus: i === strings.length - 1 ? 'full' : 'in-progress',
         translationProgress: i + 1,
-        fallbackLanguage: 'en',
-        note: 'Translated using Google Translate (TURBO Mode)',
+        fallbackLanguage: 'ar',
+        sourceLanguage: 'ar',
+        note: 'Translated from Arabic using Google Translate (Puppeteer TURBO)',
         translatedAt: new Date().toISOString(),
         translatedBy: 'Google Translate (Puppeteer TURBO)'
       };
@@ -301,21 +303,111 @@ async function translateStrings(page, strings, targetLang, langName, targetPath)
 }
 
 /**
+ * Check if translation is complete and valid
+ */
+function checkIfTranslationComplete(targetPath, totalStrings) {
+  try {
+    if (!fs.existsSync(targetPath)) {
+      return { complete: false, needsTranslation: true, reason: 'File does not exist' };
+    }
+    
+    const content = JSON.parse(fs.readFileSync(targetPath, 'utf-8'));
+    const translatedStrings = collectStrings(content);
+    
+    // Check if number of strings matches exactly
+    if (translatedStrings.length !== totalStrings) {
+      return { 
+        complete: false, 
+        needsTranslation: true, 
+        reason: `String count mismatch (${translatedStrings.length}/${totalStrings})`,
+        existingStrings: translatedStrings.length
+      };
+    }
+    
+    // Check if _meta exists and has translationStatus
+    if (!content._meta || content._meta.translationStatus !== 'full') {
+      return { 
+        complete: false, 
+        needsTranslation: true, 
+        reason: 'Missing or incomplete _meta',
+        existingStrings: translatedStrings.length
+      };
+    }
+    
+    // Check for empty or untranslated strings
+    let emptyCount = 0;
+    let untranslatedCount = 0;
+    
+    for (const item of translatedStrings) {
+      if (!item.value || item.value.trim() === '') {
+        emptyCount++;
+      }
+      // Check if value is same as key (might indicate untranslated)
+      if (item.value === item.key) {
+        untranslatedCount++;
+      }
+    }
+    
+    if (emptyCount > 0 || untranslatedCount > 0) {
+      return {
+        complete: false,
+        needsTranslation: true,
+        reason: `Quality issues (${emptyCount} empty, ${untranslatedCount} untranslated)`,
+        existingStrings: translatedStrings.length
+      };
+    }
+    
+    // All checks passed
+    return { 
+      complete: true, 
+      needsTranslation: false, 
+      count: translatedStrings.length,
+      reason: 'Complete and verified'
+    };
+  } catch (error) {
+    return { 
+      complete: false, 
+      needsTranslation: true, 
+      reason: `Error: ${error.message}` 
+    };
+  }
+}
+
+/**
  * Translate one language
  */
 async function translateLanguage(browserInstance, langCode, langName) {
   const { page } = browserInstance;
   const localesDir = path.join(__dirname, 'locales');
-  const enPath = path.join(localesDir, 'en.json');
+  const arPath = path.join(localesDir, 'ar.json');
   const targetPath = path.join(localesDir, `${langCode}.json`);
   
   currentLanguage = langName;
-  console.log(`\n🔄 [${langName}] Starting translation...`);
+  console.log(`\n🔍 [${langName}] Checking...`);
   
   try {
-    const enContent = JSON.parse(fs.readFileSync(enPath, 'utf-8'));
-    const strings = collectStrings(enContent);
-    console.log(`   [${langName}] Found ${strings.length} strings`);
+    const arContent = JSON.parse(fs.readFileSync(arPath, 'utf-8'));
+    const strings = collectStrings(arContent);
+    
+    // Check if translation is complete and valid
+    const checkResult = checkIfTranslationComplete(targetPath, strings.length);
+    
+    console.log(`   📊 Status: ${checkResult.reason}`);
+    
+    if (checkResult.complete && !checkResult.needsTranslation) {
+      console.log(`   ✅ Verified complete (${checkResult.count} strings) - Skipping`);
+      totalSkipped++;
+      return { success: true, skipped: true };
+    }
+    
+    // Needs translation or re-translation
+    if (checkResult.existingStrings) {
+      console.log(`   🔄 Re-translating to fix issues (had ${checkResult.existingStrings} strings)`);
+    } else {
+      console.log(`   🆕 Starting fresh translation`);
+    }
+    
+    console.log(`   📝 Total strings to translate: ${strings.length}`);
     
     const { result, stats, interrupted } = await translateStrings(page, strings, langCode, langName, targetPath);
     
@@ -328,8 +420,9 @@ async function translateLanguage(browserInstance, langCode, langName) {
       languageCode: langCode,
       languageName: langInfo?.nativeName || langCode,
       translationStatus: 'full',
-      fallbackLanguage: 'en',
-      note: 'Translated using Google Translate (TURBO Mode)',
+      fallbackLanguage: 'ar',
+      sourceLanguage: 'ar',
+      note: 'Translated from Arabic using Google Translate (Puppeteer TURBO)',
       translatedAt: new Date().toISOString(),
       translatedBy: 'Google Translate (Puppeteer TURBO)'
     };
@@ -340,7 +433,6 @@ async function translateLanguage(browserInstance, langCode, langName) {
     console.log(`   ✅ [${langName}] Complete! Translated: ${stats.translated}, Skipped: ${stats.skipped}`);
     
     totalTranslated += stats.translated;
-    totalSkipped += stats.skipped;
     
     return { success: true, stats };
     
@@ -409,16 +501,20 @@ async function main() {
   
   const checkpoint = loadCheckpoint();
   const completedLanguages = new Set(checkpoint.completedLanguages || []);
+  const skippedLanguages = new Set(checkpoint.skippedLanguages || []);
   
-  if (completedLanguages.size > 0) {
-    console.log(`📌 Resuming: ${completedLanguages.size} languages already done\n`);
+  if (completedLanguages.size > 0 || skippedLanguages.size > 0) {
+    console.log(`📌 Resuming from checkpoint:`);
+    console.log(`   ✅ Completed: ${completedLanguages.size} languages`);
+    console.log(`   ⏭️  Skipped (verified): ${skippedLanguages.size} languages\n`);
   }
   
-  const languagesToTranslate = REMAINING_LANGUAGES.filter(
-    code => !completedLanguages.has(code)
+  const languagesToTranslate = ALL_LANGUAGES.filter(
+    code => !completedLanguages.has(code) && !skippedLanguages.has(code)
   );
   
-  console.log(`📊 Languages to translate: ${languagesToTranslate.length}`);
+  console.log(`🌍 Languages to check/translate: ${languagesToTranslate.length}`);
+  console.log(`✅ Already completed: ${completedLanguages.size}`);
   console.log(`⏱️  Estimated time: ~${((languagesToTranslate.length * 3272 * DELAY_BETWEEN_STRINGS) / 1000 / 60 / PARALLEL_BROWSERS).toFixed(1)} minutes\n`);
   console.log('💡 Press Ctrl+C anytime to save progress and exit safely\n');
   console.log('='.repeat(60));
@@ -443,13 +539,20 @@ async function main() {
     // Update checkpoint
     for (let j = 0; j < batch.length; j++) {
       if (results[j].success) {
-        completedLanguages.add(batch[j]);
+        if (results[j].skipped) {
+          skippedLanguages.add(batch[j]);
+        } else {
+          completedLanguages.add(batch[j]);
+        }
       } else if (results[j].interrupted) {
         console.log(`\n⚠️  Translation interrupted for ${batch[j]}`);
         break;
       }
     }
-    saveCheckpoint({ completedLanguages: Array.from(completedLanguages) });
+    saveCheckpoint({ 
+      completedLanguages: Array.from(completedLanguages),
+      skippedLanguages: Array.from(skippedLanguages)
+    });
     
     if (isShuttingDown) {
       break;

@@ -23,10 +23,10 @@ console.log(`📋 Total languages in WORLD_LANGUAGES: ${WORLD_LANGUAGES.length}`
 console.log(`🌍 Languages to check/translate: ${ALL_LANGUAGES.length}`);
 console.log(`⏭️  Excluded (source language): ar\n`);
 
-const DELAY_BETWEEN_STRINGS = 500; // 500ms - very safe rate
-const DELAY_BETWEEN_BATCHES = 10000; // 10 seconds between batches
-const BATCH_SIZE = 50; // Process 50 strings at once (very safe batch size)
-const DELAY_BETWEEN_LANGUAGES = 20000; // 20 seconds between languages
+const DELAY_BETWEEN_STRINGS = 800; // 800ms - balanced speed
+const DELAY_BETWEEN_BATCHES = 15000; // 15 seconds between batches (very safe)
+const BATCH_SIZE = 30; // Process 30 strings at once (very conservative)
+const DELAY_BETWEEN_LANGUAGES = 30000; // 30 seconds between languages (very safe)
 const MAX_RETRIES = 5; // Maximum retries for failed translations
 const INITIAL_RETRY_DELAY = 5000; // 5 seconds initial delay before retry
 const MAX_RETRY_DELAY = 60000; // Max 60 seconds between retries
