@@ -3,6 +3,7 @@ import { Receipt, QrCode, Printer, DollarSign, CreditCard, Calendar, User, Check
 import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem, Session } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
+import { formatTime } from '../utils/dateHelpers';
 import ConfirmModal from '../components/ConfirmModal';
 import { printBill } from '../utils/printBill';
 import { useNavigate, useLocation } from 'react-router-dom';
