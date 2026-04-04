@@ -133,15 +133,14 @@ export const getBills = async (req, res) => {
             organization: req.user.organization,
             ...query,
         })
-            // OPTIMIZED: جلب الحقول الضرورية فقط لتحسين الأداء
+            // جلب الحقول الضرورية فقط لتحسين الأداء
             .select('billNumber customerName customerPhone table status total paid remaining createdAt discount tax')
             .populate({
                 path: "table",
-                select: "number name", // فقط الحقول الأساسية
+                select: "number name",
             })
             .sort({ createdAt: -1 })
-            .limit(100) // OPTIMIZED: تحديد عدد السجلات لتحسين الأداء
-            .lean(); // OPTIMIZED: تحسين الأداء بنسبة 40-50%
+            .lean(); // تحسين الأداء بنسبة 40-50%
 
         // Update bills that have orders but zero total
         // Note: Since we're using .lean(), we need to update the database directly
