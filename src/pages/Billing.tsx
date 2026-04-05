@@ -1799,13 +1799,15 @@ const Billing = () => {
           {!isPlaystationSectionCollapsed && (
             <div className="space-y-3 sm:space-y-4">
               {(() => {
-                // تجميع جميع الفواتير التي تحتوي على جلسات بلايستيشن أو كمبيوتر
+                // تجميع فقط الفواتير الغير مرتبطة بطاولة والتي تحتوي على جلسات بلايستيشن أو كمبيوتر
                 const allGamingBills = bills.filter((bill: Bill) => 
-                  bill.billType === 'playstation' || 
-                  bill.billType === 'computer' ||
-                  (bill.sessions && bill.sessions.some((s: any) => 
-                    s.deviceType === 'playstation' || s.deviceType === 'computer'
-                  ))
+                  !bill.table && ( // فقط الفواتير الغير مرتبطة بطاولة
+                    bill.billType === 'playstation' || 
+                    bill.billType === 'computer' ||
+                    (bill.sessions && bill.sessions.some((s: any) => 
+                      s.deviceType === 'playstation' || s.deviceType === 'computer'
+                    ))
+                  )
                 );
 
               
@@ -1816,9 +1818,7 @@ const Billing = () => {
                   deviceType: 'playstation' | 'computer';
                   hasActiveSession: boolean;
                   linkedToTable: boolean;
-                  tableNumber?: string | number;
-                  bills: Bill[]; // فقط الفواتير غير المرتبطة بطاولة
-                  allBills: Bill[]; // جميع الفواتير (للتحقق من الربط بالطاولة)
+                  bills: Bill[];
                 }>();
               
                 allGamingBills.forEach((bill: Bill) => {
@@ -1830,11 +1830,8 @@ const Billing = () => {
                   if (gamingSessions.length > 0) {
                     gamingSessions.forEach((session: any) => {
                       const deviceKey = session.deviceName || `${t('billing.device')} ${session.deviceNumber}` || t('common.unknown');
-                      const isLinkedToTable = !!bill.table;
                       const hasActiveSession = session.status === 'active';
                       const deviceType = session.deviceType || 'playstation';
-                      
-                     
                       
                       if (!deviceMap.has(deviceKey)) {
                         deviceMap.set(deviceKey, {
@@ -1843,7 +1840,6 @@ const Billing = () => {
                           hasActiveSession: false,
                           linkedToTable: false,
                           bills: [],
-                          allBills: []
                         });
                       }
                       
@@ -1854,39 +1850,16 @@ const Billing = () => {
                         deviceData.hasActiveSession = true;
                       }
                       
-                      // إضافة الفاتورة إلى قائمة جميع الفواتير
-                      if (!deviceData.allBills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
-                        deviceData.allBills.push(bill);
-                      }
-                      
-                      // إضافة الفاتورة إلى قائمة bills إذا لم تكن مرتبطة بطاولة
-                      // هذا يضمن ظهور فواتير الجلسات غير المرتبطة بطاولة في قسم أجهزة الألعاب
-                      if (!isLinkedToTable) {
-                        if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
-                          deviceData.bills.push(bill);
-                        }
+                      // إضافة الفاتورة إلى قائمة الفواتير
+                      if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
+                        deviceData.bills.push(bill);
                       } 
                     });
-                  }
-                });
-                
-                // تحديد ما إذا كان الجهاز مرتبط بطاولة (جميع فواتيره مرتبطة بنفس الطاولة)
-                deviceMap.forEach((deviceData) => {
-                  if (deviceData.allBills.length > 0) {
-                    const firstTable = deviceData.allBills[0].table;
-                    const allLinkedToSameTable = firstTable && 
-                      deviceData.allBills.every(b => b.table?._id === firstTable._id);
-                    
-                    if (allLinkedToSameTable) {
-                      deviceData.linkedToTable = true;
-                      deviceData.tableNumber = firstTable.number;
-                    }
                   }
                 });
 
                 // إضافة فواتير بلايستيشن بدون جلسات (غير مرتبطة بطاولة)
                 const playstationBillsWithoutSessions = allGamingBills.filter((bill: Bill) => 
-                  !bill.table && 
                   bill.billType === 'playstation' &&
                   (!bill.sessions || bill.sessions.length === 0 || 
                    !bill.sessions.some((s: any) => s.deviceType === 'playstation'))
@@ -1901,21 +1874,18 @@ const Billing = () => {
                       hasActiveSession: false,
                       linkedToTable: false,
                       bills: [],
-                      allBills: []
                     });
                   }
                   const deviceData = deviceMap.get(deviceKey)!;
                   playstationBillsWithoutSessions.forEach(bill => {
                     if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
                       deviceData.bills.push(bill);
-                      deviceData.allBills.push(bill);
                     }
                   });
                 }
 
                 // إضافة فواتير كمبيوتر بدون جلسات (غير مرتبطة بطاولة)
                 const computerBillsWithoutSessions = allGamingBills.filter((bill: Bill) => 
-                  !bill.table && 
                   bill.billType === 'computer' &&
                   (!bill.sessions || bill.sessions.length === 0 || 
                    !bill.sessions.some((s: any) => s.deviceType === 'computer'))
@@ -1930,14 +1900,12 @@ const Billing = () => {
                       hasActiveSession: false,
                       linkedToTable: false,
                       bills: [],
-                      allBills: []
                     });
                   }
                   const deviceData = deviceMap.get(deviceKey)!;
                   computerBillsWithoutSessions.forEach(bill => {
                     if (!deviceData.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) {
                       deviceData.bills.push(bill);
-                      deviceData.allBills.push(bill);
                     }
                   });
                 }

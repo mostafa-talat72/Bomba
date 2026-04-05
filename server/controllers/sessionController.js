@@ -1009,8 +1009,61 @@ const sessionController = {
                 Logger.info(`Updated session start time to: ${newStartDate}`);
             }
 
+            // إعادة حساب التكلفة بعد تعديل الأوقات
+            const recalculatedCost = await session.calculateCurrentCost();
+            session.totalCost = recalculatedCost;
+            session.finalCost = recalculatedCost - (session.discount || 0);
+            
+            Logger.info(`Recalculated session cost after time update:`, {
+                sessionId: session._id,
+                totalCost: session.totalCost,
+                discount: session.discount,
+                finalCost: session.finalCost
+            });
+
             session.updatedBy = req.user._id;
             await session.save();
+            
+            // تحديث الفاتورة المرتبطة بالجلسة إذا كانت موجودة
+            if (session.bill) {
+                const Bill = mongoose.model('Bill');
+                const bill = await Bill.findById(session.bill);
+                
+                if (bill) {
+                    // إعادة حساب إجمالي الفاتورة
+                    const sessionsInBill = await Session.find({ 
+                        bill: bill._id,
+                        organization: req.user.organization 
+                    });
+                    
+                    const ordersInBill = await mongoose.model('Order').find({ 
+                        bill: bill._id,
+                        organization: req.user.organization 
+                    });
+                    
+                    // حساب إجمالي الجلسات
+                    const sessionsTotal = sessionsInBill.reduce((sum, s) => sum + (s.finalCost || 0), 0);
+                    
+                    // حساب إجمالي الطلبات
+                    const ordersTotal = ordersInBill.reduce((sum, order) => sum + (order.finalAmount || 0), 0);
+                    
+                    // تحديث الفاتورة
+                    bill.subtotal = sessionsTotal + ordersTotal;
+                    bill.total = bill.subtotal - (bill.discount || 0) + (bill.tax || 0);
+                    bill.remaining = bill.total - (bill.paid || 0);
+                    bill.updatedBy = req.user._id;
+                    
+                    await bill.save();
+                    
+                    Logger.info(`Updated bill ${bill._id} after session time update:`, {
+                        billId: bill._id,
+                        subtotal: bill.subtotal,
+                        total: bill.total,
+                        remaining: bill.remaining
+                    });
+                }
+            }
+            
             await session.populate(["createdBy", "updatedBy"], "name");
 
             Logger.info(`Controllers period time updated for session ${sessionId}:`, {
@@ -1019,7 +1072,9 @@ const sessionController = {
                 newEndTime: newEndTime ? new Date(newEndTime) : null,
                 isActivePeriod,
                 forceUpdate,
-                updatedPeriod: session.controllersHistory[periodIndex]
+                updatedPeriod: session.controllersHistory[periodIndex],
+                newTotalCost: session.totalCost,
+                newFinalCost: session.finalCost
             });
 
             res.json({

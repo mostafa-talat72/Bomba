@@ -3,6 +3,7 @@ import Bill from "../models/Bill.js";
 import Order from "../models/Order.js";
 import Session from "../models/Session.js";
 import Table from "../models/Table.js";
+import Device from "../models/Device.js";
 import Organization from "../models/Organization.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
@@ -133,11 +134,15 @@ export const getBills = async (req, res) => {
             organization: req.user.organization,
             ...query,
         })
-            // جلب الحقول الضرورية فقط لتحسين الأداء
-            .select('billNumber customerName customerPhone table status total paid remaining createdAt discount tax')
+            // جلب الحقول الضرورية بما في ذلك sessions و billType
+            .select('billNumber customerName customerPhone table status total paid remaining createdAt discount tax billType sessions orders')
             .populate({
                 path: "table",
                 select: "number name",
+            })
+            .populate({
+                path: "sessions",
+                select: "deviceName deviceNumber deviceType status startTime endTime",
             })
             .sort({ createdAt: -1 })
             .lean(); // تحسين الأداء بنسبة 40-50%
@@ -1716,6 +1721,52 @@ export const deleteBill = async (req, res) => {
             // الحذف المباشر من Local و Atlas في نفس الوقت
             const localConnection = dualDatabaseManager.getLocalConnection();
             const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            
+            // إيقاف جميع الجلسات النشطة المرتبطة بالفاتورة قبل الحذف
+            if (sessionIds.length > 0) {
+                Logger.info(`🛑 Checking for active sessions in bill ${bill.billNumber}`);
+                
+                const activeSessions = await Session.find({ 
+                    _id: { $in: sessionIds },
+                    status: 'active'
+                });
+                
+                if (activeSessions.length > 0) {
+                    Logger.info(`🛑 Found ${activeSessions.length} active sessions - ending them before deletion`);
+                    
+                    for (const session of activeSessions) {
+                        try {
+                            // إيقاف الجلسة
+                            session.status = 'completed';
+                            session.endTime = new Date();
+                            
+                            // حساب التكلفة النهائية
+                            const finalCost = await session.calculateCurrentCost();
+                            session.totalCost = finalCost;
+                            session.finalCost = finalCost - (session.discount || 0);
+                            
+                            session.updatedBy = req.user._id;
+                            await session.save();
+                            
+                            // تحديث حالة الجهاز إلى متاح
+                            if (session.deviceId) {
+                                await Device.findOneAndUpdate(
+                                    { _id: session.deviceId },
+                                    { status: 'available' }
+                                );
+                                Logger.info(`✓ Device ${session.deviceName || session.deviceNumber} status updated to available`);
+                            }
+                            
+                            Logger.info(`✓ Ended active session ${session._id} (Device: ${session.deviceName || session.deviceNumber})`);
+                        } catch (sessionError) {
+                            Logger.error(`❌ Failed to end session ${session._id}:`, sessionError);
+                            // نستمر في الحذف حتى لو فشل إيقاف الجلسة
+                        }
+                    }
+                    
+                    Logger.info(`✅ All active sessions ended successfully`);
+                }
+            }
             
             // Delete all orders associated with this bill (cascade delete)
             if (orderIds.length > 0) {

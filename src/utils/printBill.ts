@@ -282,7 +282,38 @@ export const printBill = async (
     const sessionsRows = sessions.map(session => {
       const startTime = new Date(session.startTime);
       const endTime = session.endTime ? new Date(session.endTime) : new Date();
-      const duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+      const durationInMinutes = Math.floor((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+      const hours = Math.floor(durationInMinutes / 60);
+      const minutes = durationInMinutes % 60;
+      
+      // Format duration based on language
+      let durationText = '';
+      if (language === 'ar') {
+        if (hours > 0 && minutes > 0) {
+          durationText = `${formatQuantity(hours)} س ${formatQuantity(minutes)} د`;
+        } else if (hours > 0) {
+          durationText = `${formatQuantity(hours)} س`;
+        } else {
+          durationText = `${formatQuantity(minutes)} د`;
+        }
+      } else if (language === 'fr') {
+        if (hours > 0 && minutes > 0) {
+          durationText = `${formatQuantity(hours)}h ${formatQuantity(minutes)}m`;
+        } else if (hours > 0) {
+          durationText = `${formatQuantity(hours)}h`;
+        } else {
+          durationText = `${formatQuantity(minutes)}m`;
+        }
+      } else {
+        if (hours > 0 && minutes > 0) {
+          durationText = `${formatQuantity(hours)}h ${formatQuantity(minutes)}m`;
+        } else if (hours > 0) {
+          durationText = `${formatQuantity(hours)}h`;
+        } else {
+          durationText = `${formatQuantity(minutes)}m`;
+        }
+      }
+      
       const finalCost = session.finalCost ?? session.totalCost ?? 0;
       
       // Find session payment details
@@ -304,12 +335,10 @@ export const printBill = async (
       const isPaidFully = remainingAmount === 0 && finalCost > 0;
       const statusIcon = isPaidFully ? '✓' : paidAmount > 0 ? '◐' : '○';
       
-      const durationText = language === 'ar' ? 'س' : language === 'fr' ? 'h' : 'h';
-      
       return `
         <tr>
           <td class="item-name">${statusIcon} ${session.deviceName || session.deviceNumber || t('billPrint.unspecified')}</td>
-          <td class="item-quantity">${formatQuantity(parseFloat(duration.toFixed(1)))} ${durationText}</td>
+          <td class="item-quantity">${durationText}</td>
           <td class="item-paid">${formatNumber(paidAmount)}</td>
           <td class="item-total">${formatNumber(finalCost)}</td>
         </tr>

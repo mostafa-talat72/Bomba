@@ -84,6 +84,38 @@ const ConsumptionReport = () => {
     return formatCurrencyUtil(amount, i18n.language, currency);
   }, [i18n.language]);
   
+  // Helper function to format duration (hours and minutes)
+  const formatDuration = useCallback((totalHours: number, language: string) => {
+    const hours = Math.floor(totalHours);
+    const minutes = Math.round((totalHours - hours) * 60);
+    
+    if (language === 'ar') {
+      if (hours > 0 && minutes > 0) {
+        return `${formatDecimal(hours, language)} س ${formatDecimal(minutes, language)} د`;
+      } else if (hours > 0) {
+        return `${formatDecimal(hours, language)} س`;
+      } else {
+        return `${formatDecimal(minutes, language)} د`;
+      }
+    } else if (language === 'fr') {
+      if (hours > 0 && minutes > 0) {
+        return `${formatDecimal(hours, language)}h ${formatDecimal(minutes, language)}m`;
+      } else if (hours > 0) {
+        return `${formatDecimal(hours, language)}h`;
+      } else {
+        return `${formatDecimal(minutes, language)}m`;
+      }
+    } else {
+      if (hours > 0 && minutes > 0) {
+        return `${formatDecimal(hours, language)}h ${formatDecimal(minutes, language)}m`;
+      } else if (hours > 0) {
+        return `${formatDecimal(hours, language)}h`;
+      } else {
+        return `${formatDecimal(minutes, language)}m`;
+      }
+    }
+  }, []);
+  
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
     dayjs().set('hour', 0).set('minute', 0).set('second', 0),
     dayjs().set('hour', 23).set('minute', 59).set('second', 59)
@@ -129,16 +161,11 @@ const ConsumptionReport = () => {
         const isGamingDevice = record.category === '__PLAYSTATION__' || 
                                record.category === '__COMPUTER__';
         
-        // For Gaming Devices, show hours
+        // For Gaming Devices, show formatted duration (hours and minutes)
         if (isGamingDevice) {
-          // Check if hours is integer
-          const isInteger = quantity % 1 === 0;
-          const formatted = isInteger ? quantity.toFixed(0) : quantity.toFixed(2);
-          const localizedNumber = formatDecimal(parseFloat(formatted), i18n.language);
-          
           return (
             <span className="font-semibold text-gray-900 dark:text-gray-100">
-              {localizedNumber} {t('consumptionReport.units.hours')}
+              {formatDuration(quantity, i18n.language)}
             </span>
           );
         }
@@ -472,7 +499,7 @@ const ConsumptionReport = () => {
                     ${items.map(item => {
                       const isGamingDevice = item.category === '__PLAYSTATION__' || item.category === '__COMPUTER__';
                       const quantityDisplay = isGamingDevice 
-                        ? `${formatDecimal(item.quantity, i18n.language)} ${t('consumptionReport.units.hours')}`
+                        ? formatDuration(item.quantity, i18n.language)
                         : formatDecimal(Math.round(item.quantity), i18n.language);
                       const unitPriceDisplay = isGamingDevice 
                         ? '-' 
@@ -818,12 +845,22 @@ const ConsumptionReport = () => {
       // Function to add a table for a category
       const addCategoryTable = (category: string, items: ConsumptionItem[], startY: number) => {
         const headers = [['الكمية', 'سعر الوحدة', 'الإجمالي', 'اسم الصنف']];
-        const data = items.map(item => [
-          item.quantity.toString(),
-          item.price.toFixed(2) + ' ج.م',
-          item.total.toFixed(2) + ' ج.م',
-          item.name
-        ]);
+        const data = items.map(item => {
+          const isGamingDevice = item.category === '__PLAYSTATION__' || item.category === '__COMPUTER__';
+          const quantityDisplay = isGamingDevice 
+            ? formatDuration(item.quantity, i18n.language)
+            : formatDecimal(Math.round(item.quantity), i18n.language);
+          const priceDisplay = isGamingDevice 
+            ? '-' 
+            : item.price.toFixed(2) + ' ج.م';
+          
+          return [
+            quantityDisplay,
+            priceDisplay,
+            item.total.toFixed(2) + ' ج.م',
+            item.name
+          ];
+        });
 
         // Add category title
         doc.setFontSize(14);
