@@ -17,6 +17,22 @@ import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useOrganization } from '../context/OrganizationContext';
 
+// Helper function to display table number/name correctly
+const getTableDisplay = (tableNumberOrName: string | number | undefined | null, language: string = 'ar'): string => {
+  // Handle undefined or null
+  if (tableNumberOrName === undefined || tableNumberOrName === null) {
+    return '';
+  }
+  
+  // If it's a number or can be converted to a number, format it
+  const asNumber = Number(tableNumberOrName);
+  if (!isNaN(asNumber) && tableNumberOrName.toString().trim() !== '') {
+    return formatDecimal(asNumber, language);
+  }
+  // Otherwise, return as is (it's a name/text)
+  return tableNumberOrName.toString();
+};
+
 // Type for interval
 type Interval = ReturnType<typeof setInterval>;
 
@@ -44,7 +60,7 @@ const PlaystationBillItem = memo(({
   getStatusText: (status: string) => string;
   formatCurrency: (amount: number) => string;
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isUnpaid = ['draft', 'partial', 'overdue'].includes(bill.status);
   
   return (
@@ -70,7 +86,7 @@ const PlaystationBillItem = memo(({
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           {bill.table?.number ? (
             <span className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
-              🪑 {t('billing.tableWithNumber', { number: bill.table.number })}
+              🪑 {t('billing.tableWithNumber', { number: getTableDisplay(bill.table.number, i18n.language) })}
             </span>
           ) : (
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
@@ -2143,7 +2159,7 @@ const Billing = () => {
                           <TableIcon className="h-5 w-5 sm:h-8 sm:w-8 text-white" />
                         </div>
                         <span className={`text-lg sm:text-2xl font-bold transition-colors ${hasUnpaid ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
-                          {table.number}
+                          {getTableDisplay(table.number, i18n.language)}
                         </span>
                         <span className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                           {t('billing.table')}
@@ -2191,7 +2207,7 @@ const Billing = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2 truncate">
-                    {t('billing.tableBills', { number: selectedTable.number })}
+                    {t('billing.tableBills', { number: getTableDisplay(selectedTable.number, i18n.language) })}
                   </h2>
                   <p className="text-xs sm:text-sm text-orange-100 mt-1 flex items-center gap-2">
                     <Receipt className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -2222,7 +2238,7 @@ const Billing = () => {
                     });
                   }}
                   className="hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white hover:scale-105 transform"
-                  title={t('billing.manageTableOrders', { number: selectedTable.number })}
+                  title={t('billing.manageTableOrders', { number: getTableDisplay(selectedTable.number, i18n.language) })}
                 >
                   <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
                   <span className="text-xs sm:text-sm font-medium">{t('billing.manageOrders')}</span>
@@ -2250,7 +2266,7 @@ const Billing = () => {
                     });
                   }}
                   className="sm:hidden w-8 h-8 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform"
-                  title={t('billing.manageTableOrders', { number: selectedTable.number })}
+                  title={t('billing.manageTableOrders', { number: getTableDisplay(selectedTable.number, i18n.language) })}
                 >
                   <ShoppingCart className="h-4 w-4" />
                 </button>
@@ -2413,7 +2429,7 @@ const Billing = () => {
                   <button
                     onClick={handleGoToTableOrders}
                     className="hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white hover:scale-105 transform"
-                    title={t('billing.editTableOrders', { number: selectedBill.table.number })}
+                    title={t('billing.editTableOrders', { number: getTableDisplay(selectedBill.table.number, i18n.language) })}
                   >
                     <TableIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                     <span className="text-xs sm:text-sm font-medium">{t('billing.editOrders')}</span>
@@ -2477,7 +2493,7 @@ const Billing = () => {
                               <TableIcon className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                               <div>
                                 <span className="text-purple-700 dark:text-purple-300 text-xs block">{t('billing.table')}</span>
-                                <span className="font-bold text-lg text-purple-900 dark:text-purple-100">{t('billing.tableWithNumber', { number: selectedBill.table.number })}</span>
+                                <span className="font-bold text-lg text-purple-900 dark:text-purple-100">{t('billing.tableWithNumber', { number: getTableDisplay(selectedBill.table.number, i18n.language) })}</span>
                               </div>
                             </div>
                             <button
@@ -3512,7 +3528,7 @@ const Billing = () => {
                   return (
                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-2 sm:p-3 mt-3">
                       <p className="text-xs sm:text-sm font-medium text-blue-900 dark:text-blue-100">
-                        📍 {t('billing.currentTableWithNumber', { number: currentTable.number })}
+                        📍 {t('billing.currentTableWithNumber', { number: getTableDisplay(currentTable.number, i18n.language) })}
                       </p>
                     </div>
                   );
@@ -3539,7 +3555,7 @@ const Billing = () => {
                   })
                   .map((table: any) => (
                     <option key={table._id} value={table._id}>
-                      {t('billing.tableWithNumber', { number: table.number })}
+                      {t('billing.tableWithNumber', { number: getTableDisplay(table.number, i18n.language) })}
                     </option>
                   ))}
               </select>

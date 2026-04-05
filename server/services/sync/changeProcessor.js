@@ -726,6 +726,12 @@ class ChangeProcessor {
         const collectionName = change.ns.coll;
         const documentId = change.documentKey._id;
 
+        // Skip internal sync metadata collections
+        if (collectionName.startsWith('_sync_') || collectionName.startsWith('_')) {
+            Logger.debug(`[ChangeProcessor] Skipping internal collection: ${collectionName}`);
+            return false;
+        }
+
         // Check if collection is excluded from bidirectional sync
         const excludedCollections = syncConfig.bidirectionalSync?.excludedCollections || [];
         if (excludedCollections.includes(collectionName)) {
@@ -881,6 +887,8 @@ class ChangeProcessor {
                         warnings: billValidation.warnings
                     });
                     
+                    // Only reject if there are actual errors (not just warnings about missing fields)
+                    // This allows legacy/incomplete data to sync
                     return {
                         success: false,
                         reason: 'Bill validation failed - document rejected',
@@ -888,9 +896,9 @@ class ChangeProcessor {
                     };
                 }
 
-                // Log warnings if any
-                if (billValidation.warnings.length > 0) {
-                    Logger.warn(`[ChangeProcessor] Bill validation warnings for insert:`, {
+                // Log warnings if any (e.g., missing required fields in legacy data)
+                if (billValidation.warnings && billValidation.warnings.length > 0) {
+                    Logger.warn(`[ChangeProcessor] Bill validation warnings for insert (legacy data):`, {
                         documentId: document._id,
                         warnings: billValidation.warnings
                     });
@@ -1211,6 +1219,8 @@ class ChangeProcessor {
                         warnings: billValidation.warnings
                     });
                     
+                    // Only reject if there are actual errors (not just warnings about missing fields)
+                    // This allows legacy/incomplete data to sync
                     return {
                         success: false,
                         reason: 'Bill validation failed - replacement rejected',
@@ -1218,9 +1228,9 @@ class ChangeProcessor {
                     };
                 }
 
-                // Log warnings if any
-                if (billValidation.warnings.length > 0) {
-                    Logger.warn(`[ChangeProcessor] Bill validation warnings for replace:`, {
+                // Log warnings if any (e.g., missing required fields in legacy data)
+                if (billValidation.warnings && billValidation.warnings.length > 0) {
+                    Logger.warn(`[ChangeProcessor] Bill validation warnings for replace (legacy data):`, {
                         documentId: documentId,
                         warnings: billValidation.warnings
                     });

@@ -739,7 +739,7 @@
     "bill": "فاتورة",
     "bills": "فواتير",
     "tables": "الطاولات",
-    "tableBills": "فواتير الطاولة رقم {{number}}",
+    "tableBills": "فواتير طاولة {{number}}",
     "manageOrders": "إدارة الطلبات",
     "manageTableOrders": "إدارة طلبات طاولة {{number}}",
     "filterByStatus": "فلترة حسب الحالة",

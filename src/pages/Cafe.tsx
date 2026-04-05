@@ -10,6 +10,22 @@ import { printOrder } from '../utils/printOrder';
 import api from '../services/api';
 import { io, Socket } from 'socket.io-client';
 
+// Helper function to display table number/name correctly
+const getTableDisplay = (tableNumberOrName: string | number | undefined | null, language: string = 'ar'): string => {
+  // Handle undefined or null
+  if (tableNumberOrName === undefined || tableNumberOrName === null) {
+    return '';
+  }
+  
+  // If it's a number or can be converted to a number, format it
+  const asNumber = Number(tableNumberOrName);
+  if (!isNaN(asNumber) && tableNumberOrName.toString().trim() !== '') {
+    return formatDecimal(asNumber, language);
+  }
+  // Otherwise, return as is (it's a name/text)
+  return tableNumberOrName.toString();
+};
+
 // دالة تحويل الأرقام الإنجليزية إلى العربية
 const convertToArabicNumbers = (str: string | number): string => {
   const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -39,7 +55,7 @@ interface TableButtonProps {
 }
 
 const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, onClick }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (
     <button
       onClick={() => onClick(table)}
@@ -92,7 +108,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
             ? 'text-red-700 dark:text-red-300'
             : 'text-green-700 dark:text-green-300'
         }`}>
-          {table.number}
+          {getTableDisplay(table.number, i18n.language)}
         </span>
         <span className="text-xs text-gray-600 dark:text-gray-400 mt-1 hidden sm:block">
           {t('cafe.table')}
@@ -193,6 +209,7 @@ const Cafe: React.FC = () => {
   const { isRTL } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
+
   const {
     tableSections,
     tables,
@@ -1745,7 +1762,7 @@ const Cafe: React.FC = () => {
                   </div>
                   <div className="min-w-0 flex-1">
                     <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white drop-shadow-lg truncate">
-                      {t('cafe.tableOrdersModal.tableTitle', { number: formatDecimal(selectedTable.number, i18n.language) })}
+                      {t('cafe.tableOrdersModal.tableTitle', { number: getTableDisplay(selectedTable.number, i18n.language) })}
                     </h2>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="px-2 sm:px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
@@ -2098,7 +2115,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <div className="flex items-center gap-2 mt-1">
                   <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
                     <p className="text-xs sm:text-sm text-white font-medium">
-                      {t('cafe.orderModal.table', { number: formatDecimal(table.number, i18n.language) })}
+                      {t('cafe.orderModal.table', { number: getTableDisplay(table.number, i18n.language) })}
                     </p>
                   </div>
                 </div>
@@ -2484,7 +2501,7 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
                               className="group flex items-center gap-2 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-gray-300 dark:border-gray-600 hover:shadow-md transition-all duration-300"
                             >
                               <span className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
-                                {table.number}
+                                {getTableDisplay(table.number, i18n.language)}
                               </span>
                               <div className="flex items-center gap-1">
                                 <button

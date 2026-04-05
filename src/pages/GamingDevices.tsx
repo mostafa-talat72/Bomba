@@ -106,6 +106,22 @@ interface GamingDevicesProps {
 const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   const location = useLocation();
   const { t, i18n } = useTranslation();
+
+  // Helper function to display table number/name correctly
+  const getTableDisplay = (tableNumberOrName: string | number | undefined | null): string => {
+    // Handle undefined or null
+    if (tableNumberOrName === undefined || tableNumberOrName === null) {
+      return '';
+    }
+    
+    // If it's a number or can be converted to a number, format it
+    const asNumber = Number(tableNumberOrName);
+    if (!isNaN(asNumber) && tableNumberOrName.toString().trim() !== '') {
+      return formatDecimal(asNumber, i18n.language);
+    }
+    // Otherwise, return as is (it's a name/text)
+    return tableNumberOrName.toString();
+  };
   const { isRTL } = useLanguage();
   const { timezone, formatDateTime } = useOrganization();
   const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, fetchTables, fetchTableSections, fetchSessions } = useApp();
@@ -861,7 +877,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
           });
         } else {
           const billData = result.data?.bill;
-          message = t('gaming.tableLinkedSuccess', { table: formatDecimal(tableNumber, i18n.language) });
+          message = t('gaming.tableLinkedSuccess', { table: getTableDisplay(tableNumber) });
           
           if (billData && billData.sessionsCount > 1) {
             const mergedMessage = t('gaming.billsMerged', { count: billData.sessionsCount }).replace(billData.sessionsCount.toString(), formatDecimal(billData.sessionsCount, i18n.language));
@@ -902,7 +918,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
       if (response && response.success) {
         const tableNumber = response.data?.unlinkedFromTable;
         showNotification(
-          t('gaming.tableUnlinkedSuccess', { table: formatDecimal(tableNumber, i18n.language) }),
+          t('gaming.tableUnlinkedSuccess', { table: getTableDisplay(tableNumber) }),
           'success'
         );
 
@@ -1182,7 +1198,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                               {billTableNumber ? (
                                 <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
                                   <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
-                                  {t('gaming.linkedToTable')}: {formatDecimal(billTableNumber, i18n.language)}
+                                  {t('gaming.linkedToTable')}: {getTableDisplay(billTableNumber)}
                                 </div>
                               ) : (
                                 <div className="flex items-center text-gray-500 dark:text-gray-400">

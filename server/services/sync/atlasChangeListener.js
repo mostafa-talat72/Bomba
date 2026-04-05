@@ -112,13 +112,18 @@ class AtlasChangeListener {
 
             // Build pipeline to filter excluded collections
             const pipeline = [];
-            if (this.excludedCollections.length > 0) {
+            
+            // Always exclude internal sync metadata collections
+            const internalCollections = ['_sync_metadata', '_sync_tokens'];
+            const allExcludedCollections = [...this.excludedCollections, ...internalCollections];
+            
+            if (allExcludedCollections.length > 0) {
                 pipeline.push({
                     $match: {
-                        'ns.coll': { $nin: this.excludedCollections }
+                        'ns.coll': { $nin: allExcludedCollections }
                     }
                 });
-                Logger.info(`[AtlasChangeListener] Excluding collections: ${this.excludedCollections.join(', ')}`);
+                Logger.info(`[AtlasChangeListener] Excluding collections: ${allExcludedCollections.join(', ')}`);
             }
 
             // Watch the entire database

@@ -31,6 +31,9 @@ class BillValidator {
             if (!requiredFieldsResult.success) {
                 errors.push(...requiredFieldsResult.errors);
             }
+            if (requiredFieldsResult.warnings) {
+                warnings.push(...requiredFieldsResult.warnings);
+            }
 
             // Enum validation
             const enumValidationResult = this.validateEnumFields(bill);
@@ -75,6 +78,7 @@ class BillValidator {
      */
     static validateRequiredFields(bill, operation) {
         const errors = [];
+        const warnings = [];
 
         // Always required fields
         const alwaysRequired = ['organization', 'createdBy'];
@@ -88,9 +92,10 @@ class BillValidator {
             const value = bill[field];
             
             if (value === undefined || value === null) {
-                errors.push(`Required field missing: "${field}"`);
+                // Treat missing required fields as warnings for legacy data compatibility
+                warnings.push(`Required field missing: "${field}" (legacy data)`);
             } else if (typeof value === 'string' && value.trim() === '') {
-                errors.push(`Required field cannot be empty: "${field}"`);
+                warnings.push(`Required field cannot be empty: "${field}" (legacy data)`);
             }
         }
 
@@ -104,7 +109,8 @@ class BillValidator {
 
         return {
             success: errors.length === 0,
-            errors
+            errors,
+            warnings
         };
     }
 
