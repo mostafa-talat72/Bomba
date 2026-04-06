@@ -1690,13 +1690,34 @@ billSchema.methods.calculateSubtotal = async function () {
         // Add sessions total (استخدم breakdown الفعلي)
         if (this.sessions && this.sessions.length > 0) {
             for (const session of this.sessions) {
+                let sessionCost = 0;
                 if (typeof session.getCostBreakdownAsync === "function") {
                     const { totalCost } = await session.getCostBreakdownAsync();
-                    subtotal += totalCost;
+                    sessionCost = totalCost;
                 } else {
-                    const sessionAmount =
-                        session.finalCost || session.totalCost || 0;
-                    subtotal += sessionAmount;
+                    sessionCost = session.finalCost || session.totalCost || 0;
+                }
+                subtotal += sessionCost;
+                
+                // Update sessionPayments if session cost changed
+                if (this.sessionPayments && this.sessionPayments.length > 0) {
+                    const sessionPayment = this.sessionPayments.find(
+                        sp => sp.sessionId.toString() === session._id.toString()
+                    );
+                    
+                    if (sessionPayment && sessionPayment.sessionCost !== sessionCost) {
+                        // Session cost changed - update sessionPayment
+                        const oldCost = sessionPayment.sessionCost;
+                        sessionPayment.sessionCost = sessionCost;
+                        
+                        // Recalculate remaining amount
+                        // If paid amount exceeds new cost, adjust it
+                        if (sessionPayment.paidAmount > sessionCost) {
+                            sessionPayment.paidAmount = sessionCost;
+                        }
+                        sessionPayment.remainingAmount = sessionCost - sessionPayment.paidAmount;
+                        
+                    }
                 }
             }
         }

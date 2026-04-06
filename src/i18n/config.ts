@@ -18,7 +18,6 @@ Object.entries(translationModules).forEach(([path, module]: [string, any]) => {
   }
 });
 
-console.log(`✅ Loaded ${Object.keys(resources).length} language translations:`, Object.keys(resources).sort());
 
 /**
  * Detect user's preferred language based on browser locale and timezone
@@ -36,12 +35,10 @@ const detectUserLanguage = (): string => {
 
   // Check if we have translation for this language
   if (resources[primaryLang]) {
-    console.log(`🌍 Auto-detected language: ${primaryLang} (from browser: ${browserLang})`);
     return primaryLang;
   }
 
   // Fallback to English if language not supported
-  console.log(`🌍 Browser language '${primaryLang}' not supported, using English`);
   return 'en';
 };
 

@@ -23,7 +23,8 @@ import {
   Sun,
   Package2,
   CreditCard,
-  DollarSign
+  DollarSign,
+  ShoppingBag
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -161,6 +162,7 @@ const Layout = () => {
     { name: t('nav.menu'), href: '/menu', icon: Utensils, permissions: ['menu'] },
     { name: t('nav.reports'), href: '/reports', icon: BarChart3, permissions: ['reports'] },
     { name: t('nav.consumptionReport'), href: '/consumption-report', icon: Package2, permissions: ['reports'] },
+    { name: t('nav.soldItems'), href: '/sold-items', icon: ShoppingBag, permissions: ['reports'] },
     { name: t('nav.inventory'), href: '/inventory', icon: Package, permissions: ['inventory'] },
     { name: t('nav.costs'), href: '/costs', icon: Wallet, permissions: ['costs'] },
     { name: t('nav.payroll'), href: '/payroll', icon: DollarSign, permissions: ['users'] },

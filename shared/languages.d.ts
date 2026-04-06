@@ -7,6 +7,7 @@ export interface Language {
     name: string;
     nativeName: string;
     rtl: boolean;
+    flag: string;
 }
 
 export const WORLD_LANGUAGES: Language[];

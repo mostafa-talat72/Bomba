@@ -81,6 +81,7 @@
     "billing": "Invoices",
     "reports": "Reports",
     "consumptionReport": "Consumption report",
+    "soldItems": "Sold Items",
     "inventory": "Inventory",
     "costs": "Costs",
     "payroll": "Salaries",
@@ -805,6 +806,23 @@
     "paySpecificItem": "Payment of a specific item",
     "paySpecificItemDesc": "Choose specific items for payment",
     "scanQRInstruction": "The customer can scan this code to know the details of his bill",
+    "editSessionTime": "Edit Session Time",
+    "editTime": "Edit Time",
+    "startTime": "Start Time",
+    "endTime": "End Time",
+    "editSessionTimeWarning": "Editing the time will affect the calculation of the total cost of the session and the bill",
+    "controllersHistory": "Controllers Change History",
+    "editPeriodTime": "Edit Period Time",
+    "editPeriodTimeWarning": "Editing the period time will affect the cost calculation",
+    "period": "Period",
+    "now": "Now",
+    "autoAdjustment": "Automatic Adjustment of Adjacent Periods",
+    "autoAdjustStartInfo": "When editing start time → previous period's end time will be automatically adjusted",
+    "autoAdjustEndInfo": "When editing end time → next period's start time will be automatically adjusted",
+    "noGapsGuarantee": "This ensures no gaps or overlaps between periods",
+    "adjacentPeriods": "Adjacent Periods",
+    "previousPeriod": "Previous Period",
+    "nextPeriod": "Next Period",
     "qrFeature1": "• View all orders and sessions",
     "qrFeature2": "• Know the amount paid and the remaining amount",
     "qrFeature3": "• Monitor invoice status",
@@ -988,7 +1006,11 @@
       "sessionUpdateError": "Error updating sessions",
       "billDetailsError": "Error in fetching invoice details",
       "fetchBillForPrintError": "Failed to fetch invoice data for printing",
-      "fetchBillForPrintUnexpectedError": "An error occurred while fetching invoice data for printing"
+      "fetchBillForPrintUnexpectedError": "An error occurred while fetching invoice data for printing",
+      "sessionTimeUpdated": "Session time updated successfully",
+      "sessionTimeUpdateFailed": "Failed to update session time",
+      "periodTimeUpdated": "Period time updated successfully",
+      "periodTimeUpdateFailed": "Failed to update period time"
     }
   },
   "menu": {
@@ -1825,7 +1847,10 @@
     "deviceInfo": "Device information",
     "defaultCustomerName": "client",
     "playstationCustomer": "PlayStation client",
-    "computerCustomer": "Computer client"
+    "computerCustomer": "Computer client",
+    "notifications": {
+      "endTimeBeforeStart": "End time must be after start time"
+    }
   },
   "consumptionReport": {
     "title": "Consumption report",
@@ -3854,5 +3879,48 @@
     "SERVER_ERROR": "A server error occurred. ",
     "VALIDATION_ERROR": "The data entered is incorrect.",
     "UNKNOWN_ERROR": "An unexpected error occurred."
+  },
+  "soldItems": {
+    "title": "Sold Items",
+    "description": "View all sold items with details for each order",
+    "searchPlaceholder": "Search for an item...",
+    "noBill": "No Bill",
+    "noTable": "No Table",
+    "noCustomer": "No Customer Name",
+    "noItems": "No sold items found",
+    "quantity": "Quantity",
+    "orders": "Orders",
+    "items": "Items",
+    "categories": "Categories",
+    "billNumber": "Bill Number",
+    "table": "Table",
+    "orderDate": "Order Date",
+    "quantityAndPrice": "Quantity & Price",
+    "customer": "Customer",
+    "ascending": "Ascending",
+    "descending": "Descending",
+    "filters": {
+      "allTime": "All Time",
+      "today": "Today",
+      "thisWeek": "This Week",
+      "thisMonth": "This Month",
+      "customRange": "Custom Range",
+      "selectDateRange": "Select Date Range:",
+      "from": "From",
+      "to": "To",
+      "startDate": "Start Date",
+      "endDate": "End Date"
+    },
+    "sortBy": {
+      "revenue": "Revenue",
+      "quantity": "Quantity",
+      "name": "Name"
+    },
+    "summary": {
+      "totalSections": "Total Sections",
+      "totalItems": "Total Items",
+      "totalQuantity": "Total Quantity",
+      "totalRevenue": "Total Revenue"
+    }
   }
 }

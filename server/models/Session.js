@@ -372,6 +372,61 @@ sessionSchema.methods.calculateCurrentCost = async function () {
     return Math.round(total);
 };
 
+// Recalculate cost for completed sessions (used when editing times)
+sessionSchema.methods.recalculateCost = async function () {
+    // Fetch device data from database
+    const device = await Device.findById(this.deviceId);
+    if (!device) {
+        throw new Error("لم يتم العثور على بيانات الجهاز لحساب التكلفة");
+    }
+
+    const getRate = (controllers) => {
+        if (device.type === "playstation" && device.playstationRates) {
+            return device.playstationRates[String(controllers)] || 0;
+        } else if (device.type === "computer") {
+            return device.hourlyRate || 0;
+        }
+        return 0;
+    };
+
+    let total = 0;
+
+    // If no controllersHistory, calculate based on total duration
+    if (!this.controllersHistory || this.controllersHistory.length === 0) {
+        const endTime = this.endTime || new Date();
+        const durationMs = new Date(endTime) - new Date(this.startTime);
+        const minutes = durationMs / (1000 * 60);
+        const hourlyRate = getRate(this.controllers);
+        const minuteRate = hourlyRate / 60;
+        const rawCost = minutes * minuteRate;
+        total = rawCost;
+    } else {
+        // Calculate based on controllersHistory
+        for (const period of this.controllersHistory) {
+            let periodEnd = period.to;
+            if (!periodEnd) {
+                // For open periods in completed sessions, use session end time
+                periodEnd = this.endTime || new Date();
+            }
+
+            if (period.from && periodEnd) {
+                const durationMs = new Date(periodEnd) - new Date(period.from);
+                const minutes = durationMs / (1000 * 60);
+
+                if (minutes > 0) {
+                    const hourlyRate = getRate(period.controllers);
+                    const minuteRate = hourlyRate / 60;
+                    const rawPeriodCost = minutes * minuteRate;
+                    total += rawPeriodCost;
+                }
+            }
+        }
+    }
+
+    // Round only when returning final cost
+    return Math.round(total);
+};
+
 // Get detailed cost breakdown for PlayStation sessions
 sessionSchema.methods.getCostBreakdown = function () {
     if (this.deviceType !== "playstation") {

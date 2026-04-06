@@ -353,6 +353,22 @@ const Billing = () => {
   const [isProcessingSessionPayment, setIsProcessingSessionPayment] = useState(false);
   const [showPaidAmount, setShowPaidAmount] = useState(false);
   const [showRemainingAmount, setShowRemainingAmount] = useState(false);
+  
+  // States for editing completed session times
+  const [showEditSessionTimeModal, setShowEditSessionTimeModal] = useState(false);
+  const [sessionToEdit, setSessionToEdit] = useState<Session | null>(null);
+  const [editSessionStartTime, setEditSessionStartTime] = useState('');
+  const [editSessionEndTime, setEditSessionEndTime] = useState('');
+  const [isEditingSessionTime, setIsEditingSessionTime] = useState(false);
+  
+  // States for editing controllers periods
+  const [showEditControllersPeriodModal, setShowEditControllersPeriodModal] = useState(false);
+  const [periodToEdit, setPeriodToEdit] = useState<any>(null);
+  const [periodIndex, setPeriodIndex] = useState<number>(-1);
+  const [editPeriodStartTime, setEditPeriodStartTime] = useState('');
+  const [editPeriodEndTime, setEditPeriodEndTime] = useState('');
+  const [isEditingPeriod, setIsEditingPeriod] = useState(false);
+  
   const navigate = useNavigate();
 
   // استخدام Backend aggregation بدلاً من Frontend
@@ -806,6 +822,161 @@ const Billing = () => {
 
     // لا حاجة لتحديث حالة الفاتورة هنا - سيتم تحديثها بعد الدفع
   };
+
+  // Handler to open edit session time modal
+  const handleEditSessionTime = (session: Session) => {
+    setSessionToEdit(session);
+    
+    // Format dates for datetime-local input
+    const startTime = new Date(session.startTime);
+    const endTime = session.endTime ? new Date(session.endTime) : new Date();
+    
+    // Format: YYYY-MM-DDTHH:mm
+    const formatDateTimeLocal = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+    
+    setEditSessionStartTime(formatDateTimeLocal(startTime));
+    setEditSessionEndTime(formatDateTimeLocal(endTime));
+    setShowEditSessionTimeModal(true);
+  };
+
+  // Handler to save edited session times
+  const handleSaveSessionTime = async () => {
+    if (!sessionToEdit) return;
+    
+    setIsEditingSessionTime(true);
+    
+    try {
+      const startTime = new Date(editSessionStartTime);
+      const endTime = new Date(editSessionEndTime);
+      
+      // Validate times
+      if (endTime <= startTime) {
+        showNotification(t('gaming.notifications.endTimeBeforeStart'), 'error');
+        setIsEditingSessionTime(false);
+        return;
+      }
+      
+      // Update session times using the new endpoint
+      const response = await api.updateSessionTimes(sessionToEdit.id || sessionToEdit._id, {
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      });
+      
+      if (response.success) {
+        showNotification(t('billing.notifications.sessionTimeUpdated'), 'success');
+        setShowEditSessionTimeModal(false);
+        setSessionToEdit(null);
+        
+        // Refresh bills to show updated session and cost
+        await fetchBills();
+        
+        // If payment modal is open, refresh the selected bill
+        if (showPaymentModal && selectedBill) {
+          const updatedBillResult = await api.getBill(selectedBill.id || selectedBill._id);
+          if (updatedBillResult && updatedBillResult.data) {
+            setSelectedBill(updatedBillResult.data);
+            setPaymentAmount(updatedBillResult.data.remaining?.toString() || '0');
+            setOriginalAmount(updatedBillResult.data.remaining?.toString() || '0');
+          }
+        }
+      } else {
+        showNotification(response.message || t('billing.notifications.sessionTimeUpdateFailed'), 'error');
+      }
+    } catch (error: any) {
+      console.error('Error updating session time:', error);
+      showNotification(error.message || t('billing.notifications.sessionTimeUpdateFailed'), 'error');
+    } finally {
+      setIsEditingSessionTime(false);
+    }
+  };
+
+  // Handler to open edit controllers period modal
+  const handleEditControllersPeriod = (session: Session, period: any, index: number) => {
+    setSessionToEdit(session);
+    setPeriodToEdit(period);
+    setPeriodIndex(index);
+    
+    // Format dates for datetime-local input
+    const formatDateTimeLocal = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+    
+    const startTime = new Date(period.from);
+    const endTime = period.to ? new Date(period.to) : new Date();
+    
+    setEditPeriodStartTime(formatDateTimeLocal(startTime));
+    setEditPeriodEndTime(formatDateTimeLocal(endTime));
+    setShowEditControllersPeriodModal(true);
+  };
+
+  // Handler to save edited controllers period
+  const handleSaveControllersPeriod = async () => {
+    if (!sessionToEdit || !periodToEdit || periodIndex === -1) return;
+    
+    setIsEditingPeriod(true);
+    
+    try {
+      const startTime = new Date(editPeriodStartTime);
+      const endTime = new Date(editPeriodEndTime);
+      
+      // Validate times
+      if (endTime <= startTime) {
+        showNotification(t('gaming.notifications.endTimeBeforeStart'), 'error');
+        setIsEditingPeriod(false);
+        return;
+      }
+      
+      // Update period times using correct parameter order
+      const response = await api.updateControllersPeriodTime(
+        sessionToEdit.id || sessionToEdit._id,
+        periodIndex,
+        startTime.toISOString(),
+        endTime.toISOString(),
+        true // forceUpdate
+      );
+      
+      if (response.success) {
+        showNotification(t('billing.notifications.periodTimeUpdated'), 'success');
+        setShowEditControllersPeriodModal(false);
+        setSessionToEdit(null);
+        setPeriodToEdit(null);
+        setPeriodIndex(-1);
+        
+        // Refresh bills to show updated session and cost
+        await fetchBills();
+        
+        // If payment modal is open, refresh the selected bill
+        if (showPaymentModal && selectedBill) {
+          const updatedBillResult = await api.getBill(selectedBill.id || selectedBill._id);
+          if (updatedBillResult && updatedBillResult.data) {
+            setSelectedBill(updatedBillResult.data);
+            setPaymentAmount(updatedBillResult.data.remaining?.toString() || '0');
+            setOriginalAmount(updatedBillResult.data.remaining?.toString() || '0');
+          }
+        }
+      } else {
+        showNotification(response.message || t('billing.notifications.periodTimeUpdateFailed'), 'error');
+      }
+    } catch (error: any) {
+      console.error('Error updating period time:', error);
+      showNotification(error.message || t('billing.notifications.periodTimeUpdateFailed'), 'error');
+    } finally {
+      setIsEditingPeriod(false);
+    }
+  };
+
 
   const handlePaymentSubmit = async () => {
     if (!selectedBill) return;
@@ -3331,6 +3502,17 @@ const Billing = () => {
                               ⚡ {t('billing.sessionPaymentModal.activeSession')}
                             </span>
                           )}
+                          {/* زر تعديل الوقت - يظهر فقط للجلسات المنتهية غير المدفوعة بالكامل */}
+                          {isCompleted && !isFullyPaid && (
+                            <button
+                              onClick={() => handleEditSessionTime(session)}
+                              className="px-2 sm:px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                              title={t('billing.editSessionTime')}
+                            >
+                              <Calendar className="h-3 w-3" />
+                              <span className="hidden sm:inline">{t('billing.editTime')}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -3359,6 +3541,43 @@ const Billing = () => {
                             <span>⚠️</span>
                             <span>{t('billing.sessionPaymentModal.activeWarning')}</span>
                           </p>
+                        </div>
+                      )}
+
+                      {/* عرض تاريخ تغيير الدراعات للجلسات المنتهية من نوع بلايستيشن */}
+                      {isCompleted && session.deviceType === 'playstation' && session.controllersHistory && session.controllersHistory.length > 1 && (
+                        <div className="mb-3 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg">
+                          <h5 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-2 flex items-center gap-2">
+                            <Gamepad2 className="h-4 w-4" />
+                            {t('billing.controllersHistory')}
+                          </h5>
+                          <div className="space-y-2">
+                            {session.controllersHistory.map((period: any, index: number) => (
+                              <div key={index} className="flex items-center justify-between bg-white dark:bg-gray-800 p-2 rounded border border-purple-100 dark:border-purple-800">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <span className="font-bold text-purple-700 dark:text-purple-300">
+                                      {formatDecimal(period.controllers, i18n.language)} {t('billing.controllers')}
+                                    </span>
+                                    <span className="text-gray-500 dark:text-gray-400">•</span>
+                                    <span className="text-gray-600 dark:text-gray-400">
+                                      {formatTime(period.from)} - {period.to ? formatTime(period.to) : t('billing.now')}
+                                    </span>
+                                  </div>
+                                </div>
+                                {/* زر تعديل الوقت - يظهر فقط للجلسات غير المدفوعة بالكامل */}
+                                {!isFullyPaid && (
+                                  <button
+                                    onClick={() => handleEditControllersPeriod(session, period, index)}
+                                    className="px-2 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded transition-colors flex items-center gap-1"
+                                    title={t('billing.editPeriodTime')}
+                                  >
+                                    <Calendar className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
 
@@ -3568,6 +3787,290 @@ const Billing = () => {
                   t('billing.confirmChange')
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Session Time Modal */}
+      {showEditSessionTimeModal && sessionToEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <Calendar className="h-6 w-6 text-purple-600" />
+                  {t('billing.editSessionTime')}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowEditSessionTimeModal(false);
+                    setSessionToEdit(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  disabled={isEditingSessionTime}
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Session Info */}
+                <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {sessionToEdit.deviceName}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    {sessionToEdit.deviceType === 'playstation' ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}
+                  </p>
+                </div>
+
+                {/* Start Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('billing.startTime')}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editSessionStartTime}
+                    onChange={(e) => setEditSessionStartTime(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-gray-100"
+                    disabled={isEditingSessionTime}
+                  />
+                </div>
+
+                {/* End Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('billing.endTime')}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editSessionEndTime}
+                    onChange={(e) => setEditSessionEndTime(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-gray-100"
+                    disabled={isEditingSessionTime}
+                  />
+                </div>
+
+                {/* Warning */}
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
+                  <p className="text-xs text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>{t('billing.editSessionTimeWarning')}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowEditSessionTimeModal(false);
+                    setSessionToEdit(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors"
+                  disabled={isEditingSessionTime}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleSaveSessionTime}
+                  className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                    isEditingSessionTime
+                      ? 'bg-purple-400 dark:bg-purple-700 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600'
+                  } text-white`}
+                  disabled={isEditingSessionTime}
+                >
+                  {isEditingSessionTime ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {t('common.saving')}
+                    </>
+                  ) : (
+                    t('common.save')
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Controllers Period Modal */}
+      {showEditControllersPeriodModal && sessionToEdit && periodToEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <Gamepad2 className="h-6 w-6 text-purple-600" />
+                  {t('billing.editPeriodTime')}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowEditControllersPeriodModal(false);
+                    setSessionToEdit(null);
+                    setPeriodToEdit(null);
+                    setPeriodIndex(-1);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  disabled={isEditingPeriod}
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Session and Period Info */}
+                <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg space-y-2">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {sessionToEdit.deviceName}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-bold text-purple-700 dark:text-purple-300">
+                      {formatDecimal(periodToEdit.controllers, i18n.language)} {t('billing.controllers')}
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400">•</span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {t('billing.period')} {periodIndex + 1}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Auto-adjustment Info */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                  <p className="text-xs font-bold text-blue-900 dark:text-blue-100 mb-2">
+                    ℹ️ {t('billing.autoAdjustment')}
+                  </p>
+                  <ul className="space-y-1 text-xs text-blue-800 dark:text-blue-200">
+                    {periodIndex > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">→</span>
+                        <span>{t('billing.autoAdjustStartInfo')}</span>
+                      </li>
+                    )}
+                    {periodIndex < (sessionToEdit.controllersHistory?.length || 0) - 1 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">→</span>
+                        <span>{t('billing.autoAdjustEndInfo')}</span>
+                      </li>
+                    )}
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-600 dark:text-green-400 mt-0.5">✓</span>
+                      <span>{t('billing.noGapsGuarantee')}</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Adjacent Periods Info */}
+                {sessionToEdit.controllersHistory && sessionToEdit.controllersHistory.length > 1 && (
+                  <div className="bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                    <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
+                      {t('billing.adjacentPeriods')}
+                    </p>
+                    <div className="space-y-2 text-xs">
+                      {periodIndex > 0 && (
+                        <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-2 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {t('billing.previousPeriod')} ({formatDecimal(sessionToEdit.controllersHistory[periodIndex - 1].controllers, i18n.language)} {t('billing.controllers')})
+                          </span>
+                          <span className="text-gray-700 dark:text-gray-300 font-medium">
+                            {formatTime(sessionToEdit.controllersHistory[periodIndex - 1].to || new Date())}
+                          </span>
+                        </div>
+                      )}
+                      {periodIndex < sessionToEdit.controllersHistory.length - 1 && (
+                        <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-2 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {t('billing.nextPeriod')} ({formatDecimal(sessionToEdit.controllersHistory[periodIndex + 1].controllers, i18n.language)} {t('billing.controllers')})
+                          </span>
+                          <span className="text-gray-700 dark:text-gray-300 font-medium">
+                            {formatTime(sessionToEdit.controllersHistory[periodIndex + 1].from)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Start Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('billing.startTime')}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editPeriodStartTime}
+                    onChange={(e) => setEditPeriodStartTime(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-gray-100"
+                    disabled={isEditingPeriod}
+                  />
+                </div>
+
+                {/* End Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('billing.endTime')}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editPeriodEndTime}
+                    onChange={(e) => setEditPeriodEndTime(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-gray-100"
+                    disabled={isEditingPeriod}
+                  />
+                </div>
+
+                {/* Warning */}
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
+                  <p className="text-xs text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>{t('billing.editPeriodTimeWarning')}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowEditControllersPeriodModal(false);
+                    setSessionToEdit(null);
+                    setPeriodToEdit(null);
+                    setPeriodIndex(-1);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors"
+                  disabled={isEditingPeriod}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleSaveControllersPeriod}
+                  className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                    isEditingPeriod
+                      ? 'bg-purple-400 dark:bg-purple-700 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600'
+                  } text-white`}
+                  disabled={isEditingPeriod}
+                >
+                  {isEditingPeriod ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {t('common.saving')}
+                    </>
+                  ) : (
+                    t('common.save')
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

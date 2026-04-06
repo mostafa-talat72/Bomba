@@ -71,6 +71,7 @@
     "billing": "الفواتير",
     "reports": "التقارير",
     "consumptionReport": "تقرير الاستهلاك",
+    "soldItems": "الأصناف المباعة",
     "inventory": "المخزون",
     "costs": "التكاليف",
     "payroll": "المرتبات",
@@ -798,6 +799,23 @@
     "paySpecificItem": "دفع صنف معين",
     "paySpecificItemDesc": "اختيار أصناف محددة للدفع",
     "scanQRInstruction": "يمكن للعميل مسح هذا الرمز لمعرفة تفاصيل فاتورته",
+    "editSessionTime": "تعديل وقت الجلسة",
+    "editTime": "تعديل الوقت",
+    "startTime": "وقت البداية",
+    "endTime": "وقت النهاية",
+    "editSessionTimeWarning": "تعديل الوقت سيؤثر على حساب التكلفة الإجمالية للجلسة والفاتورة",
+    "controllersHistory": "تاريخ تغيير الدراعات",
+    "editPeriodTime": "تعديل وقت الفترة",
+    "editPeriodTimeWarning": "تعديل وقت الفترة سيؤثر على حساب التكلفة",
+    "period": "الفترة",
+    "now": "الآن",
+    "autoAdjustment": "التعديل التلقائي للفترات المجاورة",
+    "autoAdjustStartInfo": "عند تعديل وقت البداية → سيتم تعديل وقت نهاية الفترة السابقة تلقائياً",
+    "autoAdjustEndInfo": "عند تعديل وقت النهاية → سيتم تعديل وقت بداية الفترة التالية تلقائياً",
+    "noGapsGuarantee": "هذا يضمن عدم وجود فجوات أو تداخلات بين الفترات",
+    "adjacentPeriods": "الفترات المجاورة",
+    "previousPeriod": "الفترة السابقة",
+    "nextPeriod": "الفترة التالية",
     "qrFeature1": "• عرض جميع الطلبات والجلسات",
     "qrFeature2": "• معرفة المبلغ المدفوع والمتبقي",
     "qrFeature3": "• مراقبة حالة الفاتورة",
@@ -981,7 +999,11 @@
       "sessionUpdateError": "خطأ في تحديث الجلسات",
       "billDetailsError": "خطأ في جلب تفاصيل الفاتورة",
       "fetchBillForPrintError": "فشل في جلب بيانات الفاتورة للطباعة",
-      "fetchBillForPrintUnexpectedError": "حدث خطأ أثناء جلب بيانات الفاتورة للطباعة"
+      "fetchBillForPrintUnexpectedError": "حدث خطأ أثناء جلب بيانات الفاتورة للطباعة",
+      "sessionTimeUpdated": "تم تحديث وقت الجلسة بنجاح",
+      "sessionTimeUpdateFailed": "فشل في تحديث وقت الجلسة",
+      "periodTimeUpdated": "تم تحديث وقت الفترة بنجاح",
+      "periodTimeUpdateFailed": "فشل في تحديث وقت الفترة"
     }
   },
   "menu": {
@@ -1818,7 +1840,10 @@
     "deviceInfo": "معلومات الجهاز",
     "defaultCustomerName": "عميل",
     "playstationCustomer": "عميل بلايستيشن",
-    "computerCustomer": "عميل كمبيوتر"
+    "computerCustomer": "عميل كمبيوتر",
+    "notifications": {
+      "endTimeBeforeStart": "وقت النهاية يجب أن يكون بعد وقت البداية"
+    }
   },
   "consumptionReport": {
     "title": "تقرير الاستهلاك",
@@ -3903,5 +3928,48 @@
     "SERVER_ERROR": "حدث خطأ في السيرفر. يرجى المحاولة لاحقاً.",
     "VALIDATION_ERROR": "البيانات المدخلة غير صحيحة.",
     "UNKNOWN_ERROR": "حدث خطأ غير متوقع."
+  },
+  "soldItems": {
+    "title": "الأصناف المباعة",
+    "description": "عرض جميع الأصناف المباعة مع تفاصيل كل طلب",
+    "searchPlaceholder": "ابحث عن صنف...",
+    "noBill": "بدون فاتورة",
+    "noTable": "بدون طاولة",
+    "noCustomer": "بدون اسم عميل",
+    "noItems": "لا توجد أصناف مباعة",
+    "quantity": "الكمية",
+    "orders": "الطلبات",
+    "items": "أصناف",
+    "categories": "فئات",
+    "billNumber": "رقم الفاتورة",
+    "table": "الطاولة",
+    "orderDate": "تاريخ الطلب",
+    "quantityAndPrice": "الكمية والسعر",
+    "customer": "العميل",
+    "ascending": "تصاعدي",
+    "descending": "تنازلي",
+    "filters": {
+      "allTime": "كل الفترات",
+      "today": "اليوم",
+      "thisWeek": "هذا الأسبوع",
+      "thisMonth": "هذا الشهر",
+      "customRange": "فترة مخصصة",
+      "selectDateRange": "اختر الفترة الزمنية:",
+      "from": "من",
+      "to": "إلى",
+      "startDate": "تاريخ البداية",
+      "endDate": "تاريخ النهاية"
+    },
+    "sortBy": {
+      "revenue": "الإيرادات",
+      "quantity": "الكمية",
+      "name": "الاسم"
+    },
+    "summary": {
+      "totalSections": "إجمالي الأقسام",
+      "totalItems": "إجمالي الأصناف",
+      "totalQuantity": "إجمالي الكمية",
+      "totalRevenue": "إجمالي الإيرادات"
+    }
   }
 }

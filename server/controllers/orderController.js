@@ -896,7 +896,7 @@ export const createOrder = async (req, res) => {
 
         // Populate only essential fields for response - OPTIMIZED
         const populatedOrder = await Order.findById(order._id)
-            .select('orderNumber status items subtotal finalAmount table createdAt')
+            .select('orderNumber status items subtotal finalAmount table organization createdAt')
             .populate("table", "number name")
             .lean(); // استخدام lean() لتحسين الأداء بنسبة 40%
 

@@ -964,6 +964,13 @@ class ApiClient {
     });
   }
 
+  async updateSessionTimes(sessionId: string, data: { startTime: string; endTime: string }): Promise<ApiResponse<Session>> {
+    return this.request<Session>(`/sessions/${sessionId}/times`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   // Orders endpoints
   async getOrders(params?: { status?: string; customerName?: string; page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Order[]>> {
     const searchParams = new URLSearchParams();
@@ -1685,6 +1692,20 @@ class ApiClient {
       return response;
     } catch (error: unknown) {
       // Let the error propagate with its original message
+      throw error;
+    }
+  }
+
+  async getSoldItems(dateFilter?: string, startDate?: string, endDate?: string): Promise<ApiResponse<any[]>> {
+    try {
+      const params = new URLSearchParams();
+      if (dateFilter) params.append('dateFilter', dateFilter);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+
+      const response = await this.request<any[]>(`/reports/sold-items?${params}`);
+      return response;
+    } catch (error: unknown) {
       throw error;
     }
   }

@@ -1,270 +1,127 @@
-# Bomba - نظام إدارة المقاهي والمطاعم وصالات الألعاب
+# Bomba - نظام إدارة شامل
 
-**Bomba** هو نظام إدارة شامل للمقاهي والمطاعم وصالات الألعاب مع دعم كامل للغة العربية وواجهة RTL.
+نظام إدارة متكامل للمقاهي والمطاعم وصالات الألعاب مع دعم كامل للغة العربية.
 
-## 🎯 نظرة عامة على المنتج
+## الميزات الجديدة
 
-نظام Bomba يوفر حلول متكاملة لإدارة:
-- جلسات الألعاب (PlayStation و Computer)
-- إدارة المقهى والطلبات
-- نظام الفواتير الموحد
-- التقارير والتحليلات
-- إدارة المخزون
+### صفحة الأصناف المباعة
+صفحة جديدة تعرض جميع الأصناف المباعة مع تفاصيل شاملة لكل صنف:
 
-## 🚀 المميزات الأساسية
+- **عرض شامل**: قائمة بجميع الأصناف المباعة مع إحصائيات لكل صنف
+- **تفاصيل الطلبات**: عند الضغط على أي صنف، يتم عرض:
+  - رقم الفاتورة المرتبطة
+  - الطاولة المرتبطة (مع القسم)
+  - تاريخ ووقت إضافة الطلب
+  - اسم العميل
+  - الكمية والسعر
+  
+- **فلترة وبحث متقدم**:
+  - بحث بالاسم
+  - فلترة حسب الفترة الزمنية (اليوم، الأسبوع، الشهر، كل الفترات)
+  - ترتيب حسب (الإيرادات، الكمية، الاسم)
+  - ترتيب تصاعدي أو تنازلي
 
-### إدارة الألعاب
-- **جلسات PlayStation**: دعم متعدد الأذرع مع تسعير ديناميكي
-  - 1-2 أذرع: 20 جنيه/ساعة
-  - 3 أذرع: 25 جنيه/ساعة
-  - 4 أذرع: 30 جنيه/ساعة
-- **جلسات الكمبيوتر**: سعر ثابت 15 جنيه/ساعة
-- **تتبع فوري**: مراقبة الجلسات النشطة والمكتملة مع تاريخ الأذرع
+- **إحصائيات ملخصة**:
+  - إجمالي عدد الأصناف
+  - إجمالي الكمية المباعة
+  - إجمالي الإيرادات
 
-### إدارة المقهى
-- **قائمة ديناميكية**: إدارة المنتجات والأسعار مع الأقسام والفئات
-- **إدارة الطلبات**: دورة حياة كاملة للطلبات من الإنشاء إلى التسليم
-- **ملاحظات مخصصة**: تخصيص لكل طلب
-- **تتبع المخزون**: خصم تلقائي للمواد الخام بناءً على مكونات عناصر القائمة
+- **دعم متعدد اللغات**: العربية، الإنجليزية، والفرنسية
+- **واجهة متجاوبة**: تعمل على جميع الأجهزة
 
-### نظام الفواتير
-- **فواتير موحدة**: تجمع طلبات المقهى وجلسات الألعاب
-- **دفعات جزئية**: دعم الدفع بالتقسيط والدفع لعناصر محددة
-- **أكواد QR**: عرض الفواتير للعملاء عبر أكواد QR
-- **طرق دفع متعددة**: نقدي، بطاقة، وتحويل
+### الوصول للصفحة
+- المسار: `/sold-items`
+- القائمة الجانبية: "الأصناف المباعة" تحت قسم التقارير
+- الصلاحيات المطلوبة: `reports`
 
-### التقارير والتحليلات
-- **التقارير المالية**: تتبع الإيرادات والتكاليف والأرباح
-- **تقارير المبيعات**: تحليل أفضل العناصر مبيعاً وساعات الذروة
-- **تقارير المخزون**: حالة المخزون وتتبع الحركة
-- **تقارير الجلسات**: استخدام الأجهزة وتحليل الإيرادات
+## البنية التقنية
 
-## 👥 أدوار المستخدمين والصلاحيات
+### Backend API
+تم إنشاء endpoint جديد لجلب البيانات من قاعدة البيانات:
 
-- **المدير**: وصول كامل للنظام
-- **الموظف**: وصول تشغيلي محدود
-- **الكاشير**: إدارة الفواتير والمدفوعات
-- **المطبخ**: تحضير الطلبات وتحديث الحالة
+```
+GET /api/reports/sold-items?dateFilter=week
+```
 
-## 🛠️ التقنيات المستخدمة
+**المميزات:**
+- جلب البيانات مباشرة من MongoDB
+- تجميع الأصناف المتشابهة تلقائياً
+- استبعاد الطلبات الملغاة
+- Populate للبيانات المرتبطة (الطاولات والفواتير)
+- فلترة حسب التاريخ على مستوى قاعدة البيانات
+
+**الأداء:**
+- استعلامات محسّنة باستخدام Mongoose
+- Lean queries لتحسين الأداء
+- Indexing على حقول التاريخ
 
 ### Frontend
-- **Framework**: React 18 مع TypeScript
-- **Build Tool**: Vite 5
-- **Styling**: Tailwind CSS 3 مع دعم RTL مخصص
-- **Routing**: React Router DOM 6
-- **UI Components**: Ant Design 5 + Lucide React icons
-- **State Management**: React Context API (AppContext, ThemeContext)
-- **HTTP Client**: Axios مع API wrapper مخصص
-- **Real-time**: Socket.IO client
-- **Charts**: Recharts
-- **PDF Generation**: jsPDF مع jspdf-autotable
-- **Date Handling**: date-fns, dayjs
-- **Notifications**: react-toastify
+- استخدام API مخصص بدلاً من معالجة البيانات محلياً
+- تحديث تلقائي عند تغيير الفلاتر
+- معالجة الأخطاء بشكل صحيح
+- Loading states واضحة
+
+## التقنيات المستخدمة
+
+### Frontend
+- React 18 مع TypeScript
+- Vite 5
+- Tailwind CSS 3
+- React Router DOM 6
+- i18next للترجمة
+- Lucide React للأيقونات
+- date-fns لتنسيق التواريخ
 
 ### Backend
-- **Runtime**: Node.js 18+ (ES Modules)
-- **Framework**: Express.js
-- **Database**: MongoDB مع Mongoose ODM
-- **Authentication**: JWT مع refresh tokens
-- **Real-time**: Socket.IO
-- **Security**: Helmet, bcryptjs, CORS, express-rate-limit
-- **Validation**: express-validator
-- **Scheduling**: node-cron
-- **File Upload**: Multer
-- **QR Codes**: qrcode
-- **Email**: Nodemailer
-- **Logging**: Custom logger middleware
-
-### أدوات التطوير
-- **Linting**: ESLint 9
-- **Testing**: Vitest (frontend), Jest (backend)
-- **Process Management**: PM2 (ecosystem.config.js)
-- **Concurrency**: concurrently للوضع التطويري
-
-## 📁 هيكل المشروع
-
-```
-bomba/
-├── src/                    # Frontend React application
-│   ├── components/         # React components
-│   ├── context/           # Context providers
-│   ├── hooks/             # Custom hooks
-│   ├── pages/             # Page components
-│   ├── services/          # API services
-│   ├── styles/            # CSS styles
-│   ├── utils/             # Utility functions
-│   └── __tests__/         # Frontend tests
-├── server/                # Backend Node.js application
-│   ├── controllers/       # Route controllers
-│   ├── models/           # Database models
-│   ├── routes/           # API routes
-│   ├── middleware/       # Express middleware
-│   ├── services/         # Business logic services
-│   ├── socket/           # Socket.IO handlers
-│   ├── utils/            # Server utilities
-│   ├── config/           # Configuration files
-│   └── scripts/          # Database scripts
-├── dist/                 # Built frontend files
-├── backups/              # Database backups
-└── scripts/              # Build and deployment scripts
-```
-
-## 🚀 التثبيت والتشغيل
-
-### المتطلبات
 - Node.js 18+
-- MongoDB
-- npm أو yarn
-
-### التثبيت
-
-1. **استنساخ المشروع**
-```bash
-git clone <repository-url>
-cd bomba
-```
-
-2. **تثبيت التبعيات**
-```bash
-npm run install:all        # تثبيت جميع التبعيات
-# أو
-npm run install:server     # تثبيت تبعيات الخادم فقط
-npm install                # تثبيت تبعيات Frontend
-```
-
-3. **إعداد متغيرات البيئة**
-
-**Frontend (.env)**
-```env
-VITE_API_URL=http://localhost:5000
-```
-
-**Backend (server/.env)**
-```env
-MONGODB_URI=mongodb://localhost:27017/bomba
-JWT_SECRET=your-jwt-secret-key
-JWT_REFRESH_SECRET=your-refresh-secret-key
-PORT=5000
-NODE_ENV=development
-FRONTEND_URL=http://localhost:3000
-```
-
-4. **إنشاء مستخدم مدير افتراضي**
-```bash
-npm run seed:admin
-```
-
-### التشغيل
-
-#### وضع التطوير
-```bash
-npm run dev              # تشغيل Frontend و Backend معاً
-npm run client:dev       # Frontend فقط (منفذ 3000)
-npm run server:dev       # Backend فقط (منفذ 5000)
-```
-
-#### البناء
-```bash
-npm run build            # بناء Frontend
-npm run build:all        # بناء Frontend و Backend
-```
-
-#### الاختبار
-```bash
-npm test                 # تشغيل الاختبارات
-npm run test:coverage    # تشغيل الاختبارات مع تقرير التغطية
-```
-
-## 🔧 إعداد قاعدة البيانات
-
-### MongoDB
-تأكد من تشغيل MongoDB على النظام، ثم قم بإنشاء قاعدة بيانات جديدة:
-
-```bash
-mongosh
-use bomba
-```
-
-### البيانات الأولية
-```bash
-npm run seed:admin  # إنشاء مستخدم مدير افتراضي
-```
-
-## 🌐 API Architecture
-
-- RESTful API مع بادئة `/api`
-- Proxy مُعد في Vite للتطوير
-- مصادقة JWT مع Bearer tokens
-- تحديث تلقائي للرموز المميزة عند الاستجابة 401
+- Express.js
+- MongoDB مع Mongoose
+- JWT للمصادقة
 - Socket.IO للتحديثات الفورية
 
-### نقاط النهاية الرئيسية
+## التثبيت والتشغيل
 
-```
-POST   /api/auth/login           # تسجيل الدخول
-POST   /api/auth/refresh         # تحديث الرمز المميز
-GET    /api/bills               # جلب الفواتير
-POST   /api/bills               # إنشاء فاتورة جديدة
-PUT    /api/bills/:id/payment   # إضافة دفعة
-GET    /api/sessions            # جلب الجلسات
-POST   /api/sessions            # بدء جلسة جديدة
-PUT    /api/sessions/:id/end    # إنهاء جلسة
-GET    /api/menu                # جلب القائمة
-POST   /api/orders             # إنشاء طلب جديد
-PUT    /api/orders/:id/status  # تحديث حالة الطلب
+```bash
+# تثبيت المكتبات
+npm run install:all
+
+# تشغيل البيئة التطويرية
+npm run dev
+
+# بناء المشروع
+npm run build:all
 ```
 
-## 📊 قواعد العمل الأساسية
+## الصلاحيات
 
-- الجلسات تنشئ فواتير تلقائياً عند البدء
-- يتم خصم المخزون عند وضع علامة "قيد التحضير" على الطلبات
-- تسعير PlayStation يختلف حسب عدد الأذرع ويمكن تغييره أثناء الجلسة
-- يمكن دفع الفواتير كاملة أو جزئياً أو لعناصر محددة
-- النظام يدعم واجهة عربية RTL في جميع أنحاء التطبيق
+للوصول إلى صفحة الأصناف المباعة، يجب أن يكون لدى المستخدم صلاحية `reports`.
 
-## 🔐 الأمان
+## الملفات المضافة/المعدلة
 
-- تشفير كلمات المرور باستخدام bcryptjs
-- JWT tokens مع انتهاء صلاحية
-- CORS protection
-- Rate limiting
-- Input validation
-- Helmet للأمان الإضافي
+### Frontend
+- ✅ `src/pages/SoldItems.tsx` - الصفحة الرئيسية
+- ✅ `src/services/api.ts` - إضافة `getSoldItems()` method
+- ✅ `src/App.tsx` - إضافة route جديد
+- ✅ `src/components/Layout.tsx` - إضافة رابط في القائمة
+- ✅ `src/i18n/locales/ar.json` - الترجمات العربية
+- ✅ `src/i18n/locales/en.json` - الترجمات الإنجليزية
+- ✅ `src/i18n/locales/fr.json` - الترجمات الفرنسية
 
-## 📱 المميزات المتقدمة
+### Backend
+- ✅ `server/routes/reportRoutes.js` - إضافة endpoint جديد
+- ✅ `server/docs/SOLD_ITEMS_API.md` - توثيق API
 
-### Real-time Updates
-- تحديثات فورية للجلسات النشطة
-- إشعارات الطلبات الجديدة
-- تحديث حالة الفواتير
+## الاختبار
 
-### QR Code Integration
-- إنشاء أكواد QR للفواتير
-- عرض تفاصيل الفاتورة للعملاء
-- طباعة أكواد QR على الإيصالات
+للتأكد من عمل الميزة:
 
-### PDF Generation
-- إنشاء فواتير PDF
-- تقارير مفصلة
-- إيصالات مطبوعة
+1. تسجيل الدخول بحساب لديه صلاحية `reports`
+2. الذهاب إلى `/sold-items` أو الضغط على "الأصناف المباعة" من القائمة
+3. التأكد من ظهور البيانات بشكل صحيح
+4. اختبار الفلاتر والبحث
+5. الضغط على أي صنف لعرض التفاصيل
 
-## 🤝 المساهمة
+## الدعم
 
-1. Fork المشروع
-2. إنشاء branch للميزة الجديدة (`git checkout -b feature/AmazingFeature`)
-3. Commit التغييرات (`git commit -m 'Add some AmazingFeature'`)
-4. Push إلى Branch (`git push origin feature/AmazingFeature`)
-5. فتح Pull Request
+للمزيد من المعلومات أو الدعم، يرجى التواصل مع فريق التطوير.
 
-## 📄 الترخيص
-
-هذا المشروع مرخص تحت [MIT License](LICENSE).
-
-## 📞 الدعم
-
-للدعم والاستفسارات، يرجى فتح issue في المستودع أو التواصل مع فريق التطوير.
-
----
-
-**Bomba** - نظام إدارة شامل لأعمالك 🚀

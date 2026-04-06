@@ -934,7 +934,8 @@ const sessionController = {
             }
 
             // التحقق من أن الوقت الجديد ليس قبل بداية الجلسة
-            if (newStartDate < sessionStartTime) {
+            // إلا إذا كانت هذه الفترة الأولى (سيتم تحديث وقت بداية الجلسة)
+            if (periodIndex > 0 && newStartDate < sessionStartTime) {
                 return res.status(400).json({
                     success: false,
                     message: "لا يمكن تعديل الوقت إلى ما قبل بداية الجلسة",
@@ -944,6 +945,27 @@ const sessionController = {
 
             const targetPeriod = session.controllersHistory[periodIndex];
             const isActivePeriod = !targetPeriod.to; // الفترة النشطة ليس لها وقت نهاية
+
+            // Check if session is fully paid - prevent editing if paid
+            if (session.bill && session.status === 'completed') {
+                const Bill = mongoose.model('Bill');
+                const bill = await Bill.findById(session.bill);
+                
+                if (bill) {
+                    // Check if this session is fully paid
+                    const sessionPayment = bill.sessionPayments?.find(
+                        sp => sp.sessionId.toString() === session._id.toString()
+                    );
+                    
+                    if (sessionPayment && sessionPayment.remainingAmount === 0) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "لا يمكن تعديل وقت جلسة مدفوعة بالكامل",
+                            error: "Cannot edit time of fully paid session",
+                        });
+                    }
+                }
+            }
 
             // إذا لم يكن forceUpdate، تحليل التداخلات المحتملة وإعطاء خيارات للمستخدم
             if (!forceUpdate) {
@@ -1010,12 +1032,16 @@ const sessionController = {
             }
 
             // إعادة حساب التكلفة بعد تعديل الأوقات
-            const recalculatedCost = await session.calculateCurrentCost();
+            // استخدام recalculateCost للجلسات المنتهية و calculateCurrentCost للجلسات النشطة
+            const recalculatedCost = session.status === 'completed' 
+                ? await session.recalculateCost()
+                : await session.calculateCurrentCost();
             session.totalCost = recalculatedCost;
             session.finalCost = recalculatedCost - (session.discount || 0);
             
             Logger.info(`Recalculated session cost after time update:`, {
                 sessionId: session._id,
+                status: session.status,
                 totalCost: session.totalCost,
                 discount: session.discount,
                 finalCost: session.finalCost
@@ -3444,6 +3470,182 @@ const sessionController = {
             res.status(500).json({
                 success: false,
                 message: "خطأ في تعديل وقت بدء الجلسة",
+                error: err.message,
+            });
+        }
+    },
+
+    // Update completed session times (start and end)
+    updateSessionTimes: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { startTime, endTime } = req.body;
+
+            // Validate input
+            if (!startTime || !endTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: "وقت البدء والنهاية مطلوبان",
+                    error: "Start time and end time are required",
+                });
+            }
+
+            // Find the session
+            const session = await Session.findOne({
+                _id: id,
+                organization: req.user.organization,
+            }).populate("bill");
+
+            if (!session) {
+                return res.status(404).json({
+                    success: false,
+                    message: "الجلسة غير موجودة",
+                    error: "Session not found",
+                });
+            }
+
+            // Only allow editing completed sessions
+            if (session.status !== "completed") {
+                return res.status(400).json({
+                    success: false,
+                    message: "يمكن تعديل أوقات الجلسات المنتهية فقط",
+                    error: "Can only edit completed sessions",
+                });
+            }
+
+            // Check if session is fully paid - prevent editing if paid
+            if (session.bill) {
+                const Bill = mongoose.model('Bill');
+                const bill = await Bill.findById(session.bill);
+                
+                if (bill) {
+                    // Check if this session is fully paid
+                    const sessionPayment = bill.sessionPayments?.find(
+                        sp => sp.sessionId.toString() === session._id.toString()
+                    );
+                    
+                    if (sessionPayment && sessionPayment.remainingAmount === 0) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "لا يمكن تعديل وقت جلسة مدفوعة بالكامل",
+                            error: "Cannot edit time of fully paid session",
+                        });
+                    }
+                }
+            }
+
+            // Parse and validate times
+            const newStartTime = new Date(startTime);
+            const newEndTime = new Date(endTime);
+
+            if (isNaN(newStartTime.getTime()) || isNaN(newEndTime.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "صيغة الوقت غير صحيحة",
+                    error: "Invalid time format",
+                });
+            }
+
+            // Validate that end time is after start time
+            if (newEndTime <= newStartTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: "وقت النهاية يجب أن يكون بعد وقت البداية",
+                    error: "End time must be after start time",
+                });
+            }
+
+            // Store old times for logging
+            const oldStartTime = session.startTime;
+            const oldEndTime = session.endTime;
+
+            // Update session times
+            session.startTime = newStartTime;
+            session.endTime = newEndTime;
+            session.updatedBy = req.user._id;
+
+            // Update controllers history if it exists
+            if (session.controllersHistory && session.controllersHistory.length > 0) {
+                // Update first period start time
+                session.controllersHistory[0].from = newStartTime;
+                
+                // Update last period end time
+                const lastPeriod = session.controllersHistory[session.controllersHistory.length - 1];
+                lastPeriod.to = newEndTime;
+            }
+
+            // Recalculate cost based on new times using the recalculateCost method
+            const recalculatedCost = await session.recalculateCost();
+            session.totalCost = recalculatedCost;
+            session.finalCost = recalculatedCost - (session.discount || 0);
+
+            // Save the session
+            await session.save();
+
+            // Update the associated bill if it exists
+            if (session.bill) {
+                try {
+                    const bill = await Bill.findById(session.bill);
+                    if (bill) {
+                        await bill.calculateSubtotal();
+                        await bill.save();
+                        
+                        Logger.info(`✓ Bill updated after session time change:`, {
+                            billId: bill._id,
+                            billNumber: bill.billNumber,
+                            newTotal: bill.total,
+                        });
+                    }
+                } catch (billError) {
+                    Logger.error("❌ Error updating bill after time change:", billError);
+                }
+            }
+
+            // Populate session data
+            await session.populate(["createdBy", "updatedBy", "bill"], "name");
+
+            // Create notification
+            try {
+                if (req.user && req.user.organization) {
+                    const userLocale = getUserLocale(req.user);
+                    await NotificationService.createNotification({
+                        type: "session",
+                        category: "session",
+                        title: "تعديل أوقات الجلسة",
+                        message: `تم تعديل أوقات جلسة ${session.deviceName}`,
+                        organization: req.user.organization,
+                        createdBy: req.user._id,
+                    }, req.user);
+                }
+            } catch (notificationError) {
+                Logger.error(
+                    "Failed to create time update notification:",
+                    notificationError
+                );
+            }
+
+            Logger.info(`✓ Session times updated:`, {
+                sessionId: session._id,
+                deviceName: session.deviceName,
+                oldStartTime: oldStartTime.toISOString(),
+                newStartTime: newStartTime.toISOString(),
+                oldEndTime: oldEndTime?.toISOString(),
+                newEndTime: newEndTime.toISOString(),
+                newCost: session.finalCost,
+                updatedBy: req.user.name,
+            });
+
+            res.json({
+                success: true,
+                message: "تم تعديل أوقات الجلسة بنجاح",
+                data: session,
+            });
+
+        } catch (err) {
+            Logger.error("updateSessionTimes error:", err);
+            res.status(500).json({
+                success: false,
+                message: "خطأ في تعديل أوقات الجلسة",
                 error: err.message,
             });
         }

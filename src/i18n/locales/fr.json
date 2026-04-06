@@ -81,6 +81,7 @@
     "billing": "Factures",
     "reports": "Rapports",
     "consumptionReport": "Rapport de consommation",
+    "soldItems": "Articles Vendus",
     "inventory": "Inventaire",
     "costs": "Frais",
     "payroll": "Salaires",
@@ -805,6 +806,23 @@
     "paySpecificItem": "Paiement d'un article spécifique",
     "paySpecificItemDesc": "Choisissez des articles spécifiques pour le paiement",
     "scanQRInstruction": "Le client peut scanner ce code pour connaître le détail de sa facture",
+    "editSessionTime": "Modifier l'heure de la session",
+    "editTime": "Modifier l'heure",
+    "startTime": "Heure de début",
+    "endTime": "Heure de fin",
+    "editSessionTimeWarning": "La modification de l'heure affectera le calcul du coût total de la session et de la facture",
+    "controllersHistory": "Historique des changements de manettes",
+    "editPeriodTime": "Modifier l'heure de la période",
+    "editPeriodTimeWarning": "La modification de l'heure de la période affectera le calcul du coût",
+    "period": "Période",
+    "now": "Maintenant",
+    "autoAdjustment": "Ajustement automatique des périodes adjacentes",
+    "autoAdjustStartInfo": "Lors de la modification de l'heure de début → l'heure de fin de la période précédente sera automatiquement ajustée",
+    "autoAdjustEndInfo": "Lors de la modification de l'heure de fin → l'heure de début de la période suivante sera automatiquement ajustée",
+    "noGapsGuarantee": "Cela garantit qu'il n'y a pas de lacunes ou de chevauchements entre les périodes",
+    "adjacentPeriods": "Périodes adjacentes",
+    "previousPeriod": "Période précédente",
+    "nextPeriod": "Période suivante",
     "qrFeature1": "• Afficher toutes les commandes et sessions",
     "qrFeature2": "• Connaître le montant payé et le montant restant",
     "qrFeature3": "• Surveiller l'état de la facture",
@@ -988,7 +1006,11 @@
       "sessionUpdateError": "Erreur lors de la mise à jour des sessions",
       "billDetailsError": "Erreur lors de la récupération des détails de la facture",
       "fetchBillForPrintError": "Échec de la récupération des données de facture pour l'impression",
-      "fetchBillForPrintUnexpectedError": "Une erreur s'est produite lors de la récupération des données de facture pour l'impression"
+      "fetchBillForPrintUnexpectedError": "Une erreur s'est produite lors de la récupération des données de facture pour l'impression",
+      "sessionTimeUpdated": "L'heure de la session a été mise à jour avec succès",
+      "sessionTimeUpdateFailed": "Échec de la mise à jour de l'heure de la session",
+      "periodTimeUpdated": "L'heure de la période a été mise à jour avec succès",
+      "periodTimeUpdateFailed": "Échec de la mise à jour de l'heure de la période"
     }
   },
   "menu": {
@@ -1825,7 +1847,10 @@
     "deviceInfo": "Informations sur l'appareil",
     "defaultCustomerName": "client",
     "playstationCustomer": "Client PlayStation",
-    "computerCustomer": "Client informatique"
+    "computerCustomer": "Client informatique",
+    "notifications": {
+      "endTimeBeforeStart": "L'heure de fin doit être après l'heure de début"
+    }
   },
   "consumptionReport": {
     "title": "Rapport de consommation",
@@ -3854,5 +3879,48 @@
     "SERVER_ERROR": "Une erreur de serveur s'est produite. Veuillez réessayer plus tard.",
     "VALIDATION_ERROR": "Les données saisies sont incorrectes.",
     "UNKNOWN_ERROR": "Une erreur inattendue s'est produite."
+  },
+  "soldItems": {
+    "title": "Articles Vendus",
+    "description": "Voir tous les articles vendus avec les détails de chaque commande",
+    "searchPlaceholder": "Rechercher un article...",
+    "noBill": "Sans Facture",
+    "noTable": "Sans Table",
+    "noCustomer": "Sans Nom de Client",
+    "noItems": "Aucun article vendu trouvé",
+    "quantity": "Quantité",
+    "orders": "Commandes",
+    "items": "Articles",
+    "categories": "Catégories",
+    "billNumber": "Numéro de Facture",
+    "table": "Table",
+    "orderDate": "Date de Commande",
+    "quantityAndPrice": "Quantité et Prix",
+    "customer": "Client",
+    "ascending": "Croissant",
+    "descending": "Décroissant",
+    "filters": {
+      "allTime": "Toute la Période",
+      "today": "Aujourd'hui",
+      "thisWeek": "Cette Semaine",
+      "thisMonth": "Ce Mois",
+      "customRange": "Période Personnalisée",
+      "selectDateRange": "Sélectionner la Période:",
+      "from": "De",
+      "to": "À",
+      "startDate": "Date de Début",
+      "endDate": "Date de Fin"
+    },
+    "sortBy": {
+      "revenue": "Revenus",
+      "quantity": "Quantité",
+      "name": "Nom"
+    },
+    "summary": {
+      "totalSections": "Total des Sections",
+      "totalItems": "Total des Articles",
+      "totalQuantity": "Quantité Totale",
+      "totalRevenue": "Revenus Totaux"
+    }
   }
 }

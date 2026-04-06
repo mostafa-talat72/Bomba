@@ -258,6 +258,12 @@ notificationSchema.statics.createOrderNotification = function (
     createdBy,
     language = 'ar'
 ) {
+    // التحقق من وجود organization
+    if (!order.organization) {
+        Logger.error('Order missing organization field:', { orderId: order._id, orderNumber: order.orderNumber });
+        return null;
+    }
+    
     // Get translations for all languages
     const translations = {
         ar: {},

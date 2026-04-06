@@ -100,7 +100,7 @@ export const formatTime = (
   date: Date | string | number | dayjs.Dayjs | null | undefined,
   locale: string = 'ar'
 ): string => {
-  return formatDateInOrgTz(date, 'HH:mm', locale);
+  return formatDateInOrgTz(date, 'hh:mm A', locale);
 };
 
 /**

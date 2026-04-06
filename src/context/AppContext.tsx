@@ -366,7 +366,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        let response = await api.getMe();
+        const response = await api.getMe();
       
         if (response.success && response.data?.user) {
           setUser(response.data.user);
@@ -376,37 +376,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           await loadAndApplySettings();
           
           await refreshData();
-        } else if (!response.success && (response.status === 401 || response.statusCode === 401)) {
-          // محاولة تجديد التوكن تلقائياً عند الحصول على 401
-          const refreshToken = localStorage.getItem('refreshToken');
-          if (refreshToken) {
-            try {
-              const refreshRes = await api.refreshToken(refreshToken);
-              if (refreshRes.success && refreshRes.data?.token) {
-                localStorage.setItem('token', refreshRes.data.token);
-                if (refreshRes.data.refreshToken) {
-                  localStorage.setItem('refreshToken', refreshRes.data.refreshToken);
-                }
-                api.setToken(refreshRes.data.token);
-                // أعد محاولة getMe بعد التجديد
-                response = await api.getMe();
-                if (response.success && response.data?.user) {
-                  setUser(response.data.user);
-                  setIsAuthenticated(true);
-                  
-                  // Load and apply settings after token refresh
-                  await loadAndApplySettings();
-                  
-                  await refreshData();
-                  setIsLoading(false);
-                  return;
-                }
-              }
-            } catch (refreshError) {
-              // تجاهل الأخطاء
-            }
-          }
-          // إذا فشل التجديد أو لم يوجد refreshToken
+        } else if (!response.success) {
+          // If getMe fails, the token is invalid or expired
+          // The api.request method already handles 401 with automatic token refresh
+          // If we reach here, it means the refresh also failed
           localStorage.removeItem('token');
           localStorage.removeItem('refreshToken');
           api.clearToken();
@@ -418,15 +391,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const isBillView = /^\/bill\/[a-fA-F0-9]{24}$/.test(currentPath);
           
           if (!isBillView) {
-            showNotification(t('auth.sessionExpired'), 'error');
+            // Only show notification if it's a session expiry message
+            if (response.message?.includes('صلاحية الجلسة') || response.message?.includes('session')) {
+              showNotification(t('auth.sessionExpired'), 'error');
+            }
             navigate('/login', { replace: true });
           }
-        } else {
-          localStorage.removeItem('token');
-          localStorage.removeItem('refreshToken');
-          api.clearToken();
-          setUser(null);
-          setIsAuthenticated(false);
         }
       } else {
         // لا يوجد توكن، تأكد من أن الحالة صحيحة
