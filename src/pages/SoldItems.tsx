@@ -73,8 +73,8 @@ const SoldItems: React.FC = () => {
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set()); // Track loading items
   const [loadingCategories, setLoadingCategories] = useState<Set<string>>(new Set()); // Track loading categories
   const [loadingSections, setLoadingSections] = useState<Set<string>>(new Set()); // Track loading sections
-  const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'revenue' | 'date'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'revenue' | 'date'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Get RTL status directly from WORLD_LANGUAGES
   const currentLang = WORLD_LANGUAGES.find(lang => lang.code === i18n.language);
