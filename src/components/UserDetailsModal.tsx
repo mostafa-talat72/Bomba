@@ -4,6 +4,7 @@ import { User as UserType } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
+import { useOrganization } from '../context/OrganizationContext';
 
 interface Role {
   id: string;

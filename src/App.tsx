@@ -181,7 +181,7 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="sold-items" element={
-            <ProtectedRoute requiredPermissions={['reports']}>
+            <ProtectedRoute requiredPermissions={['soldItems']}>
               <SoldItems />
             </ProtectedRoute>
           } />
@@ -206,7 +206,7 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="settings" element={
-            <ProtectedRoute requiredPermissions={['settings']}>
+            <ProtectedRoute requiredPermissions={[]}>
               <Settings />
             </ProtectedRoute>
           } />

@@ -84,8 +84,8 @@ router.get("/financial", getFinancialReport);
 
 // @desc    Get sold items report (hierarchical: section -> category -> item)
 // @route   GET /api/reports/sold-items
-// @access  Private (Reports permission)
-router.get("/sold-items", async (req, res) => {
+// @access  Private (SoldItems permission)
+router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
     try {
         const { dateFilter, startDate, endDate } = req.query;
         

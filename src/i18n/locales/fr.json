@@ -523,6 +523,8 @@
       "reportsDesc": "Contrôle total sur l'affichage et l'exportation de tous les rapports",
       "consumption": "Rapport de consommation",
       "consumptionDesc": "Afficher et analyser les rapports de consommation de matériaux et de produits",
+      "soldItems": "Articles Vendus",
+      "soldItemsDesc": "Afficher et analyser les rapports d'articles vendus et les revenus",
       "inventory": "Inventaire",
       "inventoryDesc": "Contrôle complet des stocks, des articles et des achats",
       "costs": "Frais",
@@ -3884,6 +3886,8 @@
     "title": "Articles Vendus",
     "description": "Voir tous les articles vendus avec les détails de chaque commande",
     "searchPlaceholder": "Rechercher un article...",
+    "showMoney": "Afficher l'Argent",
+    "hideMoney": "Masquer l'Argent",
     "noBill": "Sans Facture",
     "noTable": "Sans Table",
     "noCustomer": "Sans Nom de Client",
@@ -3910,6 +3914,14 @@
       "to": "À",
       "startDate": "Date de Début",
       "endDate": "Date de Fin"
+    },
+    "sort": {
+      "byName": "Trier par Nom",
+      "byQuantity": "Trier par Quantité",
+      "byRevenue": "Trier par Revenus",
+      "byDate": "Trier par Date",
+      "ascending": "Croissant (A-Z)",
+      "descending": "Décroissant (Z-A)"
     },
     "sortBy": {
       "revenue": "Revenus",

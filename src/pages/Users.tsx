@@ -74,6 +74,7 @@ const Users = () => {
     { id: 'billing', name: t('users.permissions.billing'), description: t('users.permissions.billingDesc') },
     { id: 'reports', name: t('users.permissions.reports'), description: t('users.permissions.reportsDesc') },
     { id: 'consumption', name: t('users.permissions.consumption'), description: t('users.permissions.consumptionDesc') },
+    { id: 'soldItems', name: t('users.permissions.soldItems'), description: t('users.permissions.soldItemsDesc') },
     { id: 'inventory', name: t('users.permissions.inventory'), description: t('users.permissions.inventoryDesc') },
     { id: 'costs', name: t('users.permissions.costs'), description: t('users.permissions.costsDesc') },
     { id: 'users', name: t('users.permissions.users'), description: t('users.permissions.usersDesc') },
@@ -97,11 +98,12 @@ const Users = () => {
       billing: ['billing'],
       reports: ['reports'],
       consumption: ['consumption'],
+      soldItems: ['soldItems'],
       inventory: ['inventory'],
       costs: ['costs'],
       users: ['users'],
       settings: ['settings'],
-      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'inventory', 'costs', 'users', 'settings']
+      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'soldItems', 'inventory', 'costs', 'users', 'settings']
     };
 
     const accessiblePages = [];
@@ -125,6 +127,7 @@ const Users = () => {
       billing: t('nav.billing'),
       reports: t('nav.reports'),
       consumption: t('nav.consumptionReport'),
+      soldItems: t('nav.soldItems'),
       inventory: t('nav.inventory'),
       costs: t('nav.costs'),
       users: t('nav.users'),

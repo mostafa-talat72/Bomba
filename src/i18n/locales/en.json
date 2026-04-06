@@ -523,6 +523,8 @@
       "reportsDesc": "Full control over viewing and exporting all reports",
       "consumption": "Consumption report",
       "consumptionDesc": "View and analyze material and product consumption reports",
+      "soldItems": "Sold Items",
+      "soldItemsDesc": "View and analyze sold items reports and revenue",
       "inventory": "Inventory",
       "inventoryDesc": "Complete control of inventory, items and purchases",
       "costs": "Costs",
@@ -3884,6 +3886,8 @@
     "title": "Sold Items",
     "description": "View all sold items with details for each order",
     "searchPlaceholder": "Search for an item...",
+    "showMoney": "Show Money",
+    "hideMoney": "Hide Money",
     "noBill": "No Bill",
     "noTable": "No Table",
     "noCustomer": "No Customer Name",
@@ -3910,6 +3914,14 @@
       "to": "To",
       "startDate": "Start Date",
       "endDate": "End Date"
+    },
+    "sort": {
+      "byName": "Sort by Name",
+      "byQuantity": "Sort by Quantity",
+      "byRevenue": "Sort by Revenue",
+      "byDate": "Sort by Date",
+      "ascending": "Ascending (A-Z)",
+      "descending": "Descending (Z-A)"
     },
     "sortBy": {
       "revenue": "Revenue",
