@@ -4,6 +4,8 @@ import { useApp } from '../context/AppContext';
 import { api, Bill, Order, OrderItem, Session } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { formatTime } from '../utils/dateHelpers';
+import { canPartialPayment, canPayFullBill, canDeleteBill, canEditSessionTime, canEditPartialPayment } from '../utils/permissionHelper';
+import PermissionDenied from '../components/PermissionDenied';
 import ConfirmModal from '../components/ConfirmModal';
 import { printBill } from '../utils/printBill';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -356,6 +358,27 @@ const Billing = () => {
   
   // States for editing completed session times
   const [showEditSessionTimeModal, setShowEditSessionTimeModal] = useState(false);
+  
+  // States for editing partial payments
+  const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
+  const [paymentToEdit, setPaymentToEdit] = useState<{ session: Session; payment: any; paymentIndex: number } | null>(null);
+  const [editPaymentAmount, setEditPaymentAmount] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [editPaymentReference, setEditPaymentReference] = useState('');
+  const [isEditingPayment, setIsEditingPayment] = useState(false);
+  
+  // States for editing item payments
+  const [showEditItemPaymentModal, setShowEditItemPaymentModal] = useState(false);
+  const [itemPaymentToEdit, setItemPaymentToEdit] = useState<{ 
+    itemPayment: any; 
+    payment: any; 
+    paymentIndex: number;
+    itemPaymentId: string;
+  } | null>(null);
+  const [editItemPaymentAmount, setEditItemPaymentAmount] = useState('');
+  const [editItemPaymentMethod, setEditItemPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [editItemPaymentReference, setEditItemPaymentReference] = useState('');
+  const [isEditingItemPayment, setIsEditingItemPayment] = useState(false);
   const [sessionToEdit, setSessionToEdit] = useState<Session | null>(null);
   const [editSessionStartTime, setEditSessionStartTime] = useState('');
   const [editSessionEndTime, setEditSessionEndTime] = useState('');
@@ -825,6 +848,12 @@ const Billing = () => {
 
   // Handler to open edit session time modal
   const handleEditSessionTime = (session: Session) => {
+    // Check permission
+    if (!canEditSessionTime(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     setSessionToEdit(session);
     
     // Format dates for datetime-local input
@@ -977,6 +1006,214 @@ const Billing = () => {
     }
   };
 
+  // Handler to open edit payment modal
+  const handleEditSessionPayment = (session: Session, payment: any, paymentIndex: number) => {
+    // التحقق من الصلاحية
+    if (!canEditPartialPayment(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
+    setPaymentToEdit({ session, payment, paymentIndex });
+    setEditPaymentAmount(payment.amount.toString());
+    setEditPaymentMethod(payment.method);
+    setEditPaymentReference(payment.reference || '');
+    setShowEditPaymentModal(true);
+  };
+
+  // Handler to save edited payment
+  const handleSaveEditedPayment = async () => {
+    if (!paymentToEdit || !selectedBill) return;
+    
+    // التحقق من الصلاحية
+    if (!canEditPartialPayment(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
+    const newAmount = parseFloat(editPaymentAmount);
+    
+    // التحقق من المبلغ
+    if (isNaN(newAmount) || newAmount <= 0) {
+      showNotification(t('billing.editPayment.invalidAmount'), 'error');
+      return;
+    }
+    
+    // حساب الفرق بين المبلغ القديم والجديد
+    const oldAmount = paymentToEdit.payment.amount;
+    const amountDifference = newAmount - oldAmount;
+    
+    // التحقق من أن المبلغ الجديد لا يتجاوز الحد المسموح
+    const sessionId = paymentToEdit.session._id || paymentToEdit.session.id;
+    const sessionPayment = selectedBill.sessionPayments?.find(
+      sp => sp.sessionId === sessionId
+    );
+    
+    if (sessionPayment) {
+      const currentRemaining = sessionPayment.remainingAmount || 0;
+      const newRemaining = currentRemaining - amountDifference;
+      
+      if (newRemaining < 0) {
+        showNotification(t('billing.editPayment.amountTooHigh'), 'error');
+        return;
+      }
+    }
+    
+    setIsEditingPayment(true);
+    
+    try {
+      // استدعاء API لتعديل الدفعة
+      const response = await api.updateSessionPayment(
+        selectedBill.id || selectedBill._id,
+        sessionId,
+        paymentToEdit.paymentIndex,
+        {
+          amount: newAmount,
+          method: editPaymentMethod,
+          reference: editPaymentReference
+        }
+      );
+      
+      if (response.success) {
+        showNotification(t('billing.editPayment.success'), 'success');
+        setShowEditPaymentModal(false);
+        setPaymentToEdit(null);
+        
+        // تحديث البيانات
+        await fetchBills();
+        
+        // تحديث الفاتورة المحددة إذا كانت نافذة الدفع مفتوحة
+        if (showSessionPaymentModal && selectedBill) {
+          const updatedBillResult = await api.getBill(selectedBill.id || selectedBill._id);
+          if (updatedBillResult && updatedBillResult.data) {
+            setSelectedBill(updatedBillResult.data);
+          }
+        }
+      } else {
+        showNotification(response.message || t('billing.editPayment.error'), 'error');
+      }
+    } catch (error: any) {
+      console.error('Error updating payment:', error);
+      showNotification(error.message || t('billing.editPayment.error'), 'error');
+    } finally {
+      setIsEditingPayment(false);
+    }
+  };
+
+  // Handler to open edit item payment modal
+  const handleEditItemPayment = (data: any, displayIndex: number) => {
+    // التحقق من الصلاحية
+    if (!canEditPartialPayment(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
+    const { itemPayment, payment, paymentIdx } = data;
+    
+    setItemPaymentToEdit({ 
+      itemPayment,
+      payment, 
+      paymentIndex: paymentIdx,
+      itemPaymentId: itemPayment._id || itemPayment.id
+    });
+    setEditItemPaymentAmount(payment.quantity.toString());
+    setEditItemPaymentMethod(payment.method || 'cash');
+    setEditItemPaymentReference(payment.reference || '');
+    setShowEditItemPaymentModal(true);
+  };
+
+  // Handler to save edited item payment
+  const handleSaveEditedItemPayment = async () => {
+    if (!itemPaymentToEdit || !selectedBill) return;
+    
+    // التحقق من الصلاحية
+    if (!canEditPartialPayment(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
+    const newQuantity = parseFloat(editItemPaymentAmount);
+    
+    // التحقق من الكمية
+    if (isNaN(newQuantity) || newQuantity < 0) {
+      showNotification(t('billing.editPayment.invalidQuantity'), 'error');
+      return;
+    }
+    
+    // التحقق من أن الكمية رقم صحيح
+    if (!Number.isInteger(newQuantity)) {
+      showNotification(t('billing.editPayment.quantityMustBeInteger'), 'error');
+      return;
+    }
+    
+    // التحقق من أن الكمية الجديدة لا تتجاوز الكمية المدفوعة في هذه الدفعة
+    const maxQuantity = itemPaymentToEdit.payment.quantity;
+    if (newQuantity > maxQuantity) {
+      showNotification(t('billing.editPayment.quantityExceedsPayment'), 'error');
+      return;
+    }
+    
+    // حساب المبلغ الجديد بناءً على الكمية
+    const pricePerUnit = itemPaymentToEdit.itemPayment.pricePerUnit;
+    const newAmount = newQuantity * pricePerUnit;
+    
+    // حساب الفرق بين المبلغ القديم والجديد
+    const oldAmount = itemPaymentToEdit.payment.amount;
+    const amountDifference = newAmount - oldAmount;
+    
+    // التحقق من أن المبلغ الجديد لا يتجاوز الحد المسموح
+    const newRemaining = selectedBill.remaining - amountDifference;
+    
+    if (newRemaining < 0) {
+      showNotification(t('billing.editPayment.amountTooHigh'), 'error');
+      return;
+    }
+    
+    setIsEditingItemPayment(true);
+    
+    try {
+      // استدعاء API لتعديل الدفعة
+      const response = await api.updateItemPayment(
+        selectedBill.id || selectedBill._id,
+        itemPaymentToEdit.itemPaymentId,
+        itemPaymentToEdit.paymentIndex,
+        {
+          quantity: newQuantity,
+          method: editItemPaymentMethod,
+          reference: editItemPaymentReference
+        }
+      );
+      
+      if (response.success) {
+        if (newQuantity === 0) {
+          showNotification(t('billing.editPayment.paymentDeleted'), 'success');
+        } else {
+          showNotification(t('billing.editPayment.success'), 'success');
+        }
+        setShowEditItemPaymentModal(false);
+        setItemPaymentToEdit(null);
+        
+        // تحديث البيانات
+        await fetchBills();
+        
+        // تحديث الفاتورة المحددة إذا كانت نافذة الدفع مفتوحة
+        if (showPaymentModal && selectedBill) {
+          const updatedBillResult = await api.getBill(selectedBill.id || selectedBill._id);
+          if (updatedBillResult && updatedBillResult.data) {
+            setSelectedBill(updatedBillResult.data);
+          }
+        }
+      } else {
+        showNotification(response.message || t('billing.editPayment.error'), 'error');
+      }
+    } catch (error: any) {
+      console.error('Error updating item payment:', error);
+      showNotification(error.message || t('billing.editPayment.error'), 'error');
+    } finally {
+      setIsEditingItemPayment(false);
+    }
+  };
+
 
   const handlePaymentSubmit = async () => {
     if (!selectedBill) return;
@@ -991,6 +1228,12 @@ const Billing = () => {
     const isFullPayment = parseFloat(paymentAmount) >= (selectedBill.remaining || 0);
     
     if (isFullPayment) {
+      // التحقق من صلاحية الدفع الكامل
+      if (!canPayFullBill(user)) {
+        showNotification(t('common.permissionDenied'), 'error');
+        return;
+      }
+      
       // فتح نافذة التأكيد للدفع الكامل
       setBillToPayFull(selectedBill);
       setShowPayFullBillConfirmModal(true);
@@ -1095,6 +1338,12 @@ const Billing = () => {
 
   // دالة لدفع الفاتورة بالكامل مباشرة
   const handlePayFullBill = async (bill: Bill) => {
+    // التحقق من الصلاحية
+    if (!canPayFullBill(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     // التحقق من وجود جلسات نشطة
     if (bill && hasActiveSession(bill)) {
       showNotification(t('billing.notifications.cannotPayActiveSession'), 'error');
@@ -1217,6 +1466,12 @@ const Billing = () => {
   };
 
   const handlePartialPayment = async (bill: Bill) => {
+    // التحقق من الصلاحية
+    if (!canPartialPayment(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     setSelectedBill(bill);
     setShowPartialPaymentModal(true);
     
@@ -1341,6 +1596,12 @@ const Billing = () => {
 
   // دالة الدفع الجزئي للجلسة
   const handlePaySessionPartial = async (session?: Session) => {
+    // التحقق من صلاحية الدفع الجزئي
+    if (!canPartialPayment(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     // استخدام الجلسة الممررة أو الجلسة المحددة
     const targetSession = session || selectedSession;
     
@@ -1627,6 +1888,12 @@ const Billing = () => {
   };
 
   const handleCancelBill = async () => {
+    // التحقق من الصلاحية
+    if (!canDeleteBill(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     if (!selectedBill) return;
     
     try {
@@ -1989,6 +2256,7 @@ const Billing = () => {
                   deviceType: 'playstation' | 'computer';
                   hasActiveSession: boolean;
                   linkedToTable: boolean;
+                  tableNumber?: string | number;
                   bills: Bill[];
                 }>();
               
@@ -2785,6 +3053,77 @@ const Billing = () => {
                     </div>
                   )}
 
+                  {/* عرض الدفعات السابقة للأصناف */}
+                  {selectedBill && selectedBill.itemPayments && selectedBill.itemPayments.length > 0 && (() => {
+                    // جمع كل الدفعات من paymentHistory لكل صنف
+                    const allItemPayments: any[] = [];
+                    selectedBill.itemPayments.forEach((itemPayment: any) => {
+                      if (itemPayment.paymentHistory && itemPayment.paymentHistory.length > 0) {
+                        itemPayment.paymentHistory.forEach((payment: any, paymentIdx: number) => {
+                          allItemPayments.push({
+                            itemPayment,
+                            payment,
+                            paymentIdx
+                          });
+                        });
+                      }
+                    });
+
+                    if (allItemPayments.length === 0) return null;
+
+                    return (
+                      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-5 rounded-xl mb-6 border-2 border-blue-200 dark:border-blue-800 shadow-md">
+                        <h5 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
+                          <Receipt className="h-5 w-5" />
+                          {t('billing.previousItemPayments')}
+                        </h5>
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                          {allItemPayments.map(({ itemPayment, payment, paymentIdx }, idx) => (
+                            <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm">
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">
+                                    {itemPayment.itemName || t('billing.unknownItem')}
+                                  </p>
+                                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    {t('billing.quantity')}: {formatDecimal(payment.quantity, i18n.language)} × {formatCurrency(itemPayment.pricePerUnit)}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-blue-600 dark:text-blue-400">
+                                    {formatCurrency(payment.amount)}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-200 dark:border-gray-600">
+                                <div className="flex gap-3">
+                                  <span className="text-gray-600 dark:text-gray-400">
+                                    {payment.method ? t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`) : t('billing.paymentMethodCash')}
+                                  </span>
+                                  <span className="text-gray-500 dark:text-gray-500">
+                                    {formatDateTime(payment.paidAt)}
+                                  </span>
+                                </div>
+                                
+                                {/* زر تعديل الدفعة - يظهر فقط لمن لديه الصلاحية */}
+                                {canEditPartialPayment(user) && (
+                                  <button
+                                    onClick={() => handleEditItemPayment({ itemPayment, payment, paymentIdx }, idx)}
+                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium whitespace-nowrap"
+                                    title={t('common.edit')}
+                                  >
+                                    {t('common.edit')}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
 
 
                   {/* إدخال الدفع - يظهر فقط إذا لم تكن الفاتورة مدفوعة بالكامل */}
@@ -2797,6 +3136,12 @@ const Billing = () => {
                           {/* زر دفع الفاتورة بالكامل */}
                           <button
                             onClick={() => {
+                              // التحقق من الصلاحية
+                              if (!canPayFullBill(user)) {
+                                showNotification(t('common.permissionDenied'), 'error');
+                                return;
+                              }
+                              
                               if (selectedBill?.remaining && selectedBill.remaining > 0) {
                                 setPaymentAmount(selectedBill.remaining.toString());
                                 setOriginalAmount(selectedBill.remaining.toString());
@@ -3196,7 +3541,14 @@ const Billing = () => {
               {/* زر حذف الفاتورة - يظهر فقط إذا لم تكن مدفوعة بالكامل */}
               {selectedBill?.status !== 'paid' && (
                 <button
-                  onClick={() => setShowCancelConfirmModal(true)}
+                  onClick={() => {
+                    // التحقق من الصلاحية قبل فتح نافذة التأكيد
+                    if (!canDeleteBill(user)) {
+                      showNotification(t('common.permissionDenied'), 'error');
+                      return;
+                    }
+                    setShowCancelConfirmModal(true);
+                  }}
                   className="px-4 py-2 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-colors duration-200"
                 >
                   {t('billing.deleteBill')}
@@ -3283,7 +3635,7 @@ const Billing = () => {
         message={t('billing.confirmModals.payFullBillMessage', {
           billNumber: billToPayFull?.billNumber || billToPayFull?.id || billToPayFull?._id,
           amount: formatCurrency(billToPayFull?.remaining || 0),
-          method: t(`billing.paymentMethod${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}`)
+          method: paymentMethod ? t(`billing.paymentMethod${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}`) : t('billing.paymentMethodCash')
         })}
         confirmText={isProcessingPayment ? t('billing.confirmModals.payFullBillProcessing') : t('billing.confirmModals.payFullBillConfirm')}
         cancelText={t('billing.confirmModals.payFullBillCancel')}
@@ -3300,7 +3652,7 @@ const Billing = () => {
         message={t('billing.confirmModals.sessionPaymentMessage', {
           device: sessionToPayData?.session?.deviceName || sessionToPayData?.session?.deviceNumber || t('common.unknown'),
           amount: formatCurrency(parseFloat(sessionToPayData?.amount || '0')),
-          method: t(`billing.paymentMethod${sessionToPayData?.method ? sessionToPayData.method.charAt(0).toUpperCase() + sessionToPayData.method.slice(1) : 'Cash'}`)
+          method: sessionToPayData?.method ? t(`billing.paymentMethod${sessionToPayData.method.charAt(0).toUpperCase() + sessionToPayData.method.slice(1)}`) : t('billing.paymentMethodCash')
         })}
         confirmText={isProcessingSessionPayment ? t('billing.confirmModals.sessionPaymentProcessing') : t('billing.confirmModals.sessionPaymentConfirm')}
         cancelText={t('billing.confirmModals.sessionPaymentCancel')}
@@ -3502,8 +3854,8 @@ const Billing = () => {
                               ⚡ {t('billing.sessionPaymentModal.activeSession')}
                             </span>
                           )}
-                          {/* زر تعديل الوقت - يظهر فقط للجلسات المنتهية غير المدفوعة بالكامل */}
-                          {isCompleted && !isFullyPaid && (
+                          {/* زر تعديل الوقت - يظهر فقط للجلسات المنتهية غير المدفوعة بالكامل وللمستخدمين الذين لديهم الصلاحية */}
+                          {isCompleted && !isFullyPaid && canEditSessionTime(user) && (
                             <button
                               onClick={() => handleEditSessionTime(session)}
                               className="px-2 sm:px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
@@ -3629,6 +3981,9 @@ const Billing = () => {
                               await handlePaySessionPartial(session);
                             }}
                             disabled={(() => {
+                              // التحقق من الصلاحية
+                              if (!canPartialPayment(user)) return true;
+                              
                               // التحقق من أن هذه الجلسة هي المحددة
                               const isThisSessionSelected = selectedSession?._id === sessionId || selectedSession?.id === sessionId;
                               
@@ -3647,6 +4002,7 @@ const Billing = () => {
                               return !isThisSessionSelected;
                             })()}
                             className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm sm:text-base whitespace-nowrap"
+                            title={!canPartialPayment(user) ? t('common.permissionDenied') : ''}
                           >
                             {t('billing.sessionPaymentModal.payButton')}
                           </button>
@@ -3659,13 +4015,23 @@ const Billing = () => {
                           <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">{t('billing.sessionPaymentModal.previousPayments')}:</p>
                           <div className="space-y-1">
                             {sessionPayment.payments.map((payment: any, idx: number) => (
-                              <div key={idx} className="flex justify-between items-center text-xs bg-white dark:bg-gray-700 p-2 rounded">
+                              <div key={idx} className="flex justify-between items-center text-xs bg-white dark:bg-gray-700 p-2 rounded gap-2">
                                 <span className="text-gray-600 dark:text-gray-400 truncate flex-1 pr-2">
-                                  {formatCurrency(payment.amount)} - {t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`)}
+                                  {formatCurrency(payment.amount)} - {payment.method ? t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`) : t('billing.paymentMethodCash')}
                                 </span>
                                 <span className="text-gray-500 dark:text-gray-500 text-xs whitespace-nowrap">
                                   {formatDateTime(payment.paidAt)}
                                 </span>
+                                {/* زر تعديل الدفعة - يظهر فقط لمن لديه الصلاحية */}
+                                {canEditPartialPayment(user) && (
+                                  <button
+                                    onClick={() => handleEditSessionPayment(session, payment, idx)}
+                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium whitespace-nowrap"
+                                    title={t('common.edit')}
+                                  >
+                                    {t('common.edit')}
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -4071,6 +4437,482 @@ const Billing = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Session Payment Modal */}
+      {showEditPaymentModal && paymentToEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full my-8">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-6 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <DollarSign className="h-6 w-6" />
+                  {t('billing.editPayment.title')}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowEditPaymentModal(false);
+                    setPaymentToEdit(null);
+                  }}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  disabled={isEditingPayment}
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5 max-h-[calc(100vh-200px)] overflow-y-auto">
+              {/* Session Info Card */}
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 rounded-xl border-2 border-blue-200 dark:border-blue-700">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <p className="text-base font-bold text-gray-900 dark:text-gray-100 mb-1">
+                      {paymentToEdit.session.deviceName}
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {paymentToEdit.session.deviceType === 'playstation' ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Amount */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
+                  {t('billing.editPayment.currentAmount')}
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {formatCurrency(paymentToEdit.payment.amount)}
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  {t('billing.editPayment.currentMethod')}: {paymentToEdit.payment.method ? t(`billing.paymentMethod${paymentToEdit.payment.method.charAt(0).toUpperCase() + paymentToEdit.payment.method.slice(1)}`) : t('billing.paymentMethodCash')}
+                </p>
+              </div>
+
+              {/* New Amount */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  {t('billing.editPayment.newAmount')}
+                </label>
+                <input
+                  type="number"
+                  value={editPaymentAmount}
+                  onChange={(e) => setEditPaymentAmount(e.target.value)}
+                  placeholder={t('billing.editPayment.amountPlaceholder')}
+                  className="w-full px-4 py-3 text-lg font-semibold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                  disabled={isEditingPayment}
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              {/* New Payment Method */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t('billing.editPayment.newMethod')}
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setEditPaymentMethod('cash')}
+                    disabled={isEditingPayment}
+                    className={`p-4 border-2 rounded-xl text-center transition-all ${
+                      editPaymentMethod === 'cash'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-lg scale-105'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="text-3xl mb-2">💵</div>
+                    <div className="text-xs font-semibold">{t('billing.paymentMethodCash')}</div>
+                  </button>
+                  <button
+                    onClick={() => setEditPaymentMethod('card')}
+                    disabled={isEditingPayment}
+                    className={`p-4 border-2 rounded-xl text-center transition-all ${
+                      editPaymentMethod === 'card'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-lg scale-105'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="text-3xl mb-2">💳</div>
+                    <div className="text-xs font-semibold">{t('billing.paymentMethodCard')}</div>
+                  </button>
+                  <button
+                    onClick={() => setEditPaymentMethod('transfer')}
+                    disabled={isEditingPayment}
+                    className={`p-4 border-2 rounded-xl text-center transition-all ${
+                      editPaymentMethod === 'transfer'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-lg scale-105'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="text-3xl mb-2">📱</div>
+                    <div className="text-xs font-semibold">{t('billing.paymentMethodTransfer')}</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Reference Number */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  {t('billing.editPayment.reference')} <span className="text-gray-400 font-normal">({t('common.optional')})</span>
+                </label>
+                <input
+                  type="text"
+                  value={editPaymentReference}
+                  onChange={(e) => setEditPaymentReference(e.target.value)}
+                  placeholder={t('billing.editPayment.referencePlaceholder')}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                  disabled={isEditingPayment}
+                />
+              </div>
+
+              {/* Payment Info */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">{t('billing.editPayment.paidAt')}:</span>
+                  <span className="text-gray-900 dark:text-gray-100 font-medium">{formatDateTime(paymentToEdit.payment.paidAt)}</span>
+                </div>
+                {paymentToEdit.payment.paidBy && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">{t('billing.editPayment.paidBy')}:</span>
+                    <span className="text-gray-900 dark:text-gray-100 font-medium">
+                      {typeof paymentToEdit.payment.paidBy === 'object' 
+                        ? paymentToEdit.payment.paidBy.name 
+                        : paymentToEdit.payment.paidBy}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Warning */}
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-600 rounded-r-lg p-3">
+                <p className="text-xs text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
+                  <span className="text-base">⚠️</span>
+                  <span>{t('billing.editPayment.warning')}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-b-xl border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => {
+                  setShowEditPaymentModal(false);
+                    setPaymentToEdit(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors"
+                  disabled={isEditingPayment}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleSaveEditedPayment}
+                  className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                    isEditingPayment
+                      ? 'bg-blue-400 dark:bg-blue-700 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+                  } text-white`}
+                  disabled={isEditingPayment}
+                >
+                  {isEditingPayment ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {t('common.saving')}
+                    </>
+                  ) : (
+                    t('billing.editPayment.save')
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+      )}
+
+      {/* Edit Item Payment Modal */}
+      {showEditItemPaymentModal && itemPaymentToEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full my-8">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Receipt className="h-6 w-6" />
+                  {t('billing.editPayment.title')}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowEditItemPaymentModal(false);
+                    setItemPaymentToEdit(null);
+                  }}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  disabled={isEditingItemPayment}
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5 max-h-[calc(100vh-200px)] overflow-y-auto">
+              {/* Item Info Card */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-4 rounded-xl border-2 border-green-200 dark:border-green-700">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-base font-bold text-gray-900 dark:text-gray-100 mb-2">
+                      {itemPaymentToEdit.itemPayment.itemName || t('billing.unknownItem')}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-600 dark:text-gray-400">{t('billing.pricePerUnit')}:</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(itemPaymentToEdit.itemPayment.pricePerUnit)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-600 dark:text-gray-400">{t('billing.totalQuantity')}:</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">{formatDecimal(itemPaymentToEdit.itemPayment.quantity, i18n.language)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">{t('billing.remainingQuantity')}:</span>
+                    <span className="font-bold text-green-600 dark:text-green-400">
+                      {formatDecimal(itemPaymentToEdit.itemPayment.quantity - itemPaymentToEdit.itemPayment.paidQuantity, i18n.language)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Payment Info */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-3 uppercase tracking-wide">
+                  {t('billing.editPayment.currentQuantity')}
+                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                      {formatDecimal(itemPaymentToEdit.payment.quantity, i18n.language)}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {formatCurrency(itemPaymentToEdit.payment.amount)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.editPayment.currentMethod')}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {itemPaymentToEdit.payment.method ? t(`billing.paymentMethod${itemPaymentToEdit.payment.method.charAt(0).toUpperCase() + itemPaymentToEdit.payment.method.slice(1)}`) : t('billing.paymentMethodCash')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* New Quantity with +/- Buttons */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t('billing.editPayment.newQuantity')}
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      const currentQty = parseInt(editItemPaymentAmount) || 0;
+                      if (currentQty > 0) {
+                        setEditItemPaymentAmount((currentQty - 1).toString());
+                      }
+                    }}
+                    disabled={isEditingItemPayment || parseInt(editItemPaymentAmount) <= 0}
+                    className="w-12 h-12 flex items-center justify-center bg-red-500 hover:bg-red-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white font-bold text-xl rounded-lg transition-colors disabled:cursor-not-allowed"
+                  >
+                    −
+                  </button>
+                  
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      value={editItemPaymentAmount}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '' || (parseInt(value) >= 0 && parseInt(value) <= itemPaymentToEdit.payment.quantity)) {
+                          setEditItemPaymentAmount(value);
+                        }
+                      }}
+                      placeholder="0"
+                      className="w-full px-4 py-3 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:text-gray-100"
+                      disabled={isEditingItemPayment}
+                      min="0"
+                      max={itemPaymentToEdit.payment.quantity}
+                      step="1"
+                    />
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      const currentQty = parseInt(editItemPaymentAmount) || 0;
+                      if (currentQty < itemPaymentToEdit.payment.quantity) {
+                        setEditItemPaymentAmount((currentQty + 1).toString());
+                      }
+                    }}
+                    disabled={isEditingItemPayment || parseInt(editItemPaymentAmount) >= itemPaymentToEdit.payment.quantity}
+                    className="w-12 h-12 flex items-center justify-center bg-green-500 hover:bg-green-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white font-bold text-xl rounded-lg transition-colors disabled:cursor-not-allowed"
+                  >
+                    +
+                  </button>
+                </div>
+                
+                {/* Calculated Amount Display */}
+                {editItemPaymentAmount && !isNaN(parseFloat(editItemPaymentAmount)) && parseFloat(editItemPaymentAmount) > 0 && (
+                  <div className="mt-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-blue-800 dark:text-blue-200">{t('billing.editPayment.newAmount')}:</span>
+                      <span className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                        {formatCurrency(parseFloat(editItemPaymentAmount) * itemPaymentToEdit.itemPayment.pricePerUnit)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Zero Quantity Warning */}
+                {(editItemPaymentAmount === '0' || parseInt(editItemPaymentAmount) === 0) && (
+                  <div className="mt-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-3">
+                    <p className="text-xs text-red-800 dark:text-red-200 flex items-center gap-2">
+                      <span>🗑️</span>
+                      <span>{t('billing.editPayment.zeroQuantityWarning')}</span>
+                    </p>
+                  </div>
+                )}
+                
+                {/* Max Quantity Info */}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                  {t('billing.editPayment.maxQuantity')}: {formatDecimal(itemPaymentToEdit.payment.quantity, i18n.language)}
+                </p>
+              </div>
+
+              {/* New Payment Method */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t('billing.editPayment.newMethod')}
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setEditItemPaymentMethod('cash')}
+                    disabled={isEditingItemPayment}
+                    className={`p-4 border-2 rounded-xl text-center transition-all ${
+                      editItemPaymentMethod === 'cash'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 shadow-lg scale-105'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="text-3xl mb-2">💵</div>
+                    <div className="text-xs font-semibold">{t('billing.paymentMethodCash')}</div>
+                  </button>
+                  <button
+                    onClick={() => setEditItemPaymentMethod('card')}
+                    disabled={isEditingItemPayment}
+                    className={`p-4 border-2 rounded-xl text-center transition-all ${
+                      editItemPaymentMethod === 'card'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 shadow-lg scale-105'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="text-3xl mb-2">💳</div>
+                    <div className="text-xs font-semibold">{t('billing.paymentMethodCard')}</div>
+                  </button>
+                  <button
+                    onClick={() => setEditItemPaymentMethod('transfer')}
+                    disabled={isEditingItemPayment}
+                    className={`p-4 border-2 rounded-xl text-center transition-all ${
+                      editItemPaymentMethod === 'transfer'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 shadow-lg scale-105'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="text-3xl mb-2">📱</div>
+                    <div className="text-xs font-semibold">{t('billing.paymentMethodTransfer')}</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Reference Number */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  {t('billing.editPayment.reference')} <span className="text-gray-400 font-normal">({t('common.optional')})</span>
+                </label>
+                <input
+                  type="text"
+                  value={editItemPaymentReference}
+                  onChange={(e) => setEditItemPaymentReference(e.target.value)}
+                  placeholder={t('billing.editPayment.referencePlaceholder')}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-gray-100"
+                  disabled={isEditingItemPayment}
+                />
+              </div>
+
+              {/* Payment Info */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">{t('billing.editPayment.paidAt')}:</span>
+                  <span className="text-gray-900 dark:text-gray-100 font-medium">{formatDateTime(itemPaymentToEdit.payment.paidAt)}</span>
+                </div>
+                {itemPaymentToEdit.payment.paidBy && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">{t('billing.editPayment.paidBy')}:</span>
+                    <span className="text-gray-900 dark:text-gray-100 font-medium">
+                      {typeof itemPaymentToEdit.payment.paidBy === 'object' 
+                        ? itemPaymentToEdit.payment.paidBy.name 
+                        : itemPaymentToEdit.payment.paidBy}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Warning */}
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-600 rounded-r-lg p-3">
+                <p className="text-xs text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
+                  <span className="text-base">⚠️</span>
+                  <span>{t('billing.editPayment.warning')}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-b-xl border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => {
+                  setShowEditItemPaymentModal(false);
+                  setItemPaymentToEdit(null);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors"
+                disabled={isEditingItemPayment}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleSaveEditedItemPayment}
+                className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                  isEditingItemPayment
+                    ? 'bg-green-400 dark:bg-green-700 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600'
+                } text-white`}
+                disabled={isEditingItemPayment}
+              >
+                {isEditingItemPayment ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {t('common.saving')}
+                  </>
+                ) : (
+                  t('billing.editPayment.save')
+                )}
+              </button>
             </div>
           </div>
         </div>

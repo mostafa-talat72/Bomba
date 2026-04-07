@@ -7,6 +7,8 @@ import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { printOrder } from '../utils/printOrder';
+import { canAddOrder, canEditOrder, canDeleteOrder } from '../utils/permissionHelper';
+import PermissionDenied from '../components/PermissionDenied';
 import api from '../services/api';
 import { io, Socket } from 'socket.io-client';
 
@@ -141,6 +143,8 @@ interface OrderItemProps {
 
 const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete }) => {
   const { t } = useTranslation();
+  const { user } = useApp();
+  
   // Calculate total from items if finalAmount is not available
   const calculateTotal = () => {
     if (order.finalAmount) return order.finalAmount;
@@ -156,6 +160,9 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
     
     return 0;
   };
+
+  const userCanEdit = canEditOrder(user);
+  const userCanDelete = canDeleteOrder(user);
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
@@ -176,23 +183,43 @@ const OrderItem = React.memo<OrderItemProps>(({ order, onPrint, onEdit, onDelete
           >
             <Printer className="h-4 w-4" />
           </button>
-          <button
-            onClick={() => onEdit(order)}
-            className="text-orange-600 hover:text-orange-700 p-1"
-            title={t('cafe.edit')}
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(order);
-            }}
-            className="text-red-600 hover:text-red-700 p-1"
-            title={t('cafe.delete')}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {userCanEdit ? (
+            <button
+              onClick={() => onEdit(order)}
+              className="text-orange-600 hover:text-orange-700 p-1"
+              title={t('cafe.edit')}
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              disabled
+              className="text-gray-300 cursor-not-allowed p-1"
+              title={t('common.permissionDenied')}
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+          )}
+          {userCanDelete ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(order);
+              }}
+              className="text-red-600 hover:text-red-700 p-1"
+              title={t('cafe.delete')}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              disabled
+              className="text-gray-300 cursor-not-allowed p-1"
+              title={t('common.permissionDenied')}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
       <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -726,6 +753,12 @@ const Cafe: React.FC = () => {
 
   // Handle add order
   const handleAddOrder = () => {
+    // التحقق من الصلاحية
+    if (!canAddOrder(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     if (!selectedTable) {
       showNotification(t('cafe.selectTable'), 'error');
       return;
@@ -740,6 +773,12 @@ const Cafe: React.FC = () => {
 
   // Handle edit order
   const handleEditOrder = (order: Order) => {
+    // التحقق من الصلاحية
+    if (!canEditOrder(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     setSelectedOrder(order);
     // Check if order.items exists and is an array
     if (!order.items || !Array.isArray(order.items)) {
@@ -1259,6 +1298,12 @@ const Cafe: React.FC = () => {
 
   // Delete order
   const handleDeleteOrder = (order: Order) => {
+    // التحقق من الصلاحية
+    if (!canDeleteOrder(user)) {
+      showNotification(t('common.permissionDenied'), 'error');
+      return;
+    }
+    
     // التحقق من وجود دفعات جزئية للطلب
     const orderId = order._id || order.id;
     const orderBill = bills.find((bill: any) => {
@@ -1884,13 +1929,19 @@ const Cafe: React.FC = () => {
             {/* Footer */}
             <div className="p-4 sm:p-5 md:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
               <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={handleAddOrder}
-                  className="flex-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
-                >
-                  <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
-                  {t('cafe.tableOrdersModal.newOrder')}
-                </button>
+                {canAddOrder(user) ? (
+                  <button
+                    onClick={handleAddOrder}
+                    className="flex-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
+                  >
+                    <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
+                    {t('cafe.tableOrdersModal.newOrder')}
+                  </button>
+                ) : (
+                  <div className="flex-1">
+                    <PermissionDenied size="small" message={t('users.permissions.canAddOrderDesc')} />
+                  </div>
+                )}
                 
                 {/* Payment Management Button - only show if table is occupied */}
                 {(() => {

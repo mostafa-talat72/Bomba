@@ -234,8 +234,8 @@ const App = () => {
         }}
       >
         <LanguageProvider>
-          <AppProvider>
-            <ThemeProvider>
+          <ThemeProvider>
+            <AppProvider>
               <OrganizationProvider>
                 <ToastManager>
                   <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
@@ -243,8 +243,8 @@ const App = () => {
                   </div>
                 </ToastManager>
               </OrganizationProvider>
-            </ThemeProvider>
-          </AppProvider>
+            </AppProvider>
+          </ThemeProvider>
         </LanguageProvider>
       </BrowserRouter>
     </ErrorBoundary>

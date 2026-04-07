@@ -79,6 +79,14 @@ const Users = () => {
     { id: 'costs', name: t('users.permissions.costs'), description: t('users.permissions.costsDesc') },
     { id: 'users', name: t('users.permissions.users'), description: t('users.permissions.usersDesc') },
     { id: 'settings', name: t('users.permissions.settings'), description: t('users.permissions.settingsDesc') },
+    { id: 'canAddOrder', name: t('users.permissions.canAddOrder'), description: t('users.permissions.canAddOrderDesc') },
+    { id: 'canEditOrder', name: t('users.permissions.canEditOrder'), description: t('users.permissions.canEditOrderDesc') },
+    { id: 'canDeleteOrder', name: t('users.permissions.canDeleteOrder'), description: t('users.permissions.canDeleteOrderDesc') },
+    { id: 'canPartialPayment', name: t('users.permissions.canPartialPayment'), description: t('users.permissions.canPartialPaymentDesc') },
+    { id: 'canEditSessionTime', name: t('users.permissions.canEditSessionTime'), description: t('users.permissions.canEditSessionTimeDesc') },
+    { id: 'canPayFullBill', name: t('users.permissions.canPayFullBill'), description: t('users.permissions.canPayFullBillDesc') },
+    { id: 'canDeleteBill', name: t('users.permissions.canDeleteBill'), description: t('users.permissions.canDeleteBillDesc') },
+    { id: 'canEditPartialPayment', name: t('users.permissions.canEditPartialPayment'), description: t('users.permissions.canEditPartialPaymentDesc') },
   ];
 
   const businessTypes = [

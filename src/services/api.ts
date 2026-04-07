@@ -1465,6 +1465,52 @@ class ApiClient {
     return response;
   }
 
+  async updateSessionPayment(
+    billId: string,
+    sessionId: string,
+    paymentIndex: number,
+    paymentData: {
+      amount: number;
+      method: 'cash' | 'card' | 'transfer';
+      reference?: string;
+    }
+  ): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(
+      `/billing/${billId}/session-payments/${sessionId}/${paymentIndex}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }
+    );
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async updateItemPayment(
+    billId: string,
+    itemPaymentId: string,
+    paymentIndex: number,
+    paymentData: {
+      quantity: number;
+      method: 'cash' | 'card' | 'transfer';
+      reference?: string;
+    }
+  ): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(
+      `/billing/${billId}/item-payments/${itemPaymentId}/${paymentIndex}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }
+    );
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
   // Costs endpoints
   async getCosts(params?: { category?: string; status?: string; page?: number; limit?: number; startDate?: string; endDate?: string; vendor?: string }): Promise<ApiResponse<Cost[]>> {
     const searchParams = new URLSearchParams();
