@@ -5,6 +5,7 @@ import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import syncConfig from "../config/syncConfig.js";
 import Logger from "../middleware/logger.js";
 import bidirectionalSyncMonitor from "../services/sync/bidirectionalSyncMonitor.js";
+import syncStatusMonitor from "../services/sync/syncStatusMonitor.js";
 
 /**
  * Get sync system metrics
@@ -598,6 +599,93 @@ export const updateExcludedCollections = async (req, res) => {
     }
 };
 
+/**
+ * Get monitor status
+ * @route GET /api/sync/monitor
+ * @access Private (Admin only)
+ */
+export const getMonitorStatus = async (req, res) => {
+    try {
+        res.json({
+            success: true,
+            data: {
+                isRunning: syncStatusMonitor.isRunning,
+                updateInterval: syncStatusMonitor.updateInterval,
+                updateIntervalSeconds: syncStatusMonitor.updateInterval / 1000,
+            },
+        });
+    } catch (error) {
+        Logger.error("Error getting monitor status:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to get monitor status",
+            error: error.message,
+        });
+    }
+};
+
+/**
+ * Control monitor (start/stop/interval)
+ * @route POST /api/sync/monitor/control
+ * @access Private (Admin only)
+ */
+export const controlMonitor = async (req, res) => {
+    try {
+        const { action, interval } = req.body;
+
+        if (!action) {
+            return res.status(400).json({
+                success: false,
+                message: "action field is required (start, stop, interval)",
+            });
+        }
+
+        let result = { success: true };
+
+        switch (action) {
+            case "start":
+                const startInterval = interval || 10000;
+                syncStatusMonitor.start(startInterval);
+                result.message = `Monitor started with ${startInterval / 1000}s interval`;
+                Logger.info(`Monitor started by user: ${req.user?.name}`);
+                break;
+
+            case "stop":
+                syncStatusMonitor.stop();
+                result.message = "Monitor stopped";
+                Logger.info(`Monitor stopped by user: ${req.user?.name}`);
+                break;
+
+            case "interval":
+                if (!interval || interval < 1000) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "interval must be at least 1000ms (1 second)",
+                    });
+                }
+                syncStatusMonitor.setUpdateInterval(interval);
+                result.message = `Monitor interval updated to ${interval / 1000}s`;
+                Logger.info(`Monitor interval updated by user: ${req.user?.name} to ${interval}ms`);
+                break;
+
+            default:
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid action. Use: start, stop, or interval",
+                });
+        }
+
+        res.json(result);
+    } catch (error) {
+        Logger.error("Error controlling monitor:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to control monitor",
+            error: error.message,
+        });
+    }
+};
+
 export default {
     getMetrics,
     getHealth,
@@ -615,4 +703,6 @@ export default {
     toggleBidirectionalSync,
     getExcludedCollections,
     updateExcludedCollections,
+    getMonitorStatus,
+    controlMonitor,
 };

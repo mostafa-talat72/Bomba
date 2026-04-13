@@ -154,6 +154,7 @@ class SyncWorker {
 
     /**
      * Process the sync queue
+     * معالجة لحظية: يعالج كل العمليات الموجودة في الـ queue فورًا
      */
     async processQueue() {
         // Skip if paused or not running
@@ -177,42 +178,110 @@ class SyncWorker {
             return;
         }
 
-        // Process one operation
-        const operation = syncQueueManager.dequeue();
-        if (!operation) {
+        // معالجة لحظية: معالجة كل العمليات الموجودة دفعة واحدة
+        // بدلاً من معالجة عملية واحدة فقط
+        const batchSize = syncConfig.workerBatchSize || 100;
+        const queueSize = syncQueueManager.size();
+        const operationsToProcess = Math.min(queueSize, batchSize);
+
+        if (operationsToProcess === 0) {
             return;
         }
 
+        // جمع العمليات للمعالجة
+        const operations = [];
+        for (let i = 0; i < operationsToProcess; i++) {
+            const operation = syncQueueManager.dequeue();
+            if (operation) {
+                operations.push(operation);
+            }
+        }
+
+        if (operations.length === 0) {
+            return;
+        }
+
+        // معالجة جميع العمليات بشكل متوازي للسرعة القصوى
         const startTime = Date.now();
+        const results = await Promise.allSettled(
+            operations.map(op => this.executeOperationWithRetry(op))
+        );
 
-        try {
-            await this.executeOperation(operation);
+        // تحديث الإحصائيات
+        let successCount = 0;
+        let failureCount = 0;
+
+        results.forEach((result, index) => {
+            const operation = operations[index];
             
-            // Update stats
-            this.stats.successCount++;
-            this.stats.totalProcessed++;
-            this.updateProcessTime(Date.now() - startTime);
-
-            Logger.info(
-                `✅ Synced: ${operation.type} on ${operation.collection} (${operation.id})`
-            );
-        } catch (error) {
-            Logger.error(
-                `❌ Sync failed: ${operation.type} on ${operation.collection}`,
-                error.message
-            );
-
-            // Retry logic
-            const shouldRetry = await this.retryOperation(operation, error);
-            
-            if (!shouldRetry) {
+            if (result.status === 'fulfilled' && result.value.success) {
+                successCount++;
+                this.stats.successCount++;
+                Logger.debug(
+                    `✅ Synced: ${operation.type} on ${operation.collection} (${operation.id})`
+                );
+            } else {
+                failureCount++;
                 this.stats.failureCount++;
+                const error = result.status === 'rejected' ? result.reason : result.value.error;
+                Logger.error(
+                    `❌ Sync failed: ${operation.type} on ${operation.collection}`,
+                    error?.message || error
+                );
             }
             
             this.stats.totalProcessed++;
+        });
+
+        const duration = Date.now() - startTime;
+        this.updateProcessTime(duration / operations.length); // متوسط الوقت لكل عملية
+
+        // طباعة ملخص الدفعة
+        if (operations.length > 1) {
+            Logger.info(
+                `⚡ Batch synced: ${operations.length} operations in ${duration}ms ` +
+                `(✅ ${successCount} | ❌ ${failureCount})`
+            );
+        } else {
+            Logger.info(
+                `✅ Synced: ${operations[0].type} on ${operations[0].collection} (${operations[0].id})`
+            );
         }
 
         this.stats.lastProcessTime = new Date();
+
+        // إشعار المراقب بحدوث تغيير (إذا كان نشطًا)
+        if (global.syncStatusMonitor && global.syncStatusMonitor.isRunning) {
+            global.syncStatusMonitor.printOnChange(
+                'Batch Sync',
+                `${operations.length} operations in ${duration}ms`
+            );
+        }
+
+        // إذا كان هناك المزيد من العمليات، معالجتها فورًا
+        if (!syncQueueManager.isEmpty()) {
+            // استدعاء فوري بدون انتظار interval
+            setImmediate(() => this.processQueue());
+        }
+    }
+
+    /**
+     * تنفيذ عملية مع إعادة المحاولة التلقائية
+     */
+    async executeOperationWithRetry(operation, attempt = 0) {
+        try {
+            await this.executeOperation(operation);
+            return { success: true, operation };
+        } catch (error) {
+            // إعادة المحاولة إذا لم نصل للحد الأقصى
+            if (attempt < (operation.maxRetries || syncConfig.maxRetries)) {
+                const delay = this.calculateBackoff(attempt);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.executeOperationWithRetry(operation, attempt + 1);
+            }
+            
+            return { success: false, operation, error };
+        }
     }
 
     /**

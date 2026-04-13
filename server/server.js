@@ -32,6 +32,7 @@ import InitialSyncService from "./services/sync/initialSyncService.js";
 import BidirectionalInitialSync from "./services/sync/bidirectionalInitialSync.js";
 import bidirectionalSyncMonitor from "./services/sync/bidirectionalSyncMonitor.js";
 import dualDatabaseManager from "./config/dualDatabaseManager.js";
+import syncStatusMonitor from "./services/sync/syncStatusMonitor.js";
 
 // Routes
 import authRoutes from "./routes/authRoutes.js";
@@ -146,6 +147,18 @@ mongoose.connection.once("open", async () => {
         syncMonitor.logStatus();
         
         Logger.info("✅ Sync system initialized successfully");
+        
+        // بدء مراقب المزامنة اللحظية
+        // المراقب يطبع فقط عند حدوث تغييرات في المزامنة
+        // checkInterval: كم مرة يفحص التغييرات (بالميلي ثانية)
+        // 1000 = يفحص كل ثانية
+        // 500 = يفحص كل نصف ثانية (أسرع)
+        setTimeout(() => {
+            syncStatusMonitor.start(1000); // يفحص كل ثانية
+            
+            // إضافة المراقب إلى global scope ليستطيع syncWorker استدعاءه
+            global.syncStatusMonitor = syncStatusMonitor;
+        }, 3000); // انتظر 3 ثواني بعد بدء السيرفر
         
         // Perform FULL bidirectional sync on startup (always enabled)
         Logger.info("🔄 Starting automatic full bidirectional sync...");
@@ -625,6 +638,11 @@ server.listen(PORT, () => {
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
     Logger.info(`${signal} received, shutting down gracefully`);
+    
+    // إيقاف مراقب المزامنة
+    if (syncStatusMonitor.isRunning) {
+        syncStatusMonitor.stop();
+    }
     
     // Stop bidirectional sync components if enabled
     if (syncConfig.enabled && syncConfig.bidirectionalSync.enabled) {

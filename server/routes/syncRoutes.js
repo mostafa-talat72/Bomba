@@ -16,6 +16,8 @@ import {
     toggleBidirectionalSync,
     getExcludedCollections,
     updateExcludedCollections,
+    getMonitorStatus,
+    controlMonitor,
 } from "../controllers/syncController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -56,5 +58,9 @@ router.post("/bidirectional/toggle", toggleBidirectionalSync);
 // Excluded collections management
 router.get("/bidirectional/excluded-collections", getExcludedCollections);
 router.put("/bidirectional/excluded-collections", updateExcludedCollections);
+
+// Monitor management
+router.get("/monitor", getMonitorStatus);
+router.post("/monitor/control", controlMonitor);
 
 export default router;

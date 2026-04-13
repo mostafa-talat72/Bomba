@@ -34,6 +34,7 @@ const syncConfig = {
 
     // Batch processing
     batchSize: parseInt(process.env.SYNC_BATCH_SIZE) || 100,
+    workerBatchSize: parseInt(process.env.SYNC_WORKER_BATCH_SIZE) || 100,
 
     // Monitoring thresholds
     queueWarningThreshold: parseInt(process.env.SYNC_QUEUE_WARNING_THRESHOLD) || 5000,
