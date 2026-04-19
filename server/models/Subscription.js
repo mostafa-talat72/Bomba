@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const SubscriptionSchema = new mongoose.Schema({
     organization: {
@@ -24,7 +25,6 @@ const SubscriptionSchema = new mongoose.Schema({
 });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(SubscriptionSchema);
+applySyncMiddleware(SubscriptionSchema, 'Subscription');
 
 export default mongoose.model("Subscription", SubscriptionSchema);

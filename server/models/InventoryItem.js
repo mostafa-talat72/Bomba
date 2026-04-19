@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const inventoryItemSchema = new mongoose.Schema(
     {
@@ -417,7 +418,6 @@ inventoryItemSchema.pre('save', function(next) {
 });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(inventoryItemSchema);
+applySyncMiddleware(inventoryItemSchema, 'InventoryItem');
 
 export default mongoose.model("InventoryItem", inventoryItemSchema);

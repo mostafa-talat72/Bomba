@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { getNotificationTranslation, getActionTranslation } from "../utils/notificationTranslations.js";
 import { getCurrencySymbol } from "../utils/localeHelper.js";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const notificationSchema = new mongoose.Schema(
     {
@@ -513,8 +514,7 @@ notificationSchema.statics.cleanExpired = function (organization) {
 };
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(notificationSchema);
+applySyncMiddleware(notificationSchema, 'Notification');
 
 const Notification = mongoose.model("Notification", notificationSchema);
 export default Notification;

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const advanceSchema = new mongoose.Schema({
   advanceId: {
@@ -122,6 +123,9 @@ advanceSchema.pre('save', async function(next) {
   
   next();
 });
+
+// Apply sync middleware
+applySyncMiddleware(advanceSchema, 'Advance');
 
 const Advance = mongoose.model('Advance', advanceSchema);
 

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const payrollSchema = new mongoose.Schema({
   payrollId: {
@@ -399,6 +400,9 @@ payrollSchema.pre('save', async function(next) {
   }
   next();
 });
+
+// Apply sync middleware
+applySyncMiddleware(payrollSchema, 'Payroll');
 
 const Payroll = mongoose.model('Payroll', payrollSchema);
 

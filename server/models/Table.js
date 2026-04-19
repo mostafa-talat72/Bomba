@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const tableSchema = new mongoose.Schema(
     {
@@ -48,7 +49,6 @@ tableSchema.index({ organization: 1 });
 tableSchema.index({ isActive: 1 });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(tableSchema);
+applySyncMiddleware(tableSchema, 'Table');
 
 export default mongoose.model("Table", tableSchema);

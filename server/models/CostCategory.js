@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const costCategorySchema = new mongoose.Schema(
     {
@@ -51,8 +52,7 @@ costCategorySchema.index({ organization: 1, isActive: 1, sortOrder: 1 });
 costCategorySchema.index({ organization: 1, name: 1 }, { unique: true });
 
 // Apply sync middleware
-import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
-applySyncMiddleware(costCategorySchema);
+applySyncMiddleware(costCategorySchema, 'CostCategory');
 
 const CostCategory = mongoose.model('CostCategory', costCategorySchema);
 

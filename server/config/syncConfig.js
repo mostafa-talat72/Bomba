@@ -1,10 +1,9 @@
-import dotenv from "dotenv";
-
-dotenv.config();
-
 /**
  * Centralized configuration for MongoDB dual sync system
  * Controls behavior of local MongoDB and Atlas synchronization
+ * 
+ * NOTE: This file expects environment variables to be loaded BEFORE import.
+ * Make sure dotenv.config() is called at the top of server.js before any imports.
  */
 const syncConfig = {
     // Enable/disable sync system

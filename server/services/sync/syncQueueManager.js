@@ -245,6 +245,10 @@ class SyncQueueManager {
             const key = this.generatePendingKey(queueOperation.collection, documentId);
             this.pendingOperations.set(key, newIndex);
         }
+        
+        // 🔍 DEBUG: Log every enqueue operation
+        Logger.info(`📥 [QUEUE] Operation enqueued: ${queueOperation.type} on ${queueOperation.collection} (ID: ${queueOperation.id})`);
+        Logger.info(`📊 [QUEUE] Queue size: ${this.size()} / ${this.maxSize}`);
 
         // Log if queue is getting large
         if (this.size() > syncConfig.queueWarningThreshold) {

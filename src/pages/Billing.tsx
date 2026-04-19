@@ -1980,7 +1980,8 @@ const Billing = () => {
     return filteredBills.reduce((acc, bill) => {
       const total = Number(bill.total) || 0;
       const paid = Number(bill.paid) || 0;
-      const remaining = total - paid;
+      // استخدام bill.remaining مباشرة من قاعدة البيانات بدلاً من حسابه
+      const remaining = Number(bill.remaining) || 0;
 
       return {
         totalBills: acc.totalBills + 1,

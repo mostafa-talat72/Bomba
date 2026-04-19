@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const costSchema = new mongoose.Schema(
     {
@@ -323,7 +324,6 @@ costSchema.index({ dueDate: 1 });
 costSchema.index({ createdBy: 1 });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(costSchema);
+applySyncMiddleware(costSchema, 'Cost');
 
 export default mongoose.model("Cost", costSchema);

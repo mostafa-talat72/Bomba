@@ -136,8 +136,12 @@ function validateDocumentForSync(doc, collectionName) {
 function postSaveHook(doc, next) {
     try {
         const collectionName = this.collection.name;
+        
+        // 🔍 DEBUG: Log that middleware was triggered
+        Logger.info(`🔍 [MIDDLEWARE] postSaveHook triggered for ${collectionName} (${doc._id})`);
 
         if (!shouldSync(collectionName)) {
+            Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
 
@@ -164,6 +168,10 @@ function postSaveHook(doc, next) {
         };
 
         syncQueueManager.enqueue(operation);
+        
+        // 🔍 DEBUG: Confirm operation was queued
+        Logger.info(`✅ [MIDDLEWARE] Operation queued: insert on ${collectionName} (${doc._id})`);
+        Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
     } catch (error) {
         // Log error but don't block the operation
         Logger.error("❌ Sync middleware error (post-save):", error.message);
@@ -179,8 +187,12 @@ function postSaveHook(doc, next) {
 function postUpdateHook(result, next) {
     try {
         const collectionName = this.model.collection.name;
+        
+        // 🔍 DEBUG: Log that middleware was triggered
+        Logger.info(`🔍 [MIDDLEWARE] postUpdateHook triggered for ${collectionName}`);
 
         if (!shouldSync(collectionName)) {
+            Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
 
@@ -222,6 +234,10 @@ function postUpdateHook(result, next) {
         };
 
         syncQueueManager.enqueue(operation);
+        
+        // 🔍 DEBUG: Confirm operation was queued
+        Logger.info(`✅ [MIDDLEWARE] Operation queued: update on ${collectionName}`);
+        Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
     } catch (error) {
         Logger.error("❌ Sync middleware error (post-update):", error.message);
     }
@@ -441,11 +457,15 @@ function postDeleteManyHook(result, next) {
 /**
  * Apply sync middleware to a Mongoose schema
  * @param {mongoose.Schema} schema - Mongoose schema to apply middleware to
+ * @param {string} collectionName - Name of the collection (optional, for logging)
  */
-export function applySyncMiddleware(schema) {
+export function applySyncMiddleware(schema, collectionName = 'Unknown') {
     if (!syncConfig.enabled) {
+        Logger.info(`ℹ️  [MIDDLEWARE] Sync disabled, not applying to ${collectionName}`);
         return;
     }
+
+    Logger.info(`✅ [MIDDLEWARE] Applying sync middleware to ${collectionName}`);
 
     // Post-save hook (for inserts and saves)
     schema.post("save", postSaveHook);
@@ -461,6 +481,8 @@ export function applySyncMiddleware(schema) {
     schema.post("deleteMany", postDeleteManyHook);
     schema.post("findOneAndDelete", postFindOneAndDeleteHook);
     schema.post("findOneAndRemove", postFindOneAndDeleteHook);
+    
+    Logger.info(`✅ [MIDDLEWARE] Successfully applied sync hooks to ${collectionName}`);
 }
 
 /**

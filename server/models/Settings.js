@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const settingsSchema = new mongoose.Schema(
     {
@@ -30,7 +31,6 @@ const settingsSchema = new mongoose.Schema(
 settingsSchema.index({ category: 1, organization: 1 }, { unique: true });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(settingsSchema);
+applySyncMiddleware(settingsSchema, 'Settings');
 
 export default mongoose.model("Settings", settingsSchema);

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import QRCode from "qrcode";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 // Helper function to get item redistribution key
 // Uses menuItem ID if available, falls back to name|price for backward compatibility
@@ -1442,39 +1443,37 @@ billSchema.methods.calculateRemainingAmount = function () {
     // Check if we're using the new itemPayments/sessionPayments system
     const hasItemPayments = this.itemPayments && this.itemPayments.length > 0;
     const hasSessionPayments = this.sessionPayments && this.sessionPayments.length > 0;
-    const usingNewSystem = hasItemPayments || hasSessionPayments;
+    const hasFullPayments = this.payments && this.payments.length > 0;
 
-    if (usingNewSystem) {
-        // Use new system: itemPayments + sessionPayments
-        
-        // 1. حساب المدفوع من الأصناف (itemPayments)
-        if (hasItemPayments) {
-            this.itemPayments.forEach((item) => {
-                const paidAmount = item.paidAmount || 0;
-                totalPaidFromItems += paidAmount;
-            });
-        }
+    // 1. حساب المدفوع من الأصناف (itemPayments)
+    if (hasItemPayments) {
+        this.itemPayments.forEach((item) => {
+            const paidAmount = item.paidAmount || 0;
+            totalPaidFromItems += paidAmount;
+        });
+    }
 
-        // 2. حساب المدفوع من الجلسات (sessionPayments)
-        if (hasSessionPayments) {
-            this.sessionPayments.forEach((session) => {
-                const paidAmount = session.paidAmount || 0;
-                totalPaidFromSessions += paidAmount;
-            });
-        }
-        
-        // Don't count payments array when using new system to avoid double counting
-        
-    } else {
-        // Use old system: payments array only
-        
-        // 3. حساب المدفوع من الدفعات الكاملة (payments array)
-        if (this.payments && this.payments.length > 0) {
-            this.payments.forEach((payment) => {
-                const amount = payment.amount || 0;
+    // 2. حساب المدفوع من الجلسات (sessionPayments)
+    if (hasSessionPayments) {
+        this.sessionPayments.forEach((session) => {
+            const paidAmount = session.paidAmount || 0;
+            totalPaidFromSessions += paidAmount;
+        });
+    }
+    
+    // 3. حساب المدفوع من الدفعات الكاملة (payments array)
+    // نحسب الدفعات الكاملة فقط إذا كانت من نوع 'full' أو إذا لم يكن هناك itemPayments/sessionPayments
+    if (hasFullPayments) {
+        this.payments.forEach((payment) => {
+            const amount = payment.amount || 0;
+            const paymentType = payment.type || 'full';
+            
+            // نحسب الدفعة فقط إذا كانت من نوع 'full' ولم يتم تحويلها إلى itemPayments
+            // تجاهل الدفعات من نوع: partial-items, partial-session, converted-to-items
+            if (paymentType === 'full' || (!hasItemPayments && !hasSessionPayments)) {
                 totalPaidFromFullPayments += amount;
-            });
-        }
+            }
+        });
     }
 
     // 4. جمع جميع المدفوعات
@@ -1483,6 +1482,7 @@ billSchema.methods.calculateRemainingAmount = function () {
     // 5. تحديث المبلغ المدفوع والمتبقي
     this.paid = totalPaid;
     this.remaining = Math.max(0, this.total - totalPaid);
+    
     return this.remaining;
 };
 
@@ -1748,31 +1748,15 @@ billSchema.methods.calculateSubtotal = async function () {
             this.paid = 0;
         }
 
-        // إعادة حساب المبلغ المدفوع من itemPayments و sessionPayments
+        // إعادة حساب المبلغ المدفوع من itemPayments و sessionPayments و payments
         // لكن فقط إذا لم يتم تعديله يدوياً (للحفاظ على التعديلات اليدوية أثناء نقل الدفعات)
-        if (!this.isNew && !this._skipPaidRecalculation && (this.itemPayments?.length > 0 || this.sessionPayments?.length > 0)) {
-            let calculatedPaid = 0;
-            
-            // حساب المدفوع من itemPayments
-            if (this.itemPayments && this.itemPayments.length > 0) {
-                calculatedPaid += this.itemPayments.reduce((sum, payment) => {
-                    return sum + (payment.paidAmount || 0);
-                }, 0);
-            }
-            
-            // حساب المدفوع من sessionPayments
-            if (this.sessionPayments && this.sessionPayments.length > 0) {
-                calculatedPaid += this.sessionPayments.reduce((sum, payment) => {
-                    return sum + (payment.paidAmount || 0);
-                }, 0);
-            }
-            
-            // تحديث المبلغ المدفوع المحسوب
-            this.paid = calculatedPaid;
+        if (!this.isNew && !this._skipPaidRecalculation) {
+            // استخدام calculateRemainingAmount للحساب الموحد
+            this.calculateRemainingAmount();
+        } else {
+            // Calculate remaining amount (can't be negative)
+            this.remaining = Math.max(0, this.total - (this.paid || 0));
         }
-
-        // Calculate remaining amount (can't be negative)
-        this.remaining = Math.max(0, this.total - (this.paid || 0));
 
         // Update status based on payment, but only if this is not a new bill
         if (!this.isNew) {
@@ -1930,7 +1914,6 @@ billSchema.post("deleteOne", { document: true, query: false }, async function (d
 });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(billSchema);
+applySyncMiddleware(billSchema, 'Bill');
 
 export default mongoose.model("Bill", billSchema);

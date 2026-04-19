@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const userSchema = new mongoose.Schema(
     {
@@ -308,7 +309,6 @@ userSchema.methods.canAccessPage = function (page) {
 };
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(userSchema);
+applySyncMiddleware(userSchema, 'User');
 
 export default mongoose.model("User", userSchema);

@@ -1,10 +1,13 @@
+// ✅ CRITICAL: Load environment variables FIRST!
+// This import executes dotenv.config() before any other code
+import './config/env-loader.js';
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import dotenv from "dotenv";
 import mongoose from "mongoose";
 import connectDB from "./config/database.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
@@ -57,8 +60,7 @@ import organizationRoutes from "./routes/organizationRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
 import payrollRoutes from "./routes/payroll.js";
 
-// Load environment variables
-dotenv.config();
+// Environment variables already loaded at the top of the file
 
 // Validate sync configuration on startup
 const configValidation = validateSyncConfig();
@@ -122,6 +124,43 @@ let atlasChangeListener = null;
 // Run the fix after database connection
 mongoose.connection.once("open", async () => {
     fixUsernameIndex();
+    
+    // Auto-fix paid bills on startup
+    try {
+        Logger.info("🔧 Running automatic bill calculations fix...");
+        
+        // Import and run the fix script
+        const { default: Bill } = await import('./models/Bill.js');
+        
+        // Get all bills with status 'paid'
+        const paidBills = await Bill.find({ status: 'paid' });
+        
+        let fixedCount = 0;
+        for (const bill of paidBills) {
+            const needsFix = (Math.abs(bill.paid - bill.total) > 0.01) || (bill.remaining > 0.01);
+            
+            if (needsFix) {
+                await Bill.updateOne(
+                    { _id: bill._id },
+                    {
+                        $set: {
+                            paid: bill.total,
+                            remaining: 0
+                        }
+                    }
+                );
+                fixedCount++;
+            }
+        }
+        
+        if (fixedCount > 0) {
+            Logger.info(`✅ Fixed ${fixedCount} paid bills automatically`);
+        } else {
+            Logger.info("✅ All paid bills are correct");
+        }
+    } catch (error) {
+        Logger.error("❌ Error in automatic bill fix:", error.message);
+    }
     
     // Initialize sync system
     if (syncConfig.enabled) {

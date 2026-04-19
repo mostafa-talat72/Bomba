@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const attendanceSchema = new mongoose.Schema({
   employeeId: {
@@ -112,6 +113,9 @@ const attendanceSchema = new mongoose.Schema({
 attendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });
 attendanceSchema.index({ organizationId: 1, date: 1 });
 attendanceSchema.index({ status: 1 });
+
+// Apply sync middleware
+applySyncMiddleware(attendanceSchema, 'Attendance');
 
 const Attendance = mongoose.model('Attendance', attendanceSchema);
 

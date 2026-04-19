@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Device from "./Device.js";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const sessionSchema = new mongoose.Schema(
     {
@@ -575,8 +576,7 @@ sessionSchema.methods.getCostBreakdownAsync = async function () {
 };
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(sessionSchema);
+applySyncMiddleware(sessionSchema, 'Session');
 
 const Session = mongoose.model("Session", sessionSchema);
 export default Session;

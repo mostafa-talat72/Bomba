@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const paymentSchema = new mongoose.Schema({
   paymentId: {
@@ -73,6 +74,9 @@ paymentSchema.pre('save', async function(next) {
   }
   next();
 });
+
+// Apply sync middleware
+applySyncMiddleware(paymentSchema, 'Payment');
 
 const Payment = mongoose.model('Payment', paymentSchema);
 

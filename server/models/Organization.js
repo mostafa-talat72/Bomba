@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const OrganizationSchema = new mongoose.Schema({
     name: { type: String, required: true },
@@ -171,7 +172,6 @@ OrganizationSchema.pre('save', function (next) {
 });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(OrganizationSchema);
+applySyncMiddleware(OrganizationSchema, 'Organization');
 
 export default mongoose.model("Organization", OrganizationSchema);

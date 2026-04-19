@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const deductionSchema = new mongoose.Schema({
   employeeId: {
@@ -62,6 +63,9 @@ const deductionSchema = new mongoose.Schema({
 deductionSchema.index({ employeeId: 1, month: 1 });
 deductionSchema.index({ organizationId: 1, date: -1 });
 deductionSchema.index({ type: 1 });
+
+// Apply sync middleware
+applySyncMiddleware(deductionSchema, 'Deduction');
 
 const Deduction = mongoose.model('Deduction', deductionSchema);
 

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const deviceSchema = new mongoose.Schema(
     {
@@ -168,8 +169,7 @@ deviceSchema.pre("save", function (next) {
 });
 
 // Apply sync middleware with enhanced validation
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(deviceSchema);
+applySyncMiddleware(deviceSchema, 'Device');
 
 // Static method to fix devices with missing required fields
 deviceSchema.statics.fixMissingFields = async function() {

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const orderItemSchema = new mongoose.Schema({
     menuItem: {
@@ -251,8 +252,10 @@ orderSchema.index({ organization: 1, table: 1, createdAt: -1 });
 orderSchema.index({ organization: 1, createdAt: -1 });
 orderSchema.index({ table: 1, status: 1 }); // Index for table-status queries
 
-// Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(orderSchema);
+// Apply sync middleware BEFORE creating the model
+applySyncMiddleware(orderSchema, 'Order');
 
-export default mongoose.model("Order", orderSchema);
+// Create the model AFTER middleware is applied
+const Order = mongoose.model("Order", orderSchema);
+
+export default Order;

@@ -1225,6 +1225,14 @@ export const addPayment = async (req, res) => {
                         });
                     }
                 });
+                
+                // Mark the last payment as converted to avoid double counting
+                if (bill.payments && bill.payments.length > 0) {
+                    const lastPayment = bill.payments[bill.payments.length - 1];
+                    if (lastPayment.type === 'full') {
+                        lastPayment.type = 'converted-to-items';
+                    }
+                }
             }
             
             await bill.save();

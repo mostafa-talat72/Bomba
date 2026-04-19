@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const menuSectionSchema = new mongoose.Schema(
     {
@@ -46,8 +47,7 @@ menuSectionSchema.index({ organization: 1 });
 menuSectionSchema.index({ sortOrder: 1 });
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(menuSectionSchema);
+applySyncMiddleware(menuSectionSchema, 'MenuSection');
 
 export default mongoose.model("MenuSection", menuSectionSchema);
 

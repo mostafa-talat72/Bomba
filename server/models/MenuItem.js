@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
 
 const menuItemSchema = new mongoose.Schema(
     {
@@ -127,7 +128,6 @@ menuItemSchema.index({ isPopular: 1, organization: 1 }); // للعناصر ال�
 menuItemSchema.index({ section: 1, organization: 1 }); // للبحث حسب القسم
 
 // Apply sync middleware
-import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
-applySyncMiddleware(menuItemSchema);
+applySyncMiddleware(menuItemSchema, 'MenuItem');
 
 export default mongoose.model("MenuItem", menuItemSchema);

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { applySyncMiddleware } from '../middleware/sync/syncMiddleware.js';
 
 const employeeSchema = new mongoose.Schema({
   // معلومات شخصية
@@ -184,6 +185,9 @@ const employeeSchema = new mongoose.Schema({
 // Indexes
 employeeSchema.index({ organizationId: 1, 'employment.status': 1 });
 employeeSchema.index({ 'personalInfo.name': 'text' });
+
+// Apply sync middleware
+applySyncMiddleware(employeeSchema, 'Employee');
 
 const Employee = mongoose.model('Employee', employeeSchema);
 

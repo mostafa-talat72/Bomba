@@ -94,9 +94,22 @@ class SyncWorker {
         this.isRunning = true;
         this.isPaused = false;
         Logger.info("🚀 Sync worker started");
+        Logger.info(`   - Interval: ${this.processingInterval}ms`);
+        Logger.info(`   - Batch size: ${syncConfig.workerBatchSize}`);
+        Logger.info(`   - Max retries: ${syncConfig.maxRetries}`);
+        
+        // 🔍 DEBUG: Log worker loop type
+        if (this.processingInterval === 0) {
+            Logger.info(`   - Loop type: process.nextTick() (instant processing)`);
+        } else {
+            Logger.info(`   - Loop type: setTimeout(${this.processingInterval}ms)`);
+        }
         
         // Start processing loop
         this.scheduleNextProcess();
+        
+        Logger.info("✅ Sync worker loop initiated");
+        Logger.info("🔍 [WORKER] Worker is now actively monitoring queue...");
     }
 
     /**
@@ -145,11 +158,37 @@ class SyncWorker {
             return;
         }
 
-        this.processLoopTimer = setTimeout(() => {
-            this.processQueue().then(() => {
-                this.scheduleNextProcess();
+        // For instant sync (interval = 0), use process.nextTick for better performance
+        // For other intervals, use setTimeout
+        const delay = this.processingInterval;
+        
+        if (delay === 0) {
+            // Use process.nextTick for truly instant processing
+            // This is faster than setImmediate and ensures continuous processing
+            process.nextTick(() => {
+                this.processQueue()
+                    .then(() => {
+                        this.scheduleNextProcess();
+                    })
+                    .catch(error => {
+                        Logger.error('Error in processQueue:', error);
+                        // Continue processing even after error
+                        this.scheduleNextProcess();
+                    });
             });
-        }, this.processingInterval);
+        } else {
+            this.processLoopTimer = setTimeout(() => {
+                this.processQueue()
+                    .then(() => {
+                        this.scheduleNextProcess();
+                    })
+                    .catch(error => {
+                        Logger.error('Error in processQueue:', error);
+                        // Continue processing even after error
+                        this.scheduleNextProcess();
+                    });
+            }, delay);
+        }
     }
 
     /**
@@ -157,8 +196,17 @@ class SyncWorker {
      * معالجة لحظية: يعالج كل العمليات الموجودة في الـ queue فورًا
      */
     async processQueue() {
+        // 🔍 DEBUG: Log every cycle (even if empty) for first 10 seconds
+        const uptime = process.uptime();
+        if (uptime < 10) {
+            Logger.debug(`🔍 [WORKER] processQueue called (uptime: ${uptime.toFixed(1)}s, queue: ${syncQueueManager.size()})`);
+        }
+        
         // Skip if paused or not running
         if (this.isPaused || !this.isRunning) {
+            if (uptime < 10) {
+                Logger.debug(`🔍 [WORKER] Skipping: paused=${this.isPaused}, running=${this.isRunning}`);
+            }
             return;
         }
 
@@ -167,12 +215,16 @@ class SyncWorker {
             return;
         }
 
+        // Log queue size for debugging (only when there are operations)
+        const queueSize = syncQueueManager.size();
+        Logger.info(`📦 [WORKER] Processing queue: ${queueSize} operations pending`);
+
         // Skip if Atlas is not available
         if (!dualDatabaseManager.isAtlasAvailable()) {
             // Log warning periodically (every 100 cycles)
             if (this.stats.totalProcessed % 100 === 0) {
                 Logger.warn(
-                    `⚠️ Atlas unavailable, ${syncQueueManager.size()} operations queued`
+                    `⚠️ Atlas unavailable, ${queueSize} operations queued`
                 );
             }
             return;
@@ -181,7 +233,6 @@ class SyncWorker {
         // معالجة لحظية: معالجة كل العمليات الموجودة دفعة واحدة
         // بدلاً من معالجة عملية واحدة فقط
         const batchSize = syncConfig.workerBatchSize || 100;
-        const queueSize = syncQueueManager.size();
         const operationsToProcess = Math.min(queueSize, batchSize);
 
         if (operationsToProcess === 0) {
@@ -258,11 +309,9 @@ class SyncWorker {
             );
         }
 
-        // إذا كان هناك المزيد من العمليات، معالجتها فورًا
-        if (!syncQueueManager.isEmpty()) {
-            // استدعاء فوري بدون انتظار interval
-            setImmediate(() => this.processQueue());
-        }
+        // Note: Don't call processQueue directly here
+        // Let scheduleNextProcess handle the loop
+        // This ensures the worker continues running properly
     }
 
     /**
