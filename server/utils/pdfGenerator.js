@@ -202,13 +202,7 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
             currencySymbol: currencySymbol
         });
         
-        console.log('📊 Daily report data being sent to PDF:', {
-            organizationName: reportData.organizationName,
-            totalRevenue: reportData.totalRevenue,
-            totalCosts: reportData.totalCosts,
-            netProfit: reportData.netProfit,
-            topProductsCount: reportData.topProducts?.length || 0
-        });
+      
         
         // Render to buffer
         const pdfBuffer = await renderToBuffer(doc);
@@ -233,7 +227,6 @@ export const generateDailyReportPDF = async (reportData, language = 'ar', curren
  */
 export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', currency = 'EGP', detailedEmployeesData = null, organizationName = null) => {
     try {
-        console.log('📄 Generating Payroll Summary PDF...', { language, currency, organizationName });
         
         // Import the PayrollPDFDocument template
         const { PayrollPDFDocument } = await import('./PayrollPDFTemplate.js');
@@ -439,16 +432,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
             detailedEmployeesData: detailedEmployeesData,
             organizationName: organizationName
         });
-        
-        console.log('📊 Payroll data being sent to PDF:', {
-            totalEmployees: payrollData.totalEmployees,
-            employeesCount: payrollData.employees?.length || 0,
-            firstEmployee: payrollData.employees?.[0] || 'none',
-            statistics: payrollData.statistics,
-            hasDetailedData: !!detailedEmployeesData,
-            detailedEmployeesCount: detailedEmployeesData?.length || 0
-        });
-        
+                
         // Render to buffer
         const pdfBuffer = await renderToBuffer(doc);
         console.log('✅ Payroll Summary PDF generated successfully, size:', pdfBuffer.length, 'bytes');

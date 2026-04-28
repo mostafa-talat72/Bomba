@@ -176,86 +176,86 @@ class SyncStatusMonitor {
         // Calculate sync rate
         const syncRate = this.calculateSyncRate(workerStats);
 
-        console.log('\n┌─────────────────────────────────────────────────────────────┐');
-        console.log(`│ 🕐 Time: ${timestamp.padEnd(48)} │`);
-        console.log('├─────────────────────────────────────────────────────────────┤');
+        // console.log('\n┌─────────────────────────────────────────────────────────────┐');
+        // console.log(`│ 🕐 Time: ${timestamp.padEnd(48)} │`);
+        // console.log('├─────────────────────────────────────────────────────────────┤');
         
-        // Connection status
-        console.log('│ 📡 Connection Status:                                       │');
-        console.log(`│    Local MongoDB:  ${this.getStatusIcon(localAvailable)} ${localAvailable ? 'Connected' : 'Disconnected'}`.padEnd(62) + '│');
-        console.log(`│    Atlas MongoDB:  ${this.getStatusIcon(atlasAvailable)} ${atlasAvailable ? 'Connected' : 'Disconnected'}`.padEnd(62) + '│');
-        console.log('├─────────────────────────────────────────────────────────────┤');
+        // // Connection status
+        // console.log('│ 📡 Connection Status:                                       │');
+        // console.log(`│    Local MongoDB:  ${this.getStatusIcon(localAvailable)} ${localAvailable ? 'Connected' : 'Disconnected'}`.padEnd(62) + '│');
+        // console.log(`│    Atlas MongoDB:  ${this.getStatusIcon(atlasAvailable)} ${atlasAvailable ? 'Connected' : 'Disconnected'}`.padEnd(62) + '│');
+        // console.log('├─────────────────────────────────────────────────────────────┤');
 
-        // Sync status
-        console.log('│ 🔄 Sync Status:                                             │');
-        console.log(`│    Direction: Local ⇄ Atlas (bidirectional)`.padEnd(62) + '│');
-        console.log(`│    Status: ${this.getSyncStatusIcon(workerStats, atlasAvailable)} ${this.getSyncStatus(workerStats, atlasAvailable)}`.padEnd(62) + '│');
-        console.log(`│    Speed: ${syncConfig.workerInterval === 0 ? '⚡ Instant (0ms)' : `${syncConfig.workerInterval}ms`}`.padEnd(62) + '│');
-        console.log('├─────────────────────────────────────────────────────────────┤');
+        // // Sync status
+        // console.log('│ 🔄 Sync Status:                                             │');
+        // console.log(`│    Direction: Local ⇄ Atlas (bidirectional)`.padEnd(62) + '│');
+        // console.log(`│    Status: ${this.getSyncStatusIcon(workerStats, atlasAvailable)} ${this.getSyncStatus(workerStats, atlasAvailable)}`.padEnd(62) + '│');
+        // console.log(`│    Speed: ${syncConfig.workerInterval === 0 ? '⚡ Instant (0ms)' : `${syncConfig.workerInterval}ms`}`.padEnd(62) + '│');
+        // console.log('├─────────────────────────────────────────────────────────────┤');
 
-        // Queue statistics
-        console.log('│ 📦 Queue:                                                    │');
-        console.log(`│    Current Size: ${queueStats.size} / ${queueStats.maxSize}`.padEnd(62) + '│');
-        console.log(`│    Usage: ${this.getProgressBar(queueStats.size, queueStats.maxSize)} ${queueStats.utilizationPercent}%`.padEnd(62) + '│');
+        // // Queue statistics
+        // console.log('│ 📦 Queue:                                                    │');
+        // console.log(`│    Current Size: ${queueStats.size} / ${queueStats.maxSize}`.padEnd(62) + '│');
+        // console.log(`│    Usage: ${this.getProgressBar(queueStats.size, queueStats.maxSize)} ${queueStats.utilizationPercent}%`.padEnd(62) + '│');
         
         if (syncLag !== null) {
             const lagSeconds = (syncLag / 1000).toFixed(1);
             const lagStatus = syncLag > 5000 ? '⚠️' : '✅';
-            console.log(`│    Lag: ${lagStatus} ${lagSeconds}s`.padEnd(62) + '│');
+           // console.log(`│    Lag: ${lagStatus} ${lagSeconds}s`.padEnd(62) + '│');
         }
-        console.log('├─────────────────────────────────────────────────────────────┤');
+      //  console.log('├─────────────────────────────────────────────────────────────┤');
 
         // Operations statistics
-        console.log('│ 📊 Operations Stats:                                        │');
-        console.log(`│    Total Processed: ${workerStats.totalProcessed}`.padEnd(62) + '│');
-        console.log(`│    Successful: ✅ ${workerStats.successCount} (${workerStats.successRate}%)`.padEnd(62) + '│');
-        console.log(`│    Failed: ❌ ${workerStats.failureCount} (${workerStats.failureRate}%)`.padEnd(62) + '│');
-        console.log(`│    Avg Time: ${workerStats.avgProcessTime.toFixed(2)}ms`.padEnd(62) + '│');
+        // console.log('│ 📊 Operations Stats:                                        │');
+        // console.log(`│    Total Processed: ${workerStats.totalProcessed}`.padEnd(62) + '│');
+        // console.log(`│    Successful: ✅ ${workerStats.successCount} (${workerStats.successRate}%)`.padEnd(62) + '│');
+        // console.log(`│    Failed: ❌ ${workerStats.failureCount} (${workerStats.failureRate}%)`.padEnd(62) + '│');
+        // console.log(`│    Avg Time: ${workerStats.avgProcessTime.toFixed(2)}ms`.padEnd(62) + '│');
         
         if (syncRate !== null) {
-            console.log(`│    Sync Rate: ${syncRate} ops/sec`.padEnd(62) + '│');
+           // console.log(`│    Sync Rate: ${syncRate} ops/sec`.padEnd(62) + '│');
         }
-        console.log('├─────────────────────────────────────────────────────────────┤');
+       // console.log('├─────────────────────────────────────────────────────────────┤');
 
         // Operations by type
         if (Object.keys(queueStats.byType).length > 0) {
-            console.log('│ 📝 Pending Operations:                                      │');
+          //  console.log('│ 📝 Pending Operations:                                      │');
             if (queueStats.byType.insert) {
-                console.log(`│    ➕ Insert: ${queueStats.byType.insert}`.padEnd(62) + '│');
+           //     console.log(`│    ➕ Insert: ${queueStats.byType.insert}`.padEnd(62) + '│');
             }
             if (queueStats.byType.update) {
-                console.log(`│    🔄 Update: ${queueStats.byType.update}`.padEnd(62) + '│');
+           //     console.log(`│    🔄 Update: ${queueStats.byType.update}`.padEnd(62) + '│');
             }
             if (queueStats.byType.delete) {
-                console.log(`│    🗑️  Delete: ${queueStats.byType.delete}`.padEnd(62) + '│');
+            //    console.log(`│    🗑️  Delete: ${queueStats.byType.delete}`.padEnd(62) + '│');
             }
-            console.log('├─────────────────────────────────────────────────────────────┤');
+          //  console.log('├─────────────────────────────────────────────────────────────┤');
         }
 
         // Bidirectional sync
         if (syncConfig.bidirectionalSync.enabled) {
             const bidirStats = this.getBidirectionalStats();
-            console.log('│ 🔄 Bidirectional Sync (Atlas → Local):                     │');
-            console.log(`│    Status: ${bidirStats.status}`.padEnd(62) + '│');
-            console.log(`│    Changes Received: ${bidirStats.totalChanges}`.padEnd(62) + '│');
-            console.log(`│    Processed: ✅ ${bidirStats.processedChanges} | ❌ ${bidirStats.failedChanges}`.padEnd(62) + '│');
-            console.log('├─────────────────────────────────────────────────────────────┤');
+            // console.log('│ 🔄 Bidirectional Sync (Atlas → Local):                     │');
+            // console.log(`│    Status: ${bidirStats.status}`.padEnd(62) + '│');
+            // console.log(`│    Changes Received: ${bidirStats.totalChanges}`.padEnd(62) + '│');
+            // console.log(`│    Processed: ✅ ${bidirStats.processedChanges} | ❌ ${bidirStats.failedChanges}`.padEnd(62) + '│');
+            // console.log('├─────────────────────────────────────────────────────────────┤');
         }
 
         // Warnings
         const warnings = this.getWarnings(queueStats, workerStats, syncLag, atlasAvailable);
         if (warnings.length > 0) {
-            console.log('│ ⚠️  Warnings:                                                │');
+           // console.log('│ ⚠️  Warnings:                                                │');
             warnings.forEach(warning => {
-                console.log(`│    ${warning}`.padEnd(62) + '│');
+           //     console.log(`│    ${warning}`.padEnd(62) + '│');
             });
-            console.log('├─────────────────────────────────────────────────────────────┤');
+          //  console.log('├─────────────────────────────────────────────────────────────┤');
         }
 
         // Overall status
         const overallStatus = this.getOverallStatus(workerStats, queueStats, atlasAvailable);
-        console.log(`│ ${overallStatus.icon} Overall Status: ${overallStatus.text}`.padEnd(62) + '│');
-        console.log('└─────────────────────────────────────────────────────────────┘\n');
+       // console.log(`│ ${overallStatus.icon} Overall Status: ${overallStatus.text}`.padEnd(62) + '│');
+     //   console.log('└─────────────────────────────────────────────────────────────┘\n');
 
         // Save stats for comparison
         this.lastStats = workerStats;
@@ -437,7 +437,7 @@ class SyncStatusMonitor {
         const workerStats = syncWorker.getStats();
         const atlasAvailable = dualDatabaseManager.isAtlasAvailable();
 
-        console.log(`\n⚡ Quick Summary: Queue: ${queueStats.size} | Processed: ${workerStats.totalProcessed} | Success: ${workerStats.successRate}% | Atlas: ${atlasAvailable ? '✅' : '❌'}\n`);
+      //  console.log(`\n⚡ Quick Summary: Queue: ${queueStats.size} | Processed: ${workerStats.totalProcessed} | Success: ${workerStats.successRate}% | Atlas: ${atlasAvailable ? '✅' : '❌'}\n`);
     }
 
     /**
