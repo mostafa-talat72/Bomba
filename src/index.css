@@ -719,3 +719,245 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
 .dark .ant-spin-dot-item {
   background-color: #f97316;
 }
+
+/* Dark mode for TimePicker */
+.dark .ant-picker-time-panel-column {
+  background: #1f2937 !important;
+}
+
+.dark .ant-picker-time-panel-column > li {
+  color: #f3f4f6 !important;
+  background: transparent !important;
+}
+
+.dark .ant-picker-time-panel-column > li:hover {
+  background: #374151 !important;
+  color: #ffffff !important;
+}
+
+.dark .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected {
+  background: #f97316 !important;
+  color: #000000 !important;
+}
+
+.dark .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner {
+  color: #000000 !important;
+}
+
+.dark .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-disabled {
+  color: #6b7280 !important;
+  background: transparent !important;
+}
+
+.dark .ant-picker-time-panel-cell-inner {
+  color: #f3f4f6 !important;
+}
+
+.dark .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner {
+  color: #ffffff !important;
+}
+
+.dark .ant-picker-header-view button {
+  color: #e5e7eb !important;
+}
+
+.dark .ant-picker-header-view button:hover {
+  color: #f97316 !important;
+}
+
+.dark .ant-picker-footer {
+  background: #1f2937 !important;
+  border-top-color: #374151 !important;
+}
+
+.dark .ant-picker-now-btn {
+  color: #60a5fa !important;
+}
+
+.dark .ant-picker-now-btn:hover {
+  color: #3b82f6 !important;
+}
+
+.dark .ant-picker-ok button {
+  background: #f97316 !important;
+  border-color: #f97316 !important;
+  color: #000000 !important;
+}
+
+.dark .ant-picker-ok button:hover {
+  background: #ea580c !important;
+  border-color: #ea580c !important;
+  color: #000000 !important;
+}
+
+/* Dark mode for DatePicker dropdown */
+.dark .ant-picker-dropdown {
+  background: #1f2937 !important;
+}
+
+.dark .ant-picker-panel {
+  background: #1f2937 !important;
+  border-color: #374151 !important;
+}
+
+.dark .ant-picker-date-panel,
+.dark .ant-picker-time-panel {
+  background: #1f2937 !important;
+}
+
+/* Dark mode for picker input when focused */
+.dark .ant-picker-focused {
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2) !important;
+}
+
+.dark .ant-picker:hover {
+  border-color: #6b7280 !important;
+}
+
+/* Dark mode for picker clear button */
+.dark .ant-picker-clear {
+  background: #374151 !important;
+  color: #9ca3af !important;
+}
+
+.dark .ant-picker-clear:hover {
+  color: #e5e7eb !important;
+}
+
+/* Dark mode for picker separator */
+.dark .ant-picker-separator {
+  color: #9ca3af !important;
+}
+
+/* Dark mode for picker range arrows */
+.dark .ant-picker-range-arrow {
+  background: #1f2937 !important;
+}
+
+.dark .ant-picker-range-arrow::before {
+  background: #1f2937 !important;
+  border-color: #374151 !important;
+}
+
+/* Dark mode for picker today button */
+.dark .ant-picker-today-btn {
+  color: #60a5fa !important;
+}
+
+.dark .ant-picker-today-btn:hover {
+  color: #3b82f6 !important;
+}
+
+/* Dark mode for picker cell today */
+.dark .ant-picker-cell-today .ant-picker-cell-inner::before {
+  border-color: #f97316 !important;
+}
+
+/* Dark mode for picker disabled cells */
+.dark .ant-picker-cell-disabled {
+  color: #6b7280 !important;
+}
+
+.dark .ant-picker-cell-disabled::before {
+  background: #374151 !important;
+}
+
+/* Dark mode for all picker cells */
+.dark .ant-picker-cell-inner {
+  color: #f3f4f6 !important;
+}
+
+.dark .ant-picker-cell:hover:not(.ant-picker-cell-selected):not(.ant-picker-cell-disabled) .ant-picker-cell-inner {
+  background: #374151 !important;
+  color: #ffffff !important;
+}
+
+.dark .ant-picker-cell-selected .ant-picker-cell-inner {
+  background: #f97316 !important;
+  color: #000000 !important;
+}
+
+.dark .ant-picker-cell-range-start .ant-picker-cell-inner,
+.dark .ant-picker-cell-range-end .ant-picker-cell-inner {
+  background: #f97316 !important;
+  color: #000000 !important;
+}
+
+.dark .ant-picker-cell-in-range .ant-picker-cell-inner {
+  background: rgba(249, 115, 22, 0.2) !important;
+  color: #f3f4f6 !important;
+}
+
+/* Dark mode for picker header */
+.dark .ant-picker-header {
+  color: #f3f4f6 !important;
+  border-bottom-color: #374151 !important;
+}
+
+.dark .ant-picker-header button {
+  color: #f3f4f6 !important;
+}
+
+.dark .ant-picker-header button:hover {
+  color: #f97316 !important;
+}
+
+/* Dark mode for picker content */
+.dark .ant-picker-content {
+  background: #1f2937 !important;
+}
+
+.dark .ant-picker-content th {
+  color: #9ca3af !important;
+}
+
+/* Dark mode for month/year picker */
+.dark .ant-picker-month-panel,
+.dark .ant-picker-year-panel,
+.dark .ant-picker-decade-panel {
+  background: #1f2937 !important;
+}
+
+.dark .ant-picker-month-panel .ant-picker-cell-inner,
+.dark .ant-picker-year-panel .ant-picker-cell-inner,
+.dark .ant-picker-decade-panel .ant-picker-cell-inner {
+  color: #f3f4f6 !important;
+}
+
+/* Dark mode for RangePicker */
+.dark .ant-picker-range {
+  background: #374151 !important;
+  border-color: #4b5563 !important;
+}
+
+.dark .ant-picker-range .ant-picker-active-bar {
+  background: #f97316 !important;
+}
+
+/* Dark mode for preset ranges */
+.dark .ant-picker-ranges {
+  background: #1f2937 !important;
+  border-top-color: #374151 !important;
+}
+
+.dark .ant-picker-ranges .ant-picker-preset {
+  color: #f3f4f6 !important;
+}
+
+.dark .ant-picker-ranges .ant-picker-preset:hover {
+  color: #f97316 !important;
+}
+
+.dark .ant-picker-ranges .ant-picker-ok {
+  background: #f97316 !important;
+  border-color: #f97316 !important;
+  color: #000000 !important;
+}
+
+.dark .ant-picker-ranges .ant-picker-ok:hover {
+  background: #ea580c !important;
+  border-color: #ea580c !important;
+  color: #000000 !important;
+}
+

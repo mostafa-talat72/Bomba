@@ -2960,7 +2960,72 @@
       "addDeduction": "إضافة خصم",
       "deductionType": "نوع الخصم",
       "deductionReason": "سبب الخصم...",
-      "amountWillBeDeducted": "سيتم خصم المبلغ من مرتب الموظف"
+      "amountWillBeDeducted": "سيتم خصم المبلغ من مرتب الموظف",
+      "editDeduction": "تعديل الخصم"
+    },
+    "bonusManagement": {
+      "title": "إدارة المكافآت",
+      "addNew": "إضافة مكافأة",
+      "addBonus": "إضافة مكافأة",
+      "editBonus": "تعديل المكافأة",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "empty": "لا توجد مكافآت",
+      "employee": "الموظف",
+      "amount": "المبلغ",
+      "date": "التاريخ:",
+      "reason": "السبب:",
+      "notes": "ملاحظات:",
+      "bonusType": "نوع المكافأة",
+      "amountWillBeAdded": "سيتم إضافة هذا المبلغ لمرتب الموظف",
+      "types": {
+        "performance": "أداء متميز",
+        "holiday": "مكافأة عيد",
+        "achievement": "إنجاز",
+        "sales": "مبيعات",
+        "attendance": "حضور منتظم",
+        "overtime": "ساعات زيادة",
+        "other": "أخرى"
+      },
+      "form": {
+        "title": "إضافة مكافأة",
+        "editTitle": "تعديل المكافأة",
+        "employee": "الموظف",
+        "employeeRequired": "الرجاء اختيار الموظف",
+        "employeePlaceholder": "اختر موظف",
+        "type": "نوع المكافأة",
+        "typeRequired": "الرجاء اختيار نوع المكافأة",
+        "amount": "المبلغ",
+        "amountRequired": "الرجاء إدخال المبلغ",
+        "amountPlaceholder": "المبلغ بالجنيه",
+        "date": "التاريخ",
+        "dateRequired": "الرجاء اختيار التاريخ",
+        "datePlaceholder": "اختر التاريخ",
+        "reason": "السبب",
+        "reasonRequired": "الرجاء إدخال السبب",
+        "reasonPlaceholder": "سبب المكافأة...",
+        "notes": "ملاحظات (اختياري)",
+        "notesPlaceholder": "ملاحظات إضافية...",
+        "submit": "إضافة",
+        "update": "تحديث",
+        "cancel": "إلغاء"
+      },
+      "confirmDelete": {
+        "title": "تأكيد الحذف",
+        "content": "هل أنت متأكد من حذف هذه المكافأة؟",
+        "okText": "حذف",
+        "cancelText": "إلغاء"
+      },
+      "messages": {
+        "loadError": "فشل في تحميل المكافآت",
+        "loadEmployeesError": "فشل في تحميل الموظفين",
+        "addSuccess": "تم إضافة المكافأة بنجاح",
+        "addError": "فشل في إضافة المكافأة",
+        "updateSuccess": "تم تحديث المكافأة بنجاح",
+        "updateError": "فشل في تحديث المكافأة",
+        "deleteSuccess": "تم حذف المكافأة بنجاح",
+        "deleteError": "فشل في الحذف"
+      }
     },
     "attendanceManagement": {
       "title": "إدارة الحضور",
@@ -3117,6 +3182,7 @@
         "employeesWithDebts": "مدينون",
         "employeesBalanced": "متساوون",
         "employee": "موظف",
+        "totalBonuses": "إجمالي المكافآت",
         "totalGrossSalary": "إجمالي المستحقات",
         "totalDeductions": "إجمالي الخصومات",
         "totalNetSalary": "صافي المستحق",
@@ -3147,6 +3213,7 @@
       "table": {
         "employee": "الموظف",
         "grossSalary": "الراتب الإجمالي",
+        "bonuses": "المكافآت",
         "advances": "السلف",
         "otherDeductions": "الخصومات الأخرى",
         "totalDeductions": "إجمالي الخصومات",
@@ -3205,6 +3272,7 @@
       "carriedForward": "مرحل من أشهر سابقة",
       "currentMonthSalary": "مرتب الشهر الحالي",
       "monthAdvances": "سلف الشهر",
+      "monthBonuses": "مكافآت الشهر",
       "monthDeductions": "خصومات الشهر",
       "paidSalary": "المرتب المصروف",
       "availableBalance": "الرصيد المتاح",
@@ -3217,6 +3285,7 @@
         "attendance": "الحضور والانصراف",
         "advances": "السلف",
         "deductions": "الخصومات",
+        "bonuses": "المكافآت",
         "payments": "المدفوعات"
       },
       "table": {
@@ -3241,6 +3310,7 @@
         "attendance": "لا توجد سجلات حضور",
         "advances": "لا توجد سلف",
         "deductions": "لا توجد خصومات",
+        "bonuses": "لا توجد مكافآت",
         "payments": "لا توجد مدفوعات",
         "noEmployee": "لم يتم العثور على بيانات الموظف"
       },
@@ -3335,6 +3405,7 @@
       "value": "القيمة",
       "employeeCount": "عدد الموظفين",
       "totalGross": "إجمالي المستحقات",
+      "totalBonuses": "إجمالي المكافآت",
       "totalDeductions": "إجمالي الخصومات",
       "netDue": "صافي المستحق",
       "paid": "المدفوع",
@@ -3345,8 +3416,10 @@
       "employee": "الموظف",
       "department": "القسم",
       "gross": "الإجمالي",
+      "bonuses": "المكافآت",
       "deductions": "الخصومات",
       "net": "الصافي",
+      "paid": "المدفوع",
       "remaining": "المتبقي",
       "carried": "المرحل",
       "total": "الإجمالي"

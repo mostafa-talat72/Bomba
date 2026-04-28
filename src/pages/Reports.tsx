@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { TrendingUp, TrendingDown, ArrowUp, ArrowDown, DollarSign, Users, ShoppingCart, Download, Printer, RefreshCw, Gamepad2, Monitor, Clock, Target, Filter, ChevronDown, BarChart3, Eye, EyeOff } from 'lucide-react';
 import { format, addDays, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { ar, enUS, fr } from 'date-fns/locale';
-import { DatePicker, TimePicker, ConfigProvider } from 'antd';
+import { DatePicker, ConfigProvider } from 'antd';
+import LocalizedTimePicker from '../components/common/LocalizedTimePicker';
 import arEG from 'antd/locale/ar_EG';
 import enUS_antd from 'antd/locale/en_US';
 import frFR from 'antd/locale/fr_FR';
@@ -1378,11 +1379,10 @@ const Reports = () => {
                     placeholder={t('reports.placeholders.startDate')}
                     size="large"
                   />
-                  <TimePicker
+                  <LocalizedTimePicker
                     value={timeRange[0]}
                     onChange={(time) => handleTimeChange(time, 'start')}
                     className="w-full"
-                    format="hh:mm A"
                     minuteStep={15}
                     placeholder={t('reports.placeholders.startTime')}
                     size="large"
@@ -1406,11 +1406,10 @@ const Reports = () => {
                     placeholder={t('reports.placeholders.endDate')}
                     size="large"
                   />
-                  <TimePicker
+                  <LocalizedTimePicker
                     value={timeRange[1]}
                     onChange={(time) => handleTimeChange(time, 'end')}
                     className="w-full"
-                    format="hh:mm A"
                     minuteStep={15}
                     placeholder={t('reports.placeholders.endTime')}
                     size="large"

@@ -180,192 +180,419 @@ const styles = StyleSheet.create({
  */
 export const generateDailyReportPDF = async (reportData, language = 'ar', currency = 'EGP') => {
     try {
-        console.log('📄 Generating PDF with @react-pdf/renderer...', { language, currency });
+        console.log('📄 Generating Daily Report PDF...', { language, currency });
         
-        const { createElement: h } = React;
+        // Import the DailyReportPDFDocument template
+        const { DailyReportPDFDocument } = await import('./DailyReportPDFTemplate.js');
         
-        // Get translations and currency symbol
-        const t = pdfTranslations[language] || pdfTranslations.ar;
-        const currencySymbol = getCurrencySymbol(currency, language);
+        // Get locale
         const locale = getLocaleFromLanguage(language);
         const isRTL = language === 'ar';
+        const currencySymbol = getCurrencySymbol(currency, language);
         
-        // Helper to format numbers based on locale
-        const formatNumber = (num) => {
-            return Number(num || 0).toLocaleString(locale, { 
-                minimumFractionDigits: 2, 
-                maximumFractionDigits: 2 
-            });
-        };
+        // Get translations
+        const t = pdfTranslations[language] || pdfTranslations.ar;
         
-        // Helper to create table rows for products
-        const createProductRows = (products) => {
-            return products.slice(0, 10).map((product, index) =>
-                h(View, {
-                    key: `product-${index}`,
-                    style: [styles.tableRow, index % 2 === 0 ? styles.tableRowEven : {}]
-                }, [
-                    h(Text, { key: `num-${index}`, style: [styles.tableCell, { width: '10%' }] }, index + 1),
-                    h(Text, { key: `name-${index}`, style: [styles.tableCell, { width: '50%' }] }, product.name),
-                    h(Text, { key: `qty-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
-                    h(Text, { key: `rev-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue || 0))
-                ])
-            );
-        };
-
-        // Create pages array
-        const pages = [];
-
-        // Page 1: Main Report
-        pages.push(
-            h(Page, { size: 'A4', style: styles.page }, [
-                // Header
-                h(View, { style: styles.header }, [
-                    h(Text, { key: 'title', style: styles.title }, t.dailyReport.title),
-                    h(Text, { key: 'org', style: styles.organizationName }, reportData.organizationName),
-                    h(Text, { key: 'period', style: styles.subtitle }, reportData.reportPeriod || reportData.date)
-                ]),
-
-                // Net Profit - Highlighted
-                h(View, { style: styles.statCardFull }, [
-                    h(Text, { key: 'profit-label', style: styles.statLabel }, t.dailyReport.netProfit),
-                    h(Text, { key: 'profit-value', style: styles.statValueLarge }, `${formatNumber(reportData.netProfit || 0)} ${currencySymbol}`)
-                ]),
-
-                // Financial Summary
-                h(View, { style: styles.section }, [
-                    h(Text, { key: 'fin-title', style: styles.sectionTitle }, t.dailyReport.financialSummary),
-                    h(View, { key: 'fin-grid', style: styles.statsGrid }, [
-                        h(View, { key: 'revenue-card', style: styles.statCard }, [
-                            h(Text, { key: 'revenue-label', style: styles.statLabel }, t.dailyReport.totalRevenue),
-                            h(Text, { key: 'revenue-value', style: styles.statValue }, `${formatNumber(reportData.totalRevenue || 0)} ${currencySymbol}`)
-                        ]),
-                        h(View, { key: 'costs-card', style: styles.statCard }, [
-                            h(Text, { key: 'costs-label', style: styles.statLabel }, t.dailyReport.totalCosts),
-                            h(Text, { key: 'costs-value', style: styles.statValue }, `${formatNumber(reportData.totalCosts || 0)} ${currencySymbol}`)
-                        ])
-                    ])
-                ]),
-
-                // Operations Summary
-                h(View, { style: styles.section }, [
-                    h(Text, { key: 'ops-title', style: styles.sectionTitle }, t.dailyReport.operationsSummary),
-                    h(View, { key: 'ops-grid', style: styles.statsGrid }, [
-                        h(View, { key: 'orders-card', style: styles.statCard }, [
-                            h(Text, { key: 'orders-label', style: styles.statLabel }, t.dailyReport.totalOrders),
-                            h(Text, { key: 'orders-value', style: styles.statValue }, reportData.totalOrders || 0)
-                        ]),
-                        h(View, { key: 'sessions-card', style: styles.statCard }, [
-                            h(Text, { key: 'sessions-label', style: styles.statLabel }, t.dailyReport.totalSessions),
-                            h(Text, { key: 'sessions-value', style: styles.statValue }, reportData.totalSessions || 0)
-                        ]),
-                        h(View, { key: 'bills-card', style: styles.statCard }, [
-                            h(Text, { key: 'bills-label', style: styles.statLabel }, t.dailyReport.totalBills),
-                            h(Text, { key: 'bills-value', style: styles.statValue }, reportData.totalBills || 0)
-                        ])
-                    ])
-                ]),
-
-                // Revenue Breakdown
-                reportData.revenueByType && h(View, { style: styles.section }, [
-                    h(Text, { key: 'rev-title', style: styles.sectionTitle }, t.dailyReport.revenueBreakdown),
-                    h(View, { key: 'rev-grid', style: styles.statsGrid }, [
-                        h(View, { key: 'ps-card', style: styles.statCard }, [
-                            h(Text, { key: 'ps-label', style: styles.statLabel }, t.dailyReport.playstation),
-                            h(Text, { key: 'ps-value', style: styles.statValue }, `${formatNumber(reportData.revenueByType.playstation || 0)} ${currencySymbol}`)
-                        ]),
-                        h(View, { key: 'pc-card', style: styles.statCard }, [
-                            h(Text, { key: 'pc-label', style: styles.statLabel }, t.dailyReport.computer),
-                            h(Text, { key: 'pc-value', style: styles.statValue }, `${formatNumber(reportData.revenueByType.computer || 0)} ${currencySymbol}`)
-                        ]),
-                        h(View, { key: 'cafe-card', style: styles.statCard }, [
-                            h(Text, { key: 'cafe-label', style: styles.statLabel }, t.dailyReport.cafe),
-                            h(Text, { key: 'cafe-value', style: styles.statValue }, `${formatNumber(reportData.revenueByType.cafe || 0)} ${currencySymbol}`)
-                        ])
-                    ])
-                ]),
-
-                // Top Products
-                reportData.topProducts && reportData.topProducts.length > 0 && h(View, { style: styles.section }, [
-                    h(Text, { key: 'top-title', style: styles.sectionTitle }, t.dailyReport.topProducts),
-                    h(View, { key: 'top-table', style: styles.table }, [
-                        h(View, { key: 'top-header', style: styles.tableHeader }, [
-                            h(Text, { key: 'h-num', style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
-                            h(Text, { key: 'h-prod', style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
-                            h(Text, { key: 'h-qty', style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
-                            h(Text, { key: 'h-rev', style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
-                        ]),
-                        ...createProductRows(reportData.topProducts)
-                    ])
-                ]),
-
-                // Footer
-                h(View, { style: styles.footer }, [
-                    h(Text, { key: 'footer-date' }, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
-                    h(Text, { key: 'footer-copy' }, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
-                ])
-            ])
-        );
-
-        // Page 2: Products by Section (if available)
-        if (reportData.topProductsBySection && reportData.topProductsBySection.length > 0) {
-            pages.push(
-                h(Page, { key: 'page-2', size: 'A4', style: styles.page }, [
-                    // Header
-                    h(View, { key: 'p2-header', style: styles.header }, [
-                        h(Text, { key: 'p2-title', style: styles.title }, t.dailyReport.productsBySections),
-                        h(Text, { key: 'p2-org', style: styles.subtitle }, reportData.organizationName)
-                    ]),
-
-                    // Sections
-                    ...reportData.topProductsBySection.map((section, sectionIndex) =>
-                        h(View, { key: `section-${sectionIndex}`, style: styles.section }, [
-                            h(View, { key: `sec-header-${sectionIndex}`, style: styles.sectionHeader }, [
-                                h(Text, { key: `sec-name-${sectionIndex}`, style: styles.sectionHeaderTitle }, section.sectionName),
-                                h(Text, { key: `sec-rev-${sectionIndex}`, style: styles.sectionHeaderValue }, `${formatNumber(section.totalRevenue)} ${currencySymbol}`)
-                            ]),
-                            h(View, { key: `sec-table-${sectionIndex}`, style: styles.table }, [
-                                h(View, { key: `sec-thead-${sectionIndex}`, style: styles.tableHeader }, [
-                                    h(Text, { key: `sh-num-${sectionIndex}`, style: [styles.tableHeaderText, { width: '10%' }] }, t.dailyReport.number),
-                                    h(Text, { key: `sh-prod-${sectionIndex}`, style: [styles.tableHeaderText, { width: '50%' }] }, t.dailyReport.product),
-                                    h(Text, { key: `sh-qty-${sectionIndex}`, style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.quantity),
-                                    h(Text, { key: `sh-rev-${sectionIndex}`, style: [styles.tableHeaderText, { width: '20%' }] }, t.dailyReport.revenue)
-                                ]),
-                                ...section.products.slice(0, 5).map((product, index) =>
-                                    h(View, {
-                                        key: `sec-${sectionIndex}-prod-${index}`,
-                                        style: [styles.tableRow, index % 2 === 0 ? styles.tableRowEven : {}]
-                                    }, [
-                                        h(Text, { key: `sp-num-${sectionIndex}-${index}`, style: [styles.tableCell, { width: '10%' }] }, index + 1),
-                                        h(Text, { key: `sp-name-${sectionIndex}-${index}`, style: [styles.tableCell, { width: '50%' }] }, product.name),
-                                        h(Text, { key: `sp-qty-${sectionIndex}-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, product.quantity),
-                                        h(Text, { key: `sp-rev-${sectionIndex}-${index}`, style: [styles.tableCellNumber, { width: '20%' }] }, formatNumber(product.revenue))
-                                    ])
-                                )
-                            ])
-                        ])
-                    ),
-
-                    // Footer
-                    h(View, { key: 'p2-footer', style: styles.footer }, [
-                        h(Text, { key: 'p2-footer-date' }, `${t.dailyReport.createdAt}: ${new Date().toLocaleString(locale)}`),
-                        h(Text, { key: 'p2-footer-copy' }, `© ${new Date().getFullYear()} ${t.dailyReport.copyright}`)
-                    ])
-                ])
-            );
-        }
-
-        // Create document with all pages
-        const doc = h(Document, null, pages);
+        // Create the PDF document using the template
+        const doc = React.createElement(DailyReportPDFDocument, {
+            reportData: reportData,
+            t: t,
+            currentLanguage: language,
+            isRTL: isRTL,
+            currencySymbol: currencySymbol
+        });
+        
+        console.log('📊 Daily report data being sent to PDF:', {
+            organizationName: reportData.organizationName,
+            totalRevenue: reportData.totalRevenue,
+            totalCosts: reportData.totalCosts,
+            netProfit: reportData.netProfit,
+            topProductsCount: reportData.topProducts?.length || 0
+        });
         
         // Render to buffer
         const pdfBuffer = await renderToBuffer(doc);
-        
-        console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes');
-        
+        console.log('✅ Daily Report PDF generated successfully, size:', pdfBuffer.length, 'bytes');
         return pdfBuffer;
+        
     } catch (error) {
-        console.error('❌ Error generating PDF:', error);
-        throw new Error(`Failed to generate PDF: ${error.message}`);
+        console.error('❌ Failed to generate daily report PDF:', error);
+        console.error('Daily report error stack:', error.stack);
+        throw error;
+    }
+};
+
+/**
+ * Generate PDF buffer for payroll summary
+ * @param {Object} payrollData - Payroll summary data
+ * @param {string} language - Language code (ar, en, fr)
+ * @param {string} currency - Currency code (EGP, USD, etc.)
+ * @param {Array} detailedEmployeesData - Optional detailed employee data to include in PDF
+ * @param {string} organizationName - Organization name to display in PDF
+ * @returns {Promise<Buffer>} PDF buffer
+ */
+export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', currency = 'EGP', detailedEmployeesData = null, organizationName = null) => {
+    try {
+        console.log('📄 Generating Payroll Summary PDF...', { language, currency, organizationName });
+        
+        // Import the PayrollPDFDocument template
+        const { PayrollPDFDocument } = await import('./PayrollPDFTemplate.js');
+        
+        // Get locale
+        const locale = getLocaleFromLanguage(language);
+        const isRTL = language === 'ar';
+        
+        // Get month name
+        const monthDate = new Date(payrollData.year, payrollData.month - 1);
+        const monthName = monthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+        
+        // Translations
+        const translations = {
+            ar: {
+                comprehensivePayroll: 'كشف المصروفات الشامل',
+                generalStatistics: 'الإحصائيات العامة',
+                item: 'البند',
+                value: 'القيمة',
+                employeeCount: 'عدد الموظفين',
+                totalGross: 'إجمالي المستحقات',
+                totalBonuses: 'إجمالي المكافآت',
+                totalDeductions: 'إجمالي الخصومات',
+                netDue: 'صافي المستحق',
+                paid: 'المدفوع',
+                remainingCurrentMonth: 'المتبقي للشهر الحالي',
+                carriedForward: 'المرحل من شهور سابقة',
+                totalDue: 'إجمالي المستحقات',
+                employeeDetails: 'تفاصيل الموظفين',
+                employee: 'الموظف',
+                department: 'القسم',
+                gross: 'الإجمالي',
+                bonuses: 'المكافآت',
+                deductions: 'الخصومات',
+                net: 'الصافي',
+                remaining: 'المتبقي',
+                carried: 'المرحل',
+                total: 'الإجمالي',
+                page: 'صفحة',
+                from: 'من',
+                currency: 'ج.م',
+                employeeDetailedReport: 'تقرير تفصيلي للموظف',
+                personalInfo: 'المعلومات الشخصية',
+                name: 'الاسم',
+                phone: 'الهاتف',
+                nationalId: 'الرقم القومي',
+                hireDate: 'تاريخ التعيين',
+                position: 'المنصب',
+                employmentType: 'نوع التوظيف',
+                financialSummary: 'الملخص المالي',
+                currentMonthSalary: 'راتب الشهر الحالي',
+                attendanceDays: 'أيام الحضور',
+                advances: 'السلف',
+                availableBalance: 'الرصيد المتاح',
+                day: 'يوم',
+                attendanceRecord: 'سجل الحضور',
+                date: 'التاريخ',
+                status: 'الحالة',
+                checkIn: 'الحضور',
+                checkOut: 'الانصراف',
+                hours: 'الساعات',
+                salary: 'الراتب',
+                advancesDeductionsPayments: 'السلف والخصومات والدفعات',
+                advancesTab: 'السلف',
+                bonusesTab: 'المكافآت',
+                deductionsTab: 'الخصومات',
+                paidPayments: 'الدفعات المدفوعة',
+                amount: 'المبلغ',
+                reason: 'السبب',
+                type: 'النوع',
+                method: 'الطريقة',
+                developedBy: 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية - ٠١١١٦٦٢٦١٦٤'
+            },
+            en: {
+                comprehensivePayroll: 'Comprehensive Payroll Summary',
+                generalStatistics: 'General Statistics',
+                item: 'Item',
+                value: 'Value',
+                employeeCount: 'Employee Count',
+                totalGross: 'Total Gross Salary',
+                totalBonuses: 'Total Bonuses',
+                totalDeductions: 'Total Deductions',
+                netDue: 'Net Due',
+                paid: 'Paid',
+                remainingCurrentMonth: 'Remaining Current Month',
+                carriedForward: 'Carried Forward',
+                totalDue: 'Total Due',
+                employeeDetails: 'Employee Details',
+                employee: 'Employee',
+                department: 'Department',
+                gross: 'Gross',
+                bonuses: 'Bonuses',
+                deductions: 'Deductions',
+                net: 'Net',
+                remaining: 'Remaining',
+                carried: 'Carried',
+                total: 'Total',
+                page: 'Page',
+                from: 'of',
+                currency: 'EGP',
+                employeeDetailedReport: 'Detailed Employee Report',
+                personalInfo: 'Personal Information',
+                name: 'Name',
+                phone: 'Phone',
+                nationalId: 'National ID',
+                hireDate: 'Hire Date',
+                position: 'Position',
+                employmentType: 'Employment Type',
+                financialSummary: 'Financial Summary',
+                currentMonthSalary: 'Current Month Salary',
+                attendanceDays: 'Attendance Days',
+                advances: 'Advances',
+                availableBalance: 'Available Balance',
+                day: 'Day',
+                attendanceRecord: 'Attendance Record',
+                date: 'Date',
+                status: 'Status',
+                checkIn: 'Check In',
+                checkOut: 'Check Out',
+                hours: 'Hours',
+                salary: 'Salary',
+                advancesDeductionsPayments: 'Advances, Deductions & Payments',
+                advancesTab: 'Advances',
+                bonusesTab: 'Bonuses',
+                deductionsTab: 'Deductions',
+                paidPayments: 'Paid Payments',
+                amount: 'Amount',
+                reason: 'Reason',
+                type: 'Type',
+                method: 'Method',
+                developedBy: 'Designed & Developed by: Mostafa Talaat Software Solutions - 01116626164'
+            },
+            fr: {
+                comprehensivePayroll: 'Résumé Complet de la Paie',
+                generalStatistics: 'Statistiques Générales',
+                item: 'Article',
+                value: 'Valeur',
+                employeeCount: 'Nombre d\'Employés',
+                totalGross: 'Salaire Brut Total',
+                totalBonuses: 'Total des Primes',
+                totalDeductions: 'Total des Déductions',
+                netDue: 'Net Dû',
+                paid: 'Payé',
+                remainingCurrentMonth: 'Restant Mois Actuel',
+                carriedForward: 'Report',
+                totalDue: 'Total Dû',
+                employeeDetails: 'Détails des Employés',
+                employee: 'Employé',
+                department: 'Département',
+                gross: 'Brut',
+                bonuses: 'Primes',
+                deductions: 'Déductions',
+                net: 'Net',
+                remaining: 'Restant',
+                carried: 'Reporté',
+                total: 'Total',
+                page: 'Page',
+                from: 'de',
+                currency: 'EGP',
+                employeeDetailedReport: 'Rapport Détaillé de l\'Employé',
+                personalInfo: 'Informations Personnelles',
+                name: 'Nom',
+                phone: 'Téléphone',
+                nationalId: 'ID National',
+                hireDate: 'Date d\'Embauche',
+                position: 'Poste',
+                employmentType: 'Type d\'Emploi',
+                financialSummary: 'Résumé Financier',
+                currentMonthSalary: 'Salaire du Mois Actuel',
+                attendanceDays: 'Jours de Présence',
+                advances: 'Avances',
+                availableBalance: 'Solde Disponible',
+                day: 'Jour',
+                attendanceRecord: 'Registre de Présence',
+                date: 'Date',
+                status: 'Statut',
+                checkIn: 'Arrivée',
+                checkOut: 'Départ',
+                hours: 'Heures',
+                salary: 'Salaire',
+                advancesDeductionsPayments: 'Avances, Déductions et Paiements',
+                advancesTab: 'Avances',
+                bonusesTab: 'Primes',
+                deductionsTab: 'Déductions',
+                paidPayments: 'Paiements Effectués',
+                amount: 'Montant',
+                reason: 'Raison',
+                type: 'Type',
+                method: 'Méthode',
+                developedBy: 'Conçu et Développé par: Mostafa Talaat Solutions Logicielles - 01116626164'
+            }
+        };
+        
+        const t = translations[language] || translations.ar;
+        
+        // Create the PDF document using the template
+        const doc = React.createElement(PayrollPDFDocument, {
+            data: payrollData,
+            monthName: monthName,
+            t: t,
+            currentLanguage: language,
+            isRTL: isRTL,
+            detailedEmployeesData: detailedEmployeesData,
+            organizationName: organizationName
+        });
+        
+        console.log('📊 Payroll data being sent to PDF:', {
+            totalEmployees: payrollData.totalEmployees,
+            employeesCount: payrollData.employees?.length || 0,
+            firstEmployee: payrollData.employees?.[0] || 'none',
+            statistics: payrollData.statistics,
+            hasDetailedData: !!detailedEmployeesData,
+            detailedEmployeesCount: detailedEmployeesData?.length || 0
+        });
+        
+        // Render to buffer
+        const pdfBuffer = await renderToBuffer(doc);
+        console.log('✅ Payroll Summary PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        return pdfBuffer;
+        
+    } catch (error) {
+        console.error('❌ Failed to generate payroll summary PDF:', error);
+        console.error('Error stack:', error.stack);
+        throw error;
+    }
+};
+
+/**
+ * Generate PDF buffer for all employees data
+ * @param {Array} employeesData - Array of employee data with stats, attendance, etc.
+ * @param {string} monthName - Month name
+ * @param {string} language - Language code (ar, en, fr)
+ * @param {string} currency - Currency code (EGP, USD, etc.)
+ * @returns {Promise<Buffer>} PDF buffer
+ */
+export const generateAllEmployeesPDF = async (employeesData, monthName, language = 'ar', currency = 'EGP') => {
+    try {
+        console.log('📄 Generating All Employees PDF...', { 
+            employeeCount: employeesData.length, 
+            language, 
+            currency 
+        });
+        
+        // Import the AllEmployeesPDFTemplate
+        const AllEmployeesPDFTemplate = (await import('./AllEmployeesPDFTemplate.js')).default;
+        
+        // Get locale
+        const locale = getLocaleFromLanguage(language);
+        const isRTL = language === 'ar';
+        
+        // Translations
+        const translations = {
+            ar: {
+                title: 'تقرير شامل لجميع الموظفين',
+                personalInfo: 'المعلومات الشخصية',
+                name: 'الاسم',
+                phone: 'الهاتف',
+                nationalId: 'الرقم القومي',
+                hireDate: 'تاريخ التعيين',
+                department: 'القسم',
+                position: 'المنصب',
+                employmentType: 'نوع التوظيف',
+                financialSummary: 'الملخص المالي',
+                carriedForward: 'المرحل من شهور سابقة',
+                currentMonthSalary: 'راتب الشهر الحالي',
+                attendanceDays: 'أيام الحضور',
+                monthAdvances: 'السلف',
+                monthBonuses: 'المكافآت',
+                monthDeductions: 'الخصومات',
+                paidSalary: 'المدفوع',
+                availableBalance: 'الرصيد المتاح',
+                attendanceRecord: 'سجل الحضور',
+                date: 'التاريخ',
+                status: 'الحالة',
+                hours: 'الساعات',
+                salary: 'الراتب',
+                page: 'صفحة',
+                of: 'من'
+            },
+            en: {
+                title: 'Comprehensive Report for All Employees',
+                personalInfo: 'Personal Information',
+                name: 'Name',
+                phone: 'Phone',
+                nationalId: 'National ID',
+                hireDate: 'Hire Date',
+                department: 'Department',
+                position: 'Position',
+                employmentType: 'Employment Type',
+                financialSummary: 'Financial Summary',
+                carriedForward: 'Carried Forward',
+                currentMonthSalary: 'Current Month Salary',
+                attendanceDays: 'Attendance Days',
+                monthAdvances: 'Advances',
+                monthBonuses: 'Bonuses',
+                monthDeductions: 'Deductions',
+                paidSalary: 'Paid',
+                availableBalance: 'Available Balance',
+                attendanceRecord: 'Attendance Record',
+                date: 'Date',
+                status: 'Status',
+                hours: 'Hours',
+                salary: 'Salary',
+                page: 'Page',
+                of: 'of'
+            },
+            fr: {
+                title: 'Rapport Complet pour Tous les Employés',
+                personalInfo: 'Informations Personnelles',
+                name: 'Nom',
+                phone: 'Téléphone',
+                nationalId: 'ID National',
+                hireDate: 'Date d\'Embauche',
+                department: 'Département',
+                position: 'Poste',
+                employmentType: 'Type d\'Emploi',
+                financialSummary: 'Résumé Financier',
+                carriedForward: 'Report',
+                currentMonthSalary: 'Salaire du Mois Actuel',
+                attendanceDays: 'Jours de Présence',
+                monthAdvances: 'Avances',
+                monthBonuses: 'Primes',
+                monthDeductions: 'Déductions',
+                paidSalary: 'Payé',
+                availableBalance: 'Solde Disponible',
+                attendanceRecord: 'Registre de Présence',
+                date: 'Date',
+                status: 'Statut',
+                hours: 'Heures',
+                salary: 'Salaire',
+                page: 'Page',
+                of: 'de'
+            }
+        };
+        
+        const t = translations[language] || translations.ar;
+        
+        // Create the PDF document using the template
+        const doc = React.createElement(AllEmployeesPDFTemplate, {
+            employeesData: employeesData,
+            monthName: monthName,
+            translations: t,
+            language: language,
+            currency: getCurrencySymbol(currency, language)
+        });
+        
+        console.log('📊 All employees data being sent to PDF:', {
+            totalEmployees: employeesData.length,
+            firstEmployee: employeesData[0]?.employee?.personalInfo?.name || 'none'
+        });
+        
+        // Render to buffer
+        const pdfBuffer = await renderToBuffer(doc);
+        console.log('✅ All Employees PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        return pdfBuffer;
+        
+    } catch (error) {
+        console.error('❌ Failed to generate all employees PDF:', error);
+        console.error('Error stack:', error.stack);
+        throw error;
     }
 };

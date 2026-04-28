@@ -676,11 +676,13 @@ export const sendLowStockAlert = async ({
 // adminEmails can be either:
 // - Array of strings (old format): ['email1@example.com', 'email2@example.com']
 // - Array of objects (new format): [{email: 'email1@example.com', language: 'ar'}, {email: 'email2@example.com', language: 'en'}]
-export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null, defaultLanguage = 'ar', currency = 'EGP') => {
+export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null, defaultLanguage = 'ar', currency = 'EGP', payrollSummaryData = null, allEmployeesPDFData = null) => {
     Logger.info("Starting daily report email sending", {
         adminEmailsCount: adminEmails?.length || 0,
         adminEmails: adminEmails,
         hasPdfBuffer: !!pdfBuffer,
+        hasPayrollData: !!payrollSummaryData,
+        hasAllEmployeesData: !!allEmployeesPDFData,
         defaultLanguage: defaultLanguage,
         currency: currency,
         reportData: {
@@ -742,6 +744,72 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                     });
                 }
 
+                // Generate payroll summary PDF if data is available
+                let payrollPdfBuffer = null;
+                if (payrollSummaryData) {
+                    try {
+                        console.log('📄 Generating payroll summary PDF for:', email);
+                        const { generatePayrollSummaryPDF } = await import('./pdfGenerator.js');
+                        // Pass detailed employees data to be included in the same PDF
+                        payrollPdfBuffer = await generatePayrollSummaryPDF(payrollSummaryData, language, currency, allEmployeesPDFData, reportData.organizationName);
+                        Logger.info("Generated payroll summary PDF", {
+                            email,
+                            language,
+                            pdfSize: payrollPdfBuffer.length,
+                            totalEmployees: payrollSummaryData.totalEmployees,
+                            hasDetailedData: !!allEmployeesPDFData,
+                            detailedEmployeesCount: allEmployeesPDFData?.length || 0
+                        });
+                    } catch (payrollPdfError) {
+                        Logger.error("Failed to generate payroll PDF - continuing without it", {
+                            email,
+                            error: payrollPdfError.message,
+                            stack: payrollPdfError.stack
+                        });
+                        console.error('❌ Payroll PDF generation error (will send daily report without it):', payrollPdfError.message);
+                        // Don't throw - just continue without payroll PDF
+                        payrollPdfBuffer = null;
+                    }
+                } else {
+                    console.log('⚠️ No payroll summary data available for:', email);
+                }
+
+                // Generate all employees detailed PDF if data is available
+                // NOTE: This feature is now integrated into the payroll summary PDF
+                // The detailed employee data is passed to generatePayrollSummaryPDF above
+                // and included as additional pages in the same PDF file
+                let allEmployeesPdfBuffer = null;
+                
+                // Skip generating separate all-employees PDF since it's now part of payroll PDF
+                if (false && allEmployeesPDFData && allEmployeesPDFData.length > 0) {
+                    try {
+                        console.log('📄 Generating all employees detailed PDF for:', email);
+                        const { generateAllEmployeesPDF } = await import('./pdfGenerator.js');
+                        const monthName = new Date(payrollSummaryData?.year || new Date().getFullYear(), (payrollSummaryData?.month || new Date().getMonth() + 1) - 1).toLocaleDateString(
+                            language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US',
+                            { month: 'long', year: 'numeric' }
+                        );
+                        allEmployeesPdfBuffer = await generateAllEmployeesPDF(allEmployeesPDFData, monthName, language, currency);
+                        Logger.info("Generated all employees detailed PDF", {
+                            email,
+                            language,
+                            pdfSize: allEmployeesPdfBuffer.length,
+                            totalEmployees: allEmployeesPDFData.length
+                        });
+                    } catch (allEmpPdfError) {
+                        Logger.error("Failed to generate all employees PDF - continuing without it", {
+                            email,
+                            error: allEmpPdfError.message,
+                            stack: allEmpPdfError.stack
+                        });
+                        console.error('❌ All employees PDF generation error (will send daily report without it):', allEmpPdfError.message);
+                        // Don't throw - just continue without all employees PDF
+                        allEmployeesPdfBuffer = null;
+                    }
+                } else {
+                    console.log('⚠️ No all employees data available for:', email);
+                }
+
                 const transporter = createTransporter();
                 if (!transporter) {
                     throw new Error("Email transporter not configured");
@@ -754,26 +822,56 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                     currency
                 });
 
+                // Prepare attachments
+                const attachments = [
+                    {
+                        filename: `daily-report-${reportData.date}.pdf`,
+                        content: recipientPdfBuffer,
+                        contentType: 'application/pdf'
+                    }
+                ];
+
+                // Add payroll summary PDF if available
+                if (payrollPdfBuffer) {
+                    const monthName = new Date(payrollSummaryData.year, payrollSummaryData.month - 1).toLocaleDateString(
+                        language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US',
+                        { month: 'long', year: 'numeric' }
+                    );
+                    attachments.push({
+                        filename: `payroll-summary-${payrollSummaryData.year}-${payrollSummaryData.month.toString().padStart(2, '0')}.pdf`,
+                        content: payrollPdfBuffer,
+                        contentType: 'application/pdf'
+                    });
+                }
+
+                // Add all employees detailed PDF if available
+                if (allEmployeesPdfBuffer) {
+                    const monthName = new Date(payrollSummaryData?.year || new Date().getFullYear(), (payrollSummaryData?.month || new Date().getMonth() + 1) - 1).toLocaleDateString(
+                        language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US',
+                        { month: 'long', year: 'numeric' }
+                    );
+                    attachments.push({
+                        filename: `all-employees-detailed-${payrollSummaryData?.year || new Date().getFullYear()}-${(payrollSummaryData?.month || new Date().getMonth() + 1).toString().padStart(2, '0')}.pdf`,
+                        content: allEmployeesPdfBuffer,
+                        contentType: 'application/pdf'
+                    });
+                }
+
                 const mailOptions = {
                     from: `"Bomba System" <${process.env.EMAIL_USER}>`,
                     to: email,
                     subject: emailTemplate.subject,
                     html: emailTemplate.html,
-                    attachments: [
-                        {
-                            filename: `daily-report-${reportData.date}.pdf`,
-                            content: recipientPdfBuffer,
-                            contentType: 'application/pdf'
-                        }
-                    ]
+                    attachments: attachments
                 };
 
                 Logger.info("Sending daily report email", {
                     to: email,
                     language,
                     subject: emailTemplate.subject,
-                    hasAttachment: true,
-                    attachmentSize: recipientPdfBuffer.length
+                    attachmentCount: attachments.length,
+                    hasPayrollPdf: !!payrollPdfBuffer,
+                    hasAllEmployeesPdf: !!allEmployeesPdfBuffer
                 });
 
                 const result = await transporter.sendMail(mailOptions);
@@ -781,7 +879,8 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                 Logger.info("Daily report email sent successfully", {
                     messageId: result.messageId,
                     to: email,
-                    language
+                    language,
+                    attachmentCount: attachments.length
                 });
 
                 return { email, language, success: true, messageId: result.messageId };

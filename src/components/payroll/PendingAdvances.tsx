@@ -168,7 +168,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
         <div className="flex items-center gap-2">
           <DollarSign size={16} className="text-green-600" />
           <span className="font-bold text-green-600 dark:text-green-400">
-            {amount.toFixed(2)} {currency()}
+            {amount.toFixed(2)} {getCurrencySymbol()}
           </span>
         </div>
       )
@@ -323,7 +323,7 @@ const PendingAdvances: React.FC<PendingAdvancesProps> = ({ onUpdate }) => {
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">{t('payroll.pendingAdvances.approveModal.amount')}</span>
                   <div className="font-bold text-green-600">
-                    {selectedAdvance.amount.toFixed(2)} {currency()}
+                    {selectedAdvance.amount.toFixed(2)} {getCurrencySymbol()}
                   </div>
                 </div>
                 <div className="col-span-2">

@@ -1,11 +1,14 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Select, DatePicker, Tag, Space, Descriptions, message, Tabs, InputNumber, Input, Card, Statistic, Row, Col, Divider } from 'antd';
+import { Table, Button, Modal, Form, Select, DatePicker, Tag, Space, Descriptions, message, Tabs, InputNumber, Input, Card, Statistic, Row, Col, Divider, ConfigProvider } from 'antd';
 import { Plus, Eye, Check, DollarSign, Lock, Unlock, Printer, FileText, TrendingUp, TrendingDown } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../../context/LanguageContext';
 import { useOrganization } from '../../context/OrganizationContext';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
@@ -52,8 +55,8 @@ interface Payroll {
 }
 
 const PayrollManagement: React.FC = () => {
-  const { t } = useTranslation();
-  const { currentLanguage } = useLanguage();
+  const { t, i18n } = useTranslation();
+  const { currentLanguage, isRTL } = useLanguage();
   const { getCurrencySymbol } = useOrganization();
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -74,6 +77,19 @@ const PayrollManagement: React.FC = () => {
   const currency = () => getCurrencySymbol(currentLanguage);
   const formatCurrency = (amount: number) => {
     return `${amount.toFixed(2)} ${currency()}`;
+  };
+
+  // Get locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      case 'en':
+      default:
+        return enUS;
+    }
   };
 
   useEffect(() => {
@@ -428,6 +444,7 @@ const PayrollManagement: React.FC = () => {
   ];
 
   return (
+    <ConfigProvider direction={isRTL ? 'rtl' : 'ltr'} locale={getAntdLocale()}>
     <div>
       {/* Statistics Cards */}
       {stats && (
@@ -1110,6 +1127,7 @@ const PayrollManagement: React.FC = () => {
         </Form>
       </Modal>
     </div>
+    </ConfigProvider>
   );
 };
 

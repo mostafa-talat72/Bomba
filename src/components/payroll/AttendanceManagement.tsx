@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Button, DatePicker, Select, Tag, message, Card, Statistic, Row, Col, Modal, Form, Input, TimePicker, Empty, Spin } from 'antd';
+import { Button, DatePicker, Select, Tag, message, Card, Statistic, Row, Col, Modal, Form, Input, Empty, Spin, ConfigProvider } from 'antd';
+import LocalizedTimePicker from '../common/LocalizedTimePicker';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Edit2 } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../../contexts/LanguageContext';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
@@ -59,8 +63,8 @@ interface AttendanceManagementProps {
 }
 
 const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelectedEmployeeId }) => {
-  const { t } = useTranslation();
-  const { language } = useLanguage();
+  const { t, i18n } = useTranslation();
+  const { language, isRTL } = useLanguage();
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,6 +77,19 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
   const [timeMode, setTimeMode] = useState<'same' | 'different' | 'groups'>('same');
   const [dayTimes, setDayTimes] = useState<DayTime[]>([]);
   const [timeGroups, setTimeGroups] = useState<TimeGroup[]>([]);
+
+  // Get locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      case 'en':
+      default:
+        return enUS;
+    }
+  };
 
   useEffect(() => {
     dayjs.locale(language);
@@ -370,6 +387,38 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
     }
   };
 
+  // Helper function to convert numbers to Arabic
+  const toArabicNumbers = (num: number | string): string => {
+    if (language === 'ar') {
+      const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+      return String(num).replace(/\d/g, (digit) => arabicNumbers[parseInt(digit)]);
+    }
+    return String(num);
+  };
+
+  // Helper function to format time to 12-hour format
+  const formatTime12Hour = (time: string) => {
+    if (!time) return '';
+    
+    try {
+      // Handle both HH:mm and full date formats
+      let timeStr = time;
+      if (time.includes('T') || time.includes(' ')) {
+        const date = new Date(time);
+        timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      }
+      
+      const [hours, minutes] = timeStr.split(':');
+      const hour = parseInt(hours);
+      const ampm = hour >= 12 ? (language === 'ar' ? 'م' : 'PM') : (language === 'ar' ? 'ص' : 'AM');
+      const hour12 = hour % 12 || 12;
+      
+      return `${toArabicNumbers(hour12)}:${toArabicNumbers(minutes)} ${ampm}`;
+    } catch (error) {
+      return time;
+    }
+  };
+
   return (
     <div>
       {/* Filters */}
@@ -625,20 +674,21 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
       )}
 
       {/* Mark Attendance Modal */}
-      <Modal
-        title={editingRecord ? t('payroll.attendanceManagement.form.editTitle') : t('payroll.attendanceManagement.form.title')}
-        open={isMarkModalVisible}
-        onCancel={() => {
-          setIsMarkModalVisible(false);
-          setDayTimes([]);
-          setTimeGroups([]);
-          setTimeMode('same');
-        }}
-        footer={null}
-        width={800}
-        className="dark:bg-gray-800"
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      <ConfigProvider direction={isRTL ? 'rtl' : 'ltr'} locale={getAntdLocale()}>
+        <Modal
+          title={editingRecord ? t('payroll.attendanceManagement.form.editTitle') : t('payroll.attendanceManagement.form.title')}
+          open={isMarkModalVisible}
+          onCancel={() => {
+            setIsMarkModalVisible(false);
+            setDayTimes([]);
+            setTimeGroups([]);
+            setTimeMode('same');
+          }}
+          footer={null}
+          width={800}
+          className="dark:bg-gray-800"
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {editingRecord ? (
             <Form.Item
               label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.date')}</span>}
@@ -780,10 +830,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                               name="checkIn"
                               rules={status === 'present' || status === 'late' ? [{ required: true, message: t('payroll.attendanceManagement.form.checkInRequired') }] : []}
                             >
-                              <TimePicker 
-                                style={{ width: '100%' }} 
-                                format="hh:mm A"
-                                use12Hours
+                              <LocalizedTimePicker 
+                                style={{ width: '100%' }}
                                 className="dark:bg-gray-700 dark:border-gray-600"
                                 placeholder={t('payroll.attendanceManagement.form.checkInPlaceholder')}
                               />
@@ -794,10 +842,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                               label={<span className="dark:text-gray-200">{t('payroll.attendanceManagement.form.checkOut')}</span>} 
                               name="checkOut"
                             >
-                              <TimePicker 
-                                style={{ width: '100%' }} 
-                                format="hh:mm A"
-                                use12Hours
+                              <LocalizedTimePicker 
+                                style={{ width: '100%' }}
                                 className="dark:bg-gray-700 dark:border-gray-600"
                                 placeholder={t('payroll.attendanceManagement.form.checkOutPlaceholder')}
                               />
@@ -889,10 +935,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                                           {t('payroll.attendanceManagement.form.groups.checkIn')}
                                         </div>
-                                        <TimePicker
+                                        <LocalizedTimePicker
                                           style={{ width: '100%' }}
-                                          format="hh:mm A"
-                                          use12Hours
                                           placeholder={t('payroll.attendanceManagement.form.checkInPlaceholder')}
                                           value={group.checkIn}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkIn', time)}
@@ -903,10 +947,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                                           {t('payroll.attendanceManagement.form.groups.checkOut')}
                                         </div>
-                                        <TimePicker
+                                        <LocalizedTimePicker
                                           style={{ width: '100%' }}
-                                          format="hh:mm A"
-                                          use12Hours
                                           placeholder={t('payroll.attendanceManagement.form.checkOutPlaceholder')}
                                           value={group.checkOut}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkOut', time)}
@@ -957,10 +999,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                               <Row gutter={8}>
                                 <Col span={12}>
                                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">وقت الحضور *</div>
-                                  <TimePicker
+                                  <LocalizedTimePicker
                                     style={{ width: '100%' }}
-                                    format="hh:mm A"
-                                    use12Hours
                                     placeholder="اختر الوقت"
                                     value={dayTime.checkIn}
                                     onChange={(time) => handleDayTimeChange(index, 'checkIn', time)}
@@ -970,10 +1010,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
                                 </Col>
                                 <Col span={12}>
                                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">وقت الانصراف</div>
-                                  <TimePicker
+                                  <LocalizedTimePicker
                                     style={{ width: '100%' }}
-                                    format="hh:mm A"
-                                    use12Hours
                                     placeholder="اختر الوقت"
                                     value={dayTime.checkOut}
                                     onChange={(time) => handleDayTimeChange(index, 'checkOut', time)}
@@ -1047,33 +1085,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           </Form.Item>
         </Form>
       </Modal>
+      </ConfigProvider>
     </div>
   );
-};
-
-// Helper function to format time to 12-hour format
-const formatTime12Hour = (time: string) => {
-  if (!time) return '';
-  
-  // Handle both HH:mm and full date formats
-  let timeStr = time;
-  if (time.includes('T') || time.includes(' ')) {
-    const date = new Date(time);
-    timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-  }
-  
-  const [hours, minutes] = timeStr.split(':');
-  const hour = parseInt(hours);
-  const ampm = hour >= 12 ? 'م' : 'ص';
-  const hour12 = hour % 12 || 12;
-  
-  return `${toArabicNumbers(hour12)}:${toArabicNumbers(minutes)} ${ampm}`;
-};
-
-// Helper function to convert numbers to Arabic
-const toArabicNumbers = (num: number | string): string => {
-  const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-  return String(num).replace(/\d/g, (digit) => arabicNumbers[parseInt(digit)]);
 };
 
 export default AttendanceManagement;

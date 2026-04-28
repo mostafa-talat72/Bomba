@@ -5,16 +5,16 @@ import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
 
-// تسجيل خط Vazir - يدعم العربية والفارسية واللاتينية بشكل ممتاز
+// تسجيل خط Vazir - خط عربي موثوق
 Font.register({
   family: 'Vazir',
   fonts: [
     {
-      src: 'https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font@v30.1.0/dist/Vazir-Regular.ttf',
+      src: 'https://cdn.jsdelivr.net/npm/vazir-font@30.1.0/dist/Vazir-Regular.ttf',
       fontWeight: 400,
     },
     {
-      src: 'https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font@v30.1.0/dist/Vazir-Bold.ttf',
+      src: 'https://cdn.jsdelivr.net/npm/vazir-font@30.1.0/dist/Vazir-Bold.ttf',
       fontWeight: 700,
     }
   ]
@@ -142,6 +142,7 @@ interface EmployeePDFProps {
   monthName: string;
   stats: {
     currentMonthSalary: number;
+    currentMonthBonuses: number;
     currentMonthAdvances: number;
     currentMonthDeductions: number;
     currentMonthPaid: number;
@@ -152,6 +153,7 @@ interface EmployeePDFProps {
   attendance: any[];
   advances: any[];
   deductions: any[];
+  bonuses: any[];
   payments: any[];
   t: any; // Translation function
   currentLanguage: string;
@@ -166,6 +168,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
   attendance,
   advances,
   deductions,
+  bonuses,
   payments,
   t,
   currentLanguage,
@@ -191,6 +194,43 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
       return String(num).replace(/\d/g, (d) => arabicNumbers[parseInt(d)]);
     }
     return String(num);
+  };
+
+  // دالة لتنسيق الوقت فقط (12-hour format with AM/PM)
+  const formatTime = (dateTime: any) => {
+    if (!dateTime) return '-';
+    try {
+      const d = new Date(dateTime);
+      if (isNaN(d.getTime())) return '-';
+      
+      let hours = d.getHours();
+      const minutes = d.getMinutes();
+      
+      // تحويل إلى نظام 12 ساعة
+      const period = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // الساعة 0 تصبح 12
+      
+      // تنسيق الأرقام
+      const hoursStr = String(hours).padStart(2, '0');
+      const minutesStr = String(minutes).padStart(2, '0');
+      
+      // تحويل الأرقام حسب اللغة
+      const timeStr = `${hoursStr}:${minutesStr}`;
+      const formattedTime = currentLanguage === 'ar' ? formatNumber(timeStr) : timeStr;
+      
+      // ترجمة AM/PM حسب اللغة
+      let periodText = period;
+      if (currentLanguage === 'ar') {
+        periodText = period === 'AM' ? 'ص' : 'م';
+      } else if (currentLanguage === 'fr') {
+        periodText = period === 'AM' ? 'AM' : 'PM';
+      }
+      
+      return `${formattedTime} ${periodText}`;
+    } catch (e) {
+      return '-';
+    }
   };
 
   // دالة ترجمة الحالات - محدثة 2026
@@ -260,6 +300,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
         'advance': 'سلفة',
         'insurance': 'تأمين',
         'tax': 'ضريبة',
+        'penalty': 'غرامة',
         'other': 'أخرى'
       },
       'en': {
@@ -270,6 +311,7 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
         'advance': 'Advance',
         'insurance': 'Insurance',
         'tax': 'Tax',
+        'penalty': 'Penalty',
         'other': 'Other'
       },
       'fr': {
@@ -280,11 +322,51 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
         'advance': 'Avance',
         'insurance': 'Assurance',
         'tax': 'Taxe',
+        'penalty': 'Pénalité',
         'other': 'Autre'
       }
     };
     
     return deductionTranslations[currentLanguage]?.[cleanType] || cleanType;
+  };
+
+  const getBonusTypeName = (type: string) => {
+    if (!type) return '-';
+    const cleanType = cleanText(type);
+    if (cleanType === '-') return '-';
+    
+    // Map bonus types to translations manually
+    const bonusTranslations: Record<string, Record<string, string>> = {
+      'ar': {
+        'performance': 'أداء متميز',
+        'holiday': 'مكافأة عيد',
+        'achievement': 'إنجاز',
+        'sales': 'مبيعات',
+        'attendance': 'حضور منتظم',
+        'overtime': 'ساعات زيادة',
+        'other': 'أخرى'
+      },
+      'en': {
+        'performance': 'Performance',
+        'holiday': 'Holiday',
+        'achievement': 'Achievement',
+        'sales': 'Sales',
+        'attendance': 'Attendance',
+        'overtime': 'Overtime Hours',
+        'other': 'Other'
+      },
+      'fr': {
+        'performance': 'Performance',
+        'holiday': 'Vacances',
+        'achievement': 'Réalisation',
+        'sales': 'Ventes',
+        'attendance': 'Présence',
+        'overtime': 'Heures Supplémentaires',
+        'other': 'Autre'
+      }
+    };
+    
+    return bonusTranslations[currentLanguage]?.[cleanType] || cleanType;
   };
 
   const getDepartmentName = (dept: string) => {
@@ -414,6 +496,12 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
           </View>
           <View style={styles.statCard}>
             <View style={styles.statBox}>
+              <Text style={styles.statLabel}>{t('payroll.employeeProfile.monthBonuses')}</Text>
+              <Text style={styles.statValue}>+{formatNumber(stats.currentMonthBonuses.toFixed(2))} {currency}</Text>
+            </View>
+          </View>
+          <View style={styles.statCard}>
+            <View style={styles.statBox}>
               <Text style={styles.statLabel}>{t('payroll.employeeProfile.monthDeductions')}</Text>
               <Text style={styles.statValue}>{formatNumber(stats.currentMonthDeductions.toFixed(2))} {currency}</Text>
             </View>
@@ -460,8 +548,6 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
               <Text style={[styles.tableCell, styles.col2]}>{t('payroll.employeeProfile.table.status')}</Text>
               <Text style={[styles.tableCell, styles.col3]}>{t('payroll.employeeProfile.table.checkIn')}</Text>
               <Text style={[styles.tableCell, styles.col3]}>{t('payroll.employeeProfile.table.checkOut')}</Text>
-              <Text style={[styles.tableCell, styles.col3]}>{t('payroll.employeeProfile.table.hours')}</Text>
-              <Text style={[styles.tableCell, styles.col3]}>{t('payroll.employeeProfile.pdfReport.salary')}</Text>
             </View>
             {attendance.map((record, index) => (
               <View key={index} style={styles.tableRow}>
@@ -469,14 +555,8 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
                   {dayjs(record.date).locale(currentLanguage).format('DD/MM/YYYY')}
                 </Text>
                 <Text style={[styles.tableCell, styles.col2]}>{getStatusName(record.status)}</Text>
-                <Text style={[styles.tableCell, styles.col3]}>{cleanText(record.checkIn)}</Text>
-                <Text style={[styles.tableCell, styles.col3]}>{cleanText(record.checkOut)}</Text>
-                <Text style={[styles.tableCell, styles.col3]}>
-                  {record.hours ? formatNumber(record.hours.toFixed(1)) : '-'}
-                </Text>
-                <Text style={[styles.tableCell, styles.col3]}>
-                  {record.dailySalary ? formatNumber(record.dailySalary.toFixed(2)) : '-'}
-                </Text>
+                <Text style={[styles.tableCell, styles.col3]}>{formatTime(record.checkIn)}</Text>
+                <Text style={[styles.tableCell, styles.col3]}>{formatTime(record.checkOut)}</Text>
               </View>
             ))}
           </View>
@@ -490,8 +570,8 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
       </Page>
     )}
 
-    {/* الصفحة الثالثة - السلف والخصومات والدفعات */}
-    {(advances.length > 0 || deductions.length > 0 || payments.length > 0) && (
+    {/* الصفحة الثالثة - السلف والخصومات والمكافآت والدفعات */}
+    {(advances.length > 0 || deductions.length > 0 || bonuses.length > 0 || payments.length > 0) && (
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>{t('payroll.employeeProfile.pdfReport.advancesDeductionsPayments')}</Text>
@@ -517,6 +597,33 @@ const EmployeePDFDocument: React.FC<EmployeePDFProps> = ({
                   <Text style={[styles.tableCell, styles.col2]}>{formatNumber(advance.amount.toFixed(2))}</Text>
                   <Text style={[styles.tableCell, styles.col2]}>{cleanText(advance.reason)}</Text>
                   <Text style={[styles.tableCell, styles.col2]}>{getStatusName(advance.status)}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* المكافآت */}
+        {bonuses.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('payroll.employeeProfile.tabs.bonuses')}</Text>
+            <View style={styles.table}>
+              <View style={[styles.tableRow, styles.tableHeader]}>
+                <Text style={[styles.tableCell, styles.col2]}>{t('payroll.employeeProfile.table.date')}</Text>
+                <Text style={[styles.tableCell, styles.col2]}>{t('payroll.employeeProfile.table.type')}</Text>
+                <Text style={[styles.tableCell, styles.col2]}>{t('payroll.employeeProfile.table.amount')}</Text>
+                <Text style={[styles.tableCell, styles.col2]}>{t('payroll.employeeProfile.table.reason')}</Text>
+              </View>
+              {bonuses.map((bonus, index) => (
+                <View key={index} style={styles.tableRow}>
+                  <Text style={[styles.tableCell, styles.col2]}>
+                    {dayjs(bonus.date).locale(currentLanguage).format('DD/MM/YYYY')}
+                  </Text>
+                  <Text style={[styles.tableCell, styles.col2]}>
+                    {getBonusTypeName(bonus.type)}
+                  </Text>
+                  <Text style={[styles.tableCell, styles.col2]}>+{formatNumber(bonus.amount.toFixed(2))}</Text>
+                  <Text style={[styles.tableCell, styles.col2]}>{cleanText(bonus.reason)}</Text>
                 </View>
               ))}
             </View>

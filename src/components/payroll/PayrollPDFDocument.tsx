@@ -116,6 +116,7 @@ interface PayrollPDFProps {
     totalEmployees: number;
     statistics: {
       totalGrossSalary: number;
+      totalBonuses: number;
       totalDeductions: number;
       totalNetSalary: number;
       totalPaid: number;
@@ -127,6 +128,7 @@ interface PayrollPDFProps {
       employeeName: string;
       department: string;
       grossSalary: number;
+      bonuses: number;
       deductions: number;
       netSalary: number;
       paidAmount: number;
@@ -243,6 +245,12 @@ const PayrollPDFDocument: React.FC<PayrollPDFProps> = ({ data, monthName, t, cur
             </Text>
           </View>
           <View style={styles.tableRow}>
+            <Text style={[styles.tableCell, styles.tableCellLabel]}>{t('payroll.payrollPDF.totalBonuses')}</Text>
+            <Text style={[styles.tableCell, styles.tableCellValue]}>
+              {formatNumber((data.statistics.totalBonuses || 0).toFixed(2))} {t('common.currency')}
+            </Text>
+          </View>
+          <View style={styles.tableRow}>
             <Text style={[styles.tableCell, styles.tableCellLabel]}>{t('payroll.payrollPDF.totalDeductions')}</Text>
             <Text style={[styles.tableCell, styles.tableCellValue]}>
               {formatNumber(data.statistics.totalDeductions.toFixed(2))} {t('common.currency')}
@@ -302,6 +310,7 @@ const PayrollPDFDocument: React.FC<PayrollPDFProps> = ({ data, monthName, t, cur
             <Text style={[styles.employeeCell, styles.col1]}>{t('payroll.payrollPDF.employee')}</Text>
             <Text style={[styles.employeeCell, styles.col2]}>{t('payroll.payrollPDF.department')}</Text>
             <Text style={[styles.employeeCell, styles.col3]}>{t('payroll.payrollPDF.gross')}</Text>
+            <Text style={[styles.employeeCell, styles.col3]}>{t('payroll.payrollPDF.bonuses')}</Text>
             <Text style={[styles.employeeCell, styles.col3]}>{t('payroll.payrollPDF.deductions')}</Text>
             <Text style={[styles.employeeCell, styles.col3]}>{t('payroll.payrollPDF.net')}</Text>
             <Text style={[styles.employeeCell, styles.col3]}>{t('payroll.payrollPDF.paid')}</Text>
@@ -314,6 +323,7 @@ const PayrollPDFDocument: React.FC<PayrollPDFProps> = ({ data, monthName, t, cur
               <Text style={[styles.employeeCell, styles.col1]}>{cleanText(emp.employeeName)}</Text>
               <Text style={[styles.employeeCell, styles.col2]}>{getDepartmentName(emp.department)}</Text>
               <Text style={[styles.employeeCell, styles.col3]}>{formatNumber(emp.grossSalary.toFixed(2))}</Text>
+              <Text style={[styles.employeeCell, styles.col3]}>{formatNumber((emp.bonuses || 0).toFixed(2))}</Text>
               <Text style={[styles.employeeCell, styles.col3]}>{formatNumber(emp.deductions.toFixed(2))}</Text>
               <Text style={[styles.employeeCell, styles.col3]}>{formatNumber(emp.netSalary.toFixed(2))}</Text>
               <Text style={[styles.employeeCell, styles.col3]}>{formatNumber(emp.paidAmount.toFixed(2))}</Text>

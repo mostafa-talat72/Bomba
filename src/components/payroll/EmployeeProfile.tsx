@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Tabs, Tag, Statistic, Row, Col, Empty, Spin, Button, DatePicker, InputNumber, Modal, message, Form, Input, Select, TimePicker, Table } from 'antd';
+import { Card, Tabs, Tag, Statistic, Row, Col, Empty, Spin, Button, DatePicker, InputNumber, Modal, message, Form, Input, Select, Table, ConfigProvider } from 'antd';
+import LocalizedTimePicker from '../common/LocalizedTimePicker';
 import { User, DollarSign, AlertCircle, ArrowLeft, Wallet, TrendingUp, Calendar, Plus, Minus, Edit, Trash2, Download, MessageCircle, Phone, Briefcase } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
@@ -26,17 +30,31 @@ interface EmployeeProfileProps {
 }
 
 const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, onAdvanceAdded }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { currentLanguage, isRTL } = useLanguage();
   const { getCurrencySymbol } = useOrganization();
   
   // Helper to get currency symbol with current language
   const currency = () => getCurrencySymbol(currentLanguage);
   
+  // Get locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      case 'en':
+      default:
+        return enUS;
+    }
+  };
+  
   const [employee, setEmployee] = useState<any>(null);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [advances, setAdvances] = useState<any[]>([]);
   const [deductions, setDeductions] = useState<any[]>([]);
+  const [bonuses, setBonuses] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [payrollData, setPayrollData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -54,16 +72,19 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   const [editAttendanceModalVisible, setEditAttendanceModalVisible] = useState(false);
   const [editAdvanceModalVisible, setEditAdvanceModalVisible] = useState(false);
   const [editDeductionModalVisible, setEditDeductionModalVisible] = useState(false);
+  const [editBonusModalVisible, setEditBonusModalVisible] = useState(false);
   const [editPaymentModalVisible, setEditPaymentModalVisible] = useState(false);
   const [editingAttendance, setEditingAttendance] = useState<any>(null);
   const [editingAdvance, setEditingAdvance] = useState<any>(null);
   const [editingDeduction, setEditingDeduction] = useState<any>(null);
+  const [editingBonus, setEditingBonus] = useState<any>(null);
   const [editingPayment, setEditingPayment] = useState<any>(null);
   const [editForm] = Form.useForm();
 
   const [attendanceModalVisible, setAttendanceModalVisible] = useState(false);
   const [advanceModalVisible, setAdvanceModalVisible] = useState(false);
   const [deductionModalVisible, setDeductionModalVisible] = useState(false);
+  const [bonusModalVisible, setBonusModalVisible] = useState(false);
   
   // Attendance modal states
   const [attendanceForm] = Form.useForm();
@@ -74,6 +95,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   // Advance and Deduction forms
   const [advanceForm] = Form.useForm();
   const [deductionForm] = Form.useForm();
+  const [bonusForm] = Form.useForm();
 
   useEffect(() => {
     dayjs.locale(currentLanguage);
@@ -114,20 +136,24 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         setAttendance(summary.attendanceRecords || []);
         setAdvances(summary.advances || []);
         setDeductions(summary.deductions || []);
+        setBonuses(summary.bonuses || []);
         setPayments(summary.payments || []);
         setPayrollData({
           currentMonthSalary: summary.currentMonth.salary,
+          currentMonthBonuses: summary.currentMonth.bonuses,
           currentMonthAdvances: summary.currentMonth.advances,
           currentMonthDeductions: summary.currentMonth.deductions || 0,
           currentMonthPaid: summary.currentMonth.paid,
           carriedForward: summary.carriedForward,
           remainingBalance: summary.remainingBalance,
-          totalDeductions: summary.totalDeductions || 0
+          totalDeductions: summary.totalDeductions || 0,
+          totalBonuses: summary.totalBonuses || 0
         });
       } else {
         setAttendance([]);
         setAdvances([]);
         setDeductions([]);
+        setBonuses([]);
         setPayments([]);
         setPayrollData(null);
       }
@@ -136,6 +162,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       setAttendance([]);
       setAdvances([]);
       setDeductions([]);
+      setBonuses([]);
       setPayments([]);
       setPayrollData(null);
     } finally {
@@ -157,10 +184,33 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
     return formatNumber(num);
   };
 
+  // دالة لتنسيق الوقت بصيغة 12 ساعة مع ص/م
+  const formatTime12Hour = (time: string | null | undefined) => {
+    if (!time) return '-';
+    
+    try {
+      // Handle both HH:mm and full date formats
+      let timeStr = time;
+      if (time.includes('T') || time.includes(' ')) {
+        const date = new Date(time);
+        timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      }
+      
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const period = hours >= 12 ? (currentLanguage === 'ar' ? 'م' : 'PM') : (currentLanguage === 'ar' ? 'ص' : 'AM');
+      const displayHours = hours % 12 || 12;
+      
+      return `${formatNumber(displayHours)}:${formatNumber(minutes.toString().padStart(2, '0'))} ${period}`;
+    } catch (error) {
+      return time;
+    }
+  };
+
   const calculateStats = () => {
     if (!payrollData) {
       return {
         currentMonthSalary: 0,
+        currentMonthBonuses: 0,
         currentMonthAdvances: 0,
         currentMonthDeductions: 0,
         currentMonthPaid: 0,
@@ -168,6 +218,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         remainingBalance: 0,
         attendanceDays: attendance.filter(a => a.status === 'present' || a.status === 'late').length,
         totalSalaries: 0,
+        totalBonuses: 0,
         totalAdvances: 0,
         totalDeductions: 0,
         netAmount: 0
@@ -176,6 +227,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
     
     return {
       currentMonthSalary: payrollData.currentMonthSalary || 0,
+      currentMonthBonuses: payrollData.currentMonthBonuses || 0,
       currentMonthAdvances: payrollData.currentMonthAdvances || 0,
       currentMonthDeductions: payrollData.currentMonthDeductions || 0,
       currentMonthPaid: payrollData.currentMonthPaid || 0,
@@ -183,6 +235,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       remainingBalance: payrollData.remainingBalance || 0,
       attendanceDays: attendance.filter(a => a.status === 'present' || a.status === 'late').length,
       totalSalaries: payrollData.totalSalaries || 0,
+      totalBonuses: payrollData.totalBonuses || 0,
       totalAdvances: payrollData.totalAdvances || 0,
       totalDeductions: payrollData.totalDeductions || 0,
       netAmount: payrollData.remainingBalance || 0
@@ -237,6 +290,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           attendance={attendance}
           advances={advances}
           deductions={deductions}
+          bonuses={bonuses}
           payments={payments}
           t={t}
           currentLanguage={currentLanguage}
@@ -296,6 +350,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           attendance={attendance}
           advances={advances}
           deductions={deductions}
+          bonuses={bonuses}
           payments={payments}
           t={t}
           currentLanguage={currentLanguage}
@@ -761,6 +816,82 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
     }
   };
 
+  // Bonus handlers
+  const handleSubmitBonus = async (values: any) => {
+    try {
+      const bonusDate = values.date || dayjs();
+      const payload = {
+        employeeId,
+        amount: values.amount,
+        reason: values.reason,
+        type: values.type,
+        date: bonusDate.format('YYYY-MM-DD'),
+        notes: values.notes
+      };
+      
+      await api.post('/payroll/bonuses', payload);
+      
+      message.success(t('payroll.bonusManagement.messages.addSuccess'));
+      setBonusModalVisible(false);
+      bonusForm.resetFields();
+      fetchEmployeeData();
+    } catch (error: any) {
+      console.error('Bonus error:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || t('payroll.bonusManagement.messages.addError');
+      message.error(errorMessage);
+    }
+  };
+
+  const handleEditBonus = (bonus: any) => {
+    setEditingBonus(bonus);
+    editForm.setFieldsValue({
+      type: bonus.type,
+      amount: bonus.amount,
+      reason: bonus.reason,
+      date: dayjs(bonus.date),
+      notes: bonus.notes
+    });
+    setEditBonusModalVisible(true);
+  };
+
+  const handleUpdateBonus = async (values: any) => {
+    try {
+      await api.put(`/payroll/bonuses/${editingBonus._id}`, {
+        type: values.type,
+        amount: values.amount,
+        reason: values.reason,
+        date: values.date.format('YYYY-MM-DD'),
+        notes: values.notes
+      });
+      message.success(t('payroll.bonusManagement.messages.updateSuccess'));
+      setEditBonusModalVisible(false);
+      setEditingBonus(null);
+      editForm.resetFields();
+      fetchEmployeeData();
+    } catch (error: any) {
+      message.error(error.response?.data?.error || t('payroll.bonusManagement.messages.updateError'));
+    }
+  };
+
+  const handleDeleteBonus = async (id: string) => {
+    Modal.confirm({
+      title: t('payroll.bonusManagement.confirmDelete.title'),
+      content: t('payroll.bonusManagement.confirmDelete.content'),
+      okText: t('payroll.bonusManagement.confirmDelete.okText'),
+      cancelText: t('payroll.bonusManagement.confirmDelete.cancelText'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api.delete(`/payroll/bonuses/${id}`);
+          message.success(t('payroll.bonusManagement.messages.deleteSuccess'));
+          fetchEmployeeData();
+        } catch (error: any) {
+          message.error(error.response?.data?.error || t('payroll.bonusManagement.messages.deleteError'));
+        }
+      }
+    });
+  };
+
   // Edit employee handler
   const handleEditEmployee = async (values: any) => {
     try {
@@ -896,7 +1027,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           {/* Actions Section */}
           <div className="flex flex-col gap-3">
             {/* Action Buttons Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
               <Button 
                 type="default" 
                 size="large"
@@ -926,6 +1057,16 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 block
               >
                 {t('payroll.employeeProfile.tabs.deductions')}
+              </Button>
+              <Button 
+                type="default" 
+                size="large"
+                icon={<TrendingUp size={18} />}
+                onClick={() => setBonusModalVisible(true)}
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 w-full text-sm sm:text-base"
+                block
+              >
+                {t('payroll.employeeProfile.tabs.bonuses')}
               </Button>
             </div>
             
@@ -1115,6 +1256,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700">
+            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">{t('payroll.employeeProfile.monthBonuses')}</span>} value={toArabicNumbers(stats.currentMonthBonuses.toFixed(2))} suffix={currency()} prefix={<TrendingUp size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#13c2c2', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={8} lg={8} xl={4}>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm">{t('payroll.employeeProfile.monthAdvances')}</span>} value={toArabicNumbers(stats.currentMonthAdvances.toFixed(2))} suffix={currency()} prefix={<AlertCircle size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#faad14', fontSize: '18px' }} className="[&_.ant-statistic-content]:text-base sm:[&_.ant-statistic-content]:text-lg" />
           </Card>
         </Col>
@@ -1230,25 +1376,39 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                     title={t('payroll.employeeProfile.table.checkIn')}
                     dataIndex="checkIn"
                     key="checkIn"
-                    render={(time) => time || '-'}
+                    render={(time, record: any) => {
+                      // لا تعرض وقت الحضور للغياب أو الإجازة
+                      if (record.status === 'absent' || record.status === 'leave' || record.status === 'weekly_off') {
+                        return '-';
+                      }
+                      return (
+                        <span className="font-medium text-green-600 dark:text-green-400">
+                          {formatTime12Hour(time)}
+                        </span>
+                      );
+                    }}
                   />
                   <Table.Column
                     title={t('payroll.employeeProfile.table.checkOut')}
                     dataIndex="checkOut"
                     key="checkOut"
-                    render={(time) => time || '-'}
-                  />
-                  <Table.Column
-                    title={t('payroll.employeeProfile.table.hours')}
-                    dataIndex="hours"
-                    key="hours"
-                    render={(hours) => hours ? toArabicNumbers(hours.toFixed(1)) : '-'}
-                  />
-                  <Table.Column
-                    title={t('payroll.employeeProfile.table.dailySalary')}
-                    dataIndex="dailySalary"
-                    key="dailySalary"
-                    render={(salary) => salary ? `${toArabicNumbers(salary.toFixed(2))} ${currency()}` : '-'}
+                    render={(time, record: any) => {
+                      // لا تعرض وقت الانصراف للغياب أو الإجازة
+                      if (record.status === 'absent' || record.status === 'leave' || record.status === 'weekly_off') {
+                        return '-';
+                      }
+                      return (
+                        <span className="font-medium text-blue-600 dark:text-blue-400">
+                          {formatTime12Hour(time)}
+                          {time && record.checkIn && 
+                           parseInt(time.split(':')[0]) < parseInt(record.checkIn.split(':')[0]) && (
+                            <span className="text-xs text-orange-500 dark:text-orange-400 mr-1">
+                              ({t('payroll.attendanceManagement.card.nextDay')})
+                            </span>
+                          )}
+                        </span>
+                      );
+                    }}
                   />
                   <Table.Column
                     title={t('payroll.employeeProfile.table.actions')}
@@ -1421,6 +1581,70 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
             },
             {
               key: '4',
+              label: t('payroll.employeeProfile.tabs.bonuses'),
+              children: (
+                <Table
+                  dataSource={bonuses}
+                  rowKey="_id"
+                  loading={loading}
+                  locale={{ emptyText: t('payroll.employeeProfile.empty.bonuses') }}
+                  pagination={{ pageSize: 10 }}
+                  className="dark:bg-gray-800"
+                  scroll={{ x: 600 }}
+                >
+                  <Table.Column
+                    title={t('payroll.employeeProfile.table.date')}
+                    dataIndex="date"
+                    key="date"
+                    render={(date) => dayjs(date).format('DD/MM/YYYY')}
+                  />
+                  <Table.Column
+                    title={t('payroll.employeeProfile.table.type')}
+                    dataIndex="type"
+                    key="type"
+                    render={(type) => t(`payroll.bonusManagement.types.${type}`, type)}
+                  />
+                  <Table.Column
+                    title={t('payroll.employeeProfile.table.amount')}
+                    dataIndex="amount"
+                    key="amount"
+                    render={(amount) => `+${toArabicNumbers(amount)} ${currency()}`}
+                  />
+                  <Table.Column
+                    title={t('payroll.employeeProfile.table.reason')}
+                    dataIndex="reason"
+                    key="reason"
+                  />
+                  <Table.Column
+                    title={t('payroll.employeeProfile.table.actions')}
+                    key="actions"
+                    render={(_, record: any) => (
+                      <div className="flex gap-2">
+                        <Button
+                          type="link"
+                          icon={<Edit size={16} />}
+                          onClick={() => handleEditBonus(record)}
+                          className="dark:text-blue-400"
+                        >
+                          {t('payroll.employeeProfile.table.edit')}
+                        </Button>
+                        <Button
+                          type="link"
+                          danger
+                          icon={<Trash2 size={16} />}
+                          onClick={() => handleDeleteBonus(record._id)}
+                          className="dark:text-red-400"
+                        >
+                          {t('payroll.employeeProfile.table.delete')}
+                        </Button>
+                      </div>
+                    )}
+                  />
+                </Table>
+              )
+            },
+            {
+              key: '5',
               label: t('payroll.employeeProfile.tabs.payments'),
               children: (
                 <Table
@@ -1489,6 +1713,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       </Card>
 
       {/* Edit Modals */}
+      <ConfigProvider direction={isRTL ? 'rtl' : 'ltr'} locale={getAntdLocale()}>
       {/* Modal تعديل الحضور */}
       <Modal
         title={
@@ -1542,10 +1767,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.checkIn')}</span>} 
                 name="checkIn"
               >
-                <TimePicker 
-                  style={{ width: '100%' }} 
-                  format="hh:mm A"
-                  use12Hours
+                <LocalizedTimePicker 
+                  style={{ width: '100%' }}
                   className="dark:bg-gray-700 dark:border-gray-600"
                   size="large"
                 />
@@ -1556,10 +1779,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.checkOut')}</span>} 
                 name="checkOut"
               >
-                <TimePicker 
-                  style={{ width: '100%' }} 
-                  format="hh:mm A"
-                  use12Hours
+                <LocalizedTimePicker 
+                  style={{ width: '100%' }}
                   className="dark:bg-gray-700 dark:border-gray-600"
                   size="large"
                 />
@@ -2092,10 +2313,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                 name="checkIn"
                                 rules={status === 'present' || status === 'late' ? [{ required: true, message: t('common.required') }] : []}
                               >
-                                <TimePicker 
-                                  style={{ width: '100%' }} 
-                                  format="hh:mm A"
-                                  use12Hours
+                                <LocalizedTimePicker 
+                                  style={{ width: '100%' }}
                                   className="dark:bg-gray-700 dark:border-gray-600"
                                   placeholder={t('payroll.attendanceManagement.selectTime')}
                                   size="large"
@@ -2107,10 +2326,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                 label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.checkOut')}</span>} 
                                 name="checkOut"
                               >
-                                <TimePicker 
-                                  style={{ width: '100%' }} 
-                                  format="hh:mm A"
-                                  use12Hours
+                                <LocalizedTimePicker 
+                                  style={{ width: '100%' }}
                                   className="dark:bg-gray-700 dark:border-gray-600"
                                   placeholder={t('payroll.attendanceManagement.selectTime')}
                                   size="large"
@@ -2201,10 +2418,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                                           {t('payroll.attendanceManagement.checkInRequired')}
                                         </div>
-                                        <TimePicker
+                                        <LocalizedTimePicker
                                           style={{ width: '100%' }}
-                                          format="hh:mm A"
-                                          use12Hours
                                           placeholder={t('payroll.attendanceManagement.selectTime')}
                                           value={group.checkIn}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkIn', time)}
@@ -2215,10 +2430,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                                           {t('payroll.attendanceManagement.checkOut')}
                                         </div>
-                                        <TimePicker
+                                        <LocalizedTimePicker
                                           style={{ width: '100%' }}
-                                          format="hh:mm A"
-                                          use12Hours
                                           placeholder={t('payroll.attendanceManagement.selectTime')}
                                           value={group.checkOut}
                                           onChange={(time) => updateTimeGroup(group.id, 'checkOut', time)}
@@ -2267,10 +2480,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                               <Row gutter={8}>
                                 <Col span={12}>
                                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.attendanceManagement.checkInRequired')}</div>
-                                  <TimePicker
+                                  <LocalizedTimePicker
                                     style={{ width: '100%' }}
-                                    format="hh:mm A"
-                                    use12Hours
                                     placeholder={t('payroll.attendanceManagement.selectTime')}
                                     value={dayTime.checkIn}
                                     onChange={(time) => handleDayTimeChange(index, 'checkIn', time)}
@@ -2280,10 +2491,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                                 </Col>
                                 <Col span={12}>
                                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.attendanceManagement.checkOut')}</div>
-                                  <TimePicker
+                                  <LocalizedTimePicker
                                     style={{ width: '100%' }}
-                                    format="hh:mm A"
-                                    use12Hours
                                     placeholder={t('payroll.attendanceManagement.selectTime')}
                                     value={dayTime.checkOut}
                                     onChange={(time) => handleDayTimeChange(index, 'checkOut', time)}
@@ -2568,6 +2777,207 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         </Form>
       </Modal>
 
+      {/* Modal إضافة مكافأة */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <TrendingUp size={20} />
+            <span>{t('payroll.bonusManagement.addBonus')}</span>
+          </div>
+        }
+        open={bonusModalVisible}
+        onCancel={() => {
+          setBonusModalVisible(false);
+          bonusForm.resetFields();
+        }}
+        footer={null}
+        width={600}
+        className="professional-modal success-modal"
+      >
+        <Form form={bonusForm} layout="vertical" onFinish={handleSubmitBonus}>
+          <div className="info-box success mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={18} />
+              <span className="font-medium">{t('payroll.bonusManagement.amountWillBeAdded')}</span>
+            </div>
+          </div>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.bonusManagement.bonusType')}</span>}
+            name="type"
+            rules={[{ required: true, message: t('payroll.bonusManagement.form.typeRequired') }]}
+          >
+            <Select className="dark:bg-gray-700" size="large">
+              <Option value="performance">{t('payroll.bonusManagement.types.performance')}</Option>
+              <Option value="holiday">{t('payroll.bonusManagement.types.holiday')}</Option>
+              <Option value="achievement">{t('payroll.bonusManagement.types.achievement')}</Option>
+              <Option value="sales">{t('payroll.bonusManagement.types.sales')}</Option>
+              <Option value="attendance">{t('payroll.bonusManagement.types.attendance')}</Option>
+              <Option value="overtime">{t('payroll.bonusManagement.types.overtime')}</Option>
+              <Option value="other">{t('payroll.bonusManagement.types.other')}</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.amount')}</span>}
+            name="amount"
+            rules={[{ required: true, message: t('payroll.bonusManagement.form.amountRequired') }]}
+          >
+            <InputNumber
+              {...numberOnlyInputProps} style={{ width: '100%' }}
+              min={0}
+              placeholder={t('payroll.bonusManagement.form.amountPlaceholder')}
+              className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.date')}</span>}
+            name="date"
+            rules={[{ required: true, message: t('payroll.bonusManagement.form.dateRequired') }]}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              placeholder={t('common.selectDate')}
+              className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>}
+            name="reason"
+            rules={[{ required: true, message: t('payroll.bonusManagement.form.reasonRequired') }]}
+          >
+            <TextArea
+              rows={3}
+              placeholder={t('payroll.bonusManagement.form.reasonPlaceholder')}
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.bonusManagement.form.notes')}</span>}
+            name="notes"
+          >
+            <TextArea
+              rows={2}
+              placeholder={t('payroll.bonusManagement.form.notesPlaceholder')}
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <div className="flex gap-2">
+              <Button type="primary" htmlType="submit" size="large">
+                {t('common.add')}
+              </Button>
+              <Button onClick={() => {
+                setBonusModalVisible(false);
+                bonusForm.resetFields();
+              }} size="large">
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Modal تعديل المكافأة */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <Edit size={20} />
+            <span>{t('payroll.bonusManagement.editBonus')}</span>
+          </div>
+        }
+        open={editBonusModalVisible}
+        onCancel={() => {
+          setEditBonusModalVisible(false);
+          setEditingBonus(null);
+          editForm.resetFields();
+        }}
+        footer={null}
+        width={600}
+        className="professional-modal success-modal"
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdateBonus}>
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.bonusManagement.bonusType')}</span>}
+            name="type"
+            rules={[{ required: true, message: t('payroll.bonusManagement.form.typeRequired') }]}
+          >
+            <Select className="dark:bg-gray-700" size="large">
+              <Option value="performance">{t('payroll.bonusManagement.types.performance')}</Option>
+              <Option value="holiday">{t('payroll.bonusManagement.types.holiday')}</Option>
+              <Option value="achievement">{t('payroll.bonusManagement.types.achievement')}</Option>
+              <Option value="sales">{t('payroll.bonusManagement.types.sales')}</Option>
+              <Option value="attendance">{t('payroll.bonusManagement.types.attendance')}</Option>
+              <Option value="overtime">{t('payroll.bonusManagement.types.overtime')}</Option>
+              <Option value="other">{t('payroll.bonusManagement.types.other')}</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.amount')}</span>}
+            name="amount"
+            rules={[{ required: true, message: t('payroll.bonusManagement.form.amountRequired') }]}
+          >
+            <InputNumber
+              {...numberOnlyInputProps} style={{ width: '100%' }}
+              min={0}
+              className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              prefix={<DollarSign size={16} className="text-gray-400" />}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.date')}</span>}
+            name="date"
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="YYYY-MM-DD"
+              className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.employeeProfile.table.reason')}</span>}
+            name="reason"
+            rules={[{ required: true, message: t('payroll.bonusManagement.form.reasonRequired') }]}
+          >
+            <TextArea rows={3} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.bonusManagement.form.notes')}</span>}
+            name="notes"
+          >
+            <TextArea rows={2} className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+          </Form.Item>
+
+          <Form.Item>
+            <div className="flex gap-2">
+              <Button type="primary" htmlType="submit" size="large">
+                {t('common.save')}
+              </Button>
+              <Button onClick={() => {
+                setEditBonusModalVisible(false);
+                setEditingBonus(null);
+                editForm.resetFields();
+              }} size="large">
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </Form.Item>
+        </Form>
+      </Modal>
+
       {/* Modal تعديل بيانات الموظف */}
       <Modal
         title={
@@ -2815,6 +3225,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
           </Form.Item>
         </Form>
       </Modal>
+      </ConfigProvider>
     </div>
   );
 };

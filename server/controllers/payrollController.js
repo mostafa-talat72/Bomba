@@ -4,6 +4,7 @@ import Attendance from '../models/Attendance.js';
 import Advance from '../models/Advance.js';
 import Payment from '../models/Payment.js';
 import Deduction from '../models/Deduction.js';
+import Bonus from '../models/Bonus.js';
 import mongoose from 'mongoose';
 import { startOfMonth, endOfMonth, format, getDaysInMonth } from 'date-fns';
 
@@ -992,13 +993,22 @@ export const getPayrollSummary = async (req, res) => {
         });
         const manualDeductionsTotal = manualDeductions.reduce((sum, ded) => sum + (ded.amount || 0), 0);
         
+        // Get bonuses for the month
+        const bonuses = await Bonus.find({
+          employeeId: employee._id,
+          organizationId: req.user.organization,
+          month: monthStr
+        });
+        const bonusesTotal = bonuses.reduce((sum, bonus) => sum + (bonus.amount || 0), 0);
+        
         // NO automatic absence deduction
         // Deductions are ONLY from manual entries in Deduction table
         // Absence does NOT automatically create a deduction
 
         const otherDeductionsTotal = manualDeductionsTotal;
         const totalDeductionsEmp = advancesTotal + otherDeductionsTotal;
-        const netSalary = grossSalary - totalDeductionsEmp;
+        const grossSalaryWithBonuses = grossSalary + bonusesTotal;
+        const netSalary = grossSalaryWithBonuses - totalDeductionsEmp;
         
         // Get payments for the month
         const payments = await Payment.find({
@@ -1018,6 +1028,7 @@ export const getPayrollSummary = async (req, res) => {
         const hireDate = employee.personalInfo?.hireDate || employee.createdAt || new Date('2020-01-01');
         const previousMonthEnd = new Date(startDate);
         previousMonthEnd.setDate(0); // آخر يوم من الشهر السابق
+        previousMonthEnd.setHours(23, 59, 59, 999); // نهاية اليوم
 
         // Get all previous attendance
         const previousAttendance = await Attendance.find({
@@ -1025,6 +1036,22 @@ export const getPayrollSummary = async (req, res) => {
           organizationId: req.user.organization,
           date: { $gte: hireDate, $lte: previousMonthEnd }
         });
+        
+        console.log(`   📋 Previous attendance records: ${previousAttendance.length}`);
+        console.log(`   📅 Hire date: ${hireDate.toISOString().substring(0, 10)}`);
+        console.log(`   📅 Previous month end: ${previousMonthEnd.toISOString().substring(0, 10)}`);
+        console.log(`   💼 Employment type: ${employee.employment.type}`);
+        console.log(`   💰 Monthly salary: ${employee.compensation?.monthly || 0}`);
+        console.log(`   💰 Daily salary: ${employee.compensation?.daily || 0}`);
+        console.log(`   💰 Hourly salary: ${employee.compensation?.hourly || 0}`);
+        
+        // Print attendance details
+        if (previousAttendance.length > 0) {
+          console.log(`   📊 Attendance details:`);
+          previousAttendance.forEach(att => {
+            console.log(`      - ${att.date.toISOString().substring(0, 10)}: status=${att.status}, totalPay=${att.details?.totalPay || 0}`);
+          });
+        }
         
         
         // Calculate previous salaries based on employment type
@@ -1049,6 +1076,8 @@ export const getPayrollSummary = async (req, res) => {
             }
           });
           
+          console.log(`   📅 Attendance by month for ${employee.personalInfo?.name}:`, attendanceByMonth);
+          
           // Calculate salary for each month
           Object.keys(attendanceByMonth).forEach(monthKey => {
             const monthData = attendanceByMonth[monthKey];
@@ -1058,6 +1087,8 @@ export const getPayrollSummary = async (req, res) => {
             // Salary = (Monthly Salary ÷ Days in Month) × Days Present
             const monthlySalary = employee.compensation?.monthly || 0;
             const monthSalary = (monthlySalary / daysInMonth) * monthData.present;
+            
+            console.log(`      ${monthKey}: ${monthData.present} days present / ${daysInMonth} days in month = ${monthSalary.toFixed(2)}`);
             
             previousSalaries += monthSalary;
             
@@ -1084,27 +1115,45 @@ export const getPayrollSummary = async (req, res) => {
         
         const previousAdvancesTotal = previousAdvances.reduce((sum, adv) => sum + adv.amount, 0);
         
-        // Get all previous deductions
+        // Get all previous deductions (using month field for accuracy)
         const previousDeductions = await Deduction.find({
           employeeId: employee._id,
           organizationId: req.user.organization,
-          date: { $lte: previousMonthEnd }
+          month: { $lt: monthStr } // All months before current month
         });
         
         const previousDeductionsTotal = previousDeductions.reduce((sum, ded) => sum + ded.amount, 0);
         
-        // Get all previous payments
+        // Get all previous payments (using month field for accuracy)
         const previousPayments = await Payment.find({
           employeeId: employee._id,
           organizationId: req.user.organization,
-          paymentDate: { $lte: previousMonthEnd }
+          month: { $lt: monthStr } // All months before current month
         });
         
         const previousPaid = previousPayments.reduce((sum, pay) => sum + pay.amount, 0);
         
-        // Carried Forward = (Previous Salaries - Previous Advances - Previous Deductions) - Previous Paid
+        // Get all previous bonuses (using month field for accuracy)
+        const previousBonuses = await Bonus.find({
+          employeeId: employee._id,
+          organizationId: req.user.organization,
+          month: { $lt: monthStr } // All months before current month
+        });
+        
+        const previousBonusesTotal = previousBonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
+        
+        // Carried Forward = (Previous Salaries + Previous Bonuses - Previous Advances - Previous Deductions) - Previous Paid
         // This can be positive (مستحقات) or negative (ديون)
-        carriedForward = (previousSalaries - previousAdvancesTotal - previousDeductionsTotal) - previousPaid;
+        carriedForward = (previousSalaries + previousBonusesTotal - previousAdvancesTotal - previousDeductionsTotal) - previousPaid;
+        
+        // Log details for debugging
+        console.log(`\n📊 Employee: ${employee.personalInfo?.name || 'Unknown'}`);
+        console.log(`   Previous Salaries: ${previousSalaries.toFixed(2)}`);
+        console.log(`   Previous Bonuses: ${previousBonusesTotal.toFixed(2)}`);
+        console.log(`   Previous Advances: ${previousAdvancesTotal.toFixed(2)}`);
+        console.log(`   Previous Deductions: ${previousDeductionsTotal.toFixed(2)}`);
+        console.log(`   Previous Paid: ${previousPaid.toFixed(2)}`);
+        console.log(`   ➡️ Carried Forward: ${carriedForward.toFixed(2)}`);
         
         const totalUnpaidWithCarried = unpaidBalance + carriedForward;
 
@@ -1122,6 +1171,7 @@ export const getPayrollSummary = async (req, res) => {
           department: employee.employment?.department || '-',
           position: employee.employment?.position || '-',
           grossSalary,
+          bonuses: bonusesTotal,
           advances: advancesTotal,
           otherDeductions: otherDeductionsTotal,
           deductions: totalDeductionsEmp,
@@ -1143,6 +1193,11 @@ export const getPayrollSummary = async (req, res) => {
     const totalCarriedForward = employeesData.reduce((sum, e) => sum + (e.carriedForward || 0), 0);
     const totalUnpaidCurrentMonth = totalNetSalary - totalPaid; // المتبقي من الشهر الحالي فقط
     const totalObligationsWithCarried = totalUnpaid; // إجمالي المستحقات الكلي (المتبقي + المرحل)
+    const totalBonuses = employeesData.reduce((sum, e) => sum + (e.bonuses || 0), 0);
+    
+    console.log(`\n✅ Total Carried Forward (sum of all employees): ${totalCarriedForward.toFixed(2)}`);
+    console.log(`   Employees count: ${employeesData.length}`);
+    console.log(`   Individual carried forwards:`, employeesData.map(e => `${e.employeeName}: ${(e.carriedForward || 0).toFixed(2)}`).join(', '));
     
     // Count employees by financial status
     const employeesWithDues = employeesData.filter(e => e.totalUnpaid > 0).length;
@@ -1166,6 +1221,7 @@ export const getPayrollSummary = async (req, res) => {
         totalEmployees: employeesData.length,
         statistics: {
           totalGrossSalary,
+          totalBonuses,
           totalDeductions,
           totalNetSalary,
           totalPaid,
@@ -1563,6 +1619,121 @@ export const printPayroll = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=payslip-${payroll.payrollId}.pdf`);
     res.send(pdf.buffer);
     
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Recalculate payroll (إعادة حساب كشف الراتب من البيانات الحالية)
+export const recalculatePayroll = async (req, res) => {
+  try {
+    const payroll = await Payroll.findOne({
+      _id: req.params.id,
+      organizationId: req.user.organization
+    });
+    
+    if (!payroll) {
+      return res.status(404).json({ success: false, error: 'كشف الراتب غير موجود' });
+    }
+    
+    // التحقق من إمكانية إعادة الحساب
+    if (payroll.workflow.lockedAt) {
+      return res.status(403).json({ success: false, error: 'الكشف مقفل ولا يمكن إعادة حسابه' });
+    }
+    
+    // جلب بيانات الموظف
+    const employee = await Employee.findOne({
+      _id: payroll.employeeId,
+      organizationId: req.user.organization
+    });
+    
+    if (!employee) {
+      return res.status(404).json({ success: false, error: 'الموظف غير موجود' });
+    }
+    
+    // استخراج الشهر والسنة من كشف الراتب
+    const [year, month] = payroll.month.split('-').map(Number);
+    
+    // حفظ البيانات القديمة للمقارنة
+    const oldData = {
+      grossSalary: payroll.summary.grossSalary,
+      totalDeductions: payroll.summary.totalDeductions,
+      netSalary: payroll.summary.netSalary,
+      attendanceDays: payroll.attendance.present,
+      absenceDays: payroll.attendance.absent,
+      lateDays: payroll.attendance.late
+    };
+    
+    // إعادة حساب الراتب من البيانات الحالية
+    const newPayrollData = await calculatePayroll(
+      employee,
+      month,
+      year,
+      req.user.organization
+    );
+    
+    // تحديث البيانات
+    payroll.employeeSnapshot = newPayrollData.employeeSnapshot;
+    payroll.attendance = newPayrollData.attendance;
+    payroll.earnings = newPayrollData.earnings;
+    payroll.deductions = newPayrollData.deductions;
+    payroll.summary = {
+      ...newPayrollData.summary,
+      paidAmount: payroll.summary.paidAmount || 0, // الحفاظ على المبلغ المدفوع
+      unpaidBalance: newPayrollData.summary.netSalary - (payroll.summary.paidAmount || 0)
+    };
+    
+    // إضافة سجل المراجعة
+    const revision = {
+      revisionNumber: payroll.revisions.length + 1,
+      date: new Date(),
+      editedBy: req.user._id,
+      changes: [
+        {
+          field: 'full_recalculation',
+          oldValue: oldData,
+          newValue: {
+            grossSalary: payroll.summary.grossSalary,
+            totalDeductions: payroll.summary.totalDeductions,
+            netSalary: payroll.summary.netSalary,
+            attendanceDays: payroll.attendance.present,
+            absenceDays: payroll.attendance.absent,
+            lateDays: payroll.attendance.late
+          },
+          reason: req.body.reason || 'إعادة حساب تلقائي بسبب تحديث بيانات الحضور أو الخصومات'
+        }
+      ]
+    };
+    
+    payroll.revisions.push(revision);
+    
+    // إذا كان مدفوعاً أو معتمداً، يحتاج موافقة مجدداً
+    if (payroll.status === 'paid' || payroll.status === 'approved') {
+      payroll.status = 'pending';
+    }
+    
+    await payroll.save();
+    
+    // حساب الفروقات
+    const differences = {
+      grossSalary: payroll.summary.grossSalary - oldData.grossSalary,
+      totalDeductions: payroll.summary.totalDeductions - oldData.totalDeductions,
+      netSalary: payroll.summary.netSalary - oldData.netSalary,
+      attendanceDays: payroll.attendance.present - oldData.attendanceDays,
+      absenceDays: payroll.attendance.absent - oldData.absenceDays,
+      lateDays: payroll.attendance.late - oldData.lateDays
+    };
+    
+    res.json({
+      success: true,
+      message: 'تم إعادة حساب كشف الراتب بنجاح',
+      data: {
+        payroll,
+        oldData,
+        differences,
+        revision
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

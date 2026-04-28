@@ -512,8 +512,311 @@ const generateDailyReportForOrganization = async (organization) => {
             currency: reportData.currency
         });
 
+        // Generate payroll summary data for the current month
+        let payrollSummaryData = null;
+        try {
+            const { default: Employee } = await import('../models/Employee.js');
+            const { default: Attendance } = await import('../models/Attendance.js');
+            const { default: Advance } = await import('../models/Advance.js');
+            const { default: Payment } = await import('../models/Payment.js');
+            const { default: Deduction } = await import('../models/Deduction.js');
+            const { default: Bonus } = await import('../models/Bonus.js');
+            const { getDaysInMonth } = await import('date-fns');
+
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+            const monthStr = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
+            
+            const startDate = new Date(currentYear, currentMonth - 1, 1, 0, 0, 0, 0);
+            const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
+            const daysInMonth = getDaysInMonth(new Date(currentYear, currentMonth - 1));
+
+            // Get all active employees
+            const employees = await Employee.find({
+                organizationId: organization._id,
+                'employment.status': 'active'
+            });
+
+            if (employees && employees.length > 0) {
+                let totalGrossSalary = 0;
+                let totalBonuses = 0;
+                let totalDeductions = 0;
+                let totalNetSalary = 0;
+                let totalPaid = 0;
+                let totalUnpaid = 0;
+                let totalAdvances = 0;
+                let totalOtherDeductions = 0;
+                
+                const employeesData = [];
+                
+                for (const employee of employees) {
+                    try {
+                        const attendance = await Attendance.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            date: { $gte: startDate, $lte: endDate }
+                        });
+                        
+                        let grossSalary = 0;
+                        if (employee.employment.type === 'monthly') {
+                            const daysPresent = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+                            const dailyRate = (employee.compensation.monthly || 0) / daysInMonth;
+                            grossSalary = dailyRate * daysPresent;
+                        } else if (employee.employment.type === 'daily') {
+                            const daysWorked = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+                            grossSalary = (employee.compensation.daily || 0) * daysWorked;
+                        } else if (employee.employment.type === 'hourly') {
+                            const totalHours = attendance.reduce((sum, a) => sum + (a.details?.totalHours || 0), 0);
+                            grossSalary = (employee.compensation.hourly || 0) * totalHours;
+                        }
+
+                        const allAdvances = await Advance.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            status: { $in: ['approved', 'paid', 'completed'] }
+                        });
+
+                        let advancesTotal = 0;
+                        for (const adv of allAdvances) {
+                            const advanceDate = adv.disbursement?.paidDate || adv.approvalDate || adv.requestDate;
+                            if (advanceDate && advanceDate <= endDate) {
+                                const deductionForMonth = adv.repayment?.deductions?.find(d => d.month === monthStr);
+                                if (deductionForMonth) {
+                                    advancesTotal += deductionForMonth.amount;
+                                } else if (adv.repayment?.remainingAmount > 0) {
+                                    const startMonth = adv.repayment?.startMonth || monthStr;
+                                    if (monthStr >= startMonth) {
+                                        const deductionAmount = Math.min(
+                                            adv.repayment.amountPerMonth || adv.amount,
+                                            adv.repayment.remainingAmount
+                                        );
+                                        if (deductionAmount > 0) {
+                                            advancesTotal += deductionAmount;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        const manualDeductions = await Deduction.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            month: monthStr
+                        });
+                        const manualDeductionsTotal = manualDeductions.reduce((sum, ded) => sum + (ded.amount || 0), 0);
+
+                        const bonuses = await Bonus.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            month: monthStr
+                        });
+                        const bonusesTotal = bonuses.reduce((sum, bonus) => sum + (bonus.amount || 0), 0);
+
+                        const otherDeductionsTotal = manualDeductionsTotal;
+                        const totalDeductionsEmp = advancesTotal + otherDeductionsTotal;
+                        const grossSalaryWithBonuses = grossSalary + bonusesTotal;
+                        const netSalary = grossSalaryWithBonuses - totalDeductionsEmp;
+
+                        const payments = await Payment.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            month: monthStr
+                        });
+                        const paidAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+                        const unpaidBalance = netSalary - paidAmount;
+
+                        totalGrossSalary += grossSalary;
+                        totalBonuses += bonusesTotal;
+                        totalDeductions += totalDeductionsEmp;
+                        totalNetSalary += netSalary;
+                        totalPaid += paidAmount;
+                        totalUnpaid += unpaidBalance;
+                        totalAdvances += advancesTotal;
+                        totalOtherDeductions += otherDeductionsTotal;
+                        
+                        employeesData.push({
+                            employeeId: employee._id,
+                            employeeName: employee.personalInfo?.name || 'غير معروف',
+                            department: employee.employment?.department || '-',
+                            position: employee.employment?.position || '-',
+                            grossSalary,
+                            bonuses: bonusesTotal,
+                            advances: advancesTotal,
+                            otherDeductions: otherDeductionsTotal,
+                            deductions: totalDeductionsEmp,
+                            netSalary,
+                            paidAmount,
+                            unpaidBalance
+                        });
+                    } catch (empError) {
+                        Logger.error(`Error calculating payroll for employee ${employee._id}:`, empError);
+                    }
+                }
+
+                payrollSummaryData = {
+                    month: currentMonth,
+                    year: currentYear,
+                    totalEmployees: employeesData.length,
+                    statistics: {
+                        totalGrossSalary,
+                        totalBonuses,
+                        totalDeductions,
+                        totalNetSalary,
+                        totalPaid,
+                        totalUnpaid,
+                        totalAdvances,
+                        totalOtherDeductions
+                    },
+                    employees: employeesData
+                };
+
+                Logger.info(`✅ Payroll summary data prepared for ${organization.name}:`, {
+                    totalEmployees: employeesData.length,
+                    totalGrossSalary,
+                    totalBonuses,
+                    totalNetSalary
+                });
+            }
+        } catch (payrollError) {
+            Logger.error(`Failed to generate payroll summary for ${organization.name}:`, payrollError);
+        }
+
+        // Generate all employees detailed PDF
+        let allEmployeesPDFData = null;
+        try {
+            Logger.info(`🔍 Checking payroll data for all employees PDF:`, {
+                hasPayrollData: !!payrollSummaryData,
+                hasEmployees: !!(payrollSummaryData?.employees),
+                employeeCount: payrollSummaryData?.employees?.length || 0
+            });
+            
+            if (payrollSummaryData && payrollSummaryData.employees && payrollSummaryData.employees.length > 0) {
+                Logger.info(`📄 Preparing detailed employee data for PDF for ${organization.name}...`);
+                
+                const { default: Employee } = await import('../models/Employee.js');
+                const { default: Attendance } = await import('../models/Attendance.js');
+                const { default: Advance } = await import('../models/Advance.js');
+                const { default: Payment } = await import('../models/Payment.js');
+                const { default: Deduction } = await import('../models/Deduction.js');
+                const { default: Bonus } = await import('../models/Bonus.js');
+                
+                const currentMonth = now.getMonth() + 1;
+                const currentYear = now.getFullYear();
+                const monthStr = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
+                const startDate = new Date(currentYear, currentMonth - 1, 1, 0, 0, 0, 0);
+                const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
+                
+                Logger.info(`📅 Date range for employee data:`, {
+                    monthStr,
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString()
+                });
+                
+                const detailedEmployeesData = [];
+                
+                for (const empSummary of payrollSummaryData.employees) {
+                    try {
+                        Logger.info(`👤 Processing employee: ${empSummary.employeeName} (${empSummary.employeeId})`);
+                        
+                        // Get full employee data
+                        const employee = await Employee.findById(empSummary.employeeId);
+                        if (!employee) {
+                            Logger.warn(`Employee not found: ${empSummary.employeeId}`);
+                            continue;
+                        }
+                        
+                        // Get attendance records
+                        const attendance = await Attendance.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            date: { $gte: startDate, $lte: endDate }
+                        }).sort({ date: 1 }).lean();
+                        
+                        // Get advances
+                        const advances = await Advance.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            month: monthStr
+                        }).sort({ requestDate: -1 }).lean();
+                        
+                        // Get bonuses
+                        const bonuses = await Bonus.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            month: monthStr
+                        }).sort({ date: -1 }).lean();
+                        
+                        // Get deductions
+                        const deductions = await Deduction.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            month: monthStr
+                        }).sort({ date: -1 }).lean();
+                        
+                        // Get payments
+                        const payments = await Payment.find({
+                            employeeId: employee._id,
+                            organizationId: organization._id,
+                            month: monthStr
+                        }).sort({ paymentDate: -1 }).lean();
+                        
+                        Logger.info(`📊 Employee data collected:`, {
+                            employeeName: empSummary.employeeName,
+                            attendanceCount: attendance.length,
+                            advancesCount: advances.length,
+                            bonusesCount: bonuses.length,
+                            deductionsCount: deductions.length,
+                            paymentsCount: payments.length
+                        });
+                        
+                        // Calculate stats (reuse from payrollSummaryData)
+                        const stats = {
+                            carriedForward: 0, // You can calculate this if needed
+                            currentMonthSalary: empSummary.grossSalary || 0,
+                            currentMonthBonuses: empSummary.bonuses || 0,
+                            currentMonthAdvances: empSummary.advances || 0,
+                            currentMonthDeductions: empSummary.deductions || 0,
+                            currentMonthPaid: empSummary.paidAmount || 0,
+                            remainingBalance: empSummary.unpaidBalance || 0,
+                            attendanceDays: attendance.filter(a => a.status === 'present' || a.status === 'late').length
+                        };
+                        
+                        detailedEmployeesData.push({
+                            employee: employee.toObject(),
+                            stats,
+                            attendance,
+                            advances,
+                            bonuses,
+                            deductions,
+                            payments
+                        });
+                        
+                        Logger.info(`✅ Employee data added to array: ${empSummary.employeeName}`);
+                        
+                    } catch (empError) {
+                        Logger.error(`Error preparing detailed data for employee ${empSummary.employeeId}:`, empError);
+                    }
+                }
+                
+                allEmployeesPDFData = detailedEmployeesData;
+                
+                Logger.info(`✅ Detailed employee data prepared for ${organization.name}:`, {
+                    totalEmployees: detailedEmployeesData.length,
+                    employeeNames: detailedEmployeesData.map(e => e.employee.personalInfo?.name)
+                });
+            } else {
+                Logger.warn(`⚠️ Cannot prepare all employees PDF - missing data:`, {
+                    hasPayrollData: !!payrollSummaryData,
+                    hasEmployees: !!(payrollSummaryData?.employees),
+                    employeeCount: payrollSummaryData?.employees?.length || 0
+                });
+            }
+        } catch (allEmpError) {
+            Logger.error(`Failed to prepare all employees PDF data for ${organization.name}:`, allEmpError);
+        }
+
         // Send report via email with PDF attachment (email.js will generate PDFs per recipient language)
-        await sendDailyReport(reportData, reportEmails, null, ownerLanguage, organizationCurrency);
+        await sendDailyReport(reportData, reportEmails, null, ownerLanguage, organizationCurrency, payrollSummaryData, allEmployeesPDFData);
         
         // Update lastReportSentAt timestamp
         organization.reportSettings.lastReportSentAt = new Date();

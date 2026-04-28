@@ -509,17 +509,22 @@ class ApiClient {
             };
           }
         }
-        // Log validation errors for debugging
-        if (response.status === 400 && data.errors) {
-          console.error('Validation errors:', data.errors);
+        // Only log errors in development mode to avoid cluttering console
+        if (process.env.NODE_ENV === 'development') {
+          // Log validation errors for debugging
+          if (response.status === 400 && data.errors) {
+            console.warn('Validation errors:', data.errors);
+          }
+          
+          // Log the full error response for debugging (only for server errors)
+          if (response.status >= 500) {
+            console.error('API Error Response:', {
+              status: response.status,
+              statusText: response.statusText,
+              data
+            });
+          }
         }
-        
-        // Log the full error response for debugging
-        console.error('API Error Response:', {
-          status: response.status,
-          statusText: response.statusText,
-          data
-        });
         
         return {
           success: false,

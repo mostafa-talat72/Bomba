@@ -180,12 +180,18 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
         }
       };
 
-      await api.post('/payroll/employees', data);
-      message.success(t('payroll.employeeList.messages.addSuccess'));
-      setIsModalVisible(false);
-      fetchEmployees();
+      const response = await api.post('/payroll/employees', data);
+      
+      if (response.success) {
+        message.success(t('payroll.employeeList.messages.addSuccess'));
+        setIsModalVisible(false);
+        form.resetFields();
+        fetchEmployees();
+      } else {
+        message.error(response.message || t('payroll.employeeList.messages.saveError'));
+      }
     } catch (error: any) {
-      message.error(error.response?.data?.error || t('payroll.employeeList.messages.saveError'));
+      message.error(error.message || t('payroll.employeeList.messages.saveError'));
     }
   };
 

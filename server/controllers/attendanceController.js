@@ -56,14 +56,49 @@ export const getAttendanceByMonth = async (req, res) => {
       }
     }).sort({ date: 1 });
     
+    // الحصول على إعدادات ساعات العمل من المؤسسة
+    let workHoursPerDay = 8; // القيمة الافتراضية
+    try {
+      const payrollSettings = await Settings.findOne({
+        category: 'payroll',
+        organization: req.user.organization
+      });
+      if (payrollSettings && payrollSettings.settings.workHoursPerDay) {
+        workHoursPerDay = payrollSettings.settings.workHoursPerDay;
+      }
+    } catch (error) {
+      console.log('Using default work hours:', workHoursPerDay);
+    }
+    
     // تحويل البيانات للعرض وإعادة حساب الساعات
     const formattedAttendance = attendance.map(a => {
       let hours = a.details?.totalHours || 0;
       let overtime = a.details?.overtimeHours || 0;
       let lateMinutes = a.details?.lateMinutes || 0;
       
-      // إعادة حساب الساعات إذا كانت سالبة
-      if (a.checkIn && a.checkOut && hours < 0) {
+      // للغياب والإجازة: لا يوجد ساعات
+      if (a.status === 'absent' || a.status === 'leave' || a.status === 'weekly_off') {
+        return {
+          _id: a._id,
+          date: format(a.date, 'yyyy-MM-dd'),
+          day: format(a.date, 'EEEE', { locale: getDateFnsLocale(req.user) }),
+          status: a.status,
+          checkIn: null,
+          checkOut: null,
+          hours: 0,
+          overtime: 0,
+          lateMinutes: 0,
+          reason: a.reason,
+          excused: a.excused,
+          notes: a.notes,
+          dailySalary: 0,
+          overtimePay: 0,
+          totalPay: 0
+        };
+      }
+      
+      // إعادة حساب الساعات إذا كانت سالبة أو صفر
+      if (a.checkIn && a.checkOut && hours <= 0) {
         let checkInTime = new Date(a.checkIn);
         let checkOutTime = new Date(a.checkOut);
         
@@ -73,7 +108,8 @@ export const getAttendanceByMonth = async (req, res) => {
         }
         
         hours = (checkOutTime - checkInTime) / (1000 * 60 * 60);
-        overtime = Math.max(hours - 8, 0);
+        // حساب الوقت الإضافي بناءً على ساعات العمل المحددة في المنشأة
+        overtime = Math.max(hours - workHoursPerDay, 0);
         
         // إعادة حساب التأخير فقط للحالة "late" وللحضور الصباحي
         lateMinutes = 0;
@@ -151,7 +187,7 @@ export const markAttendance = async (req, res) => {
     }
     
     // الحصول على إعدادات ساعات العمل من المؤسسة
-    let workHoursPerDay = 10; // القيمة الافتراضية
+    let workHoursPerDay = 8; // القيمة الافتراضية
     try {
       const payrollSettings = await Settings.findOne({
         category: 'payroll',
@@ -161,6 +197,7 @@ export const markAttendance = async (req, res) => {
         workHoursPerDay = payrollSettings.settings.workHoursPerDay;
       }
     } catch (error) {
+      console.log('Using default work hours:', workHoursPerDay);
     }
     
     const attendanceDate = new Date(date);
@@ -207,7 +244,8 @@ export const markAttendance = async (req, res) => {
       if (employee.employment.type === 'daily') {
         dailySalary = employee.compensation.daily || 0;
       } else if (employee.employment.type === 'hourly') {
-        dailySalary = (employee.compensation.hourly || 0) * totalHours;
+        // للموظف بالساعة: نحسب فقط الساعات الأساسية (بدون الإضافي)
+        dailySalary = (employee.compensation.hourly || 0) * regularHours;
       } else if (employee.employment.type === 'monthly') {
         // للموظفين الشهريين، نحسب الراتب اليومي = الراتب الشهري / 30
         dailySalary = (employee.compensation.monthly || 0) / 30;

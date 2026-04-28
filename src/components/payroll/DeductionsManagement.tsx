@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Modal, Form, InputNumber, Input, Select, DatePicker, Tag, message, Card, Row, Col, Empty, Spin } from 'antd';
+import { Button, Modal, Form, InputNumber, Input, Select, DatePicker, Tag, message, Card, Row, Col, Empty, Spin, ConfigProvider } from 'antd';
 import { Plus, Trash2, DollarSign, User, Calendar, FileText } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
 import { numberOnlyInputProps, integerOnlyInputProps } from '../../utils/inputHelpers';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../../contexts/LanguageContext';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
@@ -35,13 +38,26 @@ interface DeductionsManagementProps {
 }
 
 const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelectedEmployeeId, autoOpenModal = false }) => {
-  const { t } = useTranslation();
-  const { language } = useLanguage();
+  const { t, i18n } = useTranslation();
+  const { language, isRTL } = useLanguage();
   const [deductions, setDeductions] = useState<Deduction[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(autoOpenModal);
   const [form] = Form.useForm();
+
+  // Get locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      case 'en':
+      default:
+        return enUS;
+    }
+  };
 
   useEffect(() => {
     dayjs.locale(language);
@@ -244,15 +260,16 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
       )}
 
       {/* Add Deduction Modal */}
-      <Modal
-        title={t('payroll.deductionsManagement.form.title')}
-        open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
-        footer={null}
-        width={600}
-        className="dark:bg-gray-800"
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      <ConfigProvider direction={isRTL ? 'rtl' : 'ltr'} locale={getAntdLocale()}>
+        <Modal
+          title={t('payroll.deductionsManagement.form.title')}
+          open={isModalVisible}
+          onCancel={() => setIsModalVisible(false)}
+          footer={null}
+          width={600}
+          className="dark:bg-gray-800"
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
             label={<span className="dark:text-gray-200">{t('payroll.deductionsManagement.form.employee')}</span>}
             name="employeeId"
@@ -348,6 +365,7 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
           </Form.Item>
         </Form>
       </Modal>
+      </ConfigProvider>
     </div>
   );
 };

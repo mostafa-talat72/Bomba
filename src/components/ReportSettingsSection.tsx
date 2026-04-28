@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Mail, Clock, FileText, Users, Plus, X, AlertCircle, Check, Info, Send } from 'lucide-react';
-import { TimePicker } from 'antd';
+import LocalizedTimePicker from './common/LocalizedTimePicker';
 import dayjs, { Dayjs } from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
@@ -228,10 +228,9 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
               {t('settings.organization.dailyReports.reportStartTime')}
             </h4>
             <div className="space-y-3">
-              <TimePicker
+              <LocalizedTimePicker
                 value={dayjs(settings.dailyReportStartTime, 'HH:mm')}
                 onChange={(time) => handleTimeChange(time, 'start')}
-                format="HH:mm"
                 className="w-full"
                 size="large"
                 placeholder={t('settings.organization.dailyReports.selectStartTime')}
@@ -258,10 +257,9 @@ export const ReportSettingsSection: React.FC<ReportSettingsSectionProps> = ({
               {t('settings.organization.dailyReports.reportSendTime')}
             </h4>
             <div className="space-y-3">
-              <TimePicker
+              <LocalizedTimePicker
                 value={dayjs(settings.dailyReportSendTime, 'HH:mm')}
                 onChange={(time) => handleTimeChange(time, 'send')}
-                format="HH:mm"
                 className="w-full"
                 size="large"
                 placeholder={t('settings.organization.dailyReports.selectSendTime')}

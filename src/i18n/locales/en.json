@@ -2967,7 +2967,72 @@
       "addDeduction": "Add discount",
       "deductionType": "Discount type",
       "deductionReason": "Reason for discount...",
-      "amountWillBeDeducted": "The amount will be deducted from the employee's salary"
+      "amountWillBeDeducted": "The amount will be deducted from the employee's salary",
+      "editDeduction": "Edit Deduction"
+    },
+    "bonusManagement": {
+      "title": "Bonus Management",
+      "addNew": "Add Bonus",
+      "addBonus": "Add Bonus",
+      "editBonus": "Edit Bonus",
+      "edit": "Edit",
+      "delete": "Delete",
+      "empty": "No bonuses found",
+      "employee": "Employee",
+      "amount": "Amount",
+      "date": "Date:",
+      "reason": "Reason:",
+      "notes": "Notes:",
+      "bonusType": "Bonus Type",
+      "amountWillBeAdded": "This amount will be added to employee salary",
+      "types": {
+        "performance": "Performance",
+        "holiday": "Holiday",
+        "achievement": "Achievement",
+        "sales": "Sales",
+        "attendance": "Attendance",
+        "overtime": "Overtime Hours",
+        "other": "Other"
+      },
+      "form": {
+        "title": "Add Bonus",
+        "editTitle": "Edit Bonus",
+        "employee": "Employee",
+        "employeeRequired": "Employee is required",
+        "employeePlaceholder": "Select employee",
+        "type": "Bonus Type",
+        "typeRequired": "Bonus type is required",
+        "amount": "Amount",
+        "amountRequired": "Amount is required",
+        "amountPlaceholder": "Enter amount",
+        "date": "Date",
+        "dateRequired": "Date is required",
+        "datePlaceholder": "Select date",
+        "reason": "Reason",
+        "reasonRequired": "Reason is required",
+        "reasonPlaceholder": "Reason for bonus...",
+        "notes": "Notes (Optional)",
+        "notesPlaceholder": "Additional notes...",
+        "submit": "Add",
+        "update": "Update",
+        "cancel": "Cancel"
+      },
+      "confirmDelete": {
+        "title": "Confirm Deletion",
+        "content": "Are you sure you want to delete this bonus?",
+        "okText": "Delete",
+        "cancelText": "Cancel"
+      },
+      "messages": {
+        "loadError": "Failed to load bonuses",
+        "loadEmployeesError": "Failed to load employees",
+        "addSuccess": "Bonus added successfully",
+        "addError": "Failed to add bonus",
+        "updateSuccess": "Bonus updated successfully",
+        "updateError": "Failed to update bonus",
+        "deleteSuccess": "Bonus deleted successfully",
+        "deleteError": "Failed to delete"
+      }
     },
     "attendanceManagement": {
       "title": "Attendance management",
@@ -3124,6 +3189,7 @@
         "employeesWithDebts": "Owe",
         "employeesBalanced": "Equals",
         "employee": "employee",
+        "totalBonuses": "Total Bonuses",
         "totalGrossSalary": "Total receivables",
         "totalDeductions": "Total discounts",
         "totalNetSalary": "Net receivable",
@@ -3154,6 +3220,7 @@
       "table": {
         "employee": "Employee",
         "grossSalary": "Gross salary",
+        "bonuses": "Bonuses",
         "advances": "predecessor",
         "otherDeductions": "Other discounts",
         "totalDeductions": "Total discounts",
@@ -3212,6 +3279,7 @@
       "carriedForward": "Carry over from previous months",
       "currentMonthSalary": "Current month's salary",
       "monthAdvances": "Advance of the month",
+      "monthBonuses": "Month Bonuses",
       "monthDeductions": "Discounts of the month",
       "paidSalary": "Salary disbursed",
       "availableBalance": "Available balance",
@@ -3224,6 +3292,7 @@
         "attendance": "Attendance and departure",
         "advances": "predecessor",
         "deductions": "Discounts",
+        "bonuses": "Bonuses",
         "payments": "Payments"
       },
       "table": {
@@ -3248,6 +3317,7 @@
         "attendance": "There are no attendance records",
         "advances": "There are no predecessors",
         "deductions": "There are no discounts",
+        "bonuses": "No bonuses found",
         "payments": "There are no payments",
         "noEmployee": "No employee data found"
       },
@@ -3342,6 +3412,7 @@
       "value": "Value",
       "employeeCount": "Number of employees",
       "totalGross": "Total receivables",
+      "totalBonuses": "Total Bonuses",
       "totalDeductions": "Total discounts",
       "netDue": "Net receivable",
       "paid": "Paid",
@@ -3352,8 +3423,10 @@
       "employee": "Employee",
       "department": "Section",
       "gross": "Total",
+      "bonuses": "Bonuses",
       "deductions": "Discounts",
       "net": "Net",
+      "paid": "Paid",
       "remaining": "residual",
       "carried": "relay",
       "total": "Total"

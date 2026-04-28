@@ -3,6 +3,8 @@ import Employee from '../models/Employee.js';
 import Attendance from '../models/Attendance.js';
 import Advance from '../models/Advance.js';
 import Deduction from '../models/Deduction.js';
+import Bonus from '../models/Bonus.js';
+import Settings from '../models/Settings.js';
 
 // Get employee salary summary (cumulative)
 export const getEmployeeSalarySummary = async (req, res) => {
@@ -41,6 +43,104 @@ export const getEmployeeSalarySummary = async (req, res) => {
       employeeId,
       date: { $gte: currentMonthStart, $lte: currentMonthEnd },
       organizationId: req.user.organization
+    }).sort({ date: 1 });
+    
+    // الحصول على إعدادات ساعات العمل من المؤسسة
+    let workHoursPerDay = 8; // القيمة الافتراضية
+    try {
+      const payrollSettings = await Settings.findOne({
+        category: 'payroll',
+        organization: req.user.organization
+      });
+      if (payrollSettings && payrollSettings.settings.workHoursPerDay) {
+        workHoursPerDay = payrollSettings.settings.workHoursPerDay;
+      }
+    } catch (error) {
+      console.log('Using default work hours:', workHoursPerDay);
+    }
+    
+    // تنسيق سجلات الحضور مع إعادة حساب البيانات المفقودة
+    const formattedAttendance = currentMonthAttendance.map(record => {
+      let hours = record.details?.totalHours || 0;
+      let overtime = record.details?.overtimeHours || 0;
+      let dailySalary = record.details?.dailySalary || 0;
+      let overtimePay = record.details?.overtimePay || 0;
+      let totalPay = record.details?.totalPay || 0;
+      let lateMinutes = record.details?.lateMinutes || 0;
+      
+      // للغياب والإجازة: لا يوجد ساعات أو مرتب
+      if (record.status === 'absent' || record.status === 'leave' || record.status === 'weekly_off') {
+        return {
+          _id: record._id,
+          date: record.date,
+          day: record.day,
+          status: record.status,
+          checkIn: null,  // لا يوجد وقت حضور
+          checkOut: null, // لا يوجد وقت انصراف
+          hours: 0,
+          overtime: 0,
+          lateMinutes: 0,
+          reason: record.reason,
+          excused: record.excused,
+          notes: record.notes,
+          dailySalary: 0,
+          overtimePay: 0,
+          totalPay: 0
+        };
+      }
+      
+      // إعادة حساب إذا كانت البيانات مفقودة أو خاطئة
+      if (record.checkIn && record.checkOut && (hours === 0 || totalPay === 0)) {
+        let checkInTime = new Date(record.checkIn);
+        let checkOutTime = new Date(record.checkOut);
+        
+        // إذا كان وقت الانصراف أقل من وقت الحضور، فهذا يعني أن الانصراف في اليوم التالي
+        if (checkOutTime <= checkInTime) {
+          checkOutTime = new Date(checkOutTime.getTime() + 24 * 60 * 60 * 1000);
+        }
+        
+        hours = (checkOutTime - checkInTime) / (1000 * 60 * 60);
+        // حساب الوقت الإضافي بناءً على ساعات العمل المحددة في المنشأة
+        overtime = Math.max(hours - workHoursPerDay, 0);
+        
+        // حساب المرتب
+        if (record.status === 'present' || record.status === 'late') {
+          if (employee.employment.type === 'daily') {
+            dailySalary = employee.compensation.daily || 0;
+          } else if (employee.employment.type === 'hourly') {
+            // للموظف بالساعة: نحسب فقط الساعات الأساسية (بدون الإضافي)
+            const regularHours = Math.min(hours, workHoursPerDay);
+            dailySalary = (employee.compensation.hourly || 0) * regularHours;
+          } else if (employee.employment.type === 'monthly') {
+            dailySalary = (employee.compensation.monthly || 0) / 30;
+          }
+          
+          // حساب الوقت الإضافي
+          if (overtime > 0 && employee.compensation.overtimeHourlyRate) {
+            overtimePay = overtime * employee.compensation.overtimeHourlyRate;
+          }
+          
+          totalPay = dailySalary + overtimePay;
+        }
+      }
+      
+      return {
+        _id: record._id,
+        date: record.date,
+        day: record.day,
+        status: record.status,
+        checkIn: record.checkIn,
+        checkOut: record.checkOut,
+        hours: hours,
+        overtime: overtime,
+        lateMinutes: lateMinutes,
+        reason: record.reason,
+        excused: record.excused,
+        notes: record.notes,
+        dailySalary: dailySalary,
+        overtimePay: overtimePay,
+        totalPay: totalPay
+      };
     });
     
     // حساب راتب الشهر الحالي بناءً على نوع التوظيف
@@ -49,7 +149,7 @@ export const getEmployeeSalarySummary = async (req, res) => {
     if (employee.employment.type === 'monthly') {
       // للموظف الشهري: نحسب الراتب بناءً على أيام الحضور
       const daysInMonth = new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() + 1, 0).getDate();
-      const daysPresent = currentMonthAttendance.filter(record => 
+      const daysPresent = formattedAttendance.filter(record => 
         record.status === 'present' || record.status === 'late'
       ).length;
       
@@ -58,8 +158,8 @@ export const getEmployeeSalarySummary = async (req, res) => {
       
     } else {
       // للموظف اليومي أو بالساعة: نستخدم totalPay من السجلات
-      currentMonthSalary = currentMonthAttendance.reduce((sum, record) => 
-        sum + (record.details?.totalPay || 0), 0
+      currentMonthSalary = formattedAttendance.reduce((sum, record) => 
+        sum + (record.totalPay || 0), 0
       );
     }
     
@@ -79,6 +179,14 @@ export const getEmployeeSalarySummary = async (req, res) => {
     });
     
     const currentMonthDeductionsTotal = currentMonthDeductions.reduce((sum, ded) => sum + ded.amount, 0);
+    
+    const currentMonthBonuses = await Bonus.find({
+      employeeId,
+      date: { $gte: currentMonthStart, $lte: currentMonthEnd },
+      organizationId: req.user.organization
+    });
+    
+    const currentMonthBonusesTotal = currentMonthBonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
     
     const currentMonthPayments = await Payment.find({
       employeeId,
@@ -156,6 +264,14 @@ export const getEmployeeSalarySummary = async (req, res) => {
     
     const previousDeductionsTotal = previousDeductions.reduce((sum, ded) => sum + ded.amount, 0);
     
+    const previousBonuses = await Bonus.find({
+      employeeId,
+      date: { $lte: previousMonthEnd },
+      organizationId: req.user.organization
+    });
+    
+    const previousBonusesTotal = previousBonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
+    
     const previousPayments = await Payment.find({
       employeeId,
       paymentDate: { $lte: previousMonthEnd },
@@ -165,16 +281,17 @@ export const getEmployeeSalarySummary = async (req, res) => {
     
     // ========== الحسابات ==========
     // المرحل من الأشهر السابقة
-    const carriedForward = (previousSalaries - previousAdvancesTotal - previousDeductionsTotal) - previousPaid;
+    const carriedForward = (previousSalaries + previousBonusesTotal - previousAdvancesTotal - previousDeductionsTotal) - previousPaid;
 
     // الإجماليات التراكمية (حتى نهاية الشهر الحالي)
     const totalSalaries = previousSalaries + currentMonthSalary;
+    const totalBonuses = previousBonusesTotal + currentMonthBonusesTotal;
     const totalAdvances = previousAdvancesTotal + currentMonthAdvancesTotal;
     const totalDeductions = previousDeductionsTotal + currentMonthDeductionsTotal;
     const totalPaid = previousPaid + currentMonthPaid;
     
     // الرصيد المتاح
-    const netSalary = totalSalaries - totalAdvances - totalDeductions;
+    const netSalary = totalSalaries + totalBonuses - totalAdvances - totalDeductions;
     const remainingBalance = netSalary - totalPaid;
     
     res.json({
@@ -182,6 +299,7 @@ export const getEmployeeSalarySummary = async (req, res) => {
       data: {
         // الإجماليات التراكمية (من بداية التوظيف حتى الآن)
         totalSalaries,
+        totalBonuses,
         totalAdvances,
         totalDeductions,
         totalPaid,
@@ -191,12 +309,14 @@ export const getEmployeeSalarySummary = async (req, res) => {
         // الشهر الحالي
         currentMonth: {
           salary: currentMonthSalary,
+          bonuses: currentMonthBonusesTotal,
           advances: currentMonthAdvancesTotal,
           deductions: currentMonthDeductionsTotal,
           paid: currentMonthPaid,
-          net: currentMonthSalary - currentMonthAdvancesTotal - currentMonthDeductionsTotal - currentMonthPaid
+          net: currentMonthSalary + currentMonthBonusesTotal - currentMonthAdvancesTotal - currentMonthDeductionsTotal - currentMonthPaid
         },
         currentMonthSalary,
+        currentMonthBonuses: currentMonthBonusesTotal,
         currentMonthAdvances: currentMonthAdvancesTotal,
         currentMonthDeductions: currentMonthDeductionsTotal,
         currentMonthPaid,
@@ -205,9 +325,10 @@ export const getEmployeeSalarySummary = async (req, res) => {
         carriedForward,
         
         // التفاصيل
-        attendanceRecords: currentMonthAttendance,
+        attendanceRecords: formattedAttendance,
         advances: currentMonthAdvances,
         deductions: currentMonthDeductions,
+        bonuses: currentMonthBonuses,
         payments: currentMonthPayments
       }
     });
@@ -276,6 +397,15 @@ export const makePayment = async (req, res) => {
     
     const currentMonthDeductions = deductions.reduce((sum, ded) => sum + ded.amount, 0);
     
+    // حساب مكافآت الشهر الحالي فقط
+    const bonuses = await Bonus.find({
+      employeeId,
+      date: { $gte: monthStart, $lte: monthEnd },
+      organizationId: req.user.organization
+    });
+    
+    const currentMonthBonuses = bonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
+    
     // حساب المدفوعات السابقة في هذا الشهر
     const payments = await Payment.find({
       employeeId,
@@ -322,6 +452,15 @@ export const makePayment = async (req, res) => {
     
     const previousTotalDeductions = previousDeductions.reduce((sum, ded) => sum + ded.amount, 0);
     
+    // إجمالي المكافآت حتى الشهر السابق
+    const previousBonuses = await Bonus.find({
+      employeeId,
+      date: { $lte: previousMonthEnd },
+      organizationId: req.user.organization
+    });
+    
+    const previousTotalBonuses = previousBonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
+    
     // إجمالي المدفوعات حتى الشهر السابق
     const previousPayments = await Payment.find({
       employeeId,
@@ -332,10 +471,10 @@ export const makePayment = async (req, res) => {
     const previousTotalPaid = previousPayments.reduce((sum, pay) => sum + pay.amount, 0);
     
     // المبلغ المرحل من الأشهر السابقة
-    const carriedForward = (previousTotalSalaries - previousTotalAdvances - previousTotalDeductions) - previousTotalPaid;
+    const carriedForward = (previousTotalSalaries + previousTotalBonuses - previousTotalAdvances - previousTotalDeductions) - previousTotalPaid;
     
-    // الرصيد المتاح = (مرتب الشهر الحالي - سلف الشهر - خصومات الشهر - مدفوعات الشهر) + المرحل
-    const netSalary = currentMonthSalary - currentMonthAdvances - currentMonthDeductions;
+    // الرصيد المتاح = (مرتب الشهر الحالي + مكافآت الشهر - سلف الشهر - خصومات الشهر - مدفوعات الشهر) + المرحل
+    const netSalary = currentMonthSalary + currentMonthBonuses - currentMonthAdvances - currentMonthDeductions;
     const remainingBalance = netSalary - currentMonthPaid + carriedForward;
 
     if (amount > remainingBalance) {

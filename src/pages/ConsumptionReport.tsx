@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ConfigProvider, Table, DatePicker, Tabs, Spin, Empty, TimePicker } from 'antd';
+import { ConfigProvider, Table, DatePicker, Tabs, Spin, Empty } from 'antd';
+import LocalizedTimePicker from '../components/common/LocalizedTimePicker';
 import {
   ShoppingCartOutlined,
   CoffeeOutlined,
@@ -1403,11 +1404,10 @@ const ConsumptionReport = () => {
                       placeholder={t('consumptionReport.dateRange.startDatePlaceholder')}
                       size="large"
                     />
-                    <TimePicker
+                    <LocalizedTimePicker
                       value={timeRange[0]}
                       onChange={(time) => handleTimeChange(time, 'start')}
                       className="w-full"
-                      format="hh:mm A"
                       minuteStep={15}
                       placeholder={t('consumptionReport.dateRange.startTimePlaceholder')}
                       size="large"
@@ -1431,11 +1431,10 @@ const ConsumptionReport = () => {
                       placeholder={t('consumptionReport.dateRange.endDatePlaceholder')}
                       size="large"
                     />
-                    <TimePicker
+                    <LocalizedTimePicker
                       value={timeRange[1]}
                       onChange={(time) => handleTimeChange(time, 'end')}
                       className="w-full"
-                      format="hh:mm A"
                       minuteStep={15}
                       placeholder={t('consumptionReport.dateRange.endTimePlaceholder')}
                       size="large"

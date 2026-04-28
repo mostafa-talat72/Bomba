@@ -2967,7 +2967,72 @@
       "addDeduction": "Ajouter une remise",
       "deductionType": "Type de remise",
       "deductionReason": "Raison de la réduction...",
-      "amountWillBeDeducted": "Le montant sera déduit du salaire du salarié"
+      "amountWillBeDeducted": "Le montant sera déduit du salaire du salarié",
+      "editDeduction": "Modifier la déduction"
+    },
+    "bonusManagement": {
+      "title": "Gestion des Primes",
+      "addNew": "Ajouter une Prime",
+      "addBonus": "Ajouter une Prime",
+      "editBonus": "Modifier la Prime",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "empty": "Aucune prime trouvée",
+      "employee": "Employé",
+      "amount": "Montant",
+      "date": "Date:",
+      "reason": "Raison:",
+      "notes": "Notes:",
+      "bonusType": "Type de Prime",
+      "amountWillBeAdded": "Ce montant sera ajouté au salaire de l'employé",
+      "types": {
+        "performance": "Performance",
+        "holiday": "Vacances",
+        "achievement": "Réalisation",
+        "sales": "Ventes",
+        "attendance": "Présence",
+        "overtime": "Heures Supplémentaires",
+        "other": "Autre"
+      },
+      "form": {
+        "title": "Ajouter une Prime",
+        "editTitle": "Modifier la Prime",
+        "employee": "Employé",
+        "employeeRequired": "L'employé est requis",
+        "employeePlaceholder": "Sélectionner un employé",
+        "type": "Type de Prime",
+        "typeRequired": "Le type de prime est requis",
+        "amount": "Montant",
+        "amountRequired": "Le montant est requis",
+        "amountPlaceholder": "Entrer le montant",
+        "date": "Date",
+        "dateRequired": "La date est requise",
+        "datePlaceholder": "Sélectionner la date",
+        "reason": "Raison",
+        "reasonRequired": "La raison est requise",
+        "reasonPlaceholder": "Raison de la prime...",
+        "notes": "Notes (Optionnel)",
+        "notesPlaceholder": "Notes supplémentaires...",
+        "submit": "Ajouter",
+        "update": "Mettre à jour",
+        "cancel": "Annuler"
+      },
+      "confirmDelete": {
+        "title": "Confirmer la Suppression",
+        "content": "Êtes-vous sûr de vouloir supprimer cette prime?",
+        "okText": "Supprimer",
+        "cancelText": "Annuler"
+      },
+      "messages": {
+        "loadError": "Échec du chargement des primes",
+        "loadEmployeesError": "Échec du chargement des employés",
+        "addSuccess": "Prime ajoutée avec succès",
+        "addError": "Échec de l'ajout de la prime",
+        "updateSuccess": "Prime mise à jour avec succès",
+        "updateError": "Échec de la mise à jour de la prime",
+        "deleteSuccess": "Prime supprimée avec succès",
+        "deleteError": "Échec de la suppression"
+      }
     },
     "attendanceManagement": {
       "title": "Gestion des présences",
@@ -3124,6 +3189,7 @@
         "employeesWithDebts": "Devoir",
         "employeesBalanced": "Égal",
         "employee": "employé",
+        "totalBonuses": "Total des primes",
         "totalGrossSalary": "Total des créances",
         "totalDeductions": "Remises totales",
         "totalNetSalary": "Créance nette",
@@ -3154,6 +3220,7 @@
       "table": {
         "employee": "Employé",
         "grossSalary": "Salaire brut",
+        "bonuses": "Primes",
         "advances": "prédécesseur",
         "otherDeductions": "Autres réductions",
         "totalDeductions": "Remises totales",
@@ -3212,6 +3279,7 @@
       "carriedForward": "Report des mois précédents",
       "currentMonthSalary": "Salaire du mois en cours",
       "monthAdvances": "Avance du mois",
+      "monthBonuses": "Primes du Mois",
       "monthDeductions": "Réductions du mois",
       "paidSalary": "Salaire versé",
       "availableBalance": "Solde disponible",
@@ -3224,6 +3292,7 @@
         "attendance": "Présence et départ",
         "advances": "prédécesseur",
         "deductions": "Réductions",
+        "bonuses": "Primes",
         "payments": "Paiements"
       },
       "table": {
@@ -3248,6 +3317,7 @@
         "attendance": "Il n'y a pas de relevé de présence",
         "advances": "Il n'y a pas de prédécesseurs",
         "deductions": "Il n'y a pas de réductions",
+        "bonuses": "Aucune prime trouvée",
         "payments": "Il n'y a pas de paiements",
         "noEmployee": "Aucune donnée sur les employés trouvée"
       },
@@ -3342,6 +3412,7 @@
       "value": "Valeur",
       "employeeCount": "Nombre d'employés",
       "totalGross": "Total des créances",
+      "totalBonuses": "Total des primes",
       "totalDeductions": "Remises totales",
       "netDue": "Créance nette",
       "paid": "Payé",
@@ -3352,8 +3423,10 @@
       "employee": "Employé",
       "department": "Section",
       "gross": "Total",
+      "bonuses": "Primes",
       "deductions": "Réductions",
       "net": "Filet",
+      "paid": "Payé",
       "remaining": "résiduel",
       "carried": "relais",
       "total": "Total"

@@ -6,6 +6,7 @@ import * as advanceController from '../controllers/advanceController.js';
 import * as payrollController from '../controllers/payrollController.js';
 import * as deductionController from '../controllers/deductionController.js';
 import * as paymentController from '../controllers/paymentController.js';
+import * as bonusController from '../controllers/bonusController.js';
 
 const router = express.Router();
 
@@ -63,6 +64,7 @@ router.get('/payrolls/:id', auth, payrollController.getPayrollById);
 router.post('/payrolls/generate', auth, payrollController.generatePayroll);
 router.post('/payrolls/bulk-generate', auth, payrollController.bulkGeneratePayrolls);
 router.put('/payrolls/:id/edit', auth, payrollController.editPayroll);
+router.post('/payrolls/:id/recalculate', auth, payrollController.recalculatePayroll);
 router.post('/payrolls/:id/approve', auth, payrollController.approvePayroll);
 router.post('/payrolls/:id/pay', auth, payrollController.payPayroll);
 router.post('/payrolls/:id/lock', auth, payrollController.lockPayroll);
@@ -78,5 +80,15 @@ router.get('/payments/summary/:employeeId', auth, paymentController.getEmployeeS
 router.post('/payments', auth, paymentController.makePayment);
 router.put('/payments/:id', auth, paymentController.updatePayment);
 router.delete('/payments/:id', auth, paymentController.deletePayment);
+
+// ═══════════════════════════════════════
+// Bonus Routes
+// ═══════════════════════════════════════
+router.get('/bonuses', auth, bonusController.getBonuses);
+router.get('/bonuses/summary', auth, bonusController.getBonusSummary);
+router.get('/bonuses/:employeeId/:month', auth, bonusController.getBonusesByMonth);
+router.post('/bonuses', auth, bonusController.createBonus);
+router.put('/bonuses/:id', auth, bonusController.updateBonus);
+router.delete('/bonuses/:id', auth, bonusController.deleteBonus);
 
 export default router;
