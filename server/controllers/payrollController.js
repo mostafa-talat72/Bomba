@@ -1037,22 +1037,7 @@ export const getPayrollSummary = async (req, res) => {
           date: { $gte: hireDate, $lte: previousMonthEnd }
         });
         
-        console.log(`   📋 Previous attendance records: ${previousAttendance.length}`);
-        console.log(`   📅 Hire date: ${hireDate.toISOString().substring(0, 10)}`);
-        console.log(`   📅 Previous month end: ${previousMonthEnd.toISOString().substring(0, 10)}`);
-        console.log(`   💼 Employment type: ${employee.employment.type}`);
-        console.log(`   💰 Monthly salary: ${employee.compensation?.monthly || 0}`);
-        console.log(`   💰 Daily salary: ${employee.compensation?.daily || 0}`);
-        console.log(`   💰 Hourly salary: ${employee.compensation?.hourly || 0}`);
-        
-        // Print attendance details
-        if (previousAttendance.length > 0) {
-          console.log(`   📊 Attendance details:`);
-          previousAttendance.forEach(att => {
-            console.log(`      - ${att.date.toISOString().substring(0, 10)}: status=${att.status}, totalPay=${att.details?.totalPay || 0}`);
-          });
-        }
-        
+             
         
         // Calculate previous salaries based on employment type
         let previousSalaries = 0;
@@ -1076,7 +1061,6 @@ export const getPayrollSummary = async (req, res) => {
             }
           });
           
-          console.log(`   📅 Attendance by month for ${employee.personalInfo?.name}:`, attendanceByMonth);
           
           // Calculate salary for each month
           Object.keys(attendanceByMonth).forEach(monthKey => {
@@ -1088,7 +1072,6 @@ export const getPayrollSummary = async (req, res) => {
             const monthlySalary = employee.compensation?.monthly || 0;
             const monthSalary = (monthlySalary / daysInMonth) * monthData.present;
             
-            console.log(`      ${monthKey}: ${monthData.present} days present / ${daysInMonth} days in month = ${monthSalary.toFixed(2)}`);
             
             previousSalaries += monthSalary;
             
@@ -1146,15 +1129,7 @@ export const getPayrollSummary = async (req, res) => {
         // This can be positive (مستحقات) or negative (ديون)
         carriedForward = (previousSalaries + previousBonusesTotal - previousAdvancesTotal - previousDeductionsTotal) - previousPaid;
         
-        // Log details for debugging
-        console.log(`\n📊 Employee: ${employee.personalInfo?.name || 'Unknown'}`);
-        console.log(`   Previous Salaries: ${previousSalaries.toFixed(2)}`);
-        console.log(`   Previous Bonuses: ${previousBonusesTotal.toFixed(2)}`);
-        console.log(`   Previous Advances: ${previousAdvancesTotal.toFixed(2)}`);
-        console.log(`   Previous Deductions: ${previousDeductionsTotal.toFixed(2)}`);
-        console.log(`   Previous Paid: ${previousPaid.toFixed(2)}`);
-        console.log(`   ➡️ Carried Forward: ${carriedForward.toFixed(2)}`);
-        
+      
         const totalUnpaidWithCarried = unpaidBalance + carriedForward;
 
         totalGrossSalary += grossSalary;
@@ -1195,10 +1170,7 @@ export const getPayrollSummary = async (req, res) => {
     const totalObligationsWithCarried = totalUnpaid; // إجمالي المستحقات الكلي (المتبقي + المرحل)
     const totalBonuses = employeesData.reduce((sum, e) => sum + (e.bonuses || 0), 0);
     
-    console.log(`\n✅ Total Carried Forward (sum of all employees): ${totalCarriedForward.toFixed(2)}`);
-    console.log(`   Employees count: ${employeesData.length}`);
-    console.log(`   Individual carried forwards:`, employeesData.map(e => `${e.employeeName}: ${(e.carriedForward || 0).toFixed(2)}`).join(', '));
-    
+     
     // Count employees by financial status
     const employeesWithDues = employeesData.filter(e => e.totalUnpaid > 0).length;
     const employeesWithDebts = employeesData.filter(e => e.totalUnpaid < 0).length;

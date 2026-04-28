@@ -23,7 +23,6 @@ if (result.error) {
     process.exit(1);
 }
 
-console.log('✅ Environment variables loaded from:', envPath);
 
 // Export a flag to confirm loading
 export const ENV_LOADED = true;

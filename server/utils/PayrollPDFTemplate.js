@@ -468,14 +468,14 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
     h(View, { key: index, style: styles.employeeRow }, [
       h(Text, { key: 'name', style: [styles.employeeCell, styles.col1] }, cleanText(emp.employeeName)),
       h(Text, { key: 'dept', style: [styles.employeeCell, styles.col2] }, getDepartmentName(emp.department, currentLanguage)),
-      h(Text, { key: 'gross', style: [styles.employeeCell, styles.col3] }, formatNumber(emp.grossSalary.toFixed(2), currentLanguage)),
+      h(Text, { key: 'gross', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.grossSalary || 0).toFixed(2), currentLanguage)),
       h(Text, { key: 'bonus', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.bonuses || 0).toFixed(2), currentLanguage)),
-      h(Text, { key: 'ded', style: [styles.employeeCell, styles.col3] }, formatNumber(emp.deductions.toFixed(2), currentLanguage)),
-      h(Text, { key: 'net', style: [styles.employeeCell, styles.col3] }, formatNumber(emp.netSalary.toFixed(2), currentLanguage)),
-      h(Text, { key: 'paid', style: [styles.employeeCell, styles.col3] }, formatNumber(emp.paidAmount.toFixed(2), currentLanguage)),
-      h(Text, { key: 'unpaid', style: [styles.employeeCell, styles.col3] }, formatNumber(emp.unpaidBalance.toFixed(2), currentLanguage)),
-      h(Text, { key: 'carried', style: [styles.employeeCell, styles.col3] }, formatNumber(emp.carriedForward.toFixed(2), currentLanguage)),
-      h(Text, { key: 'total', style: [styles.employeeCell, styles.col3] }, formatNumber(emp.totalUnpaid.toFixed(2), currentLanguage))
+      h(Text, { key: 'ded', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.deductions || 0).toFixed(2), currentLanguage)),
+      h(Text, { key: 'net', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.netSalary || 0).toFixed(2), currentLanguage)),
+      h(Text, { key: 'paid', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.paidAmount || 0).toFixed(2), currentLanguage)),
+      h(Text, { key: 'unpaid', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.unpaidBalance || 0).toFixed(2), currentLanguage)),
+      h(Text, { key: 'carried', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.carriedForward || 0).toFixed(2), currentLanguage)),
+      h(Text, { key: 'total', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.totalUnpaid || 0).toFixed(2), currentLanguage))
     ])
   );
 
@@ -845,11 +845,11 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
           ]),
           h(View, { key: 'row1', style: styles.tableRow }, [
             h(Text, { key: 'l1', style: [styles.tableCell, styles.tableCellLabel] }, t.employeeCount),
-            h(Text, { key: 'v1', style: [styles.tableCell, styles.tableCellValue] }, formatNumber(data.totalEmployees, currentLanguage))
+            h(Text, { key: 'v1', style: [styles.tableCell, styles.tableCellValue] }, formatNumber(data.totalEmployees || 0, currentLanguage))
           ]),
           h(View, { key: 'row2', style: styles.tableRow }, [
             h(Text, { key: 'l2', style: [styles.tableCell, styles.tableCellLabel] }, t.totalGross),
-            h(Text, { key: 'v2', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber(data.statistics.totalGrossSalary.toFixed(2), currentLanguage)} ${t.currency}`)
+            h(Text, { key: 'v2', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalGrossSalary || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ]),
           h(View, { key: 'row3', style: styles.tableRow }, [
             h(Text, { key: 'l3', style: [styles.tableCell, styles.tableCellLabel] }, t.totalBonuses),
@@ -857,27 +857,27 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
           ]),
           h(View, { key: 'row4', style: styles.tableRow }, [
             h(Text, { key: 'l4', style: [styles.tableCell, styles.tableCellLabel] }, t.totalDeductions),
-            h(Text, { key: 'v4', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber(data.statistics.totalDeductions.toFixed(2), currentLanguage)} ${t.currency}`)
+            h(Text, { key: 'v4', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalDeductions || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ]),
           h(View, { key: 'row5', style: styles.tableRow }, [
             h(Text, { key: 'l5', style: [styles.tableCell, styles.tableCellLabel] }, t.netDue),
-            h(Text, { key: 'v5', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber(data.statistics.totalNetSalary.toFixed(2), currentLanguage)} ${t.currency}`)
+            h(Text, { key: 'v5', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalNetSalary || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ]),
           h(View, { key: 'row6', style: styles.tableRow }, [
             h(Text, { key: 'l6', style: [styles.tableCell, styles.tableCellLabel] }, t.paid),
-            h(Text, { key: 'v6', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber(data.statistics.totalPaid.toFixed(2), currentLanguage)} ${t.currency}`)
+            h(Text, { key: 'v6', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalPaid || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ]),
           h(View, { key: 'row7', style: styles.tableRow }, [
             h(Text, { key: 'l7', style: [styles.tableCell, styles.tableCellLabel] }, t.remainingCurrentMonth),
-            h(Text, { key: 'v7', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber(data.statistics.totalUnpaidCurrentMonth.toFixed(2), currentLanguage)} ${t.currency}`)
+            h(Text, { key: 'v7', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalUnpaidCurrentMonth || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ]),
           h(View, { key: 'row8', style: styles.tableRow }, [
             h(Text, { key: 'l8', style: [styles.tableCell, styles.tableCellLabel] }, t.carriedForward),
-            h(Text, { key: 'v8', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber(data.statistics.totalCarriedForward.toFixed(2), currentLanguage)} ${t.currency}`)
+            h(Text, { key: 'v8', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalCarriedForward || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ]),
           h(View, { key: 'row9', style: styles.tableRow }, [
             h(Text, { key: 'l9', style: [styles.tableCell, styles.tableCellLabel] }, t.totalDue),
-            h(Text, { key: 'v9', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber(data.statistics.totalUnpaid.toFixed(2), currentLanguage)} ${t.currency}`)
+            h(Text, { key: 'v9', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalUnpaid || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ])
         ])
       ]),

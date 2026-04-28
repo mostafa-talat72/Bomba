@@ -748,7 +748,6 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                 let payrollPdfBuffer = null;
                 if (payrollSummaryData) {
                     try {
-                        console.log('📄 Generating payroll summary PDF for:', email);
                         const { generatePayrollSummaryPDF } = await import('./pdfGenerator.js');
                         // Pass detailed employees data to be included in the same PDF
                         payrollPdfBuffer = await generatePayrollSummaryPDF(payrollSummaryData, language, currency, allEmployeesPDFData, reportData.organizationName);
@@ -771,7 +770,6 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                         payrollPdfBuffer = null;
                     }
                 } else {
-                    console.log('⚠️ No payroll summary data available for:', email);
                 }
 
                 // Generate all employees detailed PDF if data is available
@@ -783,7 +781,6 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                 // Skip generating separate all-employees PDF since it's now part of payroll PDF
                 if (false && allEmployeesPDFData && allEmployeesPDFData.length > 0) {
                     try {
-                        console.log('📄 Generating all employees detailed PDF for:', email);
                         const { generateAllEmployeesPDF } = await import('./pdfGenerator.js');
                         const monthName = new Date(payrollSummaryData?.year || new Date().getFullYear(), (payrollSummaryData?.month || new Date().getMonth() + 1) - 1).toLocaleDateString(
                             language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US',
@@ -807,7 +804,6 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                         allEmployeesPdfBuffer = null;
                     }
                 } else {
-                    console.log('⚠️ No all employees data available for:', email);
                 }
 
                 const transporter = createTransporter();
