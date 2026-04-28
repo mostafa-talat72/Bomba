@@ -163,14 +163,54 @@ export const deleteEmployee = async (req, res) => {
       });
     }
     
-    // حذف الموظف فعلياً
+    // Import all related models
+    const { default: Attendance } = await import('../models/Attendance.js');
+    const { default: Advance } = await import('../models/Advance.js');
+    const { default: Payment } = await import('../models/Payment.js');
+    const { default: Deduction } = await import('../models/Deduction.js');
+    const { default: Bonus } = await import('../models/Bonus.js');
+    const { default: Payroll } = await import('../models/Payroll.js');
+    
+    
+    // Count related records before deletion
+    const [attendanceCount, advanceCount, paymentCount, deductionCount, bonusCount, payrollCount] = await Promise.all([
+      Attendance.countDocuments({ employeeId: employee._id, organizationId: req.user.organization }),
+      Advance.countDocuments({ employeeId: employee._id, organizationId: req.user.organization }),
+      Payment.countDocuments({ employeeId: employee._id, organizationId: req.user.organization }),
+      Deduction.countDocuments({ employeeId: employee._id, organizationId: req.user.organization }),
+      Bonus.countDocuments({ employeeId: employee._id, organizationId: req.user.organization }),
+      Payroll.countDocuments({ employeeId: employee._id, organizationId: req.user.organization })
+    ]);
+      
+    // Delete all related records
+    await Promise.all([
+      Attendance.deleteMany({ employeeId: employee._id, organizationId: req.user.organization }),
+      Advance.deleteMany({ employeeId: employee._id, organizationId: req.user.organization }),
+      Payment.deleteMany({ employeeId: employee._id, organizationId: req.user.organization }),
+      Deduction.deleteMany({ employeeId: employee._id, organizationId: req.user.organization }),
+      Bonus.deleteMany({ employeeId: employee._id, organizationId: req.user.organization }),
+      Payroll.deleteMany({ employeeId: employee._id, organizationId: req.user.organization })
+    ]);
+    
+    
+    // حذف الموظف نفسه
     await Employee.deleteOne({ _id: req.params.id });
+    
     
     res.json({ 
       success: true,
-      message: 'تم حذف الموظف بنجاح' 
+      message: 'تم حذف الموظف وجميع البيانات المرتبطة به بنجاح',
+      deletedRecords: {
+        attendance: attendanceCount,
+        advances: advanceCount,
+        payments: paymentCount,
+        deductions: deductionCount,
+        bonuses: bonusCount,
+        payrolls: payrollCount
+      }
     });
   } catch (error) {
+    console.error('❌ Error deleting employee:', error);
     res.status(500).json({ 
       success: false,
       error: error.message 

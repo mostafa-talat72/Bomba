@@ -134,14 +134,46 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ onAdvanceAdded }) => {
               Modal.destroyAll();
               Modal.confirm({
                 title: t('payroll.employeeList.deleteModal.confirmDeleteTitle'),
-                content: t('payroll.employeeList.deleteModal.confirmDeleteMessage'),
+                content: (
+                  <div className="space-y-3">
+                    <p className="text-red-600 dark:text-red-400 font-semibold">
+                      {t('payroll.employeeList.deleteModal.confirmDeleteMessage')}
+                    </p>
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                      <p className="text-sm font-semibold mb-2 text-red-800 dark:text-red-300">
+                        ⚠️ {t('payroll.employeeList.deleteModal.warningTitle')}
+                      </p>
+                      <ul className="list-disc list-inside space-y-1 text-xs text-red-700 dark:text-red-400">
+                        <li>{t('payroll.employeeList.deleteModal.deleteAttendance')}</li>
+                        <li>{t('payroll.employeeList.deleteModal.deleteAdvances')}</li>
+                        <li>{t('payroll.employeeList.deleteModal.deletePayments')}</li>
+                        <li>{t('payroll.employeeList.deleteModal.deleteDeductions')}</li>
+                        <li>{t('payroll.employeeList.deleteModal.deleteBonuses')}</li>
+                        <li>{t('payroll.employeeList.deleteModal.deletePayrolls')}</li>
+                      </ul>
+                      <p className="text-xs text-red-800 dark:text-red-300 font-bold mt-2">
+                        {t('payroll.employeeList.deleteModal.irreversible')}
+                      </p>
+                    </div>
+                  </div>
+                ),
                 okText: t('payroll.employeeList.deleteModal.permanentDelete'),
                 cancelText: t('payroll.employeeList.deleteModal.cancel'),
                 okButtonProps: { danger: true },
                 onOk: async () => {
                   try {
-                    await api.delete(`/payroll/employees/${id}`);
+                    const response = await api.delete(`/payroll/employees/${id}`);
                     message.success(t('payroll.employeeList.messages.deleteSuccess'));
+                    
+                    // Show deleted records count if available
+                    if (response.data?.deletedRecords) {
+                      const records = response.data.deletedRecords;
+                      const total = Object.values(records).reduce((sum: number, count) => sum + (count as number), 0);
+                      if (total > 0) {
+                        message.info(t('payroll.employeeList.messages.deletedRecordsInfo', { count: total }));
+                      }
+                    }
+                    
                     fetchEmployees();
                   } catch (error: any) {
                     message.error(error.response?.data?.error || t('payroll.employeeList.messages.deleteError'));
