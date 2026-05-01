@@ -31,6 +31,8 @@ export const setupSocketIO = (io) => {
     const getDebouncedEmitter = createDebouncedEmitters(io);
     
     io.on("connection", (socket) => {
+        console.log('🔌 New Socket.IO client connected, Socket ID:', socket.id);
+        
         // Join user to their role room
         socket.on("join-role", (role) => {
             socket.join(role);
@@ -123,7 +125,9 @@ export const setupSocketIO = (io) => {
         });
 
         // Disconnect event
-        socket.on("disconnect", () => {});
+        socket.on("disconnect", () => {
+            console.log('🔌 Socket.IO client disconnected, Socket ID:', socket.id);
+        });
     });
 
     // Helper functions to emit events from controllers
@@ -142,7 +146,10 @@ export const setupSocketIO = (io) => {
     };
 
     io.notifyInventoryUpdate = (item) => {
+        console.log('📢 notifyInventoryUpdate called with:', item);
+        console.log('📊 Emitting to all connected clients...');
         io.emit("inventory-update", item);
+        console.log('✅ inventory-update event emitted');
 
         if (item.isLowStock) {
             io.to("admin").emit("low-stock-alert", item);

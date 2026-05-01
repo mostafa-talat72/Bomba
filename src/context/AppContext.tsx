@@ -4,6 +4,28 @@ import { useNavigate } from 'react-router-dom';
 import { useSmartPolling } from '../hooks/useSmartPolling';
 import { useTranslation } from 'react-i18next';
 
+// ==================== دوال مساعدة للأرقام ====================
+
+/**
+ * تحويل الأرقام الإنجليزية إلى أرقام عربية
+ * @param {number|string} num - الرقم المراد تحويله
+ * @returns {string} - الرقم بالأرقام العربية
+ */
+const toArabicNumbers = (num: number | string): string => {
+  const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return String(num).replace(/[0-9]/g, (digit) => arabicNumbers[parseInt(digit)]);
+};
+
+/**
+ * تنسيق الرقم حسب اللغة الحالية
+ * @param {number|string} num - الرقم المراد تنسيقه
+ * @param {string} lang - رمز اللغة (ar, en, etc.)
+ * @returns {string} - الرقم منسق حسب اللغة
+ */
+const formatNumber = (num: number | string, lang: string): string => {
+  return lang === 'ar' ? toArabicNumbers(num) : String(num);
+};
+
 // تعريف Notification (مأخوذ من NotificationCenter)
 interface Notification {
   _id: string;
@@ -733,16 +755,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
   };
 
-  // دالة جديدة لجلب عناصر القائمة مع التحقق من توفر المخزون للطلبات
+  // دالة لجلب عناصر القائمة (بدون فلترة حسب المخزون - الإشعار سيظهر عند الطلب)
   const fetchAvailableMenuItems = async (): Promise<void> => {
     try {
-      // استخدام checkStock للتحقق من توفر المخزون في قائمة الطلبات
-      const response = await api.getMenuItems({ checkStock: true });
+      // إزالة checkStock لإظهار جميع العناصر حتى لو نفد المخزون
+      // الإشعار سيظهر عند محاولة إضافة طلب بعنصر غير متوفر
+      const response = await api.getMenuItems({ checkStock: false });
       if (response.success && response.data) {
         setMenuItems(response.data);
       }
     } catch (error) {
-      }
+      console.error('Error fetching menu items:', error);
+    }
   };
 
   const fetchDevices = async (): Promise<void> => {
@@ -952,13 +976,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateNotificationCount(1);
         return newOrder;
       } else {
-        const errorMessage = response.message || t('toast.order.createError');
-        showNotification(errorMessage, 'error');
+        // Handle detailed inventory insufficiency messages
+        if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
+          const detailsMessage = (response.data as any).details
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+            .join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
+        } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
+          const errorsMessage = (response.data as any).errors.join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
+        } else if (response.errors && Array.isArray(response.errors) && response.errors.length > 0) {
+          const errorsMessage = response.errors.join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
+        } else if (response.details && Array.isArray(response.details) && response.details.length > 0) {
+          const detailsMessage = response.details
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+            .join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
+        } else {
+          const errorMessage = response.message || t('toast.order.createError');
+          showNotification(errorMessage, 'error');
+        }
         return null;
       }
     } catch (error: unknown) {
-      const err = error as { message?: string };
-      showNotification(err.message || t('toast.order.createError'), 'error');
+      const err = error as { message?: string; response?: { data?: any } };
+      
+      // Handle detailed error from backend
+      if (err.response?.data) {
+        const errorData = err.response.data;
+        if (errorData.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
+          const detailsMessage = errorData.details
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+            .join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
+        } else if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+          const errorsMessage = errorData.errors.join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
+        } else {
+          showNotification(errorData.message || err.message || t('toast.order.createError'), 'error');
+        }
+      } else {
+        showNotification(err.message || t('toast.order.createError'), 'error');
+      }
       return null;
     }
   };
@@ -980,11 +1040,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Handle detailed inventory insufficiency messages
         if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
           const detailsMessage = (response.data as any).details
-            .map((d: any) => `• ${d.name}: ${t('common.required')} ${d.required} ${d.unit}, ${t('common.available')} ${d.available} ${d.unit}`)
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
             .join('\n');
-          showNotification(`${t('toast.order.insufficientStock')}:\n${detailsMessage}`, 'error');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
-          showNotification(`${t('toast.order.insufficientStock')}:\n${(response.data as any).errors.join('\n')}`, 'error');
+          const errorsMessage = (response.data as any).errors.join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
+        } else if (response.errors && Array.isArray(response.errors) && response.errors.length > 0) {
+          const errorsMessage = response.errors.join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
+        } else if (response.details && Array.isArray(response.details) && response.details.length > 0) {
+          const detailsMessage = response.details
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+            .join('\n');
+          showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else {
           showNotification(response.message || t('toast.order.updateError'), 'error');
         }

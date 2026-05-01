@@ -511,11 +511,6 @@ class ApiClient {
         }
         // Only log errors in development mode to avoid cluttering console
         if (process.env.NODE_ENV === 'development') {
-          // Log validation errors for debugging
-          if (response.status === 400 && data.errors) {
-            console.warn('Validation errors:', data.errors);
-          }
-          
           // Log the full error response for debugging (only for server errors)
           if (response.status >= 500) {
             console.error('API Error Response:', {
@@ -529,7 +524,9 @@ class ApiClient {
         return {
           success: false,
           message: data.error || data.message || `خطأ ${response.status}: ${response.statusText}`,
-          errors: data.errors
+          errors: data.errors,
+          details: data.details,
+          data: data
         };
       }
 

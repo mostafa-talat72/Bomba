@@ -428,26 +428,19 @@ const Cafe: React.FC = () => {
     });
 
     socket.on('reconnect_error', (error) => {
-      console.error('Socket.IO reconnection error:', error);
+      // Reconnection error occurred
     });
 
     socket.on('reconnect_failed', () => {
-      console.error('Socket.IO reconnection failed');
       showNotification?.(t('cafe.notifications.reconnectFailed'), 'error');
     });
 
     socket.on('connect_error', (error: any) => {
-      console.error('Socket.IO connection error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        description: error.description,
-        context: error.context,
-        type: error.type
-      });
+      // Connection error occurred
     });
 
     socket.on('error', (error) => {
-      console.error('Socket.IO error:', error);
+      // Socket error occurred
     });
 
     // Listen for order-created event
@@ -514,6 +507,13 @@ const Cafe: React.FC = () => {
       }
     });
 
+    // Listen for inventory-update event
+    socket.on('inventory-update', async (data: any) => {
+      // Refresh menu items when inventory changes
+      // Menu items will remain visible even if out of stock - notification will show when ordering
+      await fetchAvailableMenuItems();
+    });
+
     // Cleanup on unmount
     return () => {
       // Don't disconnect in development due to Strict Mode
@@ -528,6 +528,7 @@ const Cafe: React.FC = () => {
         socket.off('order-update');
         socket.off('bill-update');
         socket.off('table-status-update');
+        socket.off('inventory-update');
       } else {
         socket.off('connect');
         socket.off('disconnect');
@@ -539,6 +540,7 @@ const Cafe: React.FC = () => {
         socket.off('order-update');
         socket.off('bill-update');
         socket.off('table-status-update');
+        socket.off('inventory-update');
         socket.disconnect();
       }
     };
@@ -916,11 +918,8 @@ const Cafe: React.FC = () => {
         notes: orderNotes || null,
       };
 
-      // Close modal immediately for better UX
-      setShowOrderModal(false);
-      setSelectedTable(null);
-      setCurrentOrderItems([]);
-      setOrderNotes('');
+      // لا تغلق النافذة حتى نتأكد من نجاح العملية
+      const tableToUpdate = selectedTable;
       showNotification(t('cafe.notifications.savingOrder'), 'info');
       
       // Create order in background
@@ -928,7 +927,15 @@ const Cafe: React.FC = () => {
       const order = await createOrder(orderData);
       
       if (order) {
+        // أغلق النافذة فقط عند النجاح
+        setShowOrderModal(false);
+        setSelectedTable(null);
+        setCurrentOrderItems([]);
+        setOrderNotes('');
         showNotification(t('cafe.orderAddedSuccess'), 'success');
+        
+        // تحديث قائمة المنيو (العناصر تبقى ظاهرة حتى لو نفد المخزون)
+        fetchAvailableMenuItems();
         
         // Print order if requested or by default
         if (shouldPrint) {
@@ -979,7 +986,7 @@ const Cafe: React.FC = () => {
       } else {
         // If order creation failed, revert optimistic updates
         setTableStatuses(previousTableStatuses);
-        showNotification(t('cafe.orderAddedError'), 'error');
+        // Removed generic error message - detailed error will be shown from AppContext
       }
     } catch (error: any) {
       // Revert optimistic updates on error
@@ -1165,13 +1172,8 @@ const Cafe: React.FC = () => {
         notes: orderNotes || null,
       };
 
-      // Close modal immediately for better UX
-      setShowEditOrderModal(false);
-      setSelectedTable(null);
+      // لا تغلق النافذة حتى نتأكد من نجاح العملية
       const orderToUpdate = selectedOrder;
-      setSelectedOrder(null);
-      setCurrentOrderItems([]);
-      setOrderNotes('');
       showNotification(t('cafe.notifications.updatingOrder'), 'info');
       
       // Update order in background
@@ -1179,7 +1181,16 @@ const Cafe: React.FC = () => {
       const updatedOrder = await updateOrder(orderToUpdate.id, orderData);
       
       if (updatedOrder) {
+        // أغلق النافذة فقط عند النجاح
+        setShowEditOrderModal(false);
+        setSelectedTable(null);
+        setSelectedOrder(null);
+        setCurrentOrderItems([]);
+        setOrderNotes('');
         showNotification(t('cafe.orderUpdatedSuccess'), 'success');
+        
+        // تحديث قائمة المنيو (العناصر تبقى ظاهرة حتى لو نفد المخزون)
+        fetchAvailableMenuItems();
         
         // Print updated order if requested
         if (shouldPrint) {
@@ -1223,7 +1234,7 @@ const Cafe: React.FC = () => {
       } else {
         // If order update failed, revert optimistic updates
         setTableStatuses(previousTableStatuses);
-        showNotification(t('cafe.orderUpdatedError'), 'error');
+        // Removed generic error message - detailed error will be shown from AppContext
       }
     } catch (error: any) {
       // Revert optimistic updates on error
@@ -1237,7 +1248,7 @@ const Cafe: React.FC = () => {
       } else if (!navigator.onLine) {
         showNotification(t('cafe.noConnection'), 'error');
       } else {
-        showNotification(t('cafe.orderUpdatedError'), 'error');
+        showNotification(t('cafe.errorUpdatingOrder'), 'error');
       }
     } finally {
       setSavingOrder(false);
@@ -1366,6 +1377,9 @@ const Cafe: React.FC = () => {
             } else {
               showNotification(t('cafe.orderDeletedSuccess'), 'success');
             }
+            
+            // تحديث قائمة المنيو (العناصر تبقى ظاهرة حتى لو نفد المخزون)
+            fetchAvailableMenuItems();
             
             // إعادة تحميل البيانات في الخلفية (بدون await)
             Promise.all([
@@ -1729,7 +1743,7 @@ const Cafe: React.FC = () => {
 
       {/* Confirm Modal */}
       {showConfirmModal && confirmModalData && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[70] p-3 sm:p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden">
             {/* Header */}
             <div className="relative p-4 sm:p-5 bg-gradient-to-br from-yellow-500 to-orange-600">
@@ -1792,7 +1806,7 @@ const Cafe: React.FC = () => {
 
       {/* Table Orders Modal */}
       {showTableOrdersModal && selectedTable && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4 md:p-6 animate-fadeIn">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-30 p-3 sm:p-4 md:p-6 animate-fadeIn">
           <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-2xl md:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-slideUp">
             {/* Header */}
             <div className="relative p-4 sm:p-5 md:p-6 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex-shrink-0">
@@ -2138,7 +2152,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6"
+      className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4 md:p-6"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -2458,7 +2472,7 @@ const ManagementModal: React.FC<ManagementModalProps> = ({
   const { isRTL } = useLanguage();
   
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4 md:p-6">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4 md:p-6">
       <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl max-w-sm sm:max-w-2xl md:max-w-4xl lg:max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
         {/* Header */}
         <div className="relative p-4 sm:p-5 md:p-6 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
@@ -2631,7 +2645,7 @@ const SectionModal: React.FC<SectionModalProps> = ({
   }, []);
   
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Header */}
         <div className="relative p-4 sm:p-5 bg-gradient-to-br from-blue-500 to-indigo-600">
@@ -2747,7 +2761,7 @@ const TableModal: React.FC<TableModalProps> = ({
   }, []);
   
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Header */}
         <div className="relative p-4 sm:p-5 bg-gradient-to-br from-green-500 to-emerald-600">

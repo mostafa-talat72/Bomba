@@ -16,6 +16,29 @@ import {
     createOrderSuccessMessages,
 } from "../utils/orderUtils.js";
 
+// ==================== دوال مساعدة للأرقام ====================
+
+/**
+ * تحويل الأرقام الإنجليزية إلى أرقام عربية
+ * @param {number|string} num - الرقم المراد تحويله
+ * @returns {string} - الرقم بالأرقام العربية
+ */
+function toArabicNumbers(num) {
+    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return String(num).replace(/[0-9]/g, (digit) => arabicNumbers[digit]);
+}
+
+/**
+ * تنسيق الرقم حسب اللغة من الـ header
+ * @param {number|string} num - الرقم المراد تنسيقه
+ * @param {Object} req - Express request object
+ * @returns {string} - الرقم منسق حسب اللغة
+ */
+function formatNumber(num, req) {
+    const lang = req.headers['accept-language']?.split(',')[0]?.split('-')[0] || 'ar';
+    return lang === 'ar' ? toArabicNumbers(num) : String(num);
+}
+
 // ==================== دوال مساعدة لإدارة المخزون ====================
 
 /**
@@ -889,6 +912,25 @@ export const createOrder = async (req, res) => {
             }
             await deductInventoryForOrder(order, req.user._id, billNumber);
             Logger.info(`✓ تم خصم المخزون للطلب ${order.orderNumber}`);
+            
+            // إطلاق حدث تحديث المخزون عبر Socket.IO
+            if (req.io) {
+                const connectedClients = req.io.engine.clientsCount;
+                console.log('🔔 Emitting inventory-update event (deducted) for order:', order.orderNumber);
+                console.log('📊 Connected Socket.IO clients:', connectedClients);
+                
+                // استخدام الدالة المخصصة من socketHandler
+                req.io.notifyInventoryUpdate({
+                    type: 'deducted',
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    timestamp: new Date()
+                });
+                
+                console.log('✅ Event emitted successfully via notifyInventoryUpdate');
+            } else {
+                console.error('❌ req.io is not available in createOrder');
+            }
         } catch (inventoryError) {
             Logger.error('خطأ في خصم المخزون:', inventoryError);
             // لا نفشل الطلب، لكن نسجل الخطأ
@@ -1029,25 +1071,53 @@ export const updateOrder = async (req, res) => {
 
         // حساب التكلفة الإجمالية دائماً (حتى لو لم يتم تمرير items)
         if (items && Array.isArray(items) && items.length > 0) {
-            // حساب المخزون المطلوب لجميع الأصناف
-            const inventoryNeeded = await calculateTotalInventoryNeeded(items);
+            // حساب المخزون المطلوب للطلب الجديد
+            const newInventoryNeeded = await calculateTotalInventoryNeeded(items);
+            
+            // حساب المخزون المطلوب للطلب القديم
+            const oldInventoryNeeded = await calculateTotalInventoryNeeded(oldOrderItems);
+            
+            // حساب الفرق (المخزون الإضافي المطلوب)
+            const additionalInventoryNeeded = new Map();
+            
+            for (const [inventoryItemId, newData] of newInventoryNeeded) {
+                const oldData = oldInventoryNeeded.get(inventoryItemId);
+                const oldQuantity = oldData ? oldData.quantity : 0;
+                const oldUnit = oldData ? oldData.unit : newData.unit;
+                
+                // تحويل الكمية القديمة إلى نفس وحدة الكمية الجديدة
+                const convertedOldQuantity = convertQuantity(oldQuantity, oldUnit, newData.unit);
+                
+                // حساب الفرق
+                const difference = newData.quantity - convertedOldQuantity;
+                
+                // إذا كان هناك زيادة في الكمية، أضفها للتحقق
+                if (difference > 0) {
+                    additionalInventoryNeeded.set(inventoryItemId, {
+                        quantity: difference,
+                        unit: newData.unit
+                    });
+                }
+            }
 
             // حساب التكلفة الإجمالية
             calculatedTotalCost = await calculateOrderTotalCost(items);
 
-            // التحقق من توفر المخزون
-            const { errors: validationErrors, details: insufficientDetails } =
-                await validateInventoryAvailability(inventoryNeeded);
+            // التحقق من توفر المخزون الإضافي فقط
+            if (additionalInventoryNeeded.size > 0) {
+                const { errors: validationErrors, details: insufficientDetails } =
+                    await validateInventoryAvailability(additionalInventoryNeeded);
 
-            if (validationErrors.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "المخزون غير كافي لتعديل الطلب - راجع التفاصيل أدناه",
-                    errors: validationErrors,
-                    details: insufficientDetails,
-                    inventoryErrors: validationErrors,
-                });
+                if (validationErrors.length > 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message:
+                            "المخزون غير كافي لتعديل الطلب - راجع التفاصيل أدناه",
+                        errors: validationErrors,
+                        details: insufficientDetails,
+                        inventoryErrors: validationErrors,
+                    });
+                }
             }
         } else {
             // حساب التكلفة من عناصر الطلب الحالية إذا لم يتم تمرير items
@@ -1227,6 +1297,23 @@ export const updateOrder = async (req, res) => {
                 // الآن order.items تحتوي على العناصر الجديدة بعد التعديل
                 await adjustInventoryForOrderUpdate(oldOrderData, order, req.user._id);
                 Logger.info(`✓ تم تعديل المخزون للطلب ${order.orderNumber}`);
+                
+                // إطلاق حدث تحديث المخزون عبر Socket.IO
+                if (req.io) {
+                    console.log('🔔 Emitting inventory-update event (adjusted) for order:', order.orderNumber);
+                    
+                    // استخدام الدالة المخصصة من socketHandler
+                    req.io.notifyInventoryUpdate({
+                        type: 'adjusted',
+                        orderId: order._id,
+                        orderNumber: order.orderNumber,
+                        timestamp: new Date()
+                    });
+                    
+                    console.log('✅ Event emitted successfully via notifyInventoryUpdate');
+                } else {
+                    console.error('❌ req.io is not available in updateOrder');
+                }
             } catch (inventoryError) {
                 Logger.error('خطأ في تعديل المخزون:', inventoryError);
                 // نستمر في حفظ الطلب حتى لو فشل تعديل المخزون
@@ -1518,6 +1605,23 @@ export const deleteOrder = async (req, res) => {
         try {
             await restoreInventoryForOrder(order, req.user._id);
             Logger.info(`✓ تم استرداد المخزون للطلب ${order.orderNumber}`);
+            
+            // إطلاق حدث تحديث المخزون عبر Socket.IO
+            if (req.io) {
+                console.log('🔔 Emitting inventory-update event (restored) for order:', order.orderNumber);
+                
+                // استخدام الدالة المخصصة من socketHandler
+                req.io.notifyInventoryUpdate({
+                    type: 'restored',
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    timestamp: new Date()
+                });
+                
+                console.log('✅ Event emitted successfully via notifyInventoryUpdate');
+            } else {
+                console.error('❌ req.io is not available in deleteOrder');
+            }
         } catch (inventoryError) {
             Logger.error('خطأ في استرداد المخزون:', inventoryError);
             // نستمر في الحذف حتى لو فشل استرداد المخزون
@@ -2125,7 +2229,7 @@ export const updateOrderItemPrepared = async (req, res) => {
                             if (inventoryItem.currentStock < quantityToDeduct) {
                                 return res.status(400).json({
                                     success: false,
-                                    message: `المخزون غير كافي لـ ${inventoryItem.name}. المطلوب: ${quantityToDeduct} ${inventoryItem.unit}، المتوفر: ${inventoryItem.currentStock} ${inventoryItem.unit}`,
+                                    message: `المخزون غير كافي لـ ${inventoryItem.name}. المطلوب: ${formatNumber(quantityToDeduct, req)} ${inventoryItem.unit}، المتوفر: ${formatNumber(inventoryItem.currentStock, req)} ${inventoryItem.unit}`,
                                 });
                             }
 
@@ -2302,7 +2406,7 @@ export const deductOrderInventory = async (req, res) => {
             const errorMessage = insufficientItems
                 .map(
                     (item) =>
-                        `• ${item.name}: المطلوب ${item.required} ${item.unit}، المتوفر ${item.available} ${item.unit}`
+                        `• ${item.name}: المطلوب ${formatNumber(item.required, req)} ${item.unit}، المتوفر ${formatNumber(item.available, req)} ${item.unit}`
                 )
                 .join("\n");
 
