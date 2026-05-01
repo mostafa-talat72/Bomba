@@ -400,7 +400,7 @@ const Menu: React.FC = () => {
 			isAvailable: formData.isAvailable,
 			preparationTime: parseInt(formData.preparationTime),
 			isPopular: formData.isPopular,
-			ingredients: validIngredients.length > 0 ? validIngredients : undefined
+			ingredients: validIngredients // إرسال مصفوفة فارغة إذا لم تكن هناك خامات
 		};
 
 		try {

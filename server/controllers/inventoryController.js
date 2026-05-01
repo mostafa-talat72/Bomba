@@ -17,7 +17,7 @@ export const getInventoryItems = async (req, res) => {
             });
         }
 
-        const { category, lowStock, page = 1, limit = 10, search } = req.query;
+        const { category, lowStock, page = 1, limit, search } = req.query;
 
         const query = { isActive: true };
 
@@ -30,11 +30,17 @@ export const getInventoryItems = async (req, res) => {
         }
         query.organization = req.user.organization;
 
-        const items = await InventoryItem.find(query)
+        // إذا لم يتم تحديد limit، جلب جميع العناصر
+        let itemsQuery = InventoryItem.find(query)
             .populate("recipe.ingredient", "name unit")
-            .sort({ name: 1 })
-            .limit(limit * 1)
-            .skip((page - 1) * limit);
+            .sort({ name: 1 });
+
+        // تطبيق pagination فقط إذا تم تحديد limit
+        if (limit) {
+            itemsQuery = itemsQuery.limit(limit * 1).skip((page - 1) * limit);
+        }
+
+        const items = await itemsQuery;
 
         const total = await InventoryItem.countDocuments(query);
 
