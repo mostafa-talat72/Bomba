@@ -1,9 +1,13 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { ConfigProvider } from 'antd';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import frFR from 'antd/locale/fr_FR';
 import { AppProvider, useApp } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { LanguageProvider } from './context/LanguageContext';
+import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
@@ -113,7 +117,20 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
 // مكون للتحقق من المسار الحالي
 const RouteHandler = () => {
   const { isAuthenticated, isLoading } = useApp();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { isRTL } = useLanguage();
+
+  // Get Ant Design locale based on current language
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'ar':
+        return arEG;
+      case 'fr':
+        return frFR;
+      default:
+        return enUS;
+    }
+  };
 
   if (isLoading) {
     return (
@@ -127,6 +144,17 @@ const RouteHandler = () => {
   }
 
   return (
+    <ConfigProvider
+      locale={getAntdLocale()}
+      direction={isRTL ? 'rtl' : 'ltr'}
+      getPopupContainer={(node) => {
+        // If node has a parent, use it; otherwise use document.body
+        if (node && node.parentElement) {
+          return node.parentElement;
+        }
+        return document.body;
+      }}
+    >
     <Routes>
       {/* صفحات عامة متاحة دائماً */}
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -221,6 +249,7 @@ const RouteHandler = () => {
       {/* fallback */}
               <Route path="*" element={<Login />} />
     </Routes>
+    </ConfigProvider>
   );
 };
 

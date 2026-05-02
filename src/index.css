@@ -1009,40 +1009,43 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
 }
 
 /* ✅ Fix Ant Design DatePicker and TimePicker z-index issues */
-/* Ensure picker dropdowns appear above modals and other elements */
+/* CRITICAL: Ensure picker dropdowns appear above ALL elements including modals */
 .ant-picker-dropdown {
-  z-index: 9999999 !important;
+  z-index: 99999999 !important;
+  position: fixed !important;
 }
 
 /* Ensure picker panels are visible */
 .ant-picker-panel-container {
-  z-index: 9999999 !important;
+  z-index: 99999999 !important;
 }
 
-/* Fix for pickers inside modals */
-.ant-modal .ant-picker-dropdown {
-  z-index: 10000000 !important;
+/* Fix for pickers inside modals - HIGHEST PRIORITY */
+.ant-modal .ant-picker-dropdown,
+.ant-modal-wrap .ant-picker-dropdown {
+  z-index: 100000000 !important;
 }
 
 /* Fix for pickers inside drawers */
-.ant-drawer .ant-picker-dropdown {
-  z-index: 10000000 !important;
+.ant-drawer .ant-picker-dropdown,
+.ant-drawer-content .ant-picker-dropdown {
+  z-index: 100000000 !important;
 }
 
 /* Ensure time panel is visible */
 .ant-picker-time-panel {
-  z-index: 9999999 !important;
+  z-index: 99999999 !important;
 }
 
 /* Fix for date range picker */
 .ant-picker-range-arrow {
-  z-index: 9999999 !important;
+  z-index: 99999999 !important;
 }
 
-/* Ensure picker is clickable */
+/* Ensure picker is clickable and visible */
 .ant-picker {
-  position: relative;
-  z-index: 1;
+  position: relative !important;
+  z-index: 1 !important;
 }
 
 /* Fix for picker in fixed/absolute positioned containers */
@@ -1050,7 +1053,27 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
 .ant-picker-dropdown-placement-bottomRight,
 .ant-picker-dropdown-placement-topLeft,
 .ant-picker-dropdown-placement-topRight {
-  z-index: 9999999 !important;
+  z-index: 99999999 !important;
+}
+
+/* Ensure dropdown is not hidden by overflow */
+.ant-picker-dropdown-hidden {
+  display: none !important;
+}
+
+/* Fix pointer events */
+.ant-picker-dropdown {
+  pointer-events: auto !important;
+}
+
+/* Ensure panel is visible */
+.ant-picker-panel {
+  z-index: 99999999 !important;
+}
+
+/* Fix for select dropdown inside picker */
+.ant-picker-dropdown .ant-select-dropdown {
+  z-index: 99999999 !important;
 }
 .custom-toast-body {
   padding: 0 !important;
