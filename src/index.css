@@ -1008,6 +1008,50 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
   direction: rtl !important;
 }
 
+/* ✅ Fix Ant Design DatePicker and TimePicker z-index issues */
+/* Ensure picker dropdowns appear above modals and other elements */
+.ant-picker-dropdown {
+  z-index: 9999999 !important;
+}
+
+/* Ensure picker panels are visible */
+.ant-picker-panel-container {
+  z-index: 9999999 !important;
+}
+
+/* Fix for pickers inside modals */
+.ant-modal .ant-picker-dropdown {
+  z-index: 10000000 !important;
+}
+
+/* Fix for pickers inside drawers */
+.ant-drawer .ant-picker-dropdown {
+  z-index: 10000000 !important;
+}
+
+/* Ensure time panel is visible */
+.ant-picker-time-panel {
+  z-index: 9999999 !important;
+}
+
+/* Fix for date range picker */
+.ant-picker-range-arrow {
+  z-index: 9999999 !important;
+}
+
+/* Ensure picker is clickable */
+.ant-picker {
+  position: relative;
+  z-index: 1;
+}
+
+/* Fix for picker in fixed/absolute positioned containers */
+.ant-picker-dropdown-placement-bottomLeft,
+.ant-picker-dropdown-placement-bottomRight,
+.ant-picker-dropdown-placement-topLeft,
+.ant-picker-dropdown-placement-topRight {
+  z-index: 9999999 !important;
+}
 .custom-toast-body {
   padding: 0 !important;
   margin: 0 !important;

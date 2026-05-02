@@ -393,6 +393,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               className="w-full"
               style={{ width: '100%', height: '48px' }}
               placeholder={t('costs.modals.costForm.date')}
+              getPopupContainer={(trigger) => trigger.parentElement || document.body}
               required
             />
           </div>
@@ -411,6 +412,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
               placeholder={t('costs.modals.costForm.time')}
               showNow
               needConfirm={false}
+              getPopupContainer={(trigger) => trigger.parentElement || document.body}
               required
             />
           </div>
@@ -428,6 +430,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
             className="w-full"
             style={{ width: '100%', height: '48px' }}
             placeholder={t('costs.modals.costForm.dueDate')}
+            getPopupContainer={(trigger) => trigger.parentElement || document.body}
           />
         </div>
 
