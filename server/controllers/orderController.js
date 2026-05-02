@@ -916,8 +916,6 @@ export const createOrder = async (req, res) => {
             // إطلاق حدث تحديث المخزون عبر Socket.IO
             if (req.io) {
                 const connectedClients = req.io.engine.clientsCount;
-                console.log('🔔 Emitting inventory-update event (deducted) for order:', order.orderNumber);
-                console.log('📊 Connected Socket.IO clients:', connectedClients);
                 
                 // استخدام الدالة المخصصة من socketHandler
                 req.io.notifyInventoryUpdate({
@@ -927,7 +925,6 @@ export const createOrder = async (req, res) => {
                     timestamp: new Date()
                 });
                 
-                console.log('✅ Event emitted successfully via notifyInventoryUpdate');
             } else {
                 console.error('❌ req.io is not available in createOrder');
             }
@@ -1300,7 +1297,6 @@ export const updateOrder = async (req, res) => {
                 
                 // إطلاق حدث تحديث المخزون عبر Socket.IO
                 if (req.io) {
-                    console.log('🔔 Emitting inventory-update event (adjusted) for order:', order.orderNumber);
                     
                     // استخدام الدالة المخصصة من socketHandler
                     req.io.notifyInventoryUpdate({
@@ -1310,7 +1306,6 @@ export const updateOrder = async (req, res) => {
                         timestamp: new Date()
                     });
                     
-                    console.log('✅ Event emitted successfully via notifyInventoryUpdate');
                 } else {
                     console.error('❌ req.io is not available in updateOrder');
                 }
@@ -1608,7 +1603,6 @@ export const deleteOrder = async (req, res) => {
             
             // إطلاق حدث تحديث المخزون عبر Socket.IO
             if (req.io) {
-                console.log('🔔 Emitting inventory-update event (restored) for order:', order.orderNumber);
                 
                 // استخدام الدالة المخصصة من socketHandler
                 req.io.notifyInventoryUpdate({
@@ -1618,7 +1612,6 @@ export const deleteOrder = async (req, res) => {
                     timestamp: new Date()
                 });
                 
-                console.log('✅ Event emitted successfully via notifyInventoryUpdate');
             } else {
                 console.error('❌ req.io is not available in deleteOrder');
             }

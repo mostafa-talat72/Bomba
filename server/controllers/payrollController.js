@@ -971,16 +971,7 @@ export const getPayrollSummaryData = async (organizationId, month, year) => {
         });
 
         const advancesTotal = monthAdvances.reduce((sum, adv) => sum + adv.amount, 0);
-        
-        console.log(`[${employee.personalInfo?.name}] Current Month (${monthStr}): Advances Count: ${monthAdvances.length}, Total: ${advancesTotal}`);
-        if (monthAdvances.length > 0) {
-          console.log(`  Advances Details:`, monthAdvances.map(a => ({ 
-            amount: a.amount, 
-            requestDate: a.requestDate?.toISOString().substring(0, 10),
-            status: a.status 
-          })));
-        }
-                
+                      
         // Get manual deductions for the month (using date field)
         const manualDeductions = await Deduction.find({
           employeeId: employee._id,
@@ -1094,7 +1085,6 @@ export const getPayrollSummaryData = async (organizationId, month, year) => {
         
         const previousAdvancesTotal = previousAdvances.reduce((sum, adv) => sum + adv.amount, 0);
         
-        console.log(`[${employee.personalInfo?.name}] Previous Months (until ${previousMonthEnd.toISOString().substring(0, 10)}): Advances Count: ${previousAdvances.length}, Total: ${previousAdvancesTotal}`);
         
         // Get all previous deductions (using date field for accuracy)
         const previousDeductions = await Deduction.find({
@@ -1139,8 +1129,6 @@ export const getPayrollSummaryData = async (organizationId, month, year) => {
         totalAdvances += advancesTotal;  // سلف الشهر الحالي فقط
         totalOtherDeductions += otherDeductionsTotal;  // خصومات الشهر الحالي فقط
         
-        // Logging للتحقق من الحسابات
-        console.log(`[${employee.personalInfo?.name}] Summary: Advances(Current): ${advancesTotal}, Deductions(Current): ${otherDeductionsTotal}, Carried Forward: ${carriedForward}, Total Unpaid: ${totalUnpaidWithCarried}`);
         
         employeesData.push({
           employeeId: employee._id,
@@ -1171,25 +1159,7 @@ export const getPayrollSummaryData = async (organizationId, month, year) => {
     const totalUnpaidCurrentMonth = totalNetSalary - totalPaid; // المتبقي من الشهر الحالي فقط
     const totalObligationsWithCarried = totalUnpaid; // إجمالي المستحقات الكلي (المتبقي + المرحل)
     const totalBonuses = employeesData.reduce((sum, e) => sum + (e.bonuses || 0), 0);
-    
-    // Logging للتحقق من الإجماليات النهائية
-    console.log('=== PAYROLL SUMMARY TOTALS ===');
-    console.log(`Month: ${monthStr}`);
-    console.log(`Date Range: ${startDate.toISOString().substring(0, 10)} to ${endDate.toISOString().substring(0, 10)}`);
-    console.log(`Total Employees: ${employeesData.length}`);
-    console.log(`Total Gross Salary (Current Month): ${totalGrossSalary.toFixed(2)}`);
-    console.log(`Total Bonuses (Current Month): ${totalBonuses.toFixed(2)}`);
-    console.log(`Total Advances (Current Month Only): ${totalAdvances.toFixed(2)}`);
-    console.log(`Total Other Deductions (Current Month Only): ${totalOtherDeductions.toFixed(2)}`);
-    console.log(`Total Deductions (Advances + Other): ${totalDeductions.toFixed(2)}`);
-    console.log(`Total Net Salary (Current Month): ${totalNetSalary.toFixed(2)}`);
-    console.log(`Total Paid (Current Month): ${totalPaid.toFixed(2)}`);
-    console.log(`Total Unpaid Current Month: ${totalUnpaidCurrentMonth.toFixed(2)}`);
-    console.log(`Total Carried Forward: ${totalCarriedForward.toFixed(2)}`);
-    console.log(`Total Unpaid (with Carried): ${totalUnpaid.toFixed(2)}`);
-    console.log('==============================');
-    
-     
+        
     // Count employees by financial status
     const employeesWithDues = employeesData.filter(e => e.totalUnpaid > 0).length;
     const employeesWithDebts = employeesData.filter(e => e.totalUnpaid < 0).length;
@@ -1228,7 +1198,6 @@ export const getPayrollSummaryData = async (organizationId, month, year) => {
       return false;
     });
     
-    console.log(`Filtered Employees: ${activeEmployeesData.length} active out of ${totalEmployeesCount} total`);
     
     // ✅ إرجاع البيانات (للاستخدام من organizationController)
     return {
