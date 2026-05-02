@@ -2539,6 +2539,7 @@
         "partiallyPaidNote": "Payment status will be automatically updated to \"Partially Paid\"",
         "fullyPaidNote": "Payment status will be automatically updated to \"Paid\"",
         "date": "the date",
+        "time": "Time",
         "dateRequired": "required",
         "dueDate": "due date",
         "dueDateOptional": "optional",
@@ -2867,7 +2868,8 @@
         "rejectError": "Failed to refuse",
         "amountRequired": "Please enter the amount",
         "reasonRequired": "Please enter the reason",
-        "installmentsRequired": "Please enter the number of installments"
+        "installmentsRequired": "Please enter the number of installments",
+        "advanceNotFound": "Advance not found"
       },
       "requestAdvance": "Request a new advance",
       "requestDate": "Order date",
@@ -3339,6 +3341,7 @@
         "loadError": "Failed to upload employee data",
         "invalidAmount": "Please enter a valid amount",
         "amountExceedsBalance": "The required amount is greater than the remaining amount",
+        "amountExceedsMonthlyEarnings": "Amount exceeds current month earnings",
         "paymentSuccess": "The payment has been registered successfully",
         "paymentError": "Failed to record the payment",
         "exportingPDF": "Creating PDF file...",

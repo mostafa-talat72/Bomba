@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Modal, Form, InputNumber, Input, Select, Tag, message, Card, Row, Col, Empty, Spin } from 'antd';
+import { Button, Modal, Form, InputNumber, Input, Select, Tag, message, Card, Row, Col, Empty, Spin, DatePicker } from 'antd';
 import { Plus, Check, X, DollarSign, User, Calendar, FileText } from 'lucide-react';
 import api from '../../services/api';
 import dayjs from 'dayjs';
@@ -76,7 +76,12 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
 
   const handleSubmit = async (values: any) => {
     try {
-      await api.post('/payroll/advances', values);
+      const advanceDate = values.requestDate || dayjs();
+      const payload = {
+        ...values,
+        requestDate: advanceDate.format('YYYY-MM-DD')
+      };
+      await api.post('/payroll/advances', payload);
       message.success(t('payroll.advanceManagement.messages.submitSuccess'));
       setIsModalVisible(false);
       form.resetFields();
@@ -87,14 +92,63 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
   };
 
   const handleApprove = async (id: string) => {
-    Modal.confirm({
+    // البحث عن السلفة للحصول على requestDate
+    const advance = advances.find(adv => adv._id === id);
+    if (!advance) {
+      message.error(t('payroll.advanceManagement.messages.advanceNotFound'));
+      return;
+    }
+
+    const requestDate = dayjs(advance.requestDate);
+    let approvalDate = dayjs();
+
+    // إنشاء modal مخصص لاختيار تاريخ الموافقة
+    const approvalModal = Modal.confirm({
       title: t('payroll.advanceManagement.confirmApprove.title'),
-      content: t('payroll.advanceManagement.confirmApprove.content'),
+      width: 500,
+      content: (
+        <div className="space-y-4 mt-4">
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            {t('payroll.advanceManagement.confirmApprove.content')}
+          </p>
+          <div>
+            <label className="block text-sm font-medium mb-2 dark:text-gray-200">
+              {i18n.language === 'ar' ? 'تاريخ الموافقة' : i18n.language === 'fr' ? 'Date d\'approbation' : 'Approval Date'}
+            </label>
+            <DatePicker
+              defaultValue={dayjs()}
+              format="YYYY-MM-DD"
+              style={{ width: '100%' }}
+              onChange={(date) => {
+                if (date) {
+                  approvalDate = date;
+                }
+              }}
+              disabledDate={(current) => {
+                if (!current) return false;
+                const today = dayjs();
+                // لا يمكن اختيار تاريخ قبل requestDate أو بعد اليوم
+                return current.isBefore(requestDate, 'day') || current.isAfter(today, 'day');
+              }}
+            />
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {i18n.language === 'ar' 
+                ? `لا يمكن اختيار تاريخ قبل ${requestDate.format('DD/MM/YYYY')} أو بعد اليوم`
+                : i18n.language === 'fr'
+                ? `Impossible de sélectionner une date avant le ${requestDate.format('DD/MM/YYYY')} ou après aujourd'hui`
+                : `Cannot select a date before ${requestDate.format('DD/MM/YYYY')} or after today`}
+            </div>
+          </div>
+        </div>
+      ),
       okText: t('payroll.advanceManagement.confirmApprove.okText'),
       cancelText: t('payroll.advanceManagement.confirmApprove.cancelText'),
       onOk: async () => {
         try {
-          await api.put(`/payroll/advances/${id}/status`, { status: 'approved' });
+          await api.put(`/payroll/advances/${id}/status`, { 
+            status: 'approved',
+            approvalDate: approvalDate.format('YYYY-MM-DD')
+          });
           message.success(t('payroll.advanceManagement.messages.approveSuccess'));
           fetchAdvances();
         } catch (error: any) {
@@ -326,6 +380,25 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
               rows={3}
               placeholder={t('payroll.advanceManagement.form.reasonPlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.pendingAdvances.table.requestDate')}</span>}
+            name="requestDate"
+            initialValue={dayjs()}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="YYYY-MM-DD"
+              className="dark:bg-gray-700 dark:border-gray-600"
+              placeholder={t('payroll.attendanceManagement.selectDate')}
+              disabledDate={(current) => {
+                if (!current) return false;
+                const today = dayjs();
+                // لا يمكن اختيار تاريخ في المستقبل
+                return current.isAfter(today, 'day');
+              }}
             />
           </Form.Item>
 

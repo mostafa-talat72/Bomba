@@ -48,7 +48,7 @@ export const getAdvanceById = async (req, res) => {
 export const requestAdvance = async (req, res) => {
   try {
 
-    const { employeeId, amount, reason, repayment } = req.body;
+    const { employeeId, amount, reason, repayment, requestDate } = req.body;
     
     // التحقق من وجود الموظف
     const employee = await Employee.findOne({
@@ -68,6 +68,7 @@ export const requestAdvance = async (req, res) => {
       employeeId,
       amount,
       reason,
+      requestDate: requestDate || new Date(), // استخدام التاريخ المرسل أو تاريخ اليوم
       repayment: {
         method: repayment?.method || 'installments',
         installments: repayment?.installments || 1,
@@ -98,7 +99,7 @@ export const requestAdvance = async (req, res) => {
 // Approve/Reject advance
 export const updateAdvanceStatus = async (req, res) => {
   try {
-    const { status, notes, rejectionReason } = req.body;
+    const { status, notes, rejectionReason, approvalDate } = req.body;
     
     const advance = await Advance.findOne({
       _id: req.params.id,
@@ -113,9 +114,36 @@ export const updateAdvanceStatus = async (req, res) => {
       return res.status(400).json({ success: false, error: 'لا يمكن تعديل حالة هذه السلفة' });
     }
     
+    // التحقق من صحة تاريخ الموافقة
+    if (status === 'approved' && approvalDate) {
+      const approvalDateObj = new Date(approvalDate);
+      const requestDateObj = new Date(advance.requestDate);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); // نهاية اليوم
+      
+      // التحقق من أن تاريخ الموافقة ليس قبل تاريخ الطلب
+      if (approvalDateObj < requestDateObj) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'تاريخ الموافقة لا يمكن أن يكون قبل تاريخ الطلب' 
+        });
+      }
+      
+      // التحقق من أن تاريخ الموافقة ليس في المستقبل
+      if (approvalDateObj > today) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'تاريخ الموافقة لا يمكن أن يكون في المستقبل' 
+        });
+      }
+      
+      advance.approvalDate = approvalDateObj;
+    } else {
+      advance.approvalDate = new Date();
+    }
+    
     advance.status = status;
     advance.approvedBy = req.user._id;
-    advance.approvalDate = new Date();
     advance.approvalNotes = notes;
     
     if (status === 'rejected') {

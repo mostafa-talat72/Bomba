@@ -205,6 +205,36 @@ const formatNumber = (num, currentLanguage) => {
   return String(num);
 };
 
+// ✅ دالة لتنسيق الأرقام السالبة بشكل صحيح (علامة السالب قبل الرقم)
+const formatNumberWithSign = (num, currentLanguage, isRTL = false) => {
+  const absNum = Math.abs(num);
+  const formattedNum = formatNumber(absNum.toFixed(2), currentLanguage);
+  
+  if (num < 0) {
+    // علامة السالب قبل الرقم
+    if (isRTL) {
+      return `${formattedNum}-`; // في RTL: الرقم ثم السالب
+    } else {
+      return `-${formattedNum}`; // في LTR: السالب ثم الرقم
+    }
+  }
+  
+  return formattedNum;
+};
+
+// ✅ دالة للحصول على نص توضيحي للأرقام السالبة (ديون)
+const getDebtLabel = (amount, currentLanguage) => {
+  if (amount >= 0) return null;
+  
+  const labels = {
+    'ar': '(ديون على الموظف)',
+    'en': '(Employee Debt)',
+    'fr': '(Dette de l\'employé)'
+  };
+  
+  return labels[currentLanguage] || labels['ar'];
+};
+
 // دالة لتنظيف النصوص - تضمن عرض البيانات من قاعدة البيانات بشكل صحيح
 const cleanText = (text) => {
   if (!text || text === null || text === undefined) return '-';
@@ -463,9 +493,34 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
   const styles = createStyles(isRTL);
   const { createElement: h } = React;
 
+  // ✅ دالة للحصول على الحالة المالية للموظف
+  const getFinancialStatus = (totalUnpaid, currentLanguage) => {
+    if (totalUnpaid > 0) {
+      // الموظف له مستحقات
+      return {
+        text: currentLanguage === 'ar' ? 'له مستحقات' : currentLanguage === 'fr' ? 'A des droits' : 'Has Dues',
+        color: '#16a34a' // أخضر
+      };
+    } else if (totalUnpaid < 0) {
+      // الموظف مديون (عليه ديون)
+      return {
+        text: currentLanguage === 'ar' ? 'عليه ديون' : currentLanguage === 'fr' ? 'A des dettes' : 'Has Debts',
+        color: '#dc2626' // أحمر
+      };
+    } else {
+      // متساوي
+      return {
+        text: currentLanguage === 'ar' ? 'متساوي' : currentLanguage === 'fr' ? 'Équilibré' : 'Balanced',
+        color: '#6b7280' // رمادي
+      };
+    }
+  };
+
   // Create employee rows for summary table
-  const employeeRows = data.employees.map((emp, index) =>
-    h(View, { key: index, style: styles.employeeRow }, [
+  const employeeRows = data.employees.map((emp, index) => {
+    const financialStatus = getFinancialStatus(emp.totalUnpaid || 0, currentLanguage);
+    
+    return h(View, { key: index, style: styles.employeeRow }, [
       h(Text, { key: 'name', style: [styles.employeeCell, styles.col1] }, cleanText(emp.employeeName)),
       h(Text, { key: 'dept', style: [styles.employeeCell, styles.col2] }, getDepartmentName(emp.department, currentLanguage)),
       h(Text, { key: 'gross', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.grossSalary || 0).toFixed(2), currentLanguage)),
@@ -474,10 +529,29 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
       h(Text, { key: 'net', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.netSalary || 0).toFixed(2), currentLanguage)),
       h(Text, { key: 'paid', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.paidAmount || 0).toFixed(2), currentLanguage)),
       h(Text, { key: 'unpaid', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.unpaidBalance || 0).toFixed(2), currentLanguage)),
-      h(Text, { key: 'carried', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.carriedForward || 0).toFixed(2), currentLanguage)),
-      h(Text, { key: 'total', style: [styles.employeeCell, styles.col3] }, formatNumber((emp.totalUnpaid || 0).toFixed(2), currentLanguage))
-    ])
-  );
+      // ✅ المرحل - مع علامة السالب الصحيحة
+      h(Text, { 
+        key: 'carried', 
+        style: [styles.employeeCell, styles.col3, { color: emp.carriedForward < 0 ? '#dc2626' : '#2c3e50' }] 
+      }, 
+        formatNumberWithSign(emp.carriedForward || 0, currentLanguage, isRTL)
+      ),
+      // ✅ الإجمالي - مع علامة السالب الصحيحة
+      h(Text, { 
+        key: 'total', 
+        style: [styles.employeeCell, styles.col3, { color: emp.totalUnpaid < 0 ? '#dc2626' : emp.totalUnpaid > 0 ? '#16a34a' : '#2c3e50', fontWeight: 'bold' }] 
+      }, 
+        formatNumberWithSign(emp.totalUnpaid || 0, currentLanguage, isRTL)
+      ),
+      // ✅ الحالة المالية - عمود جديد
+      h(Text, { 
+        key: 'status', 
+        style: [styles.employeeCell, styles.col3, { color: financialStatus.color, fontWeight: 'bold', fontSize: 8 }] 
+      }, 
+        financialStatus.text
+      )
+    ]);
+  });
 
   // Create detailed pages for each employee if data is available
   const detailedPages = [];
@@ -545,10 +619,18 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
         h(View, { key: 's2', style: { ...styles.section, marginBottom: 8 } }, [
           h(Text, { key: 'st2', style: styles.sectionTitle }, `${cleanText(t.financialSummary || 'الملخص المالي')} - ${cleanText(monthName)}`),
           h(View, { key: 'grid2', style: styles.statsGrid }, [
+            // ✅ المرحل - مع توضيح إذا كان ديون
             h(View, { key: 'c1', style: styles.statCard }, [
-              h(View, { key: 'b1', style: styles.statBox }, [
+              h(View, { key: 'b1', style: { ...styles.statBox, backgroundColor: stats.carriedForward < 0 ? '#fee2e2' : '#ecf0f1' } }, [
                 h(Text, { key: 'l1', style: styles.statLabel }, cleanText(t.carriedForward || 'المرحل')),
-                h(Text, { key: 'v1', style: styles.statValue }, `${formatNumber((stats.carriedForward || 0).toFixed(2), currentLanguage)} ${cleanText(t.currency)}`)
+                h(Text, { key: 'v1', style: { ...styles.statValue, color: stats.carriedForward < 0 ? '#dc2626' : '#2c3e50' } }, 
+                  `${formatNumberWithSign(stats.carriedForward || 0, currentLanguage, isRTL)} ${cleanText(t.currency)}`
+                ),
+                ...(stats.carriedForward < 0 ? [
+                  h(Text, { key: 'debt1', style: { fontSize: 7, color: '#dc2626', marginTop: 2 } }, 
+                    getDebtLabel(stats.carriedForward, currentLanguage)
+                  )
+                ] : [])
               ])
             ]),
             h(View, { key: 'c2', style: styles.statCard }, [
@@ -588,10 +670,21 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
               ])
             ])
           ]),
-          // الرصيد المتاح
-          h(View, { key: 'balance', style: styles.balanceBox }, [
-            h(Text, { key: 'bl', style: styles.balanceLabel }, cleanText(t.availableBalance || 'الرصيد المتاح')),
-            h(Text, { key: 'bv', style: styles.balanceValue }, `${formatNumber((stats.remainingBalance || 0).toFixed(2), currentLanguage)} ${cleanText(t.currency)}`)
+          // ✅ الرصيد المتاح أو مديون برصيد - مع توضيح الديون
+          h(View, { key: 'balance', style: { ...styles.balanceBox, backgroundColor: stats.remainingBalance < 0 ? '#dc2626' : '#3498db' } }, [
+            h(Text, { key: 'bl', style: styles.balanceLabel }, cleanText(
+              stats.remainingBalance >= 0 
+                ? (t.availableBalance || 'الرصيد المتاح')
+                : (currentLanguage === 'ar' ? 'مديون برصيد' : currentLanguage === 'fr' ? 'Solde débiteur' : 'Debt balance')
+            )),
+            h(Text, { key: 'bv', style: styles.balanceValue }, 
+              `${formatNumberWithSign(stats.remainingBalance || 0, currentLanguage, isRTL)} ${cleanText(t.currency)}`
+            ),
+            ...(stats.remainingBalance < 0 ? [
+              h(Text, { key: 'debt-note', style: { fontSize: 9, color: 'white', textAlign: 'center', marginTop: 4 } }, 
+                getDebtLabel(stats.remainingBalance, currentLanguage)
+              )
+            ] : [])
           ])
         ]),
         
@@ -871,13 +964,33 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
             h(Text, { key: 'l7', style: [styles.tableCell, styles.tableCellLabel] }, t.remainingCurrentMonth),
             h(Text, { key: 'v7', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalUnpaidCurrentMonth || 0).toFixed(2), currentLanguage)} ${t.currency}`)
           ]),
+          // ✅ المرحل - مع علامة السالب الصحيحة وتوضيح الديون
           h(View, { key: 'row8', style: styles.tableRow }, [
             h(Text, { key: 'l8', style: [styles.tableCell, styles.tableCellLabel] }, t.carriedForward),
-            h(Text, { key: 'v8', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalCarriedForward || 0).toFixed(2), currentLanguage)} ${t.currency}`)
+            h(View, { key: 'v8-container', style: [styles.tableCell, styles.tableCellValue] }, [
+              h(Text, { key: 'v8', style: { fontSize: 11 } }, 
+                `${formatNumberWithSign(data.statistics.totalCarriedForward || 0, currentLanguage, isRTL)} ${t.currency}`
+              ),
+              ...(data.statistics.totalCarriedForward < 0 ? [
+                h(Text, { key: 'debt8', style: { fontSize: 8, color: '#dc2626', marginTop: 2 } }, 
+                  getDebtLabel(data.statistics.totalCarriedForward, currentLanguage)
+                )
+              ] : [])
+            ])
           ]),
+          // ✅ إجمالي المستحقات - مع علامة السالب الصحيحة وتوضيح الديون
           h(View, { key: 'row9', style: styles.tableRow }, [
             h(Text, { key: 'l9', style: [styles.tableCell, styles.tableCellLabel] }, t.totalDue),
-            h(Text, { key: 'v9', style: [styles.tableCell, styles.tableCellValue] }, `${formatNumber((data.statistics.totalUnpaid || 0).toFixed(2), currentLanguage)} ${t.currency}`)
+            h(View, { key: 'v9-container', style: [styles.tableCell, styles.tableCellValue] }, [
+              h(Text, { key: 'v9', style: { fontSize: 11 } }, 
+                `${formatNumberWithSign(data.statistics.totalUnpaid || 0, currentLanguage, isRTL)} ${t.currency}`
+              ),
+              ...(data.statistics.totalUnpaid < 0 ? [
+                h(Text, { key: 'debt9', style: { fontSize: 8, color: '#dc2626', marginTop: 2 } }, 
+                  getDebtLabel(data.statistics.totalUnpaid, currentLanguage)
+                )
+              ] : [])
+            ])
           ])
         ])
       ]),
@@ -924,7 +1037,9 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
             h(Text, { key: 'h7', style: [styles.employeeCell, styles.col3] }, t.paid),
             h(Text, { key: 'h8', style: [styles.employeeCell, styles.col3] }, t.remaining),
             h(Text, { key: 'h9', style: [styles.employeeCell, styles.col3] }, t.carried),
-            h(Text, { key: 'h10', style: [styles.employeeCell, styles.col3] }, t.total)
+            h(Text, { key: 'h10', style: [styles.employeeCell, styles.col3] }, t.total),
+            // ✅ عمود جديد للحالة المالية
+            h(Text, { key: 'h11', style: [styles.employeeCell, styles.col3] }, t.financialStatus || 'الحالة')
           ]),
           ...employeeRows
         ])

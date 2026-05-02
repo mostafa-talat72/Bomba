@@ -425,6 +425,14 @@ const generateMonthlyReportForOrganization = async (organization) => {
             computerRevenue,
             totalRevenue,
             totalCosts,
+            costsCount: costs.length,
+            costsDetails: costs.map(c => ({
+                id: c._id,
+                amount: c.amount,
+                paidAmount: c.paidAmount,
+                category: c.category,
+                date: c.date
+            })),
             netProfit
         });
 

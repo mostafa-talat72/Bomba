@@ -2532,6 +2532,7 @@
         "partiallyPaidNote": "سيتم تحديث حالة الدفع تلقائياً إلى \"مدفوع جزئياً\"",
         "fullyPaidNote": "سيتم تحديث حالة الدفع تلقائياً إلى \"مدفوع\"",
         "date": "التاريخ",
+        "time": "الوقت",
         "dateRequired": "مطلوب",
         "dueDate": "تاريخ الاستحقاق",
         "dueDateOptional": "اختياري",
@@ -2860,7 +2861,8 @@
         "rejectError": "فشل في الرفض",
         "amountRequired": "الرجاء إدخال المبلغ",
         "reasonRequired": "الرجاء إدخال السبب",
-        "installmentsRequired": "الرجاء إدخال عدد الأقساط"
+        "installmentsRequired": "الرجاء إدخال عدد الأقساط",
+        "advanceNotFound": "السلفة غير موجودة"
       },
       "requestAdvance": "طلب سلفة جديدة",
       "requestDate": "تاريخ الطلب",
@@ -3332,6 +3334,8 @@
         "loadError": "فشل في تحميل بيانات الموظف",
         "invalidAmount": "الرجاء إدخال مبلغ صحيح",
         "amountExceedsBalance": "المبلغ المطلوب أكبر من المتبقي",
+        "amountExceedsMonthlyEarnings": "المبلغ أكبر من راتب الشهر الحالي",
+        "noAmountAvailable": "لا يوجد مبلغ متاح للدفع في الشهر الحالي",
         "paymentSuccess": "تم تسجيل الدفعة بنجاح",
         "paymentError": "فشل في تسجيل الدفعة",
         "exportingPDF": "جاري إنشاء ملف PDF...",

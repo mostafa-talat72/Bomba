@@ -2539,6 +2539,7 @@
         "partiallyPaidNote": "Le statut du paiement sera automatiquement mis à jour sur « Partiellement payé ».",
         "fullyPaidNote": "Le statut du paiement sera automatiquement mis à jour sur « Payé »",
         "date": "la date",
+        "time": "Temps",
         "dateRequired": "requis",
         "dueDate": "date d'échéance",
         "dueDateOptional": "facultatif",
@@ -2858,7 +2859,8 @@
         "rejectError": "Impossible de refuser",
         "amountRequired": "Veuillez saisir le montant",
         "reasonRequired": "Veuillez entrer la raison",
-        "installmentsRequired": "Veuillez saisir le nombre de versements"
+        "installmentsRequired": "Veuillez saisir le nombre de versements",
+        "advanceNotFound": "Avance introuvable"
       },
       "requestAdvance": "Demander une nouvelle avance",
       "requestDate": "Date de commande",
@@ -3330,6 +3332,7 @@
         "loadError": "Échec du téléchargement des données des employés",
         "invalidAmount": "Veuillez entrer un montant valide",
         "amountExceedsBalance": "Le montant requis est supérieur au montant restant",
+        "amountExceedsMonthlyEarnings": "Le montant dépasse les gains du mois en cours",
         "paymentSuccess": "Le paiement a été enregistré avec succès",
         "paymentError": "Échec de l'enregistrement du paiement",
         "exportingPDF": "Création d'un fichier PDF...",

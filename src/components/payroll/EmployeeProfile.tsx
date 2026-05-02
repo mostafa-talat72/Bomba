@@ -245,14 +245,47 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   const stats = calculateStats();
 
   const handlePayment = async () => {
+    // حساب المبلغ المتاح للدفع
+    // إذا كان الرصيد موجب: يمكن الدفع حتى الرصيد المتاح
+    // إذا كان الرصيد سالب (مديون): يمكن الدفع من راتب الشهر الحالي فقط
+    const currentMonthEarnings = stats.currentMonthSalary + stats.currentMonthBonuses;
+    const alreadyPaid = stats.currentMonthPaid;
+    const availableFromCurrentMonth = currentMonthEarnings - alreadyPaid;
+    
+    // إذا كان الرصيد موجب، يمكن الدفع من الرصيد المتاح
+    // إذا كان الرصيد سالب، يمكن الدفع من راتب الشهر الحالي فقط
+    const maxAllowedPayment = stats.remainingBalance >= 0 
+      ? stats.remainingBalance 
+      : availableFromCurrentMonth;
+    
+    // إذا لم يكن هناك راتب في الشهر الحالي ولا رصيد متاح
+    if (maxAllowedPayment <= 0) {
+      message.error(currentLanguage === 'ar' 
+        ? 'لا يوجد مبلغ متاح للدفع في الشهر الحالي' 
+        : 'No amount available for payment in current month');
+      return;
+    }
+    
     if (!paymentAmount || paymentAmount <= 0) {
-      message.error(t('payroll.employeeProfile.messages.invalidAmount'));
+      message.error(currentLanguage === 'ar' 
+        ? `الرجاء إدخال مبلغ صحيح. الحد الأقصى: ${formatNumber(maxAllowedPayment.toFixed(2))} ${currency()}`
+        : `Please enter a valid amount. Maximum: ${maxAllowedPayment.toFixed(2)} ${currency()}`);
       return;
     }
-    if (paymentAmount > stats.remainingBalance) {
-      message.error(t('payroll.employeeProfile.messages.amountExceedsBalance'));
+    
+    if (paymentAmount > maxAllowedPayment) {
+      if (stats.remainingBalance >= 0) {
+        message.error(currentLanguage === 'ar' 
+          ? `المبلغ المطلوب أكبر من الرصيد المتاح. الحد الأقصى: ${formatNumber(maxAllowedPayment.toFixed(2))} ${currency()}`
+          : `Amount exceeds available balance. Maximum: ${maxAllowedPayment.toFixed(2)} ${currency()}`);
+      } else {
+        message.error(currentLanguage === 'ar' 
+          ? `المبلغ المطلوب أكبر من راتب الشهر الحالي المتاح. الحد الأقصى: ${formatNumber(maxAllowedPayment.toFixed(2))} ${currency()}`
+          : `Amount exceeds current month available salary. Maximum: ${maxAllowedPayment.toFixed(2)} ${currency()}`);
+      }
       return;
     }
+    
     try {
       const response = await api.post('/payroll/payments', {
         employeeId,
@@ -363,7 +396,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
       
       // إنشاء رسالة WhatsApp
       const employeeName = employee.personalInfo?.name;
-      const whatsappMessage = `${t('payroll.employeeProfile.whatsappMessage.greeting')} ${employeeName}،\n\n${t('payroll.employeeProfile.whatsappMessage.reportFor')} ${monthName}\n\n${t('payroll.employeeProfile.availableBalance')}: ${toArabicNumbers(stats.remainingBalance.toFixed(2))} ${currency()}`;
+      const balanceText = stats.remainingBalance >= 0 
+        ? `${t('payroll.employeeProfile.availableBalance')}: ${toArabicNumbers(stats.remainingBalance.toFixed(2))} ${currency()}`
+        : `${currentLanguage === 'ar' ? 'مديون برصيد' : 'Debt balance'}: ${toArabicNumbers(Math.abs(stats.remainingBalance).toFixed(2))} ${currency()}`;
+      const whatsappMessage = `${t('payroll.employeeProfile.whatsappMessage.greeting')} ${employeeName}،\n\n${t('payroll.employeeProfile.whatsappMessage.reportFor')} ${monthName}\n\n${balanceText}`;
       
       // فتح WhatsApp Web مع الرسالة
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
@@ -754,11 +790,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   // Advance handlers
   const handleSubmitAdvance = async (values: any) => {
     try {
-
+      const advanceDate = values.requestDate || dayjs();
       const payload = {
         employeeId,
         amount: values.amount,
         reason: values.reason,
+        requestDate: advanceDate.format('YYYY-MM-DD'),
         repayment: {
           method: values.repaymentMethod || 'installments',
           installments: values.installments || 1
@@ -1276,7 +1313,24 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={4}>
           <Card className="dark:bg-gray-800 dark:border-gray-700 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
-            <Statistic title={<span className="dark:text-gray-300 text-xs sm:text-sm font-bold">{t('payroll.employeeProfile.availableBalance')}</span>} value={toArabicNumbers(stats.remainingBalance.toFixed(2))} suffix={currency()} prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} valueStyle={{ color: '#1890ff', fontSize: '20px', fontWeight: 'bold' }} className="[&_.ant-statistic-content]:text-lg sm:[&_.ant-statistic-content]:text-xl" />
+            <Statistic 
+              title={
+                <span className="dark:text-gray-300 text-xs sm:text-sm font-bold">
+                  {stats.remainingBalance >= 0 
+                    ? t('payroll.employeeProfile.availableBalance')
+                    : (currentLanguage === 'ar' ? 'مديون برصيد' : 'Debt balance')}
+                </span>
+              } 
+              value={toArabicNumbers(Math.abs(stats.remainingBalance).toFixed(2))} 
+              suffix={currency()} 
+              prefix={<Wallet size={16} className="sm:w-[18px] sm:h-[18px]" />} 
+              valueStyle={{ 
+                color: stats.remainingBalance >= 0 ? '#1890ff' : '#ff4d4f', 
+                fontSize: '20px', 
+                fontWeight: 'bold' 
+              }} 
+              className="[&_.ant-statistic-content]:text-lg sm:[&_.ant-statistic-content]:text-xl" 
+            />
           </Card>
         </Col>
       </Row>
@@ -1286,8 +1340,14 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         <Card className="mb-4 dark:bg-gray-800 dark:border-gray-700">
           <div className="flex flex-col gap-4">
             <div>
-              <h3 className="text-base sm:text-lg font-bold dark:text-gray-100">{t('payroll.employeeProfile.availableBalanceTitle')}</h3>
-              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 mt-2">{toArabicNumbers(stats.remainingBalance.toFixed(2))} {currency()}</p>
+              <h3 className="text-base sm:text-lg font-bold dark:text-gray-100">
+                {stats.remainingBalance >= 0 
+                  ? t('payroll.employeeProfile.availableBalanceTitle')
+                  : (currentLanguage === 'ar' ? 'مديون برصيد' : 'Debt balance')}
+              </h3>
+              <p className={`text-xl sm:text-2xl font-bold mt-2 ${stats.remainingBalance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {toArabicNumbers(Math.abs(stats.remainingBalance).toFixed(2))} {currency()}
+              </p>
               {!isCurrentMonth && (
                 <p className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 mt-1">
                   {t('payroll.employeeProfile.cannotPayNonCurrentMonth')}
@@ -1320,8 +1380,20 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 type="primary" 
                 size="large" 
                 icon={<Wallet size={18} />} 
-                onClick={() => setPaymentModalVisible(true)} 
-                disabled={stats.remainingBalance <= 0 || !isCurrentMonth}
+                onClick={() => {
+                  // تعيين القيمة الافتراضية للمبلغ المدفوع
+                  const currentMonthEarnings = stats.currentMonthSalary + stats.currentMonthBonuses;
+                  const alreadyPaid = stats.currentMonthPaid;
+                  const availableToPay = currentMonthEarnings - alreadyPaid;
+                  
+                  if (availableToPay > 0) {
+                    setPaymentAmount(availableToPay);
+                  } else {
+                    setPaymentAmount(0);
+                  }
+                  setPaymentModalVisible(true);
+                }} 
+                disabled={!isCurrentMonth}
                 className="w-full text-sm sm:col-span-2 lg:col-span-1"
                 block
               >
@@ -2069,16 +2141,74 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         okText={t('payroll.payrollHistory.pay')} 
         cancelText={t('common.cancel')} 
         className="professional-modal success-modal"
-        width={500}
+        width={550}
       >
         <div className="space-y-4">
-          <div className="info-box success">
-            <div className="flex items-center gap-2 mb-2">
-              <Wallet size={18} />
-              <span className="font-bold">{t('payroll.employeeProfile.availableBalance')}</span>
+          {/* ملخص الراتب الشهري */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.currentMonthSalary')}</div>
+                <div className="font-bold text-green-600 dark:text-green-400">
+                  {toArabicNumbers(stats.currentMonthSalary.toFixed(2))} {currency()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.monthBonuses')}</div>
+                <div className="font-bold text-blue-600 dark:text-blue-400">
+                  {toArabicNumbers(stats.currentMonthBonuses.toFixed(2))} {currency()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.monthAdvances')}</div>
+                <div className="font-bold text-orange-600 dark:text-orange-400">
+                  {toArabicNumbers(stats.currentMonthAdvances.toFixed(2))} {currency()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('payroll.employeeProfile.monthDeductions')}</div>
+                <div className="font-bold text-red-600 dark:text-red-400">
+                  {toArabicNumbers(stats.currentMonthDeductions.toFixed(2))} {currency()}
+                </div>
+              </div>
             </div>
-            <div className="text-2xl font-bold">{toArabicNumbers(stats.remainingBalance.toFixed(2))} {currency()}</div>
+            <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {stats.remainingBalance >= 0 
+                    ? t('payroll.employeeProfile.availableBalance')
+                    : (currentLanguage === 'ar' ? 'مديون برصيد' : 'Debt balance')}:
+                </span>
+                <span className={`text-xl font-bold ${stats.remainingBalance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {toArabicNumbers(Math.abs(stats.remainingBalance).toFixed(2))} {currency()}
+                </span>
+              </div>
+              {stats.carriedForward !== 0 && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  ({t('payroll.employeeProfile.carriedForward')}: {toArabicNumbers(stats.carriedForward.toFixed(2))} {currency()})
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* تنبيه إذا كان الموظف مديون */}
+          {stats.remainingBalance < 0 && (
+            <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg border border-orange-200 dark:border-orange-800">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={18} className="text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
+                    {currentLanguage === 'ar' ? 'الموظف مديون' : 'Employee has debt'}
+                  </p>
+                  <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                    {currentLanguage === 'ar' 
+                      ? 'يمكنك دفع جزء من راتب الشهر الحالي، والباقي سيُخصم من الديون تلقائياً'
+                      : 'You can pay part of current month salary, the rest will be deducted from debts automatically'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div>
             <label className="block text-sm font-medium mb-2 dark:text-gray-200">{t('payroll.payrollHistory.amountToPay')}</label>
@@ -2087,14 +2217,60 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               value={paymentAmount} 
               onChange={(value) => setPaymentAmount(value || 0)} 
               min={0} 
-              max={stats.remainingBalance} 
+              max={stats.remainingBalance >= 0 
+                ? stats.remainingBalance 
+                : (stats.currentMonthSalary + stats.currentMonthBonuses - stats.currentMonthPaid)}
               style={{ width: '100%' }} 
               className="dark:bg-gray-700 dark:border-gray-600" 
               placeholder={t('payroll.advanceManagement.enterAmount')}
               size="large"
               prefix={<DollarSign size={16} className="text-gray-400" />}
             />
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {currentLanguage === 'ar' 
+                ? `الحد الأقصى: ${toArabicNumbers((stats.remainingBalance >= 0 
+                    ? stats.remainingBalance 
+                    : (stats.currentMonthSalary + stats.currentMonthBonuses - stats.currentMonthPaid)).toFixed(2))} ${currency()}`
+                : `Maximum: ${(stats.remainingBalance >= 0 
+                    ? stats.remainingBalance 
+                    : (stats.currentMonthSalary + stats.currentMonthBonuses - stats.currentMonthPaid)).toFixed(2)} ${currency()}`}
+            </div>
           </div>
+
+          {/* عرض ما سيحدث بعد الدفع */}
+          {paymentAmount > 0 && (
+            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {currentLanguage === 'ar' ? 'المبلغ المدفوع:' : 'Amount to pay:'}
+                  </span>
+                  <span className="font-bold text-green-600 dark:text-green-400">
+                    {toArabicNumbers(paymentAmount.toFixed(2))} {currency()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {currentLanguage === 'ar' 
+                      ? (stats.remainingBalance + paymentAmount >= 0 ? 'الرصيد بعد الدفع:' : 'مديون برصيد:')
+                      : (stats.remainingBalance + paymentAmount >= 0 ? 'Balance after payment:' : 'Debt balance:')}
+                  </span>
+                  <span className={`font-bold ${(stats.remainingBalance + paymentAmount) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                    {toArabicNumbers(Math.abs(stats.remainingBalance + paymentAmount).toFixed(2))} {currency()}
+                  </span>
+                </div>
+                {(stats.remainingBalance + paymentAmount) < 0 && (
+                  <div className="pt-2 border-t border-green-200 dark:border-green-800">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {currentLanguage === 'ar' 
+                        ? `الباقي (${toArabicNumbers(Math.abs(stats.remainingBalance + paymentAmount).toFixed(2))} ${currency()}) سيبقى كدين على الموظف`
+                        : `Remaining (${Math.abs(stats.remainingBalance + paymentAmount).toFixed(2)} ${currency()}) will remain as employee debt`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           
           <div>
             <label className="block text-sm font-medium mb-2 dark:text-gray-200">{t('payroll.payrollHistory.paymentDate')}</label>
@@ -2617,6 +2793,26 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               rows={3}
               placeholder={t('payroll.advanceManagement.advanceReason')}
               className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={<span className="dark:text-gray-200">{t('payroll.pendingAdvances.table.requestDate')}</span>}
+            name="requestDate"
+            initialValue={dayjs()}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="YYYY-MM-DD"
+              className="dark:bg-gray-700 dark:border-gray-600"
+              size="large"
+              placeholder={t('payroll.attendanceManagement.selectDate')}
+              disabledDate={(current) => {
+                if (!current) return false;
+                const today = dayjs();
+                // لا يمكن اختيار تاريخ في المستقبل
+                return current.isAfter(today, 'day');
+              }}
             />
           </Form.Item>
 

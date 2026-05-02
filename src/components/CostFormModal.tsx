@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { formatCurrency } from '../utils/formatters';
-import { DatePicker, ConfigProvider } from 'antd';
+import { DatePicker, TimePicker, ConfigProvider } from 'antd';
 import dayjs from 'dayjs';
 import arEG from 'antd/locale/ar_EG';
 import enUS from 'antd/locale/en_US';
@@ -66,6 +66,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
     amount: 0,
     paidAmount: 0,
     date: new Date().toISOString().split('T')[0],
+    time: new Date().toTimeString().slice(0, 5), // HH:MM format
     dueDate: '',
     paymentMethod: 'cash',
     vendor: '',
@@ -81,25 +82,33 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
         ? editingCost.category 
         : editingCost.category?._id || '';
       
+      // Extract date and time from ISO string
+      const costDate = new Date(editingCost.date);
+      const dateStr = costDate.toISOString().split('T')[0];
+      const timeStr = costDate.toTimeString().slice(0, 5);
+      
       setFormData({
         category: categoryId,
         description: editingCost.description,
         amount: editingCost.amount,
         paidAmount: editingCost.paidAmount,
-        date: editingCost.date.split('T')[0],
+        date: dateStr,
+        time: timeStr,
         dueDate: editingCost.dueDate ? editingCost.dueDate.split('T')[0] : '',
         paymentMethod: editingCost.paymentMethod,
         vendor: editingCost.vendor || '',
         notes: editingCost.notes || '',
       });
     } else {
-      // Reset form for new cost
+      // Reset form for new cost with current date and time
+      const now = new Date();
       setFormData({
         category: '',
         description: '',
         amount: 0,
         paidAmount: 0,
-        date: new Date().toISOString().split('T')[0],
+        date: now.toISOString().split('T')[0],
+        time: now.toTimeString().slice(0, 5),
         dueDate: '',
         paymentMethod: 'cash',
         vendor: '',
@@ -140,11 +149,18 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
     try {
       setLoading(true);
 
+      // Combine date and time into ISO string
+      const dateTimeString = `${formData.date}T${formData.time}:00.000Z`;
+
       const payload = {
         ...formData,
+        date: dateTimeString, // Send combined date and time
         currency: 'EGP', // Add default currency
         dueDate: formData.dueDate || undefined,
       };
+
+      // Remove time field from payload as it's now combined with date
+      delete (payload as any).time;
 
       if (editingCost) {
         // Update existing cost
@@ -364,7 +380,7 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
           )}
         </div>
 
-        {/* Date and Due Date */}
+        {/* Date and Time */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
@@ -383,17 +399,36 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
 
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-              📆 {t('costs.modals.costForm.dueDate')} <span className="text-xs font-normal text-gray-500">({t('costs.modals.costForm.dueDateOptional')})</span>
+              🕐 {t('costs.modals.costForm.time')} <span className="text-red-500">*</span>
             </label>
-            <DatePicker
-              value={formData.dueDate ? dayjs(formData.dueDate) : null}
-              onChange={(date) => setFormData({ ...formData, dueDate: date ? date.format('YYYY-MM-DD') : '' })}
-              format="YYYY-MM-DD"
+            <TimePicker
+              value={formData.time ? dayjs(formData.time, 'HH:mm') : null}
+              onChange={(time) => setFormData({ ...formData, time: time ? time.format('HH:mm') : '' })}
+              format="h:mm A"
+              use12Hours
               className="w-full"
               style={{ width: '100%', height: '48px' }}
-              placeholder={t('costs.modals.costForm.dueDate')}
+              placeholder={t('costs.modals.costForm.time')}
+              showNow
+              needConfirm={false}
+              required
             />
           </div>
+        </div>
+
+        {/* Due Date */}
+        <div>
+          <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+            📆 {t('costs.modals.costForm.dueDate')} <span className="text-xs font-normal text-gray-500">({t('costs.modals.costForm.dueDateOptional')})</span>
+          </label>
+          <DatePicker
+            value={formData.dueDate ? dayjs(formData.dueDate) : null}
+            onChange={(date) => setFormData({ ...formData, dueDate: date ? date.format('YYYY-MM-DD') : '' })}
+            format="YYYY-MM-DD"
+            className="w-full"
+            style={{ width: '100%', height: '48px' }}
+            placeholder={t('costs.modals.costForm.dueDate')}
+          />
         </div>
 
         {/* Payment Method */}

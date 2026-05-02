@@ -477,10 +477,31 @@ export const makePayment = async (req, res) => {
     const netSalary = currentMonthSalary + currentMonthBonuses - currentMonthAdvances - currentMonthDeductions;
     const remainingBalance = netSalary - currentMonthPaid + carriedForward;
 
-    if (amount > remainingBalance) {
+    // التحقق من المبلغ المطلوب
+    // إذا كان الرصيد موجب: يمكن الدفع حتى الرصيد المتاح
+    // إذا كان الرصيد سالب (مديون): يمكن الدفع من راتب الشهر الحالي فقط
+    const availableFromCurrentMonth = netSalary - currentMonthPaid;
+    const maxAllowedPayment = remainingBalance >= 0 ? remainingBalance : availableFromCurrentMonth;
+    
+    if (amount > maxAllowedPayment && maxAllowedPayment > 0) {
+      if (remainingBalance >= 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `المبلغ المطلوب (${amount}) أكبر من الرصيد المتاح (${remainingBalance.toFixed(2)})` 
+        });
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          error: `المبلغ المطلوب (${amount}) أكبر من راتب الشهر الحالي المتاح (${availableFromCurrentMonth.toFixed(2)})` 
+        });
+      }
+    }
+    
+    // إذا لم يكن هناك راتب متاح للدفع
+    if (maxAllowedPayment <= 0) {
       return res.status(400).json({ 
         success: false, 
-        error: `المبلغ المطلوب (${amount}) أكبر من الرصيد المتاح (${remainingBalance.toFixed(2)})` 
+        error: 'لا يوجد مبلغ متاح للدفع في الشهر الحالي' 
       });
     }
     

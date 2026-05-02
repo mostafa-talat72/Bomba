@@ -838,36 +838,49 @@ export const getEmployeePayrollHistory = async (req, res) => {
 };
 
 
-// Get comprehensive payroll summary for all employees
+// Get comprehensive payroll summary for all employees (API endpoint)
 export const getPayrollSummary = async (req, res) => {
   try {
     const { month, year } = req.query;
+    const organizationId = req.user.organization;
     
+    const data = await getPayrollSummaryData(organizationId, month, year);
+    
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('Error in getPayrollSummary:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ✅ دالة مساعدة لحساب ملخص المرتبات - يمكن استخدامها من أي مكان
+export const getPayrollSummaryData = async (organizationId, month, year) => {
+  try {
     // Get all active employees
     const employees = await Employee.find({
-      organizationId: req.user.organization,
+      organizationId: organizationId,
       'employment.status': 'active'
     });
     
     if (!employees || employees.length === 0) {
-      return res.json({
-        success: true,
-        data: {
-          month: month || 'all',
-          year: year || 'all',
-          totalEmployees: 0,
-          statistics: {
-            totalGrossSalary: 0,
-            totalDeductions: 0,
-            totalNetSalary: 0,
-            totalPaid: 0,
-            totalUnpaid: 0,
-            totalAdvances: 0,
-            totalOtherDeductions: 0
-          },
-          employees: []
-        }
-      });
+      return {
+        month: month || 'all',
+        year: year || 'all',
+        totalEmployees: 0,
+        statistics: {
+          totalGrossSalary: 0,
+          totalDeductions: 0,
+          totalNetSalary: 0,
+          totalPaid: 0,
+          totalUnpaid: 0,
+          totalAdvances: 0,
+          totalOtherDeductions: 0
+        },
+        employees: []
+      };
     }
     
     // Calculate date range
@@ -908,7 +921,7 @@ export const getPayrollSummary = async (req, res) => {
         if (employee.employment.status === 'suspended' || employee.employment.status === 'terminated') {
           const lastAttendance = await Attendance.findOne({
             employeeId: employee._id,
-            organizationId: req.user.organization,
+            organizationId: organizationId,
             date: { $gte: startDate, $lte: endDate }
           }).sort({ date: -1 });
           
@@ -922,7 +935,7 @@ export const getPayrollSummary = async (req, res) => {
         // Get attendance for the month
         const attendance = await Attendance.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
+          organizationId: organizationId,
           date: { $gte: startDate, $lte: employeeEndDate }
         });
         
@@ -949,55 +962,38 @@ export const getPayrollSummary = async (req, res) => {
           salaryCalculationNote = `${totalHours} ساعة × ${employee.compensation.hourly} = ${grossSalary} جنيه`;
         }
  
-        // Get ALL advances for this employee
-        const allAdvances = await Advance.find({
+        // Get advances for this month based on requestDate
+        const monthAdvances = await Advance.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
-          status: { $in: ['approved', 'paid', 'completed'] }
+          organizationId: organizationId,
+          status: { $in: ['approved', 'paid'] },
+          requestDate: { $gte: startDate, $lte: endDate }
         });
 
-        let advancesTotal = 0;
+        const advancesTotal = monthAdvances.reduce((sum, adv) => sum + adv.amount, 0);
         
-        // Calculate advances for this month
-        for (const adv of allAdvances) {
-          const advanceDate = adv.disbursement?.paidDate || adv.approvalDate || adv.requestDate;
-          
-          if (advanceDate && advanceDate <= endDate) {
-            // Check if there's already a deduction recorded for this month
-            const deductionForMonth = adv.repayment?.deductions?.find(d => d.month === monthStr);
-            
-            if (deductionForMonth) {
-              advancesTotal += deductionForMonth.amount;
-            } else if (adv.repayment?.remainingAmount > 0) {
-              const startMonth = adv.repayment?.startMonth || monthStr;
-              
-              if (monthStr >= startMonth) {
-                const deductionAmount = Math.min(
-                  adv.repayment.amountPerMonth || adv.amount,
-                  adv.repayment.remainingAmount
-                );
-                
-                if (deductionAmount > 0) {
-                  advancesTotal += deductionAmount;
-                }
-              }
-            }
-          }
+        console.log(`[${employee.personalInfo?.name}] Current Month (${monthStr}): Advances Count: ${monthAdvances.length}, Total: ${advancesTotal}`);
+        if (monthAdvances.length > 0) {
+          console.log(`  Advances Details:`, monthAdvances.map(a => ({ 
+            amount: a.amount, 
+            requestDate: a.requestDate?.toISOString().substring(0, 10),
+            status: a.status 
+          })));
         }
                 
-        // Get manual deductions for the month
+        // Get manual deductions for the month (using date field)
         const manualDeductions = await Deduction.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
-          month: monthStr
+          organizationId: organizationId,
+          date: { $gte: startDate, $lte: endDate }
         });
         const manualDeductionsTotal = manualDeductions.reduce((sum, ded) => sum + (ded.amount || 0), 0);
         
-        // Get bonuses for the month
+        // Get bonuses for the month (using date field)
         const bonuses = await Bonus.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
-          month: monthStr
+          organizationId: organizationId,
+          date: { $gte: startDate, $lte: endDate }
         });
         const bonusesTotal = bonuses.reduce((sum, bonus) => sum + (bonus.amount || 0), 0);
         
@@ -1013,7 +1009,7 @@ export const getPayrollSummary = async (req, res) => {
         // Get payments for the month
         const payments = await Payment.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
+          organizationId: organizationId,
           month: monthStr
         });
         const paidAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -1033,7 +1029,7 @@ export const getPayrollSummary = async (req, res) => {
         // Get all previous attendance
         const previousAttendance = await Attendance.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
+          organizationId: organizationId,
           date: { $gte: hireDate, $lte: previousMonthEnd }
         });
         
@@ -1091,18 +1087,20 @@ export const getPayrollSummary = async (req, res) => {
         // Get all previous advances
         const previousAdvances = await Advance.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
+          organizationId: organizationId,
           status: { $in: ['approved', 'paid'] },
           requestDate: { $lte: previousMonthEnd }
         });
         
         const previousAdvancesTotal = previousAdvances.reduce((sum, adv) => sum + adv.amount, 0);
         
-        // Get all previous deductions (using month field for accuracy)
+        console.log(`[${employee.personalInfo?.name}] Previous Months (until ${previousMonthEnd.toISOString().substring(0, 10)}): Advances Count: ${previousAdvances.length}, Total: ${previousAdvancesTotal}`);
+        
+        // Get all previous deductions (using date field for accuracy)
         const previousDeductions = await Deduction.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
-          month: { $lt: monthStr } // All months before current month
+          organizationId: organizationId,
+          date: { $lte: previousMonthEnd }
         });
         
         const previousDeductionsTotal = previousDeductions.reduce((sum, ded) => sum + ded.amount, 0);
@@ -1110,17 +1108,17 @@ export const getPayrollSummary = async (req, res) => {
         // Get all previous payments (using month field for accuracy)
         const previousPayments = await Payment.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
+          organizationId: organizationId,
           month: { $lt: monthStr } // All months before current month
         });
         
         const previousPaid = previousPayments.reduce((sum, pay) => sum + pay.amount, 0);
         
-        // Get all previous bonuses (using month field for accuracy)
+        // Get all previous bonuses (using date field for accuracy)
         const previousBonuses = await Bonus.find({
           employeeId: employee._id,
-          organizationId: req.user.organization,
-          month: { $lt: monthStr } // All months before current month
+          organizationId: organizationId,
+          date: { $lte: previousMonthEnd }
         });
         
         const previousBonusesTotal = previousBonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
@@ -1132,13 +1130,17 @@ export const getPayrollSummary = async (req, res) => {
       
         const totalUnpaidWithCarried = unpaidBalance + carriedForward;
 
+        // ✅ جمع الإجماليات من بيانات الشهر الحالي فقط
         totalGrossSalary += grossSalary;
         totalDeductions += totalDeductionsEmp;
         totalNetSalary += netSalary;
         totalPaid += paidAmount;
         totalUnpaid += totalUnpaidWithCarried;
-        totalAdvances += advancesTotal;
-        totalOtherDeductions += otherDeductionsTotal;
+        totalAdvances += advancesTotal;  // سلف الشهر الحالي فقط
+        totalOtherDeductions += otherDeductionsTotal;  // خصومات الشهر الحالي فقط
+        
+        // Logging للتحقق من الحسابات
+        console.log(`[${employee.personalInfo?.name}] Summary: Advances(Current): ${advancesTotal}, Deductions(Current): ${otherDeductionsTotal}, Carried Forward: ${carriedForward}, Total Unpaid: ${totalUnpaidWithCarried}`);
         
         employeesData.push({
           employeeId: employee._id,
@@ -1170,6 +1172,23 @@ export const getPayrollSummary = async (req, res) => {
     const totalObligationsWithCarried = totalUnpaid; // إجمالي المستحقات الكلي (المتبقي + المرحل)
     const totalBonuses = employeesData.reduce((sum, e) => sum + (e.bonuses || 0), 0);
     
+    // Logging للتحقق من الإجماليات النهائية
+    console.log('=== PAYROLL SUMMARY TOTALS ===');
+    console.log(`Month: ${monthStr}`);
+    console.log(`Date Range: ${startDate.toISOString().substring(0, 10)} to ${endDate.toISOString().substring(0, 10)}`);
+    console.log(`Total Employees: ${employeesData.length}`);
+    console.log(`Total Gross Salary (Current Month): ${totalGrossSalary.toFixed(2)}`);
+    console.log(`Total Bonuses (Current Month): ${totalBonuses.toFixed(2)}`);
+    console.log(`Total Advances (Current Month Only): ${totalAdvances.toFixed(2)}`);
+    console.log(`Total Other Deductions (Current Month Only): ${totalOtherDeductions.toFixed(2)}`);
+    console.log(`Total Deductions (Advances + Other): ${totalDeductions.toFixed(2)}`);
+    console.log(`Total Net Salary (Current Month): ${totalNetSalary.toFixed(2)}`);
+    console.log(`Total Paid (Current Month): ${totalPaid.toFixed(2)}`);
+    console.log(`Total Unpaid Current Month: ${totalUnpaidCurrentMonth.toFixed(2)}`);
+    console.log(`Total Carried Forward: ${totalCarriedForward.toFixed(2)}`);
+    console.log(`Total Unpaid (with Carried): ${totalUnpaid.toFixed(2)}`);
+    console.log('==============================');
+    
      
     // Count employees by financial status
     const employeesWithDues = employeesData.filter(e => e.totalUnpaid > 0).length;
@@ -1185,35 +1204,60 @@ export const getPayrollSummary = async (req, res) => {
       .filter(e => e.totalUnpaid < 0)
       .reduce((sum, e) => sum + e.totalUnpaid, 0));
     
-    res.json({
-      success: true,
-      data: {
-        month: monthNum,
-        year: yearNum,
-        totalEmployees: employeesData.length,
-        statistics: {
-          totalGrossSalary,
-          totalBonuses,
-          totalDeductions,
-          totalNetSalary,
-          totalPaid,
-          totalUnpaid, // إجمالي المستحقات الكلي (المتبقي + المرحل)
-          totalUnpaidCurrentMonth, // المتبقي من الشهر الحالي فقط
-          totalAdvances,
-          totalOtherDeductions,
-          totalCarriedForward, // المرحل من أشهر سابقة
-          employeesWithDues,
-          employeesWithDebts,
-          employeesBalanced,
-          totalEmployeeDues,
-          totalEmployeeDebts
-        },
-        employees: employeesData
-      }
+    // ✅ عدد الموظفين الإجمالي (قبل الفلترة)
+    const totalEmployeesCount = employeesData.length;
+    
+    // ✅ فلترة الموظفين: إخفاء الموظفين الذين ليس لهم نشاط في الشهر الحالي
+    // الموظف يُعتبر "غير نشط" إذا:
+    // 1. ليس له حضور في الشهر الحالي (attendance.length === 0)
+    // 2. ليس له مستحقات أو ديون (totalUnpaid === 0)
+    const activeEmployeesData = employeesData.filter(emp => {
+      // إذا كان له حضور في الشهر الحالي، يظهر
+      if (emp.grossSalary > 0) return true;
+      
+      // إذا كان له مستحقات أو ديون، يظهر
+      if (emp.totalUnpaid !== 0) return true;
+      
+      // إذا كان له مدفوعات في الشهر الحالي، يظهر
+      if (emp.paidAmount > 0) return true;
+      
+      // إذا كان له سلف أو خصومات أو مكافآت في الشهر الحالي، يظهر
+      if (emp.advances > 0 || emp.otherDeductions > 0 || emp.bonuses > 0) return true;
+      
+      // خلاف ذلك، لا يظهر
+      return false;
     });
+    
+    console.log(`Filtered Employees: ${activeEmployeesData.length} active out of ${totalEmployeesCount} total`);
+    
+    // ✅ إرجاع البيانات (للاستخدام من organizationController)
+    return {
+      month: monthNum,
+      year: yearNum,
+      totalEmployees: totalEmployeesCount, // ✅ عدد الموظفين الإجمالي (قبل الفلترة)
+      activeEmployees: activeEmployeesData.length, // عدد الموظفين النشطين (بعد الفلترة)
+      statistics: {
+        totalGrossSalary,
+        totalBonuses,
+        totalDeductions,
+        totalNetSalary,
+        totalPaid,
+        totalUnpaid, // إجمالي المستحقات الكلي (المتبقي + المرحل)
+        totalUnpaidCurrentMonth, // المتبقي من الشهر الحالي فقط
+        totalAdvances,
+        totalOtherDeductions,
+        totalCarriedForward, // المرحل من أشهر سابقة
+        employeesWithDues,
+        employeesWithDebts,
+        employeesBalanced,
+        totalEmployeeDues,
+        totalEmployeeDebts
+      },
+      employees: activeEmployeesData // ✅ فقط الموظفين النشطين
+    };
   } catch (error) {
-    console.error('Error in getPayrollSummary:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error in getPayrollSummaryData:', error);
+    throw error;
   }
 };
 

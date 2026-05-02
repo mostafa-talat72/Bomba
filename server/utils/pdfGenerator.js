@@ -265,6 +265,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 remaining: 'المتبقي',
                 carried: 'المرحل',
                 total: 'الإجمالي',
+                financialStatus: 'الحالة المالية',
                 page: 'صفحة',
                 from: 'من',
                 currency: 'ج.م',
@@ -324,6 +325,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 remaining: 'Remaining',
                 carried: 'Carried',
                 total: 'Total',
+                financialStatus: 'Financial Status',
                 page: 'Page',
                 from: 'of',
                 currency: 'EGP',
@@ -416,6 +418,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 reason: 'Raison',
                 type: 'Type',
                 method: 'Méthode',
+                financialStatus: 'Statut Financier',
                 developedBy: 'Conçu et Développé par: Mostafa Talaat Solutions Logicielles - 01116626164'
             }
         };
