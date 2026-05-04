@@ -1010,50 +1010,66 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
 
 /* ✅ Fix Ant Design DatePicker and TimePicker z-index issues */
 /* CRITICAL: Ensure picker dropdowns appear above ALL elements including modals */
+
+/* Main picker dropdown - HIGHEST PRIORITY */
 .ant-picker-dropdown {
-  z-index: 99999999 !important;
+  z-index: 100000000 !important;
   position: fixed !important;
+  pointer-events: auto !important;
 }
 
 /* Ensure picker panels are visible */
 .ant-picker-panel-container {
-  z-index: 99999999 !important;
+  z-index: 100000000 !important;
 }
 
-/* Fix for pickers inside modals - HIGHEST PRIORITY */
+/* Fix for pickers inside modals - ULTRA HIGH PRIORITY */
 .ant-modal .ant-picker-dropdown,
-.ant-modal-wrap .ant-picker-dropdown {
-  z-index: 100000000 !important;
+.ant-modal-wrap .ant-picker-dropdown,
+.ant-modal-root .ant-picker-dropdown {
+  z-index: 100000001 !important;
 }
 
 /* Fix for pickers inside drawers */
 .ant-drawer .ant-picker-dropdown,
-.ant-drawer-content .ant-picker-dropdown {
-  z-index: 100000000 !important;
+.ant-drawer-content .ant-picker-dropdown,
+.ant-drawer-wrapper .ant-picker-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* Fix for pickers inside popover/tooltip */
+.ant-popover .ant-picker-dropdown,
+.ant-tooltip .ant-picker-dropdown {
+  z-index: 100000001 !important;
 }
 
 /* Ensure time panel is visible */
 .ant-picker-time-panel {
-  z-index: 99999999 !important;
+  z-index: 100000000 !important;
+}
+
+/* Ensure time panel columns are visible */
+.ant-picker-time-panel-column {
+  z-index: 100000000 !important;
 }
 
 /* Fix for date range picker */
 .ant-picker-range-arrow {
-  z-index: 99999999 !important;
+  z-index: 100000000 !important;
 }
 
-/* Ensure picker is clickable and visible */
+/* Ensure picker input is clickable */
 .ant-picker {
   position: relative !important;
-  z-index: 100 !important;
+  z-index: 1 !important;
 }
 
-/* Fix for picker in fixed/absolute positioned containers */
+/* Fix for all picker dropdown placements */
 .ant-picker-dropdown-placement-bottomLeft,
 .ant-picker-dropdown-placement-bottomRight,
 .ant-picker-dropdown-placement-topLeft,
 .ant-picker-dropdown-placement-topRight {
-  z-index: 99999999 !important;
+  z-index: 100000000 !important;
 }
 
 /* Ensure dropdown is not hidden by overflow */
@@ -1061,20 +1077,183 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
   display: none !important;
 }
 
-/* Fix pointer events */
+/* Ensure panel is visible */
+.ant-picker-panel {
+  z-index: 100000000 !important;
+}
+
+/* Fix for select dropdown inside picker (year/month selector) */
+.ant-picker-dropdown .ant-select-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* Fix for picker header dropdowns (year/month selection) */
+.ant-picker-header-view .ant-select-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* Ensure picker footer is visible */
+.ant-picker-footer {
+  z-index: 100000000 !important;
+}
+
+/* Fix for picker ranges (preset ranges) */
+.ant-picker-ranges {
+  z-index: 100000000 !important;
+}
+
+/* Ensure picker cells are clickable */
+.ant-picker-cell {
+  z-index: 1 !important;
+  position: relative !important;
+}
+
+/* Fix for picker in table cells */
+.ant-table-cell .ant-picker-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* Fix for picker in form items */
+.ant-form-item .ant-picker-dropdown {
+  z-index: 100000000 !important;
+}
+
+/* Ensure picker dropdown is above overlay masks */
 .ant-picker-dropdown {
+  z-index: 100000000 !important;
+}
+
+/* Fix for multiple pickers on same page */
+.ant-picker-dropdown-range {
+  z-index: 100000000 !important;
+}
+
+/* Ensure picker is visible in scrollable containers */
+.overflow-auto .ant-picker-dropdown,
+.overflow-y-auto .ant-picker-dropdown,
+.overflow-x-auto .ant-picker-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* Fix for picker in fixed positioned elements */
+[style*="position: fixed"] .ant-picker-dropdown,
+[style*="position:fixed"] .ant-picker-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* Ensure all picker-related dropdowns are visible */
+.ant-picker-dropdown *,
+.ant-picker-panel-container * {
   pointer-events: auto !important;
 }
 
-/* Ensure panel is visible */
-.ant-picker-panel {
+/* Fix for picker backdrop/mask if any */
+.ant-picker-dropdown-mask {
   z-index: 99999999 !important;
 }
 
-/* Fix for select dropdown inside picker */
-.ant-picker-dropdown .ant-select-dropdown {
-  z-index: 99999999 !important;
+/* ✅ Fix Ant Design Select dropdown z-index issues */
+.ant-select-dropdown {
+  z-index: 100000000 !important;
+  position: fixed !important;
 }
+
+/* Fix for select inside modals */
+.ant-modal .ant-select-dropdown,
+.ant-modal-wrap .ant-select-dropdown,
+.ant-modal-root .ant-select-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* Fix for select inside drawers */
+.ant-drawer .ant-select-dropdown,
+.ant-drawer-content .ant-select-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* ✅ Fix Ant Design Dropdown z-index issues */
+.ant-dropdown {
+  z-index: 100000000 !important;
+}
+
+/* Fix for dropdown inside modals */
+.ant-modal .ant-dropdown,
+.ant-modal-wrap .ant-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* ✅ Fix Ant Design Popover z-index issues */
+.ant-popover {
+  z-index: 100000000 !important;
+}
+
+/* Fix for popover inside modals */
+.ant-modal .ant-popover,
+.ant-modal-wrap .ant-popover {
+  z-index: 100000001 !important;
+}
+
+/* ✅ Fix Ant Design Tooltip z-index issues */
+.ant-tooltip {
+  z-index: 100000000 !important;
+}
+
+/* Fix for tooltip inside modals */
+.ant-modal .ant-tooltip,
+.ant-modal-wrap .ant-tooltip {
+  z-index: 100000001 !important;
+}
+
+/* ✅ Fix Ant Design AutoComplete dropdown z-index issues */
+.ant-select-auto-complete .ant-select-dropdown {
+  z-index: 100000000 !important;
+}
+
+/* ✅ Fix Ant Design Cascader dropdown z-index issues */
+.ant-cascader-dropdown {
+  z-index: 100000000 !important;
+}
+
+/* Fix for cascader inside modals */
+.ant-modal .ant-cascader-dropdown,
+.ant-modal-wrap .ant-cascader-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* ✅ Fix Ant Design TreeSelect dropdown z-index issues */
+.ant-select-tree-dropdown {
+  z-index: 100000000 !important;
+}
+
+/* Fix for tree select inside modals */
+.ant-modal .ant-select-tree-dropdown,
+.ant-modal-wrap .ant-select-tree-dropdown {
+  z-index: 100000001 !important;
+}
+
+/* ✅ Fix Ant Design Mentions dropdown z-index issues */
+.ant-mentions-dropdown {
+  z-index: 100000000 !important;
+}
+
+/* ✅ Fix Ant Design ColorPicker dropdown z-index issues */
+.ant-color-picker-panel {
+  z-index: 100000000 !important;
+}
+
+/* ✅ Ensure all Ant Design overlay components are visible */
+.ant-picker-dropdown,
+.ant-select-dropdown,
+.ant-dropdown,
+.ant-popover,
+.ant-tooltip,
+.ant-cascader-dropdown,
+.ant-select-tree-dropdown,
+.ant-mentions-dropdown,
+.ant-color-picker-panel {
+  pointer-events: auto !important;
+}
+
 .custom-toast-body {
   padding: 0 !important;
   margin: 0 !important;
