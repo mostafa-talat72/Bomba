@@ -67,7 +67,6 @@ export const getAttendanceByMonth = async (req, res) => {
         workHoursPerDay = payrollSettings.settings.workHoursPerDay;
       }
     } catch (error) {
-      console.log('Using default work hours:', workHoursPerDay);
     }
     
     // تحويل البيانات للعرض وإعادة حساب الساعات
@@ -197,7 +196,6 @@ export const markAttendance = async (req, res) => {
         workHoursPerDay = payrollSettings.settings.workHoursPerDay;
       }
     } catch (error) {
-      console.log('Using default work hours:', workHoursPerDay);
     }
     
     const attendanceDate = new Date(date);
@@ -376,19 +374,10 @@ export const bulkMarkAttendance = async (req, res) => {
 // Update attendance
 export const updateAttendance = async (req, res) => {
   try {
-    console.log('🔄 Update Attendance Request:', {
-      id: req.params.id,
-      body: req.body,
-      user: req.user?.username,
-      organizationId: req.user?.organization
-    });
+   
     
     const { status, checkIn, checkOut, reason, notes } = req.body;
     
-    console.log('🔍 Searching for attendance with:', {
-      _id: req.params.id,
-      organizationId: req.user.organization
-    });
     
     const attendance = await Attendance.findOne({
       _id: req.params.id,
@@ -396,22 +385,10 @@ export const updateAttendance = async (req, res) => {
     });
     
     if (!attendance) {
-      console.log('❌ Attendance not found:', req.params.id);
-      console.log('🔍 Trying to find without organizationId filter...');
       const anyAttendance = await Attendance.findById(req.params.id);
-      if (anyAttendance) {
-        console.log('⚠️ Found attendance but organizationId mismatch:', {
-          expected: req.user.organization,
-          actual: anyAttendance.organizationId
-        });
-      } else {
-        console.log('❌ Attendance does not exist at all');
-      }
+      
       return res.status(404).json({ success: false, error: 'السجل غير موجود' });
-    }
-    
-    console.log('📝 Current attendance:', attendance);
-    
+    }    
     // تحديث البيانات
     if (status) {
       attendance.status = status;
@@ -470,9 +447,7 @@ export const updateAttendance = async (req, res) => {
     }
     
     await attendance.save();
-    
-    console.log('✅ Attendance updated successfully:', attendance);
-    
+        
     res.json({
       success: true,
       message: 'تم تحديث السجل بنجاح',

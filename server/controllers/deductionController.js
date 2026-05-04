@@ -72,19 +72,9 @@ export const deleteDeduction = async (req, res) => {
 // Update deduction
 export const updateDeduction = async (req, res) => {
   try {
-    console.log('🔄 Update Deduction Request:', {
-      id: req.params.id,
-      body: req.body,
-      user: req.user?.username,
-      organizationId: req.user?.organization
-    });
-    
+   
     const { amount, reason, type, date } = req.body;
     
-    console.log('🔍 Searching for deduction with:', {
-      _id: req.params.id,
-      organizationId: req.user.organization
-    });
     
     const deduction = await Deduction.findOne({
       _id: req.params.id,
@@ -92,21 +82,11 @@ export const updateDeduction = async (req, res) => {
     });
     
     if (!deduction) {
-      console.log('❌ Deduction not found:', req.params.id);
-      console.log('🔍 Trying to find without organizationId filter...');
       const anyDeduction = await Deduction.findById(req.params.id);
-      if (anyDeduction) {
-        console.log('⚠️ Found deduction but organizationId mismatch:', {
-          expected: req.user.organization,
-          actual: anyDeduction.organizationId
-        });
-      } else {
-        console.log('❌ Deduction does not exist at all');
-      }
+      
       return res.status(404).json({ success: false, error: 'الخصم غير موجود' });
     }
     
-    console.log('📝 Current deduction:', deduction);
     
     // تحديث البيانات
     if (amount !== undefined) {
@@ -128,7 +108,6 @@ export const updateDeduction = async (req, res) => {
     
     await deduction.save();
     
-    console.log('✅ Deduction updated successfully:', deduction);
     
     res.json({
       success: true,

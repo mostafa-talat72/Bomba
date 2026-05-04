@@ -580,41 +580,20 @@ export const deletePayment = async (req, res) => {
 // Update payment
 export const updatePayment = async (req, res) => {
   try {
-    console.log('🔄 Update Payment Request:', {
-      id: req.params.id,
-      body: req.body,
-      user: req.user?.username,
-      organizationId: req.user?.organization
-    });
-    
+  
     const { amount, method, notes } = req.body;
-    
-    console.log('🔍 Searching for payment with:', {
-      _id: req.params.id,
-      organizationId: req.user.organization
-    });
-    
+   
     const payment = await Payment.findOne({
       _id: req.params.id,
       organizationId: req.user.organization
     });
     
     if (!payment) {
-      console.log('❌ Payment not found:', req.params.id);
-      console.log('🔍 Trying to find without organizationId filter...');
-      const anyPayment = await Payment.findById(req.params.id);
-      if (anyPayment) {
-        console.log('⚠️ Found payment but organizationId mismatch:', {
-          expected: req.user.organization,
-          actual: anyPayment.organizationId
-        });
-      } else {
-        console.log('❌ Payment does not exist at all');
-      }
+     const anyPayment = await Payment.findById(req.params.id);
+     
       return res.status(404).json({ success: false, error: 'الدفعة غير موجودة' });
     }
     
-    console.log('📝 Current payment:', payment);
     
     // تحديث البيانات
     if (amount !== undefined) {
@@ -634,12 +613,10 @@ export const updatePayment = async (req, res) => {
     if (req.body.paymentDate !== undefined) {
       payment.paymentDate = new Date(req.body.paymentDate);
       payment.markModified('paymentDate');
-      console.log('📅 Payment date updated to:', payment.paymentDate);
     }
     
     await payment.save();
     
-    console.log('✅ Payment updated successfully:', payment);
     
     res.json({
       success: true,

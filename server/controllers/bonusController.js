@@ -128,45 +128,23 @@ export const createBonus = async (req, res) => {
 // Update bonus
 export const updateBonus = async (req, res) => {
   try {
-    console.log('🔄 Update Bonus Request:', {
-      id: req.params.id,
-      body: req.body,
-      user: req.user?.username,
-      organizationId: req.user?.organization
-    });
-    
+       
     const { amount, type, reason, date, notes } = req.body;
-    
-    console.log('🔍 Searching for bonus with:', {
-      _id: req.params.id,
-      organizationId: req.user.organization
-    });
-    
+     
     const bonus = await Bonus.findOne({
       _id: req.params.id,
       organizationId: req.user.organization
     });
     
     if (!bonus) {
-      console.log('❌ Bonus not found:', req.params.id);
-      console.log('🔍 Trying to find without organizationId filter...');
       const anyBonus = await Bonus.findById(req.params.id);
-      if (anyBonus) {
-        console.log('⚠️ Found bonus but organizationId mismatch:', {
-          expected: req.user.organization,
-          actual: anyBonus.organizationId
-        });
-      } else {
-        console.log('❌ Bonus does not exist at all');
-      }
+      
       return res.status(404).json({ 
         success: false,
         error: 'المكافأة غير موجودة' 
       });
     }
-    
-    console.log('📝 Current bonus:', bonus);
-    
+        
     // تحديث البيانات
     if (amount !== undefined) {
       bonus.amount = amount;
@@ -194,7 +172,6 @@ export const updateBonus = async (req, res) => {
     
     await bonus.save();
     
-    console.log('✅ Bonus updated successfully:', bonus);
     
     // Populate employee info
     await bonus.populate('employeeId', 'personalInfo.name employment');
