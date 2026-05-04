@@ -242,6 +242,21 @@ export const updateUser = async (req, res) => {
             }
         }
 
+        // Check if email is already taken by another user
+        if (email && email !== user.email) {
+            const existingUser = await User.findOne({ 
+                email, 
+                _id: { $ne: req.params.id } 
+            });
+            
+            if (existingUser) {
+                return res.status(400).json({
+                    success: false,
+                    message: "البريد الإلكتروني مستخدم بالفعل",
+                });
+            }
+        }
+
         // Update fields
         if (name) user.name = name;
         if (email) user.email = email;

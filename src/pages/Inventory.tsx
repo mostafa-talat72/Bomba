@@ -22,6 +22,7 @@ import 'dayjs/locale/ar';
 import 'dayjs/locale/en';
 import 'dayjs/locale/fr';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+import PermissionGuard from '../components/PermissionGuard';
 
 // Configure dayjs
 dayjs.extend(customParseFormat);
@@ -51,7 +52,16 @@ const Inventory = () => {
     updateStock,
     createInventoryItem,
     updateInventoryItem,
+    user,
   } = useApp();
+
+  // Helper function to check permissions
+  const hasPermission = (permission: string) => {
+    if (!user) return false;
+    return user.permissions.includes('all') || 
+           user.permissions.includes('inventory') || 
+           user.permissions.includes(permission);
+  };
 
   // Get Ant Design locale based on current language
   const getAntdLocale = () => {
@@ -1223,13 +1233,15 @@ const Inventory = () => {
           </h1>
           <p className={`text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-4' : 'ml-4'} xs:mr-0 xs:w-full xs:text-center`}>{t('inventory.subtitle')}</p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center xs:mt-2"
-        >
-          <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-          {t('inventory.addStock')}
-        </button>
+        <PermissionGuard requiredPermissions={['canAddInventoryItem', 'canAddStock', 'all']}>
+          <button
+            onClick={openAddModal}
+            className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center xs:mt-2"
+          >
+            <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+            {t('inventory.addStock')}
+          </button>
+        </PermissionGuard>
       </div>
 
       {/* Stats */}
@@ -1627,34 +1639,42 @@ const Inventory = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.supplier}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 space-x-reverse">
-                      <button 
-                        className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center" 
-                        onClick={() => openMovementsModal(item)}
-                        title={t('inventory.table.movementsHistory')}
-                      >
-                        <History className="h-4 w-4" />
-                      </button>
-                      <button 
-                        className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 inline-flex items-center" 
-                        onClick={() => openDeductModal(item)}
-                        title={t('inventory.table.deductQuantity')}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <button 
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" 
-                        onClick={() => openEditModal(item)}
-                        title={t('inventory.table.edit')}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button 
-                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" 
-                        onClick={() => openDeleteModal(item)}
-                        title={t('inventory.table.delete')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <PermissionGuard requiredPermissions={['canViewStockMovements', 'canViewInventory', 'all']}>
+                        <button 
+                          className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center" 
+                          onClick={() => openMovementsModal(item)}
+                          title={t('inventory.table.movementsHistory')}
+                        >
+                          <History className="h-4 w-4" />
+                        </button>
+                      </PermissionGuard>
+                      <PermissionGuard requiredPermissions={['canAddStock', 'canRemoveStock', 'canAdjustStock', 'all']}>
+                        <button 
+                          className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 inline-flex items-center" 
+                          onClick={() => openDeductModal(item)}
+                          title={t('inventory.table.deductQuantity')}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                      </PermissionGuard>
+                      <PermissionGuard requiredPermissions={['canEditInventoryItem', 'all']}>
+                        <button 
+                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" 
+                          onClick={() => openEditModal(item)}
+                          title={t('inventory.table.edit')}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      </PermissionGuard>
+                      <PermissionGuard requiredPermissions={['canDeleteInventoryItem', 'all']}>
+                        <button 
+                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" 
+                          onClick={() => openDeleteModal(item)}
+                          title={t('inventory.table.delete')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </PermissionGuard>
                     </td>
                   </tr>
                 );
@@ -2535,20 +2555,24 @@ const Inventory = () => {
                                 {/* لا يمكن تعديل أو حذف الحركات المرتبطة بالطلبات */}
                                 {!movement.reason?.includes('طلب رقم') && !movement.reason?.includes('فاتورة') ? (
                                   <>
-                                    <button
-                                      onClick={() => openEditMovementModal(movement)}
-                                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                      title={t('inventory.movementsModal.edit')}
-                                    >
-                                      <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteMovement(movement._id)}
-                                      className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                                      title={t('inventory.movementsModal.delete')}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    <PermissionGuard requiredPermissions={['canEditStockMovement', 'all']}>
+                                      <button
+                                        onClick={() => openEditMovementModal(movement)}
+                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                        title={t('inventory.movementsModal.edit')}
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                    </PermissionGuard>
+                                    <PermissionGuard requiredPermissions={['canDeleteStockMovement', 'all']}>
+                                      <button
+                                        onClick={() => handleDeleteMovement(movement._id)}
+                                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                                        title={t('inventory.movementsModal.delete')}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </PermissionGuard>
                                   </>
                                 ) : (
                                   <span className="text-xs text-gray-500 dark:text-gray-400 italic">

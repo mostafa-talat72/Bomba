@@ -19,23 +19,29 @@ const router = express.Router();
 // All routes require authentication
 router.use(protect);
 
+// View inventory items - requires canViewInventory or inventory or all permission
 router.route('/')
-  .get(authorize('inventory', 'all'), getInventoryItems)
-  .post(authorize('inventory', 'all'), validateInventoryItem, validateRequest, createInventoryItem);
+  .get(authorize('canViewInventory', 'inventory', 'all'), getInventoryItems)
+  .post(authorize('canAddInventoryItem', 'inventory', 'all'), validateInventoryItem, validateRequest, createInventoryItem);
 
-router.get('/low-stock', authorize('inventory', 'all'), getLowStockItems);
+// View low stock items - requires canViewInventory or inventory or all permission
+router.get('/low-stock', authorize('canViewInventory', 'inventory', 'all'), getLowStockItems);
 
+// Single item operations
 router.route('/:id')
-  .get(authorize('inventory', 'all'), getInventoryItem)
-  .put(authorize('inventory', 'all'), updateInventoryItem)
-  .delete(authorize('inventory', 'all'), deleteInventoryItem);
+  .get(authorize('canViewInventory', 'inventory', 'all'), getInventoryItem)
+  .put(authorize('canEditInventoryItem', 'inventory', 'all'), updateInventoryItem)
+  .delete(authorize('canDeleteInventoryItem', 'inventory', 'all'), deleteInventoryItem);
 
-router.put('/:id/stock', authorize('inventory', 'all'), updateStock);
-router.get('/:id/movements', authorize('inventory', 'all'), getStockMovements);
+// Stock operations - add/remove/adjust stock
+router.put('/:id/stock', authorize('canAddStock', 'canRemoveStock', 'canAdjustStock', 'inventory', 'all'), updateStock);
+
+// View movements - requires canViewStockMovements or canViewInventory or inventory or all
+router.get('/:id/movements', authorize('canViewStockMovements', 'canViewInventory', 'inventory', 'all'), getStockMovements);
 
 // Movement management routes
 router.route('/:id/movements/:movementId')
-  .put(authorize('inventory', 'all'), updateStockMovement)
-  .delete(authorize('inventory', 'all'), deleteStockMovement);
+  .put(authorize('canEditStockMovement', 'inventory', 'all'), updateStockMovement)
+  .delete(authorize('canDeleteStockMovement', 'inventory', 'all'), deleteStockMovement);
 
 export default router;

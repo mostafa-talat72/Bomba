@@ -21,6 +21,7 @@ const Users = () => {
   const [showEditUser, setShowEditUser] = useState(false);
   const [showViewUser, setShowViewUser] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,6 +77,17 @@ const Users = () => {
     { id: 'consumption', name: t('users.permissions.consumption'), description: t('users.permissions.consumptionDesc') },
     { id: 'soldItems', name: t('users.permissions.soldItems'), description: t('users.permissions.soldItemsDesc') },
     { id: 'inventory', name: t('users.permissions.inventory'), description: t('users.permissions.inventoryDesc') },
+    // Inventory detailed permissions
+    { id: 'canViewInventory', name: 'عرض المخزون', description: 'السماح بعرض قائمة المخزون والمنتجات' },
+    { id: 'canAddInventoryItem', name: 'إضافة منتج للمخزون', description: 'السماح بإضافة منتجات جديدة للمخزون' },
+    { id: 'canEditInventoryItem', name: 'تعديل منتج المخزون', description: 'السماح بتعديل معلومات المنتجات' },
+    { id: 'canDeleteInventoryItem', name: 'حذف منتج المخزون', description: 'السماح بحذف المنتجات من المخزون' },
+    { id: 'canAddStock', name: 'إضافة كمية للمخزون', description: 'السماح بإضافة كميات جديدة للمنتجات' },
+    { id: 'canRemoveStock', name: 'خصم كمية من المخزون', description: 'السماح بخصم كميات من المنتجات' },
+    { id: 'canAdjustStock', name: 'تعديل رصيد المخزون', description: 'السماح بتعديل الرصيد الفعلي للمخزون' },
+    { id: 'canViewStockMovements', name: 'عرض حركات المخزون', description: 'السماح بعرض سجل حركات المخزون' },
+    { id: 'canEditStockMovement', name: 'تعديل حركة المخزون', description: 'السماح بتعديل حركات المخزون' },
+    { id: 'canDeleteStockMovement', name: 'حذف حركة المخزون', description: 'السماح بحذف حركات المخزون' },
     { id: 'costs', name: t('users.permissions.costs'), description: t('users.permissions.costsDesc') },
     { id: 'users', name: t('users.permissions.users'), description: t('users.permissions.usersDesc') },
     { id: 'settings', name: t('users.permissions.settings'), description: t('users.permissions.settingsDesc') },
@@ -293,6 +305,8 @@ const Users = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    console.log('handleSubmit called:', { showEditUser, selectedUserId, selectedUser: selectedUser ? { id: selectedUser.id, _id: selectedUser._id } : null });
+
     if (!showEditUser && formData.password !== formData.confirmPassword) {
       setAlertMessage(t('users.errors.passwordMismatch'));
       setAlertType('error');
@@ -348,12 +362,12 @@ const Users = () => {
         notes: formData.notes,
       };
 
-      if (showEditUser && selectedUser) {
+      if (showEditUser && selectedUserId) {
         // إضافة كلمة المرور فقط إذا تم تغييرها
         if (formData.password) {
           userData.password = formData.password;
         }
-        await updateUser(selectedUser.id, userData);
+        await updateUser(selectedUserId, userData);
         setShowEditUser(false);
       } else {
         userData.password = formData.password;
@@ -380,6 +394,7 @@ const Users = () => {
 
       resetForm();
       setSelectedUser(null);
+      setSelectedUserId(null);
       await loadUsers();
 
     } catch {
@@ -392,6 +407,7 @@ const Users = () => {
   };
 
   const handleEdit = (user: UserType) => {
+    console.log('handleEdit called with user:', { id: user.id, _id: user._id, name: user.name });
     const u = user as Partial<UserType & { businessName?: string; businessType?: string }>;
     setFormData({
       name: u.name || '',
@@ -412,6 +428,8 @@ const Users = () => {
       notes: u.notes || '',
     });
     setSelectedUser(user);
+    setSelectedUserId(user.id || user._id);
+    console.log('selectedUserId set to:', user.id || user._id);
     setShowEditUser(true);
     // إغلاق نافذة التفاصيل عند فتح نافذة التعديل
     setShowViewUser(false);
@@ -818,6 +836,7 @@ const Users = () => {
           setShowEditUser(false);
           resetForm();
           setSelectedUser(null);
+          setSelectedUserId(null);
         }}
         onSubmit={handleSubmit}
         formData={formData}
