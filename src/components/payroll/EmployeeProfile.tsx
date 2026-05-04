@@ -62,6 +62,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDate, setPaymentDate] = useState(dayjs());
+  const [paymentNotes, setPaymentNotes] = useState(''); // ملاحظات الدفع
   const [showFinancials, setShowFinancials] = useState(false);
   const [editEmployeeModalVisible, setEditEmployeeModalVisible] = useState(false);
   const [editEmployeeForm] = Form.useForm();
@@ -292,7 +293,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         amount: paymentAmount,
         month: selectedMonth.format('YYYY-MM'),
         method: 'cash',
-        date: paymentDate.format('YYYY-MM-DD')
+        date: paymentDate.format('YYYY-MM-DD'),
+        notes: paymentNotes // إضافة الملاحظات
       });
       
       if (response.success) {
@@ -300,6 +302,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         setPaymentModalVisible(false);
         setPaymentAmount(0);
         setPaymentDate(dayjs());
+        setPaymentNotes(''); // مسح الملاحظات
         fetchEmployeeData();
       }
     } catch (error: any) {
@@ -2135,7 +2138,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
         onCancel={() => { 
           setPaymentModalVisible(false); 
           setPaymentAmount(0); 
-          setPaymentDate(dayjs()); 
+          setPaymentDate(dayjs());
+          setPaymentNotes(''); // مسح الملاحظات
         }} 
         onOk={handlePayment} 
         okText={t('payroll.payrollHistory.pay')} 
@@ -2293,6 +2297,21 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
                 
                 return false;
               }}
+            />
+          </div>
+
+          {/* حقل الملاحظات */}
+          <div>
+            <label className="block text-sm font-medium mb-2 dark:text-gray-200">
+              {t('payroll.employeeProfile.table.notes')}
+            </label>
+            <Input.TextArea
+              value={paymentNotes}
+              onChange={(e) => setPaymentNotes(e.target.value)}
+              placeholder={currentLanguage === 'ar' ? 'أضف ملاحظات (اختياري)' : 'Add notes (optional)'}
+              rows={3}
+              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+              size="large"
             />
           </div>
         </div>
