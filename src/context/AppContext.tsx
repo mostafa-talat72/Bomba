@@ -465,7 +465,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     try {
       isApplyingSettingsRef.current = true;
-      
+     
       // Load user's general settings (theme, language)
       const generalSettingsResponse = await api.getGeneralSettings();
       if (generalSettingsResponse.success && generalSettingsResponse.data) {
@@ -490,22 +490,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
         }
         
-        // Apply language and direction ONLY if different from current
-        if (language && window.i18n && window.i18n.language !== language) {
+        // Apply language and direction
+        if (language && window.i18n) {
+          
           // Store language in localStorage first
           localStorage.setItem('language', language);
           
-          // Change language (this will trigger languageChanged event)
-          await window.i18n.changeLanguage(language);
+          // Check if language is RTL (using full list of RTL languages)
+          const rtlLanguages = ['ar', 'he', 'fa', 'ur', 'ps', 'yi', 'sd', 'ug', 'dv', 'ku'];
+          const isRTL = rtlLanguages.includes(language);
           
-          // Apply language to document
-          document.documentElement.lang = language;
           
-          // Apply direction based on language (ar is RTL, en and fr are LTR)
-          const isRTL = language === 'ar';
+          // Apply direction IMMEDIATELY to prevent layout shift
           document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
           document.body.dir = isRTL ? 'rtl' : 'ltr';
+          document.documentElement.lang = language;
+          
+          
+          // Change language (this will trigger languageChanged event)
+          // Only change if different from current to avoid unnecessary re-renders
+          if (window.i18n.language !== language) {
+            await window.i18n.changeLanguage(language);
+          } else {
+          }
         }
+      } else {
+        console.warn('⚠️ loadAndApplySettings: Failed to load general settings');
       }
       
       // Load organization settings (currency, timezone)
@@ -521,8 +531,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           localStorage.setItem('organizationTimezone', timezone);
         }
       }
+      
     } catch (error) {
-      console.error('Error loading and applying settings:', error);
+      console.error('❌ loadAndApplySettings: Error loading and applying settings:', error);
     } finally {
       // Reset flag after a short delay to allow for legitimate subsequent calls
       setTimeout(() => {
@@ -545,6 +556,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         // Load and apply settings after login
         await loadAndApplySettings();
+        
+        // Force re-apply direction after a short delay to ensure it's not overridden
+        // This is needed because LanguageContext might re-apply LTR if it thinks we're still on auth page
+        setTimeout(() => {
+          const savedLanguage = localStorage.getItem('language') || 'ar';
+          const rtlLanguages = ['ar', 'he', 'fa', 'ur', 'ps', 'yi', 'sd', 'ug', 'dv', 'ku'];
+          const isRTL = rtlLanguages.includes(savedLanguage);
+          document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+          document.body.dir = isRTL ? 'rtl' : 'ltr';
+        }, 100);
         
         await refreshData();
         // رسالة ترحيب فقط عند تسجيل الدخول وليس عند reload
@@ -977,20 +998,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return newOrder;
       } else {
         // Handle detailed inventory insufficiency messages
+        const responseWithErrors = response as any;
+        const currentLang = window.i18n?.language || 'ar';
         if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
           const detailsMessage = (response.data as any).details
-            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, currentLang)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, currentLang)} ${d.unit}`)
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
           const errorsMessage = (response.data as any).errors.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
-        } else if (response.errors && Array.isArray(response.errors) && response.errors.length > 0) {
-          const errorsMessage = response.errors.join('\n');
+        } else if (responseWithErrors.errors && Array.isArray(responseWithErrors.errors) && responseWithErrors.errors.length > 0) {
+          const errorsMessage = responseWithErrors.errors.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
-        } else if (response.details && Array.isArray(response.details) && response.details.length > 0) {
-          const detailsMessage = response.details
-            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+        } else if (responseWithErrors.details && Array.isArray(responseWithErrors.details) && responseWithErrors.details.length > 0) {
+          const detailsMessage = responseWithErrors.details
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, currentLang)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, currentLang)} ${d.unit}`)
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else {
@@ -1001,13 +1024,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     } catch (error: unknown) {
       const err = error as { message?: string; response?: { data?: any } };
+      const currentLang = window.i18n?.language || 'ar';
       
       // Handle detailed error from backend
       if (err.response?.data) {
         const errorData = err.response.data;
         if (errorData.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
           const detailsMessage = errorData.details
-            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, currentLang)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, currentLang)} ${d.unit}`)
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
@@ -1038,20 +1062,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // Handle error response from backend
       if (response && !response.success) {
         // Handle detailed inventory insufficiency messages
+        const responseWithErrors = response as any;
+        const currentLang = window.i18n?.language || 'ar';
         if (response.data && typeof response.data === 'object' && 'details' in response.data && Array.isArray((response.data as any).details) && (response.data as any).details.length > 0) {
           const detailsMessage = (response.data as any).details
-            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, currentLang)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, currentLang)} ${d.unit}`)
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
           const errorsMessage = (response.data as any).errors.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
-        } else if (response.errors && Array.isArray(response.errors) && response.errors.length > 0) {
-          const errorsMessage = response.errors.join('\n');
+        } else if (responseWithErrors.errors && Array.isArray(responseWithErrors.errors) && responseWithErrors.errors.length > 0) {
+          const errorsMessage = responseWithErrors.errors.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
-        } else if (response.details && Array.isArray(response.details) && response.details.length > 0) {
-          const detailsMessage = response.details
-            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, i18n.language)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, i18n.language)} ${d.unit}`)
+        } else if (responseWithErrors.details && Array.isArray(responseWithErrors.details) && responseWithErrors.details.length > 0) {
+          const detailsMessage = responseWithErrors.details
+            .map((d: any) => `${d.name}: ${t('common.required')} ${formatNumber(d.required, currentLang)} ${d.unit}, ${t('common.available')} ${formatNumber(d.available, currentLang)} ${d.unit}`)
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else {

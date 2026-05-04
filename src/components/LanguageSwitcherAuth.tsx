@@ -33,7 +33,13 @@ const LanguageSwitcherAuth: React.FC = () => {
       // For auth pages (not logged in), always keep body as ltr
       // Check if user is on auth pages
       const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
-      document.body.dir = isAuthPage ? 'ltr' : selectedLanguage.dir;
+      
+      // Apply direction to body based on authentication status
+      if (isAuthPage) {
+        document.body.dir = 'ltr';
+      } else {
+        document.body.dir = selectedLanguage.dir;
+      }
     }
     
     setIsOpen(false);
@@ -49,7 +55,13 @@ const LanguageSwitcherAuth: React.FC = () => {
       
       // For auth pages (not logged in), always keep body as ltr
       const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
-      document.body.dir = isAuthPage ? 'ltr' : language.dir;
+      
+      // Apply direction to body based on authentication status
+      if (isAuthPage) {
+        document.body.dir = 'ltr';
+      } else {
+        document.body.dir = language.dir;
+      }
     }
   }, [i18n.language]);
 

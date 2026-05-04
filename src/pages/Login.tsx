@@ -96,6 +96,15 @@ const Login: React.FC = () => {
         clearForm();
         // Navigate to dashboard - AppContext will handle the authentication state
         navigate('/dashboard', { replace: true });
+        
+        // Force re-apply direction after navigation to ensure it's correct
+        setTimeout(() => {
+          const savedLanguage = localStorage.getItem('language') || 'ar';
+          const rtlLanguages = ['ar', 'he', 'fa', 'ur', 'ps', 'yi', 'sd', 'ug', 'dv', 'ku'];
+          const isRTL = rtlLanguages.includes(savedLanguage);
+          document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+          document.body.dir = isRTL ? 'rtl' : 'ltr';
+        }, 200);
       } else {
         // Check if the error message is an error code
         const errorCode = result.message || '';

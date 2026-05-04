@@ -305,7 +305,6 @@ const Users = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    console.log('handleSubmit called:', { showEditUser, selectedUserId, selectedUser: selectedUser ? { id: selectedUser.id, _id: selectedUser._id } : null });
 
     if (!showEditUser && formData.password !== formData.confirmPassword) {
       setAlertMessage(t('users.errors.passwordMismatch'));
@@ -407,7 +406,6 @@ const Users = () => {
   };
 
   const handleEdit = (user: UserType) => {
-    console.log('handleEdit called with user:', { id: user.id, _id: user._id, name: user.name });
     const u = user as Partial<UserType & { businessName?: string; businessType?: string }>;
     setFormData({
       name: u.name || '',
@@ -429,7 +427,6 @@ const Users = () => {
     });
     setSelectedUser(user);
     setSelectedUserId(user.id || user._id);
-    console.log('selectedUserId set to:', user.id || user._id);
     setShowEditUser(true);
     // إغلاق نافذة التفاصيل عند فتح نافذة التعديل
     setShowViewUser(false);

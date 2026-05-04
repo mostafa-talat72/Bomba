@@ -25,6 +25,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (language) {
         setIsRTL(language.dir === 'rtl');
         
+        
         // Apply direction to document
         document.documentElement.dir = language.dir;
         document.documentElement.lang = lng;
@@ -33,7 +34,15 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         const token = localStorage.getItem('token');
         // For auth pages or not logged in, keep body as ltr
         const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
-        document.body.dir = (!token || isAuthPage) ? 'ltr' : language.dir;
+        
+        // Apply direction to body
+        // If authenticated and not on auth page, apply the language direction
+        // Otherwise keep ltr for auth pages
+        if (token && !isAuthPage) {
+          document.body.dir = language.dir;
+        } else {
+          document.body.dir = 'ltr';
+        }
         
         // Store in localStorage
         localStorage.setItem('language', lng);
@@ -75,7 +84,15 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         const token = localStorage.getItem('token');
         // For auth pages or not logged in, keep body as ltr
         const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
-        document.body.dir = (!token || isAuthPage) ? 'ltr' : language.dir;
+        
+        // Apply direction to body
+        // If authenticated and not on auth page, apply the language direction
+        // Otherwise keep ltr for auth pages
+        if (token && !isAuthPage) {
+          document.body.dir = language.dir;
+        } else {
+          document.body.dir = 'ltr';
+        }
         
         // Store in localStorage
         localStorage.setItem('language', lang);
