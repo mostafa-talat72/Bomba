@@ -349,7 +349,19 @@ export const deleteAdvance = async (req, res) => {
 // Update advance
 export const updateAdvance = async (req, res) => {
   try {
+    console.log('🔄 Update Advance Request:', {
+      id: req.params.id,
+      body: req.body,
+      user: req.user?.username,
+      organizationId: req.user?.organization
+    });
+    
     const { amount, reason, requestDate } = req.body;
+    
+    console.log('🔍 Searching for advance with:', {
+      _id: req.params.id,
+      organizationId: req.user.organization
+    });
     
     const advance = await Advance.findOne({
       _id: req.params.id,
@@ -357,22 +369,47 @@ export const updateAdvance = async (req, res) => {
     });
     
     if (!advance) {
+      console.log('❌ Advance not found:', req.params.id);
+      console.log('🔍 Trying to find without organizationId filter...');
+      const anyAdvance = await Advance.findById(req.params.id);
+      if (anyAdvance) {
+        console.log('⚠️ Found advance but organizationId mismatch:', {
+          expected: req.user.organization,
+          actual: anyAdvance.organizationId
+        });
+      } else {
+        console.log('❌ Advance does not exist at all');
+      }
       return res.status(404).json({ success: false, error: 'السلفة غير موجودة' });
     }
     
+    console.log('📝 Current advance:', advance);
+    
     // تحديث البيانات
-    if (amount !== undefined) advance.amount = amount;
-    if (reason !== undefined) advance.reason = reason;
-    if (requestDate !== undefined) advance.requestDate = new Date(requestDate);
+    if (amount !== undefined) {
+      advance.amount = amount;
+      advance.markModified('amount');
+    }
+    if (reason !== undefined) {
+      advance.reason = reason;
+      advance.markModified('reason');
+    }
+    if (requestDate !== undefined) {
+      advance.requestDate = new Date(requestDate);
+      advance.markModified('requestDate');
+    }
     
     // إذا تم تغيير المبلغ، نحدث بيانات السداد
     if (amount !== undefined && advance.repayment) {
       const installments = advance.repayment.installments || 1;
       advance.repayment.amountPerMonth = Math.ceil(amount / installments);
       advance.repayment.remainingAmount = amount - (advance.repayment.totalPaid || 0);
+      advance.markModified('repayment');
     }
     
     await advance.save();
+    
+    console.log('✅ Advance updated successfully:', advance);
     
     res.json({
       success: true,
@@ -380,6 +417,7 @@ export const updateAdvance = async (req, res) => {
       data: advance
     });
   } catch (error) {
+    console.error('❌ Error in updateAdvance:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

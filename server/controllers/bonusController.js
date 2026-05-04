@@ -128,7 +128,19 @@ export const createBonus = async (req, res) => {
 // Update bonus
 export const updateBonus = async (req, res) => {
   try {
+    console.log('🔄 Update Bonus Request:', {
+      id: req.params.id,
+      body: req.body,
+      user: req.user?.username,
+      organizationId: req.user?.organization
+    });
+    
     const { amount, type, reason, date, notes } = req.body;
+    
+    console.log('🔍 Searching for bonus with:', {
+      _id: req.params.id,
+      organizationId: req.user.organization
+    });
     
     const bonus = await Bonus.findOne({
       _id: req.params.id,
@@ -136,24 +148,53 @@ export const updateBonus = async (req, res) => {
     });
     
     if (!bonus) {
+      console.log('❌ Bonus not found:', req.params.id);
+      console.log('🔍 Trying to find without organizationId filter...');
+      const anyBonus = await Bonus.findById(req.params.id);
+      if (anyBonus) {
+        console.log('⚠️ Found bonus but organizationId mismatch:', {
+          expected: req.user.organization,
+          actual: anyBonus.organizationId
+        });
+      } else {
+        console.log('❌ Bonus does not exist at all');
+      }
       return res.status(404).json({ 
         success: false,
         error: 'المكافأة غير موجودة' 
       });
     }
     
+    console.log('📝 Current bonus:', bonus);
+    
     // تحديث البيانات
-    if (amount !== undefined) bonus.amount = amount;
-    if (type !== undefined) bonus.type = type;
-    if (reason !== undefined) bonus.reason = reason;
-    if (notes !== undefined) bonus.notes = notes;
+    if (amount !== undefined) {
+      bonus.amount = amount;
+      bonus.markModified('amount');
+    }
+    if (type !== undefined) {
+      bonus.type = type;
+      bonus.markModified('type');
+    }
+    if (reason !== undefined) {
+      bonus.reason = reason;
+      bonus.markModified('reason');
+    }
+    if (notes !== undefined) {
+      bonus.notes = notes;
+      bonus.markModified('notes');
+    }
     
     if (date !== undefined) {
       bonus.date = new Date(date);
       bonus.month = bonus.date.toISOString().substring(0, 7);
+      bonus.markModified('date');
+      bonus.markModified('month');
     }
     
     await bonus.save();
+    
+    console.log('✅ Bonus updated successfully:', bonus);
     
     // Populate employee info
     await bonus.populate('employeeId', 'personalInfo.name employment');
@@ -165,7 +206,7 @@ export const updateBonus = async (req, res) => {
       data: bonus
     });
   } catch (error) {
-    console.error('Error in updateBonus:', error);
+    console.error('❌ Error in updateBonus:', error);
     res.status(500).json({ 
       success: false,
       error: error.message 

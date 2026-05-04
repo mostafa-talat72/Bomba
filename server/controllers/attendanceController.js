@@ -376,7 +376,19 @@ export const bulkMarkAttendance = async (req, res) => {
 // Update attendance
 export const updateAttendance = async (req, res) => {
   try {
+    console.log('🔄 Update Attendance Request:', {
+      id: req.params.id,
+      body: req.body,
+      user: req.user?.username,
+      organizationId: req.user?.organization
+    });
+    
     const { status, checkIn, checkOut, reason, notes } = req.body;
+    
+    console.log('🔍 Searching for attendance with:', {
+      _id: req.params.id,
+      organizationId: req.user.organization
+    });
     
     const attendance = await Attendance.findOne({
       _id: req.params.id,
@@ -384,15 +396,43 @@ export const updateAttendance = async (req, res) => {
     });
     
     if (!attendance) {
+      console.log('❌ Attendance not found:', req.params.id);
+      console.log('🔍 Trying to find without organizationId filter...');
+      const anyAttendance = await Attendance.findById(req.params.id);
+      if (anyAttendance) {
+        console.log('⚠️ Found attendance but organizationId mismatch:', {
+          expected: req.user.organization,
+          actual: anyAttendance.organizationId
+        });
+      } else {
+        console.log('❌ Attendance does not exist at all');
+      }
       return res.status(404).json({ success: false, error: 'السجل غير موجود' });
     }
     
+    console.log('📝 Current attendance:', attendance);
+    
     // تحديث البيانات
-    if (status) attendance.status = status;
-    if (checkIn !== undefined) attendance.checkIn = checkIn;
-    if (checkOut !== undefined) attendance.checkOut = checkOut;
-    if (reason !== undefined) attendance.reason = reason;
-    if (notes !== undefined) attendance.notes = notes;
+    if (status) {
+      attendance.status = status;
+      attendance.markModified('status');
+    }
+    if (checkIn !== undefined) {
+      attendance.checkIn = checkIn;
+      attendance.markModified('checkIn');
+    }
+    if (checkOut !== undefined) {
+      attendance.checkOut = checkOut;
+      attendance.markModified('checkOut');
+    }
+    if (reason !== undefined) {
+      attendance.reason = reason;
+      attendance.markModified('reason');
+    }
+    if (notes !== undefined) {
+      attendance.notes = notes;
+      attendance.markModified('notes');
+    }
     
     // إعادة حساب الساعات والمرتب
     if (attendance.checkIn && attendance.checkOut) {
@@ -431,13 +471,15 @@ export const updateAttendance = async (req, res) => {
     
     await attendance.save();
     
+    console.log('✅ Attendance updated successfully:', attendance);
+    
     res.json({
       success: true,
       message: 'تم تحديث السجل بنجاح',
       data: attendance
     });
   } catch (error) {
-    console.error('Error in updateAttendance:', error);
+    console.error('❌ Error in updateAttendance:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

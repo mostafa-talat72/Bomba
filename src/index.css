@@ -1045,7 +1045,7 @@ body.hide-scroll-buttons button[title="النزول للأسفل"] {
 /* Ensure picker is clickable and visible */
 .ant-picker {
   position: relative !important;
-  z-index: 1 !important;
+  z-index: 100 !important;
 }
 
 /* Fix for picker in fixed/absolute positioned containers */
