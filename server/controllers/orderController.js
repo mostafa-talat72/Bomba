@@ -1365,6 +1365,9 @@ export const updateOrder = async (req, res) => {
                             let totalRemovedAmount = 0;
                             let totalAdjustedAmount = 0;
 
+                            // Track existing itemPayment IDs before filtering
+                            const existingItemPaymentIds = new Set(billDoc.itemPayments.map(ip => ip.itemId));
+                            
                             // Filter out invalid itemPayments and adjust quantities for modified items
                             billDoc.itemPayments = billDoc.itemPayments.filter(payment => {
                                 if (!validItemIds.has(payment.itemId)) {
@@ -1391,17 +1394,24 @@ export const updateOrder = async (req, res) => {
                                     return false; // Remove this payment
                                 }
 
-                                // Item still exists - check if quantity changed
+                                // Item still exists - check if quantity or price changed
                                 const currentItem = currentOrderItems.get(payment.itemId);
-                                if (currentItem && currentItem.quantity !== payment.quantity) {
+                                if (currentItem) {
                                     const oldPaidAmount = payment.paidAmount || 0;
                                     const oldPaidQuantity = payment.paidQuantity || 0;
+                                    let hasChanges = false;
                                     
-                                    // Update item details
-                                    payment.itemName = currentItem.name;
-                                    payment.pricePerUnit = currentItem.price;
-                                    payment.quantity = currentItem.quantity;
-                                    payment.totalPrice = currentItem.price * currentItem.quantity;
+                                    // Update item details if they changed
+                                    if (currentItem.name !== payment.itemName || 
+                                        currentItem.price !== payment.pricePerUnit || 
+                                        currentItem.quantity !== payment.quantity) {
+                                        
+                                        payment.itemName = currentItem.name;
+                                        payment.pricePerUnit = currentItem.price;
+                                        payment.quantity = currentItem.quantity;
+                                        payment.totalPrice = currentItem.price * currentItem.quantity;
+                                        hasChanges = true;
+                                    }
                                     
                                     // Adjust paid quantity if it exceeds new total quantity
                                     if (payment.paidQuantity > currentItem.quantity) {
@@ -1427,7 +1437,7 @@ export const updateOrder = async (req, res) => {
                                             newPaidAmount: payment.paidAmount,
                                             adjustedAmount: adjustedAmount
                                         });
-                                    } else {
+                                    } else if (hasChanges) {
                                         // Recalculate paid amount based on current price
                                         payment.paidAmount = payment.paidQuantity * currentItem.price;
                                         payment.isPaid = payment.paidQuantity >= payment.quantity;
@@ -1436,6 +1446,50 @@ export const updateOrder = async (req, res) => {
                                 
                                 return true; // Keep this payment
                             });
+
+                            // Add itemPayments for new items that don't have payments yet
+                            const newItemsAdded = [];
+                            for (const [itemId, itemDetails] of currentOrderItems) {
+                                if (!existingItemPaymentIds.has(itemId)) {
+                                    // This is a new item - create itemPayment for it
+                                    const MenuItem = (await import('../models/MenuItem.js')).default;
+                                    let menuItemId = null;
+                                    
+                                    // Try to find menuItem by name to get the ID
+                                    const menuItem = await MenuItem.findOne({
+                                        name: itemDetails.name,
+                                        organization: billDoc.organization
+                                    }).select('_id');
+                                    
+                                    if (menuItem) {
+                                        menuItemId = menuItem._id;
+                                    }
+                                    
+                                    billDoc.itemPayments.push({
+                                        orderId: itemDetails.orderId,
+                                        itemId: itemId,
+                                        menuItemId: menuItemId,
+                                        itemName: itemDetails.name,
+                                        quantity: itemDetails.quantity,
+                                        paidQuantity: 0,
+                                        pricePerUnit: itemDetails.price,
+                                        totalPrice: itemDetails.price * itemDetails.quantity,
+                                        paidAmount: 0,
+                                        isPaid: false,
+                                        addons: [],
+                                        paymentHistory: []
+                                    });
+                                    
+                                    newItemsAdded.push({
+                                        itemName: itemDetails.name,
+                                        itemId: itemId,
+                                        quantity: itemDetails.quantity,
+                                        price: itemDetails.price
+                                    });
+                                    
+                                    Logger.info(`➕ [updateOrder] Created itemPayment for new item: ${itemDetails.name} (${itemId}), quantity: ${itemDetails.quantity}, price: ${itemDetails.price}`);
+                                }
+                            }
 
                             // Redistribute payments to remaining items of the same type
                             for (const [itemKey, totalPaidAmount] of paymentsToRedistribute) {
@@ -1494,10 +1548,11 @@ export const updateOrder = async (req, res) => {
                             }
 
                             // Log summary of changes
-                            if (removedPayments.length > 0 || adjustedPayments.length > 0) {
+                            if (removedPayments.length > 0 || adjustedPayments.length > 0 || newItemsAdded.length > 0) {
                                 Logger.info(`💰 [updateOrder] Payment adjustments summary for bill ${billDoc.billNumber}:`, {
                                     removedPayments: removedPayments.length,
                                     adjustedPayments: adjustedPayments.length,
+                                    newItemsAdded: newItemsAdded.length,
                                     totalRemovedAmount,
                                     totalAdjustedAmount,
                                     redistributedTypes: paymentsToRedistribute.size,
