@@ -1462,15 +1462,21 @@ billSchema.methods.calculateRemainingAmount = function () {
     }
     
     // 3. حساب المدفوع من الدفعات الكاملة (payments array)
-    // نحسب الدفعات الكاملة فقط إذا كانت من نوع 'full' أو إذا لم يكن هناك itemPayments/sessionPayments
+    // نحسب الدفعات الكاملة فقط إذا لم يكن هناك itemPayments/sessionPayments
+    // لأن الدفعات الكاملة يتم تحويلها تلقائياً إلى itemPayments/sessionPayments
     if (hasFullPayments) {
         this.payments.forEach((payment) => {
             const amount = payment.amount || 0;
             const paymentType = payment.type || 'full';
             
-            // نحسب الدفعة فقط إذا كانت من نوع 'full' ولم يتم تحويلها إلى itemPayments
-            // تجاهل الدفعات من نوع: partial-items, partial-session, converted-to-items
-            if (paymentType === 'full' || (!hasItemPayments && !hasSessionPayments)) {
+            // نحسب الدفعة فقط في الحالات التالية:
+            // 1. إذا كانت من نوع 'credit-from-deleted-items' (رصيد من عناصر محذوفة)
+            // 2. إذا لم يكن هناك itemPayments/sessionPayments (للتوافق مع البيانات القديمة)
+            // تجاهل الدفعات من نوع: full, partial-items, partial-session, converted-to-items
+            const isCredit = paymentType === 'credit-from-deleted-items' || paymentType === 'credit';
+            const shouldCountFullPayment = !hasItemPayments && !hasSessionPayments;
+            
+            if (isCredit || shouldCountFullPayment) {
                 totalPaidFromFullPayments += amount;
             }
         });

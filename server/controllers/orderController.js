@@ -1492,11 +1492,18 @@ export const updateOrder = async (req, res) => {
                             }
 
                             // Redistribute payments to remaining items of the same type
+                            const unredistributedAmounts = new Map(); // Track amounts that couldn't be redistributed
+                            
                             for (const [itemKey, totalPaidAmount] of paymentsToRedistribute) {
                                 if (totalPaidAmount <= 0) continue;
                                 
                                 const remainingItemIds = itemsByType.get(itemKey) || [];
-                                if (remainingItemIds.length === 0) continue;
+                                if (remainingItemIds.length === 0) {
+                                    // No items of this type remain - track unredistributed amount
+                                    unredistributedAmounts.set(itemKey, totalPaidAmount);
+                                    Logger.warn(`⚠️ [updateOrder] No remaining items of type ${itemKey} to redistribute ${totalPaidAmount} EGP`);
+                                    continue;
+                                }
                                 
                                 Logger.info(`🔄 [updateOrder] Redistributing ${totalPaidAmount} EGP for item type: ${itemKey} to ${remainingItemIds.length} remaining items`);
                                 
@@ -1543,16 +1550,46 @@ export const updateOrder = async (req, res) => {
                                 }
                                 
                                 if (remainingQuantityToDistribute > 0) {
-                                    Logger.warn(`⚠️ [updateOrder] Could not redistribute ${remainingQuantityToDistribute} units for item type: ${itemKey}`);
+                                    const unredistributedAmount = remainingQuantityToDistribute * unitPrice;
+                                    unredistributedAmounts.set(itemKey, unredistributedAmount);
+                                    Logger.warn(`⚠️ [updateOrder] Could not redistribute ${remainingQuantityToDistribute} units (${unredistributedAmount} EGP) for item type: ${itemKey}`);
+                                }
+                            }
+
+                            // Add unredistributed amounts as credit in payments array
+                            if (unredistributedAmounts.size > 0) {
+                                let totalUnredistributed = 0;
+                                const itemsList = [];
+                                
+                                for (const [itemKey, amount] of unredistributedAmounts) {
+                                    totalUnredistributed += amount;
+                                    const [itemName] = itemKey.split('|');
+                                    itemsList.push(itemName);
+                                }
+                                
+                                if (totalUnredistributed > 0) {
+                                    // Add as a credit payment that can be used later
+                                    billDoc.payments.push({
+                                        amount: totalUnredistributed,
+                                        method: 'credit',
+                                        type: 'credit-from-deleted-items',
+                                        paidBy: null,
+                                        paidAt: new Date(),
+                                        reference: `Credit from deleted items: ${itemsList.join(', ')}`,
+                                        note: `Unredistributed payment from deleted items after order update`
+                                    });
+                                    
+                                    Logger.info(`💳 [updateOrder] Added ${totalUnredistributed} EGP as credit from unredistributed payments for deleted items: ${itemsList.join(', ')}`);
                                 }
                             }
 
                             // Log summary of changes
-                            if (removedPayments.length > 0 || adjustedPayments.length > 0 || newItemsAdded.length > 0) {
+                            if (removedPayments.length > 0 || adjustedPayments.length > 0 || newItemsAdded.length > 0 || unredistributedAmounts.size > 0) {
                                 Logger.info(`💰 [updateOrder] Payment adjustments summary for bill ${billDoc.billNumber}:`, {
                                     removedPayments: removedPayments.length,
                                     adjustedPayments: adjustedPayments.length,
                                     newItemsAdded: newItemsAdded.length,
+                                    unredistributedCredits: unredistributedAmounts.size,
                                     totalRemovedAmount,
                                     totalAdjustedAmount,
                                     redistributedTypes: paymentsToRedistribute.size,
