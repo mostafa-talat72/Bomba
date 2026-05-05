@@ -299,6 +299,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 reason: 'السبب',
                 type: 'النوع',
                 method: 'الطريقة',
+                notes: 'الملاحظات',
                 developedBy: 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية - ٠١١١٦٦٢٦١٦٤'
             },
             en: {
@@ -359,6 +360,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 reason: 'Reason',
                 type: 'Type',
                 method: 'Method',
+                notes: 'Notes',
                 developedBy: 'Designed & Developed by: Mostafa Talaat Software Solutions - 01116626164'
             },
             fr: {
@@ -418,6 +420,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 reason: 'Raison',
                 type: 'Type',
                 method: 'Méthode',
+                notes: 'Remarques',
                 financialStatus: 'Statut Financier',
                 developedBy: 'Conçu et Développé par: Mostafa Talaat Solutions Logicielles - 01116626164'
             }

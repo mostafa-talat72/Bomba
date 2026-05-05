@@ -65,8 +65,8 @@ const SoldItems: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
   const [customDateRange, setCustomDateRange] = useState<[Dayjs, Dayjs]>([
-    dayjs().set('hour', 0).set('minute', 0).set('second', 0),
-    dayjs().set('hour', 23).set('minute', 59).set('second', 59)
+    dayjs().set('hour', 0).set('minute', 0).set('second', 0).set('millisecond', 0),
+    dayjs().set('hour', 23).set('minute', 59).set('second', 59).set('millisecond', 999)
   ]);
   const [loading, setLoading] = useState(true);
   const [showMoney, setShowMoney] = useState(false); // State to show/hide money
@@ -183,9 +183,30 @@ const SoldItems: React.FC = () => {
       
       // If custom date range is selected, use the custom dates
       if (dateFilter === 'custom') {
-        startDate = customDateRange[0].toISOString();
-        endDate = customDateRange[1].toISOString();
+        // Ensure start date is at beginning of day (00:00:00)
+        const start = customDateRange[0]
+          .set('hour', 0)
+          .set('minute', 0)
+          .set('second', 0)
+          .set('millisecond', 0);
+        
+        // Ensure end date is at end of day (23:59:59.999)
+        const end = customDateRange[1]
+          .set('hour', 23)
+          .set('minute', 59)
+          .set('second', 59)
+          .set('millisecond', 999);
+        
+        startDate = start.toISOString();
+        endDate = end.toISOString();
         filterParam = 'custom';
+        
+        console.log('📅 Fetching sold items with custom date range:', {
+          startDate,
+          endDate,
+          startFormatted: start.format('YYYY-MM-DD HH:mm:ss'),
+          endFormatted: end.format('YYYY-MM-DD HH:mm:ss')
+        });
       }
       
       const response = await api.getSoldItems(filterParam, startDate, endDate);
@@ -450,10 +471,19 @@ const SoldItems: React.FC = () => {
                       value={customDateRange[0]}
                       onChange={(date) => {
                         if (date) {
+                          // Set to beginning of day
+                          const startOfDay = date
+                            .set('hour', 0)
+                            .set('minute', 0)
+                            .set('second', 0)
+                            .set('millisecond', 0);
+                          
                           setCustomDateRange([
-                            date.set('hour', 0).set('minute', 0).set('second', 0),
+                            startOfDay,
                             customDateRange[1]
                           ]);
+                          
+                          console.log('📅 Start date changed:', startOfDay.format('YYYY-MM-DD HH:mm:ss'));
                         }
                       }}
                       format="YYYY-MM-DD"
@@ -471,10 +501,19 @@ const SoldItems: React.FC = () => {
                       value={customDateRange[1]}
                       onChange={(date) => {
                         if (date) {
+                          // Set to end of day
+                          const endOfDay = date
+                            .set('hour', 23)
+                            .set('minute', 59)
+                            .set('second', 59)
+                            .set('millisecond', 999);
+                          
                           setCustomDateRange([
                             customDateRange[0],
-                            date.set('hour', 23).set('minute', 59).set('second', 59)
+                            endOfDay
                           ]);
+                          
+                          console.log('📅 End date changed:', endOfDay.format('YYYY-MM-DD HH:mm:ss'));
                         }
                       }}
                       format="YYYY-MM-DD"

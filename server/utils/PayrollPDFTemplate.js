@@ -870,9 +870,10 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
         if (payments.length > 0) {
           const paymentRows = payments.map((pay, payIdx) =>
             h(View, { key: payIdx, style: styles.tableRow }, [
-              h(Text, { key: 'date', style: [styles.tableCell, styles.col3] }, formatDate(pay.paymentDate, currentLanguage)),
-              h(Text, { key: 'amount', style: [styles.tableCell, styles.col3] }, formatNumber(pay.amount.toFixed(2), currentLanguage)),
-              h(Text, { key: 'method', style: [styles.tableCell, styles.col3] }, cleanText(pay.method))
+              h(Text, { key: 'date', style: [styles.tableCell, styles.col4] }, formatDate(pay.paymentDate, currentLanguage)),
+              h(Text, { key: 'amount', style: [styles.tableCell, styles.col4] }, formatNumber(pay.amount.toFixed(2), currentLanguage)),
+              h(Text, { key: 'method', style: [styles.tableCell, styles.col4] }, cleanText(pay.method)),
+              h(Text, { key: 'notes', style: [styles.tableCell, styles.col4] }, cleanText(pay.notes || '-'))
             ])
           );
 
@@ -881,9 +882,10 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
               h(Text, { key: 'pay-title', style: styles.sectionTitle }, cleanText(t.paidPayments || 'الدفعات المدفوعة')),
               h(View, { key: 'pay-table', style: styles.table }, [
                 h(View, { key: 'pay-thead', style: [styles.tableRow, styles.tableHeader] }, [
-                  h(Text, { key: 'h1', style: [styles.tableCell, styles.col3] }, cleanText(t.date || 'التاريخ')),
-                  h(Text, { key: 'h2', style: [styles.tableCell, styles.col3] }, cleanText(t.amount || 'المبلغ')),
-                  h(Text, { key: 'h3', style: [styles.tableCell, styles.col3] }, cleanText(t.method || 'الطريقة'))
+                  h(Text, { key: 'h1', style: [styles.tableCell, styles.col4] }, cleanText(t.date || 'التاريخ')),
+                  h(Text, { key: 'h2', style: [styles.tableCell, styles.col4] }, cleanText(t.amount || 'المبلغ')),
+                  h(Text, { key: 'h3', style: [styles.tableCell, styles.col4] }, cleanText(t.method || 'الطريقة')),
+                  h(Text, { key: 'h4', style: [styles.tableCell, styles.col4] }, cleanText(t.notes || 'الملاحظات'))
                 ]),
                 ...paymentRows
               ])

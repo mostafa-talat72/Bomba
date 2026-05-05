@@ -477,8 +477,7 @@ export const getOrders = async (req, res) => {
             if (endDate) {
                 try {
                     const endDateTime = new Date(endDate);
-                    // Set to end of day to include all orders from that day
-                    endDateTime.setHours(23, 59, 59, 999);
+                    // Use the exact time provided by the user
                     query.createdAt.$lte = endDateTime;
                 } catch (error) {
                     Logger.error("Invalid endDate format", { endDate });

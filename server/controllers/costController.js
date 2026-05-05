@@ -48,13 +48,13 @@ export const getCosts = async (req, res) => {
             
             if (startDate) {
                 const start = new Date(startDate);
-                start.setHours(0, 0, 0, 0);
+                // Use the exact time provided by the user
                 dateFilter.$gte = start;
             }
             
             if (endDate) {
                 const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
+                // Use the exact time provided by the user
                 dateFilter.$lte = end;
             }
 
