@@ -126,9 +126,11 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
               }}
               disabledDate={(current) => {
                 if (!current) return false;
-                const today = dayjs();
+                const today = dayjs().startOf('day');
+                const currentDate = current.startOf('day');
+                const requestDateStart = requestDate.startOf('day');
                 // لا يمكن اختيار تاريخ قبل requestDate أو بعد اليوم
-                return current.isBefore(requestDate, 'day') || current.isAfter(today, 'day');
+                return currentDate.isBefore(requestDateStart) || currentDate.isAfter(today);
               }}
             />
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
@@ -395,9 +397,10 @@ const AdvanceManagement: React.FC<AdvanceManagementProps> = ({ preSelectedEmploy
               placeholder={t('payroll.attendanceManagement.selectDate')}
               disabledDate={(current) => {
                 if (!current) return false;
-                const today = dayjs();
+                const today = dayjs().startOf('day');
+                const currentDate = current.startOf('day');
                 // لا يمكن اختيار تاريخ في المستقبل
-                return current.isAfter(today, 'day');
+                return currentDate.isAfter(today);
               }}
             />
           </Form.Item>

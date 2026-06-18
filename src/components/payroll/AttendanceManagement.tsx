@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button, DatePicker, Select, Tag, message, Card, Statistic, Row, Col, Modal, Form, Input, Empty, Spin, ConfigProvider } from 'antd';
 import LocalizedTimePicker from '../common/LocalizedTimePicker';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Edit2 } from 'lucide-react';
@@ -148,8 +148,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
       form.setFieldsValue({
         dates: [dayjs(record.date)],
         status: record.status,
-        checkIn: record.checkIn ? dayjs(record.checkIn, 'HH:mm') : null,
-        checkOut: record.checkOut ? dayjs(record.checkOut, 'HH:mm') : null,
+        checkIn: record.checkIn ? dayjs(record.checkIn, 'HH:mm') : dayjs().hour(9).minute(0), // وقت افتراضي 9:00 صباحاً
+        checkOut: record.checkOut ? dayjs(record.checkOut, 'HH:mm') : dayjs().hour(17).minute(0), // وقت افتراضي 5:00 مساءً
         reason: record.reason,
         excused: record.excused,
         notes: record.notes
@@ -162,7 +162,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
       form.resetFields();
       form.setFieldsValue({
         dates: [dayjs()],
-        status: 'present'
+        status: 'present',
+        checkIn: dayjs().hour(9).minute(0), // وقت افتراضي 9:00 صباحاً
+        checkOut: dayjs().hour(17).minute(0) // وقت افتراضي 5:00 مساءً
       });
       setDayTimes([]);
       setTimeGroups([]);
@@ -170,17 +172,56 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
     setIsMarkModalVisible(true);
   };
 
+  // دالة لتعطيل التواريخ في DatePicker
+  const disabledDate = useCallback((current: dayjs.Dayjs): boolean => {
+    if (!current) return false;
+    
+    // منع اختيار تواريخ في المستقبل
+    const today = dayjs().startOf('day');
+    const currentDate = current.startOf('day');
+    
+    console.log('🔍 Checking date:', current.format('YYYY-MM-DD'), {
+      isAfterToday: currentDate.isAfter(today),
+      attendanceCount: attendance.length,
+      isEditing: !!editingRecord
+    });
+    
+    if (currentDate.isAfter(today)) {
+      console.log('❌ DISABLED: Future date');
+      return true; // تاريخ في المستقبل
+    }
+    
+    // منع اختيار تواريخ محفوظة مسبقاً (فقط في وضع الإضافة)
+    if (!editingRecord) {
+      const dateStr = current.format('YYYY-MM-DD');
+      const isRecorded = attendance.some(record => {
+        const match = record.date === dateStr;
+        if (match) {
+          console.log('🔍 Found duplicate:', dateStr, 'in record:', record.date);
+        }
+        return match;
+      });
+      if (isRecorded) {
+        console.log('❌ DISABLED: Duplicate date');
+        return true; // تاريخ مكرر
+      }
+    }
+    
+    console.log('✅ ENABLED');
+    return false;
+  }, [attendance, editingRecord]);
+
   const handleDatesChange = (dates: any) => {
     if (!dates || dates.length === 0) {
       setDayTimes([]);
       return;
     }
 
-    // إنشاء قائمة بالأيام المختارة
+    // إنشاء قائمة بالأيام المختارة مع أوقات افتراضية
     const newDayTimes = dates.map((date: any) => ({
       date: date.format('YYYY-MM-DD'),
-      checkIn: null,
-      checkOut: null
+      checkIn: dayjs().hour(9).minute(0), // وقت افتراضي 9:00 صباحاً
+      checkOut: dayjs().hour(17).minute(0) // وقت افتراضي 5:00 مساءً
     }));
     setDayTimes(newDayTimes);
   };
@@ -195,8 +236,8 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
     const newGroup: TimeGroup = {
       id: Date.now().toString(),
       dates: [],
-      checkIn: null,
-      checkOut: null
+      checkIn: dayjs().hour(9).minute(0), // وقت افتراضي 9:00 صباحاً
+      checkOut: dayjs().hour(17).minute(0) // وقت افتراضي 5:00 مساءً
     };
     setTimeGroups([...timeGroups, newGroup]);
   };
@@ -346,6 +387,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           message.warning(t('payroll.attendanceManagement.messages.partialFailure', { count: errors.length }));
         }
         setIsMarkModalVisible(false);
+        setEditingRecord(null);
         form.resetFields();
         setDayTimes([]);
         setTimeGroups([]);
@@ -680,6 +722,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
           open={isMarkModalVisible}
           onCancel={() => {
             setIsMarkModalVisible(false);
+            setEditingRecord(null);
             setDayTimes([]);
             setTimeGroups([]);
             setTimeMode('same');
@@ -709,12 +752,21 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
               rules={[{ required: true, message: t('payroll.attendanceManagement.form.datesRequired') }]}
             >
               <DatePicker
+                key={`datepicker-${attendance.length}-${editingRecord ? 'edit' : 'add'}`}
                 multiple
                 style={{ width: '100%' }}
                 format="YYYY-MM-DD"
                 className="dark:bg-gray-700 dark:border-gray-600"
                 placeholder={t('payroll.attendanceManagement.form.datesPlaceholder')}
                 onChange={handleDatesChange}
+                onOpenChange={(open) => {
+                  // إغلاق النافذة عند الضغط خارجها
+                  if (!open) {
+                    // يمكن إضافة أي منطق إضافي هنا إذا لزم الأمر
+                  }
+                }}
+                disabledDate={disabledDate}
+                popupClassName="attendance-date-picker-popup"
               />
             </Form.Item>
           )}
@@ -1073,6 +1125,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ preSelected
               <Button 
                 onClick={() => {
                   setIsMarkModalVisible(false);
+                  setEditingRecord(null);
                   setDayTimes([]);
                   setTimeGroups([]);
                   setTimeMode('same');

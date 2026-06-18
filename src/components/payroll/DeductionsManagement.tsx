@@ -328,6 +328,15 @@ const DeductionsManagement: React.FC<DeductionsManagementProps> = ({ preSelected
               style={{ width: '100%' }}
               placeholder={t('payroll.deductionsManagement.form.datePlaceholder')}
               className="dark:bg-gray-700 dark:border-gray-600"
+              disabledDate={(current) => {
+                if (!current) return false;
+                // منع اختيار تواريخ في المستقبل
+                const today = dayjs().startOf('day');
+                const currentDate = current.startOf('day');
+                const isDisabled = currentDate.isAfter(today);
+                console.log('🔍 [Deductions] Checking:', current.format('YYYY-MM-DD'), 'Disabled:', isDisabled);
+                return isDisabled;
+              }}
             />
           </Form.Item>
 

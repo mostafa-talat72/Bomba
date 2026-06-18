@@ -2100,6 +2100,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               format="YYYY-MM-DD"
               className="dark:bg-gray-700 dark:border-gray-600"
               size="large"
+              disabledDate={(current) => {
+                if (!current) return false;
+                // منع اختيار تواريخ في المستقبل
+                const today = dayjs().startOf('day');
+                const currentDate = current.startOf('day');
+                return currentDate.isAfter(today);
+              }}
             />
           </Form.Item>
 
@@ -2288,12 +2295,13 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               size="large"
               disabledDate={(current) => {
                 if (!current) return false;
-                const today = dayjs();
+                const today = dayjs().startOf('day');
+                const currentDate = current.startOf('day');
                 const currentMonthStart = selectedMonth.startOf('month');
                 const currentMonthEnd = selectedMonth.endOf('month');
                 
-                if (current.isAfter(today, 'day')) return true;
-                if (current.isBefore(currentMonthStart, 'day') || current.isAfter(currentMonthEnd, 'day')) return true;
+                if (currentDate.isAfter(today)) return true;
+                if (currentDate.isBefore(currentMonthStart) || currentDate.isAfter(currentMonthEnd)) return true;
                 
                 return false;
               }}
@@ -2828,9 +2836,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ employeeId, onClose, 
               placeholder={t('payroll.attendanceManagement.selectDate')}
               disabledDate={(current) => {
                 if (!current) return false;
-                const today = dayjs();
+                const today = dayjs().startOf('day');
+                const currentDate = current.startOf('day');
                 // لا يمكن اختيار تاريخ في المستقبل
-                return current.isAfter(today, 'day');
+                return currentDate.isAfter(today);
               }}
             />
           </Form.Item>

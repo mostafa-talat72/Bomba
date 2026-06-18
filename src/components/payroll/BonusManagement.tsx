@@ -380,6 +380,15 @@ const BonusManagement: React.FC<BonusManagementProps> = ({ preSelectedEmployeeId
                 style={{ width: '100%' }}
                 placeholder={t('payroll.bonusManagement.form.datePlaceholder')}
                 className="dark:bg-gray-700 dark:border-gray-600"
+                disabledDate={(current) => {
+                  if (!current) return false;
+                  // منع اختيار تواريخ في المستقبل
+                  const today = dayjs().startOf('day');
+                  const currentDate = current.startOf('day');
+                  const isDisabled = currentDate.isAfter(today);
+                  console.log('🔍 [Bonus] Checking:', current.format('YYYY-MM-DD'), 'Disabled:', isDisabled);
+                  return isDisabled;
+                }}
               />
             </Form.Item>
 
