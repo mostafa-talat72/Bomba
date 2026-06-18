@@ -778,19 +778,19 @@ const Warehouse = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-600">
+          <table className="min-w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.product')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.category')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.currentStock')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.minStock')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.unit')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.lastPurchasePrice')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.totalValue')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.supplier')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.actions')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.product')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.category')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.currentStock')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.minStock')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.unit')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.lastPurchasePrice')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.totalValue')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.supplier')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.actions')}</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -808,52 +808,54 @@ const Warehouse = () => {
                 const stock = getStockStatus(item.currentStock, item.minStock);
                 return (
                   <tr key={item.id || item._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className={`w-2 h-2 rounded-full ml-2 ${
+                    <td className={`px-6 py-4 whitespace-nowrap ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                           stock.status === 'low' ? 'bg-red-500' : stock.status === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
                         }`} />
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{item.name}</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">{item.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{translateCategory(item.category)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`font-medium ${stock.color}`}>{formatQuantity(item.currentStock, translateUnit(item.unit), i18n.language)}</span>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{translateCategory(item.category)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${stock.color} ${stock.bgColor} ring-1 ring-inset`}>{formatQuantity(item.currentStock, translateUnit(item.unit), i18n.language)}</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{translateUnit(item.unit)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatCurrency(item.price)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(item.totalValue || (item.currentStock * item.price))}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.supplier}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 space-x-reverse">
-                      <PermissionGuard requiredPermissions={['canViewStockMovements', 'canViewInventory', 'all']}>
-                        <button onClick={() => openMovementsModal(item)}
-                          className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center"
-                          title={t('inventory.table.movementsHistory')}>
-                          <History className="h-4 w-4" />
-                        </button>
-                      </PermissionGuard>
-                      <PermissionGuard requiredPermissions={['canAddStock', 'canRemoveStock', 'canAdjustStock', 'all']}>
-                        <button onClick={() => openDeductModal(item)}
-                          className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 inline-flex items-center"
-                          title={t('inventory.table.deductQuantity')}>
-                          <Minus className="h-4 w-4" />
-                        </button>
-                      </PermissionGuard>
-                      <PermissionGuard requiredPermissions={['canEditInventoryItem', 'all']}>
-                        <button onClick={() => openEditModal(item)}
-                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                          title={t('inventory.table.edit')}>
-                          <Edit className="h-4 w-4" />
-                        </button>
-                      </PermissionGuard>
-                      <PermissionGuard requiredPermissions={['canDeleteInventoryItem', 'all']}>
-                        <button onClick={() => { setDeleteTarget(item); setShowDeleteModal(true); }}
-                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                          title={t('inventory.table.delete')}>
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </PermissionGuard>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{translateUnit(item.unit)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.price)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.totalValue || (item.currentStock * item.price))}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.supplier || <span className="text-gray-400">—</span>}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <div className="flex items-center gap-1">
+                        <PermissionGuard requiredPermissions={['canViewStockMovements', 'canViewInventory', 'all']}>
+                          <button onClick={() => openMovementsModal(item)}
+                            className="p-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                            title={t('inventory.table.movementsHistory')}>
+                            <History className="h-4 w-4" />
+                          </button>
+                        </PermissionGuard>
+                        <PermissionGuard requiredPermissions={['canAddStock', 'canRemoveStock', 'canAdjustStock', 'all']}>
+                          <button onClick={() => openDeductModal(item)}
+                            className="p-1.5 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors"
+                            title={t('inventory.table.deductQuantity')}>
+                            <Minus className="h-4 w-4" />
+                          </button>
+                        </PermissionGuard>
+                        <PermissionGuard requiredPermissions={['canEditInventoryItem', 'all']}>
+                          <button onClick={() => openEditModal(item)}
+                            className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                            title={t('inventory.table.edit')}>
+                            <Edit className="h-4 w-4" />
+                          </button>
+                        </PermissionGuard>
+                        <PermissionGuard requiredPermissions={['canDeleteInventoryItem', 'all']}>
+                          <button onClick={() => { setDeleteTarget(item); setShowDeleteModal(true); }}
+                            className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title={t('inventory.table.delete')}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </PermissionGuard>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1075,11 +1077,10 @@ const Warehouse = () => {
                       </div>
                       <div className={`${isRTL ? 'mr-3' : 'ml-3'}`}>
                         <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('inventory.addModal.importantNote')}</h3>
-                        <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-                          <p>{t('inventory.addModal.noteCannotDuplicate')}</p>
-                          <p>{t('inventory.addModal.noteUseExisting')}</p>
-                          <p>{t('inventory.addModal.noteDifferentBranches')}</p>
-                        </div>
+                          <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+                            <p>{t('inventory.addModal.noteCannotDuplicate')}</p>
+                            <p>{t('inventory.addModal.noteUseExisting')}</p>
+                          </div>
                       </div>
                     </div>
                   </div>
@@ -1098,7 +1099,7 @@ const Warehouse = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.quantity')}</label>
-                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
+                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" step="0.01" inputMode="decimal" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
@@ -1379,7 +1380,13 @@ const Warehouse = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     {deductForm.type === 'out' ? t('inventory.deductModal.quantityToDeduct') : t('inventory.deductModal.correctStock')}
                   </label>
-                  <input type="number" value={deductForm.quantity} onChange={e => setDeductForm({...deductForm, quantity: e.target.value})}
+                  <input type="number" value={deductForm.quantity} step="0.01" inputMode="decimal"
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                        setDeductForm({...deductForm, quantity: val});
+                      }
+                    }}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100" required />
                 </div>
 
@@ -1437,90 +1444,117 @@ const Warehouse = () => {
 
       {/* Movements Modal */}
       {showMovementsModal && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setShowMovementsModal(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('inventory.movementsModal.title')}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{selectedItem.name} - {t('inventory.movementsModal.currentStock')}: <span className="font-semibold">{formatQuantity(selectedItem.currentStock, translateUnit(selectedItem.unit), i18n.language)}</span></p>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-orange-600 to-orange-500 px-6 py-4 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <History className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">{t('inventory.movementsModal.title')}</h3>
+                  <p className="text-sm text-white/80">{selectedItem.name} · 
+                    <span className="font-semibold"> {t('inventory.movementsModal.currentStock')}: {formatQuantity(selectedItem.currentStock, translateUnit(selectedItem.unit), i18n.language)}</span>
+                  </p>
+                </div>
               </div>
               <button onClick={() => setShowMovementsModal(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                <X className="h-5 w-5" />
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="p-6 overflow-y-auto flex-1">
+            <div className="overflow-y-auto flex-1">
               {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <svg className="animate-spin h-8 w-8 text-orange-600" viewBox="0 0 24 24">
+                <div className="flex flex-col items-center justify-center py-16">
+                  <svg className="animate-spin h-10 w-10 text-orange-600 mb-4" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
+                  <p className="text-gray-500 dark:text-gray-400">{t('inventory.movementsModal.loading')}</p>
                 </div>
               ) : itemMovements.length === 0 ? (
-                <div className="text-center py-12">
-                  <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <div className="text-center py-16">
+                  <div className="bg-gray-100 dark:bg-gray-700 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                    <History className="h-8 w-8 text-gray-400" />
+                  </div>
                   <p className="text-gray-500 dark:text-gray-400">{t('inventory.movementsModal.noMovements')}</p>
                 </div>
               ) : (
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.date')}</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.type')}</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.quantity')}</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.price')}</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.balanceAfter')}</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.reason')}</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.user')}</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('inventory.movementsModal.actions')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {itemMovements.map((movement: any, idx: number) => (
-                      <tr key={movement._id || idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                          {formatOrgDate ? formatOrgDate(movement.timestamp || movement.date) : new Date(movement.timestamp || movement.date).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            movement.type === 'in' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                            movement.type === 'transfer_in' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                            movement.type === 'out' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                            movement.type === 'transfer_out' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' :
-                            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          }`}>
-                            {movement.type === 'in' ? t('inventory.movementsModal.types.in') :
-                             movement.type === 'transfer_in' ? t('warehouse.transferIn') :
-                             movement.type === 'out' ? t('inventory.movementsModal.types.out') :
-                             movement.type === 'transfer_out' ? t('warehouse.transferOut') :
-                             t('inventory.movementsModal.types.adjustment')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{movement.quantity}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{movement.price ? formatCurrency(movement.price) : '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{movement.balanceAfter}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 max-w-[200px] truncate" title={movement.reason}>{translateReason(movement.reason)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">{movement.user?.name || t('inventory.movementsModal.system')}</td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap space-x-2 space-x-reverse">
-                          {movement.type !== 'transfer_out' && movement.type !== 'transfer_in' && (
-                            <button onClick={() => openEditMovementModal(movement)}
-                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400" title={t('inventory.movementsModal.edit')}>
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                          )}
-                          {movement.type !== 'transfer_out' && movement.type !== 'transfer_in' && (
-                            <button onClick={() => handleDeleteMovement(movement._id)}
-                              className="text-red-600 hover:text-red-800 dark:text-red-400" title={t('inventory.movementsModal.delete')}>
-                              <Trash2 className="h-4 w-4 inline" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="p-6">
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-600">
+                    <table className="min-w-full">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-700">
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.date')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.type')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.quantity')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.price')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.balanceAfter')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.reason')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.user')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.actions')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+                        {itemMovements.map((movement: any, idx: number) => (
+                          <tr key={movement._id || idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                              {formatOrgDate ? formatOrgDate(movement.timestamp || movement.date, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : new Date(movement.timestamp || movement.date).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                                movement.type === 'in' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 ring-1 ring-green-200 dark:ring-green-800' :
+                                movement.type === 'transfer_in' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800' :
+                                movement.type === 'out' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800' :
+                                movement.type === 'transfer_out' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 ring-1 ring-purple-200 dark:ring-purple-800' :
+                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 ring-1 ring-yellow-200 dark:ring-yellow-800'
+                              }`}>
+                                {movement.type === 'in' ? t('inventory.movementsModal.types.in') :
+                                 movement.type === 'transfer_in' ? t('warehouse.transferIn') :
+                                 movement.type === 'out' ? t('inventory.movementsModal.types.out') :
+                                 movement.type === 'transfer_out' ? t('warehouse.transferOut') :
+                                 t('inventory.movementsModal.types.adjustment')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`text-sm font-bold ${
+                                movement.type === 'in' || movement.type === 'transfer_in' ? 'text-green-600 dark:text-green-400' :
+                                movement.type === 'out' || movement.type === 'transfer_out' ? 'text-red-600 dark:text-red-400' :
+                                'text-yellow-600 dark:text-yellow-400'
+                              }`}>
+                                {movement.type === 'in' || movement.type === 'transfer_in' ? '+' : movement.type === 'out' || movement.type === 'transfer_out' ? '−' : '±'}{formatDecimal(movement.quantity, i18n.language)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{movement.price ? formatCurrency(movement.price, i18n.language) : <span className="text-gray-400">—</span>}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">{formatDecimal(movement.balanceAfter, i18n.language)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 max-w-[200px] truncate" title={movement.reason}>{translateReason(movement.reason)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">{movement.user?.name || <span className="text-gray-400 italic">{t('inventory.movementsModal.system')}</span>}</td>
+                            <td className="px-4 py-3 text-sm whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                {movement.type !== 'transfer_out' && movement.type !== 'transfer_in' && (
+                                  <>
+                                    <button onClick={() => openEditMovementModal(movement)}
+                                      className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.edit')}>
+                                      <Edit2 className="h-4 w-4" />
+                                    </button>
+                                    <button onClick={() => handleDeleteMovement(movement._id)}
+                                      className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.delete')}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                                {(movement.type === 'transfer_out' || movement.type === 'transfer_in') && (
+                                  <span className="text-xs text-gray-400 italic">{t('inventory.movementsModal.linkedToOrder')}</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -1529,46 +1563,91 @@ const Warehouse = () => {
 
       {/* Edit Movement Modal */}
       {showEditMovementModal && editingMovement && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setShowEditMovementModal(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-orange-600 to-orange-500 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <Edit2 className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white">{t('inventory.editMovementModal.title')}</h3>
+              </div>
+              <button onClick={() => setShowEditMovementModal(false)}
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('inventory.editMovementModal.title')}</h3>
+              <div className={`mb-5 p-4 rounded-xl border ${
+                editingMovement.type === 'in' || editingMovement.type === 'transfer_in'
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/50'
+                  : editingMovement.type === 'out' || editingMovement.type === 'transfer_out'
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700/50'
+                  : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/50'
+              }`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('inventory.editMovementModal.movementType')}:</span>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    editingMovement.type === 'in' || editingMovement.type === 'transfer_in'
+                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 ring-1 ring-green-200 dark:ring-green-800'
+                      : editingMovement.type === 'out' || editingMovement.type === 'transfer_out'
+                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 ring-1 ring-red-200 dark:ring-red-800'
+                      : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 ring-1 ring-yellow-200 dark:ring-yellow-800'
+                  }`}>
+                    {editingMovement.type === 'in' || editingMovement.type === 'transfer_in' ? t('inventory.movementsModal.types.in') :
+                     editingMovement.type === 'out' || editingMovement.type === 'transfer_out' ? t('inventory.movementsModal.types.out') :
+                     t('inventory.movementsModal.types.adjustment')}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.warningTitle')}</p>
+              </div>
               <form onSubmit={handleEditMovementSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.editMovementModal.quantity')}</label>
-                  <input type="number" value={editMovementForm.quantity} onChange={e => setEditMovementForm({...editMovementForm, quantity: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.editMovementModal.quantity')}</label>
+                    <input type="number" value={editMovementForm.quantity} step="0.01" inputMode="decimal"
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                          setEditMovementForm({...editMovementForm, quantity: val});
+                        }
+                      }}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.editMovementModal.price')}</label>
+                    <input type="number" value={editMovementForm.price} onChange={e => setEditMovementForm({...editMovementForm, price: e.target.value})}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.editMovementModal.price')}</label>
-                  <input type="number" value={editMovementForm.price} onChange={e => setEditMovementForm({...editMovementForm, price: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.editMovementModal.reason')}</label>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.editMovementModal.reason')}</label>
                   <input type="text" value={editMovementForm.reason} onChange={e => setEditMovementForm({...editMovementForm, reason: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.editMovementModal.date')}</label>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.editMovementModal.date')}</label>
                   <DatePicker showTime value={editMovementForm.date ? dayjs(editMovementForm.date) : null}
                     onChange={(date) => setEditMovementForm({...editMovementForm, date: date ? date.format('YYYY-MM-DDTHH:mm') : ''})}
-                    className="w-full" format="YYYY-MM-DD HH:mm" />
+                    className="w-full [&_.ant-picker]:!rounded-xl [&_.ant-picker]:!py-3" format="YYYY-MM-DD HH:mm" />
                 </div>
-                {error && <p className="text-red-600 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">{error}</p>}
-                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-600">
+                {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-3.5"><p className="text-red-600 dark:text-red-400 text-sm">{error}</p></div>}
+                <hr className="border-gray-200 dark:border-gray-600" />
+                <div className="flex justify-end gap-3">
                   <button type="button" onClick={() => setShowEditMovementModal(false)}
-                    className="px-6 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                    className="px-5 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl font-medium transition-colors">
                     {t('inventory.editMovementModal.cancel')}
                   </button>
                   <button type="submit" disabled={loading}
-                    className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                    className="px-6 py-2.5 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-200 dark:shadow-orange-900/30 transition-all duration-200 disabled:opacity-50 flex items-center gap-2">
                     {loading ? (
-                      <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                      <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                       {t('inventory.editMovementModal.updating')}</>
                     ) : (
-                      <>{t('inventory.editMovementModal.update')}</>
+                      <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      {t('inventory.editMovementModal.update')}</>
                     )}
                   </button>
                 </div>
@@ -1580,21 +1659,41 @@ const Warehouse = () => {
 
       {/* Delete Movement Modal */}
       {showDeleteMovementModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setShowDeleteMovementModal(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">{t('inventory.deleteMovementModal.title')}</h3>
-              <p className="text-gray-600 dark:text-gray-300 mb-6">{t('inventory.deleteMovementModal.confirmMessage')}</p>
-              <div className="flex justify-end gap-3">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-red-600 to-red-500 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <Trash2 className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white">{t('inventory.deleteMovementModal.title')}</h3>
+              </div>
+              <button onClick={() => setShowDeleteMovementModal(false)}
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6 text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="rounded-full bg-red-100 dark:bg-red-900/20 p-3">
+                  <Trash2 className="h-8 w-8 text-red-600 dark:text-red-400" />
+                </div>
+              </div>
+              <p className="mb-2 text-gray-700 dark:text-gray-200 text-lg font-bold">{t('inventory.deleteMovementModal.confirmMessage')}</p>
+              <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl p-3.5 flex gap-3">
+                <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                <p className="text-sm text-amber-800 dark:text-amber-200">{t('inventory.deleteMovementModal.cannotUndo')}</p>
+              </div>
+              <div className="flex justify-center gap-3 mt-6">
                 <button onClick={() => setShowDeleteMovementModal(false)}
-                  className="px-6 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                  className="px-5 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl font-medium transition-colors">
                   {t('inventory.deleteMovementModal.cancel')}
                 </button>
                 <button onClick={confirmDeleteMovement} disabled={loading}
-                  className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 dark:shadow-red-900/30 transition-all duration-200 disabled:opacity-50 flex items-center gap-2">
                   {loading ? (
-                    <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                    <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                     {t('inventory.deleteMovementModal.deleting')}</>
                   ) : (
                     <><Trash2 className="h-4 w-4" />{t('inventory.deleteMovementModal.confirm')}</>

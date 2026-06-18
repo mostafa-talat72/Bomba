@@ -2072,7 +2072,7 @@
   "inventory": {
     "title": "Inventory",
     "subtitle": "Inventory and purchasing management",
-    "addStock": "Add stock",
+    "addStock": "Add new product",
     "addNewProduct": "Add a new product",
     "editProduct": "Edit a product",
     "deleteProduct": "Delete a product",
@@ -2152,7 +2152,7 @@
       "infoLine3": "• You can review the history from the “Transaction History” button 📊",
       "importantNote": "Important note",
       "noteCannotDuplicate": "• It is not possible to add a product with the same name to a single facility",
-      "noteUseExisting": "• If the product exists, use “Add quantity to existing product”",
+      "noteUseExisting": "• If the product exists, use the “Transfer from Main Warehouse” button to add quantity",
       "noteDifferentBranches": "• Products with the same name can be added in different facilities",
       "selectProduct": "Choose the product",
       "searchProduct": "Search for a product by typing...",
@@ -2196,7 +2196,9 @@
       "reason": "Purchase new stock",
       "initialStock": "Initial inventory",
       "successMessage": "This process is also automatically recorded in costs.",
-      "viewCosts": "View the costs page"
+      "viewCosts": "View the costs page",
+      "warehouseItem": "Warehouse item",
+      "selectWarehouseItem": "Select warehouse item"
     },
     "editModal": {
       "title": "Edit a product",
@@ -2263,6 +2265,7 @@
     "movementsModal": {
       "title": "Record inventory movements",
       "product": "Product",
+      "stock": "Stock",
       "currentStock": "Current stock",
       "totalValue": "Total value",
       "totalValueHint": "Calculated based on price per batch (FIFO)",
@@ -2354,12 +2357,15 @@
       "selectProduct": "Please select the product and enter the quantity and price",
       "fillAllFields": "Please fill out all required fields",
       "noProductSelected": "No product selected for editing",
-      "notLinkedToWarehouse": "Product is not linked to warehouse. Please select a warehouse product first.",
-      "transferFailed": "Transfer from main warehouse failed",
-      "returnFailed": "Return to main warehouse failed",
+      "notLinkedToWarehouse": "The product is not linked to the main warehouse. Please select a main warehouse product first.",
+      "transferFailed": "Failed to transfer from main warehouse",
+      "returnFailed": "Failed to return to main warehouse",
       "thisProduct": "This product",
       "cannotDeleteInUse": "Cannot delete {{name}} because it is used in the following items:\n{{list}}\n\nPlease remove the product from these items first.",
-      "cannotDeleteSummary": "Cannot delete {{name}} because it is used in {{count}} items"
+      "cannotDeleteSummary": "Cannot delete {{name}} because it is used in {{count}} items in the list",
+      "warehouseItemCreated": "Warehouse item created and linked to product",
+      "warehouseItemCreateError": "Failed to create warehouse item",
+      "creating": "Creating..."
     },
     "notifications": {
       "quantityAdded": "Quantity added successfully!",
@@ -2387,7 +2393,9 @@
       "available": "Available: {{stock}} {{unit}}",
       "currentStock": "Current Stock: {{stock}} {{unit}}",
       "transfer": "Transfer",
-      "transferring": "Transferring..."
+      "transferring": "Transferring...",
+      "noLinkMessage": "This product must first be linked to a warehouse item. You can edit the product and select the linked warehouse item.",
+      "createWarehouseItem": "Create warehouse item"
     },
     "returnModal": {
       "title": "Return to Main Warehouse",
@@ -2395,8 +2403,11 @@
       "selectPlaceholder": "Select from Main Warehouse",
       "available": "Available: {{stock}} {{unit}}",
       "currentStock": "Current Stock: {{stock}} {{unit}}",
+      "return": "Return",
       "returnToWarehouse": "Return",
-      "returning": "Returning..."
+      "returning": "Returning...",
+      "noLinkMessage": "This product must first be linked to a warehouse item. You can edit the product and select the linked warehouse item.",
+      "createWarehouseItem": "Create warehouse item"
     }
   },
   "warehouse": {

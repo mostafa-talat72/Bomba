@@ -56,6 +56,7 @@ const Inventory = () => {
     fetchWarehouseItems,
     transferToInventory,
     returnToWarehouse,
+    createWarehouseItem,
     user,
   } = useApp();
 
@@ -141,24 +142,17 @@ const Inventory = () => {
     reason: '',
     date: '',
   });
-  const [productSearchTerm, setProductSearchTerm] = useState(''); // For add modal product search
-  const [showProductDropdown, setShowProductDropdown] = useState(false); // Show/hide product dropdown
 
   // Add/Edit form state
-  const [addType, setAddType] = useState<'existing' | 'new'>('existing');
   const [addForm, setAddForm] = useState({
-    productId: '',
     name: '',
     category: '',
-    quantity: '',
     price: '',
     supplier: '',
     minStock: '',
     unit: '',
-    date: getCairoDateTime(timezone),
-    costStatus: 'pending',
-    paidAmount: '',
     isRawMaterial: false,
+    warehouseItem: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -540,64 +534,23 @@ const Inventory = () => {
     });
   }, [inventoryItems, searchTerm, filterCategory, filterType, filterStock]);
 
-  // Filtered products for add modal dropdown
-  const filteredProducts = useMemo(() => {
-    if (!productSearchTerm) return inventoryItems;
-    return inventoryItems.filter(item => 
-      item.name.toLowerCase().includes(productSearchTerm.toLowerCase())
-    );
-  }, [inventoryItems, productSearchTerm]);
-
   const getStockStatus = (current: number, min: number) => {
     if (current <= min) return { status: 'low', color: 'text-red-600', bgColor: 'bg-red-50' };
     if (current <= min * 1.5) return { status: 'medium', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
     return { status: 'good', color: 'text-green-600', bgColor: 'bg-green-50' };
   };
 
-  // حساب المبلغ المتبقي بناءً على حالة الدفع والمبلغ المدفوع
-  const calculateRemainingAmount = () => {
-    const totalAmount = parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0');
-    const paidAmount = parseFloat(addForm.paidAmount || '0');
-    return Math.max(0, totalAmount - paidAmount);
-  };
-
-  // تحديث حالة الدفع تلقائياً بناءً على المبلغ المدفوع
-  const updatePaymentStatus = () => {
-    const totalAmount = parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0');
-    const paidAmount = parseFloat(addForm.paidAmount || '0');
-
-    if (paidAmount >= totalAmount && totalAmount > 0) {
-      setAddForm(prev => ({ ...prev, costStatus: 'paid' }));
-    } else if (paidAmount > 0 && paidAmount < totalAmount) {
-      setAddForm(prev => ({ ...prev, costStatus: 'partially_paid' }));
-    } else {
-      setAddForm(prev => ({ ...prev, costStatus: 'pending' }));
-    }
-  };
-
-  // مراقبة تغييرات السعر والكمية والمبلغ المدفوع
-  useEffect(() => {
-    updatePaymentStatus();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addForm.price, addForm.quantity, addForm.paidAmount]);
-
   // فتح نافذة إضافة مخزون
   const openAddModal = () => {
-    setAddType('existing');
-    setProductSearchTerm(''); // Reset search term
     setAddForm({
-      productId: '',
       name: '',
       category: '',
-      quantity: '',
       price: '',
       supplier: '',
       minStock: '',
       unit: '',
-      date: getCairoDateTime(timezone),
-      costStatus: 'pending',
-      paidAmount: '',
-      isRawMaterial: false
+      isRawMaterial: false,
+      warehouseItem: '',
     });
     setError('');
     setSuccess('');
@@ -620,6 +573,7 @@ const Inventory = () => {
       costStatus: 'pending',
       paidAmount: '',
       isRawMaterial: item.isRawMaterial || false,
+      warehouseItem: item.warehouseItem || '',
     });
     setError('');
     setSuccess('');
@@ -767,18 +721,26 @@ const Inventory = () => {
   const openTransferFromWarehouseModal = (item: InventoryItem) => {
     setSelectedItem(item);
     setError('');
-    // Find a warehouse item with the same name
-    const matchingWarehouse = warehouseItems.find(w =>
-      w.name.toLowerCase() === item.name.toLowerCase()
-    );
-    setTransferForm({
-      warehouseItemId: matchingWarehouse?.id || matchingWarehouse?._id || '',
-      quantity: '',
-      price: '',
-      date: getCairoDateTime(timezone),
-      reason: t('inventory.transferModal.title'),
-    });
-    fetchWarehouseItems(); // Refresh warehouse items list
+    const hasLink = !!(item.warehouseItem);
+    if (hasLink) {
+      const warehouseId = typeof item.warehouseItem === 'string' ? item.warehouseItem : '';
+      setTransferForm({
+        warehouseItemId: warehouseId,
+        quantity: '',
+        price: '',
+        date: getCairoDateTime(timezone),
+        reason: t('inventory.transferModal.title'),
+      });
+    } else {
+      setTransferForm({
+        warehouseItemId: '',
+        quantity: '',
+        price: '',
+        date: getCairoDateTime(timezone),
+        reason: t('inventory.transferModal.title'),
+      });
+    }
+    fetchWarehouseItems();
     setShowTransferFromWarehouseModal(true);
   };
 
@@ -823,8 +785,7 @@ const Inventory = () => {
   const openReturnToWarehouseModal = (item: InventoryItem) => {
     setSelectedItem(item);
     setError('');
-    // Find or use warehouseItem reference
-    const warehouseId = item.warehouseItem || '';
+    const warehouseId = typeof item.warehouseItem === 'string' ? item.warehouseItem : '';
     setReturnForm({
       warehouseItemId: warehouseId,
       quantity: '',
@@ -834,6 +795,45 @@ const Inventory = () => {
     });
     fetchWarehouseItems();
     setShowReturnToWarehouseModal(true);
+  };
+
+  // إنشاء عنصر في المخزن الرئيسي من عنصر المخزون غير المرتبط
+  const handleCreateWarehouseFromInventory = async () => {
+    if (!selectedItem) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await createWarehouseItem({
+        name: selectedItem.name,
+        category: selectedItem.category,
+        unit: selectedItem.unit,
+        minStock: selectedItem.minStock || 0,
+        price: selectedItem.price,
+        supplier: selectedItem.supplier || '',
+        isRawMaterial: selectedItem.isRawMaterial || false,
+        currentStock: 0,
+      });
+      if (res && (res.id || res._id)) {
+        const warehouseId = res.id || res._id;
+        await updateInventoryItem(selectedItem.id || selectedItem._id, {
+          warehouseItem: warehouseId,
+        });
+        setShowTransferFromWarehouseModal(false);
+        setShowReturnToWarehouseModal(false);
+        await fetchInventoryItems();
+        await fetchWarehouseItems();
+        toast.success(t('inventory.messages.warehouseItemCreated'));
+        setSelectedItem(null);
+        setLoading(false);
+      } else {
+        setError(t('inventory.messages.warehouseItemCreateError'));
+        setLoading(false);
+      }
+    } catch (err) {
+      const error = err as Error;
+      setError(error.message || t('inventory.messages.warehouseItemCreateError'));
+      setLoading(false);
+    }
   };
 
   // تأكيد الإرجاع للمخزن الرئيسي
@@ -1020,62 +1020,10 @@ const Inventory = () => {
     }
   };
 
-  // تغيير نوع الإضافة (منتج جديد أو إضافة كمية لمنتج موجود)
-  const handleAddTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setAddType(e.target.value as 'existing' | 'new');
-    setProductSearchTerm(''); // Reset search term when changing type
-    setAddForm({
-      productId: '',
-      name: '',
-      category: '',
-      quantity: '',
-      price: '',
-      supplier: '',
-      minStock: '',
-      unit: '',
-      date: getCairoDateTime(timezone),
-      costStatus: 'pending',
-      paidAmount: '',
-      isRawMaterial: false
-    });
-    setError('');
-    setSuccess('');
-  };
-
   // تغيير الحقول
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-
-    if (name === 'paidAmount') {
-      // حساب المبلغ الكلي (الكمية × السعر)
-      const quantity = parseFloat(addForm.quantity) || 0;
-      const price = parseFloat(addForm.price) || 0;
-      const totalCost = quantity * price;
-
-      // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
-      let paidAmount = parseFloat(value) || 0;
-      if (paidAmount > totalCost) {
-        paidAmount = totalCost;
-      }
-
-      setAddForm({
-        ...addForm,
-        [name]: paidAmount.toString()
-      });
-    } else if (name === 'costStatus' && value === 'paid') {
-      // إذا تم اختيار الحالة كـ "مدفوع"، تحديث المبلغ المدفوع تلقائياً
-      const quantity = parseFloat(addForm.quantity) || 0;
-      const price = parseFloat(addForm.price) || 0;
-      const totalCost = quantity * price;
-
-      setAddForm({
-        ...addForm,
-        [name]: value,
-        paidAmount: totalCost.toString()
-      });
-    } else {
-      setAddForm({ ...addForm, [name]: value });
-    }
+    setAddForm(prev => ({ ...prev, [name]: value }));
   };
 
   // إظهار نافذة التنبيه
@@ -1098,101 +1046,44 @@ const Inventory = () => {
     setError('');
     setSuccess('');
     try {
-      if (addType === 'existing') {
-        if (!addForm.productId || !addForm.quantity || !addForm.price) {
-          setError(t('inventory.messages.selectProduct'));
-          showAlertMessage(t('inventory.messages.fillAllFields'), 'error');
-          setLoading(false);
-          return;
-        }
-        const res = await updateStock(addForm.productId, {
-          type: 'in',
-          quantity: Number(addForm.quantity),
-          reason: t('inventory.addModal.reason'),
-          price: Number(addForm.price),
-          supplier: addForm.supplier,
-          date: addForm.date,
-          costStatus: addForm.costStatus,
-          paidAmount: Number(addForm.paidAmount) || 0,
+      if (!addForm.name || !addForm.category || !addForm.unit || !addForm.minStock) {
+        setError(t('inventory.messages.enterAllFields'));
+        setLoading(false);
+        return;
+      }
+      const res = await createInventoryItem({
+        name: addForm.name,
+        category: addForm.category,
+        currentStock: 0,
+        minStock: Number(addForm.minStock),
+        unit: addForm.unit,
+        price: addForm.price ? Number(addForm.price) : 0,
+        supplier: addForm.supplier,
+        isRawMaterial: addForm.isRawMaterial,
+        warehouseItem: addForm.warehouseItem || undefined,
+      });
+      if (res) {
+        setSuccess(t('inventory.notifications.productAdded'));
+        toast.success(t('inventory.notifications.productAdded'));
+
+        await fetchInventoryItems();
+
+        setShowAddModal(false);
+
+        setAddForm({
+          name: '',
+          category: '',
+          price: '',
+          supplier: '',
+          minStock: '',
+          unit: '',
+          isRawMaterial: false,
+          warehouseItem: '',
         });
-        if (res) {
-          setSuccess(t('inventory.notifications.quantityAdded'));
-          toast.success(t('inventory.notifications.quantityAdded'));
-          
-          // Refresh inventory list
-          await fetchInventoryItems();
-          
-          // Close modal
-          setShowAddModal(false);
-          
-          // Reset form
-          setAddForm({
-            productId: '',
-            name: '',
-            category: '',
-            quantity: '',
-            price: '',
-            supplier: '',
-            minStock: '',
-            unit: '',
-            date: getCairoDateTime(timezone),
-            costStatus: 'pending',
-            paidAmount: '',
-            isRawMaterial: false,
-          });
-          setError('');
-          setSuccess('');
-        } else {
-          setError(t('inventory.notifications.quantityAddError'));
-        }
+        setError('');
+        setSuccess('');
       } else {
-        if (!addForm.name || !addForm.category || !addForm.quantity || !addForm.price || !addForm.unit || !addForm.minStock) {
-          setError(t('inventory.messages.enterAllFields'));
-          setLoading(false);
-          return;
-        }
-        const res = await createInventoryItem({
-          name: addForm.name,
-          category: addForm.category,
-          currentStock: Number(addForm.quantity),
-          minStock: Number(addForm.minStock),
-          unit: addForm.unit,
-          price: Number(addForm.price),
-          supplier: addForm.supplier,
-          costStatus: addForm.costStatus,
-          paidAmount: Number(addForm.paidAmount) || 0,
-          isRawMaterial: addForm.isRawMaterial,
-        });
-        if (res) {
-          setSuccess(t('inventory.notifications.productAdded'));
-          toast.success(t('inventory.notifications.productAdded'));
-          
-          // Refresh inventory list
-          await fetchInventoryItems();
-          
-          // Close modal
-          setShowAddModal(false);
-          
-          // Reset form
-          setAddForm({
-            productId: '',
-            name: '',
-            category: '',
-            quantity: '',
-            price: '',
-            supplier: '',
-            minStock: '',
-            unit: '',
-            date: getCairoDateTime(timezone),
-            costStatus: 'pending',
-            paidAmount: '',
-            isRawMaterial: false,
-          });
-          setError('');
-          setSuccess('');
-        } else {
-          setError(t('inventory.notifications.productAddError'));
-        }
+        setError(t('inventory.notifications.productAddError'));
       }
     } catch (err) {
       const error = err as Error;
@@ -1234,6 +1125,7 @@ const Inventory = () => {
         unit: addForm.unit,
         supplier: addForm.supplier,
         isRawMaterial: addForm.isRawMaterial,
+        warehouseItem: addForm.warehouseItem || null,
       });
       if (res) {
         setSuccess(t('inventory.notifications.productUpdated'));
@@ -1259,6 +1151,7 @@ const Inventory = () => {
           costStatus: 'pending',
           paidAmount: '',
           isRawMaterial: false,
+          warehouseItem: '',
         });
         setError('');
         setSuccess('');
@@ -1738,65 +1631,71 @@ const Inventory = () => {
             )}
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-600">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.product')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.type')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.category')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.currentStock')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.minStock')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.unit')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.lastPurchasePrice')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.totalValue')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.supplier')}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('inventory.table.actions')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.product')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.type')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.category')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.currentStock')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.minStock')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.unit')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.lastPurchasePrice')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.totalValue')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.supplier')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.actions')}</th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                    {searchTerm || filterCategory || filterType || filterStock || filterDateFrom || filterDateTo || filterMonth || filterYear
-                      ? t('inventory.table.noResults')
-                      : t('inventory.table.noProducts')}
+                  <td colSpan={10} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <div className="flex flex-col items-center">
+                      <Package className="h-12 w-12 text-gray-400 mb-4" />
+                      <p className="text-lg font-medium text-gray-500 dark:text-gray-400">
+                        {searchTerm || filterCategory || filterType || filterStock || filterDateFrom || filterDateTo || filterMonth || filterYear
+                          ? t('inventory.table.noResults')
+                          : t('inventory.table.noProducts')}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 filteredItems.map((item) => {
                 const stockStatus = getStockStatus(item.currentStock, item.minStock);
                 return (
-                  <tr key={item.id || item._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
+                  <tr key={item.id || item._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <td className={`px-6 py-4 whitespace-nowrap ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <div className="font-semibold text-gray-900 dark:text-gray-100">{item.name}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    <td className={`px-6 py-4 whitespace-nowrap ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ring-1 ${
                         item.isRawMaterial
-                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 ring-blue-200 dark:ring-blue-800'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 ring-gray-200 dark:ring-gray-600'
                       }`}>
                         {item.isRawMaterial ? t('inventory.table.rawMaterial') : t('inventory.table.product')}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{translateCategory(item.category)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stockStatus.bgColor} ${stockStatus.color}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{translateCategory(item.category)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ring-1 ${stockStatus.bgColor} ${stockStatus.color}`}>
                         {formatQuantity(item.currentStock, translateUnit(item.unit), i18n.language)}
-                      </div>
+                      </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{translateUnit(item.unit)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{formatCurrency(item.price)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{translateUnit(item.unit)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.price)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>
                       {formatCurrency(item.totalValue || (item.currentStock * item.price))}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.supplier}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 space-x-reverse">
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.supplier || <span className="text-gray-400">—</span>}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <div className="flex items-center gap-1">
                       <PermissionGuard requiredPermissions={['canAddStock', 'inventory', 'all']}>
                         <button 
-                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center" 
+                          className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" 
                           onClick={() => openTransferFromWarehouseModal(item)}
                           title={t('inventory.transferModal.title')}
                         >
@@ -1805,7 +1704,7 @@ const Inventory = () => {
                       </PermissionGuard>
                       <PermissionGuard requiredPermissions={['canRemoveStock', 'inventory', 'all']}>
                         <button 
-                          className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 inline-flex items-center" 
+                          className="p-1.5 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors" 
                           onClick={() => openReturnToWarehouseModal(item)}
                           title={t('inventory.returnModal.title')}
                         >
@@ -1814,7 +1713,7 @@ const Inventory = () => {
                       </PermissionGuard>
                       <PermissionGuard requiredPermissions={['canViewStockMovements', 'canViewInventory', 'all']}>
                         <button 
-                          className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center" 
+                          className="p-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors" 
                           onClick={() => openMovementsModal(item)}
                           title={t('inventory.table.movementsHistory')}
                         >
@@ -1823,7 +1722,7 @@ const Inventory = () => {
                       </PermissionGuard>
                       <PermissionGuard requiredPermissions={['canAddStock', 'canRemoveStock', 'canAdjustStock', 'all']}>
                         <button 
-                          className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 inline-flex items-center" 
+                          className="p-1.5 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors" 
                           onClick={() => openDeductModal(item)}
                           title={t('inventory.table.deductQuantity')}
                         >
@@ -1832,7 +1731,7 @@ const Inventory = () => {
                       </PermissionGuard>
                       <PermissionGuard requiredPermissions={['canEditInventoryItem', 'all']}>
                         <button 
-                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" 
+                          className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" 
                           onClick={() => openEditModal(item)}
                           title={t('inventory.table.edit')}
                         >
@@ -1841,13 +1740,14 @@ const Inventory = () => {
                       </PermissionGuard>
                       <PermissionGuard requiredPermissions={['canDeleteInventoryItem', 'all']}>
                         <button 
-                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" 
+                          className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" 
                           onClick={() => openDeleteModal(item)}
                           title={t('inventory.table.delete')}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </PermissionGuard>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1858,7 +1758,7 @@ const Inventory = () => {
         </div>
       </div>
 
-      {/* Modal إضافة مخزون */}
+      {/* Modal إضافة منتج جديد */}
       {showAddModal && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -1868,7 +1768,7 @@ const Inventory = () => {
             }
           }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.addModal.title')}</h2>
@@ -1880,315 +1780,77 @@ const Inventory = () => {
             </div>
             <div className="p-6">
             <form onSubmit={handleAddSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.addType')}</label>
-                <select name="addType" value={addType} onChange={handleAddTypeChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100">
-                  <option value="existing">{t('inventory.addModal.addToExisting')}</option>
-                  <option value="new">{t('inventory.addModal.addNew')}</option>
-                </select>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {addType === 'existing' 
-                    ? t('inventory.addModal.existingHint')
-                    : t('inventory.addModal.newHint')}
-                </p>
+              {/* رسالة مفيدة حول قاعدة التسمية */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-3 mb-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className={`${isRTL ? 'mr-3' : 'ml-3'}`}>
+                    <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('inventory.addModal.importantNote')}</h3>
+                  <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+                    <p>{t('inventory.addModal.noteCannotDuplicate')}</p>
+                    <p>{t('inventory.addModal.noteUseExisting')}</p>
+                  </div>
+                  </div>
+                </div>
               </div>
-              {addType === 'existing' ? (
-                <>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-3">
-                    <div className="flex items-start">
-                      <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className={`${isRTL ? 'mr-3' : 'ml-3'}`}>
-                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('inventory.addModal.infoTitle')}</h3>
-                        <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-                          <p>{t('inventory.addModal.infoLine1')}</p>
-                          <p>{t('inventory.addModal.infoLine2')}</p>
-                          <p>{t('inventory.addModal.infoLine3')}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.selectProduct')}</label>
-                    <div className="relative product-dropdown-container">
-                      <input
-                        type="text"
-                        placeholder={t('inventory.addModal.searchProduct')}
-                        value={productSearchTerm}
-                        onChange={(e) => setProductSearchTerm(e.target.value)}
-                        onFocus={() => setShowProductDropdown(true)}
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base"
-                      />
-                      {showProductDropdown && (
-                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                          {filteredProducts.length === 0 ? (
-                            <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                              {productSearchTerm ? t('inventory.addModal.noResults') : t('inventory.addModal.startTyping')}
-                            </div>
-                          ) : (
-                            filteredProducts.map(item => (
-                              <button
-                                key={item.id || item._id}
-                                type="button"
-                                onClick={() => {
-                                  setAddForm({ ...addForm, productId: item.id || item._id });
-                                  setProductSearchTerm(item.name);
-                                  setShowProductDropdown(false);
-                                }}
-                                className="w-full text-right px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0"
-                              >
-                                <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {translateCategory(item.category)} - {t('inventory.addModal.stockInfo')}: {formatQuantity(item.currentStock, translateUnit(item.unit), i18n.language)}
-                                </div>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                      {addForm.productId && (
-                        <input type="hidden" name="productId" value={addForm.productId} />
-                      )}
-                    </div>
-                    {!addForm.productId && productSearchTerm && (
-                      <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">{t('inventory.addModal.selectFromList')}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.quantity')}</label>
-                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" required min="0.01" step="0.01" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.price')}</label>
-                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" required min="0" step="0.01" placeholder="0.00" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.supplier')}</label>
-                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base" placeholder={t('inventory.addModal.supplierPlaceholder')} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.date')}</label>
-                    <DatePicker
-                      showTime
-                      value={addForm.date ? dayjs(addForm.date) : null}
-                      onChange={(date) => {
-                        const event = {
-                          target: {
-                            name: 'date',
-                            value: date ? date.format('YYYY-MM-DDTHH:mm') : ''
-                          }
-                        } as React.ChangeEvent<HTMLInputElement>;
-                        handleFormChange(event);
-                      }}
-                      format="YYYY/MM/DD HH:mm"
-                      className="w-full"
-                      size="large"
-                      placeholder={t('inventory.addModal.date')}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.productName')}</label>
+                  <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.category')}</label>
+                  <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
+                    <option value="">{t('inventory.addModal.selectCategory')}</option>
+                    {categoryOptions.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
+                  <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
+                    <option value="">{t('inventory.addModal.selectUnit')}</option>
+                    {unitOptions.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.minStock')}</label>
+                  <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.warehouseItem')}</label>
+                  <select name="warehouseItem" value={addForm.warehouseItem} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100">
+                    <option value="">-- {t('inventory.addModal.selectWarehouseItem')} --</option>
+                    {warehouseItems.map(w => (
+                      <option key={w.id || w._id} value={w.id || w._id}>{w.name} ({formatDecimal(w.currentStock, i18n.language)} {translateUnit(w.unit)})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.supplier')}</label>
+                  <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="isRawMaterial"
+                      checked={addForm.isRawMaterial}
+                      onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
+                      className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
                     />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">💡 {t('inventory.addModal.dateHint')}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('inventory.addModal.costStatus')}</label>
-                    <select
-                      name="costStatus"
-                      value={addForm.costStatus}
-                      onChange={handleFormChange}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base"
-                    >
-                      {costStatusOptions.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {addForm.costStatus !== 'paid' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        {t('inventory.addModal.paidAmount')}
-                        {addForm.costStatus === 'partially_paid' && (
-                          <span className="text-xs text-gray-500 mr-2">({t('inventory.addModal.partial')})</span>
-                        )}
-                      </label>
-                      <input
-                        type="number"
-                        name="paidAmount"
-                        value={addForm.paidAmount}
-                        onChange={handleFormChange}
-                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 dark:bg-gray-700 dark:text-gray-100 text-base"
-                        min="0"
-                        step="0.01"
-                        max={parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')}
-                        placeholder="0.00"
-                      />
-                      {addForm.paidAmount && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  </div>
-
-                  {/* إظهار ملخص التكلفة */}
-                  {addForm.price && addForm.quantity && (
-                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-                      <div className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3">{t('inventory.addModal.costSummary')}</div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.totalCost')}:</span>
-                          <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
-                        </div>
-                        {addForm.paidAmount && (
-                          <>
-                            <div>
-                              <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.paid')}:</span>
-                              <div className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
-                            </div>
-                            <div>
-                              <span className="text-gray-600 dark:text-gray-400">{t('inventory.addModal.remaining')}:</span>
-                              <div className="text-lg font-bold text-red-600 dark:text-red-400">{formatCurrency(calculateRemainingAmount())}</div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* رسالة مفيدة حول قاعدة التسمية */}
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-3 mb-4">
-                    <div className="flex items-start">
-                      <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className={`${isRTL ? 'mr-3' : 'ml-3'}`}>
-                        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('inventory.addModal.importantNote')}</h3>
-                        <div className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-                          <p>{t('inventory.addModal.noteCannotDuplicate')}</p>
-                          <p>{t('inventory.addModal.noteUseExisting')}</p>
-                          <p>{t('inventory.addModal.noteDifferentBranches')}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.productName')}</label>
-                    <input type="text" name="name" value={addForm.name} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.category')}</label>
-                    <select name="category" value={addForm.category} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
-                      <option value="">{t('inventory.addModal.selectCategory')}</option>
-                      {categoryOptions.map(option => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.quantity')}</label>
-                    <input type="number" name="quantity" value={addForm.quantity} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.unit')}</label>
-                    <select name="unit" value={addForm.unit} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
-                      <option value="">{t('inventory.addModal.selectUnit')}</option>
-                      {unitOptions.map(option => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.minStock')}</label>
-                    <input type="number" name="minStock" value={addForm.minStock} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.price')}</label>
-                    <input type="number" name="price" value={addForm.price} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required min="0" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.supplier')}</label>
-                    <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        name="isRawMaterial"
-                        checked={addForm.isRawMaterial}
-                        onChange={(e) => setAddForm({ ...addForm, isRawMaterial: e.target.checked })}
-                        className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
-                      />
-                      <span className={`${isRTL ? 'mr-2' : 'ml-2'} text-sm text-gray-700 dark:text-gray-300`}>{t('inventory.addModal.isRawMaterial')}</span>
-                    </label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('inventory.addModal.rawMaterialHint')}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.costStatus')}</label>
-                    <select
-                      name="costStatus"
-                      value={addForm.costStatus}
-                      onChange={handleFormChange}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                    >
-                      {costStatusOptions.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* إظهار حقول الدفع فقط إذا كانت الحالة ليست "مدفوع" */}
-                  {addForm.costStatus !== 'paid' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          {t('inventory.addModal.paidAmount')}
-                          {addForm.costStatus === 'partially_paid' && (
-                            <span className="text-xs text-gray-500 mr-2">({t('inventory.addModal.partial')})</span>
-                          )}
-                        </label>
-                        <input
-                          type="number"
-                          name="paidAmount"
-                          value={addForm.paidAmount}
-                          onChange={handleFormChange}
-                          className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
-                          min="0"
-                          max={parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0')}
-                          placeholder="0"
-                        />
-                        {addForm.paidAmount && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {/* إظهار ملخص التكلفة */}
-                  {addForm.price && addForm.quantity && (
-                    <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                      <div className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">{t('inventory.addModal.costSummary')}:</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">
-                        <div>{t('inventory.addModal.totalCost')}: {formatCurrency(parseFloat(addForm.price || '0') * parseFloat(addForm.quantity || '0'))}</div>
-                        {addForm.paidAmount && (
-                          <>
-                            <div>{t('inventory.addModal.paid')}: {formatCurrency(parseFloat(addForm.paidAmount || '0'))}</div>
-                            <div>{t('inventory.addModal.remaining')}: {formatCurrency(calculateRemainingAmount())}</div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
+                    <span className={`${isRTL ? 'mr-2' : 'ml-2'} text-sm text-gray-700 dark:text-gray-300`}>{t('inventory.addModal.isRawMaterial')}</span>
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('inventory.addModal.rawMaterialHint')}</p>
+                </div>
+              </div>
               {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-600 rounded-lg p-3">
                   <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
@@ -2240,6 +1902,7 @@ const Inventory = () => {
           </div>
         </div>
       )}
+
 
       {/* Modal تعديل منتج */}
       {showEditModal && (
@@ -2297,6 +1960,15 @@ const Inventory = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.supplier')}</label>
                 <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.warehouseItem')}</label>
+                <select name="warehouseItem" value={addForm.warehouseItem} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100">
+                  <option value="">-- {t('inventory.addModal.selectWarehouseItem')} --</option>
+                  {warehouseItems.map(w => (
+                    <option key={w.id || w._id} value={w.id || w._id}>{w.name} ({formatDecimal(w.currentStock, i18n.language)} {translateUnit(w.unit)})</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="flex items-center">
@@ -2463,11 +2135,16 @@ const Inventory = () => {
                   <input
                     type="number"
                     value={deductForm.quantity}
-                    onChange={(e) => setDeductForm({ ...deductForm, quantity: e.target.value })}
+                    step="0.01"
+                    inputMode="decimal"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                        setDeductForm({ ...deductForm, quantity: val });
+                      }
+                    }}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100"
                     required
-                    min="0"
-                    step="0.01"
                     placeholder={deductForm.type === 'out' ? t('inventory.deductModal.exampleQuantity') : `${t('inventory.deductModal.currentLabel')}: ${formatDecimal(selectedItem.currentStock, i18n.language)}`}
                   />
                   {deductForm.type === 'out' && deductForm.quantity && (
@@ -2584,64 +2261,141 @@ const Inventory = () => {
 
       {/* Modal تحويل من المخزن الرئيسي */}
       {showTransferFromWarehouseModal && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setShowTransferFromWarehouseModal(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                </div>
+                <h3 className="text-lg font-bold text-white">{t('inventory.transferModal.title')}</h3>
+              </div>
+              <button type="button" onClick={() => setShowTransferFromWarehouseModal(false)}
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('inventory.transferModal.title')}</h3>
-              <form onSubmit={handleTransferFromWarehouse} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.table.product')}</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{selectedItem.name}</p>
-                  <p className="text-xs text-gray-500">{t('inventory.transferModal.currentStock', { stock: selectedItem.currentStock, unit: selectedItem.unit })}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.transferModal.warehouseProduct')}</label>
-                  <select value={transferForm.warehouseItemId}
-                    onChange={e => setTransferForm({...transferForm, warehouseItemId: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
-                    <option value="">{t('inventory.transferModal.selectPlaceholder')}</option>
-                    {warehouseItems.filter(w => w.currentStock > 0).map(w => (
-                      <option key={w.id || w._id} value={w.id || w._id}>
-                        {w.name} ({t('inventory.transferModal.available', { stock: w.currentStock, unit: w.unit })})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.quantity')}</label>
-                  <input type="number" value={transferForm.quantity}
-                    onChange={e => setTransferForm({...transferForm, quantity: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.price')} ({t('common.optional')})</label>
-                  <input type="number" value={transferForm.price}
-                    onChange={e => setTransferForm({...transferForm, price: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.reason')}</label>
-                  <input type="text" value={transferForm.reason}
-                    onChange={e => setTransferForm({...transferForm, reason: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
-                </div>
-
-                {error && <p className="text-red-600 text-sm">{error}</p>}
-
-                <div className="flex justify-end gap-3 pt-4">
+              {!selectedItem.warehouseItem ? (
+                <div className="space-y-5">
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl p-5">
+                    <div className="flex gap-3">
+                      <svg className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                      <div>
+                        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">{t('inventory.transferModal.noLinkMessage')}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleCreateWarehouseFromInventory} disabled={loading}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white px-4 py-3 rounded-xl font-medium shadow-lg shadow-emerald-200 dark:shadow-emerald-900/30 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    {loading ? t('inventory.messages.creating') : t('inventory.transferModal.createWarehouseItem')}
+                  </button>
                   <button type="button" onClick={() => setShowTransferFromWarehouseModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">{t('common.cancel')}</button>
-                  <button type="submit" disabled={loading}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                    {loading ? t('inventory.transferModal.transferring') : t('inventory.transferModal.transfer')}
+                    className="w-full px-4 py-2.5 text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors font-medium">
+                    {t('common.cancel')}
                   </button>
                 </div>
-              </form>
+              ) : (
+                <form onSubmit={handleTransferFromWarehouse} className="space-y-5">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-100 dark:border-gray-600/50">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('inventory.table.product')}</span>
+                        <p className="text-base font-bold text-gray-900 dark:text-gray-100 mt-0.5">{selectedItem.name}</p>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                        <span className="opacity-75">{t('inventory.movementsModal.stock')}: </span>
+                        <span>{formatDecimal(selectedItem.currentStock, i18n.language)} {translateUnit(selectedItem.unit)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.transferModal.warehouseProduct')}</label>
+                    {transferForm.warehouseItemId ? (
+                      (() => {
+                        const w = warehouseItems.find(wi => (wi.id || wi._id) === transferForm.warehouseItemId);
+                        return (
+                          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/50 rounded-xl p-3 flex items-center gap-3">
+                            <div className="bg-emerald-100 dark:bg-emerald-800/40 rounded-lg p-2">
+                              <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{w?.name || ''}</p>
+                              {w && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">{t('inventory.transferModal.available', { stock: formatDecimal(w.currentStock, i18n.language), unit: translateUnit(w.unit) })}</p>}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <select value={transferForm.warehouseItemId}
+                        onChange={e => setTransferForm({...transferForm, warehouseItemId: e.target.value})}
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" required>
+                        <option value="">{t('inventory.transferModal.selectPlaceholder')}</option>
+                        {warehouseItems.filter(w => w.currentStock > 0).map(w => (
+                          <option key={w.id || w._id} value={w.id || w._id}>
+                            {w.name} ({t('inventory.transferModal.available', { stock: formatDecimal(w.currentStock, i18n.language), unit: translateUnit(w.unit) })})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.deductModal.quantity')}</label>
+                    <div className="relative">
+                      <input type="number" value={transferForm.quantity} step="0.01" inputMode="decimal" placeholder="0.00"
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                            setTransferForm({...transferForm, quantity: val});
+                          }
+                        }}
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-16" required />
+                      <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-sm text-gray-400 dark:text-gray-500 font-medium border-l border-gray-200 dark:border-gray-600 pl-3 ml-0">
+                        {translateUnit(selectedItem.unit)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.addModal.price')}</label>
+                    <div className="relative">
+                      <input type="number" value={transferForm.price} placeholder="0.00"
+                        onChange={e => setTransferForm({...transferForm, price: e.target.value})}
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-16" />
+                      <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-sm text-gray-400 dark:text-gray-500 font-medium border-l border-gray-200 dark:border-gray-600 pl-3 ml-0">$</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.deductModal.reason')}</label>
+                    <input type="text" value={transferForm.reason} placeholder="..."
+                      onChange={e => setTransferForm({...transferForm, reason: e.target.value})}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" />
+                  </div>
+
+                  {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-3"><p className="text-red-600 dark:text-red-400 text-sm">{error}</p></div>}
+
+                  <hr className="border-gray-200 dark:border-gray-600" />
+
+                  <div className="flex justify-end gap-3">
+                    <button type="button" onClick={() => setShowTransferFromWarehouseModal(false)}
+                      className="px-5 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl font-medium transition-colors">
+                      {t('common.cancel')}</button>
+                    <button type="submit" disabled={loading}
+                      className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 dark:shadow-blue-900/30 transition-all duration-200 disabled:opacity-50 flex items-center gap-2">
+                      {loading ? (
+                        <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>{t('inventory.transferModal.transferring')}</>
+                      ) : (
+                        <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>{t('inventory.transferModal.transfer')}</>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>
@@ -2649,64 +2403,141 @@ const Inventory = () => {
 
       {/* Modal إرجاع للمخزن الرئيسي */}
       {showReturnToWarehouseModal && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setShowReturnToWarehouseModal(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-500 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 17l-4 4m0 0l-4-4m4 4V3" /></svg>
+                </div>
+                <h3 className="text-lg font-bold text-white">{t('inventory.returnModal.title')}</h3>
+              </div>
+              <button type="button" onClick={() => setShowReturnToWarehouseModal(false)}
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('inventory.returnModal.title')}</h3>
-              <form onSubmit={handleReturnToWarehouse} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.table.product')}</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{selectedItem.name}</p>
-                  <p className="text-xs text-gray-500">{t('inventory.returnModal.currentStock', { stock: selectedItem.currentStock, unit: selectedItem.unit })}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.returnModal.warehouseProduct')}</label>
-                  <select value={returnForm.warehouseItemId}
-                    onChange={e => setReturnForm({...returnForm, warehouseItemId: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
-                    <option value="">{t('inventory.returnModal.selectPlaceholder')}</option>
-                    {warehouseItems.map(w => (
-                      <option key={w.id || w._id} value={w.id || w._id}>
-                        {w.name} ({t('inventory.returnModal.available', { stock: w.currentStock, unit: w.unit })})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.quantity')}</label>
-                  <input type="number" value={returnForm.quantity}
-                    onChange={e => setReturnForm({...returnForm, quantity: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.price')} ({t('common.optional')})</label>
-                  <input type="number" value={returnForm.price}
-                    onChange={e => setReturnForm({...returnForm, price: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.reason')}</label>
-                  <input type="text" value={returnForm.reason}
-                    onChange={e => setReturnForm({...returnForm, reason: e.target.value})}
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
-                </div>
-
-                {error && <p className="text-red-600 text-sm">{error}</p>}
-
-                <div className="flex justify-end gap-3 pt-4">
+              {!selectedItem.warehouseItem ? (
+                <div className="space-y-5">
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl p-5">
+                    <div className="flex gap-3">
+                      <svg className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                      <div>
+                        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">{t('inventory.returnModal.noLinkMessage')}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleCreateWarehouseFromInventory} disabled={loading}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white px-4 py-3 rounded-xl font-medium shadow-lg shadow-emerald-200 dark:shadow-emerald-900/30 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    {loading ? t('inventory.messages.creating') : t('inventory.returnModal.createWarehouseItem')}
+                  </button>
                   <button type="button" onClick={() => setShowReturnToWarehouseModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">{t('common.cancel')}</button>
-                  <button type="submit" disabled={loading}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                    {loading ? t('inventory.returnModal.returning') : t('inventory.returnModal.returnToWarehouse')}
+                    className="w-full px-4 py-2.5 text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors font-medium">
+                    {t('common.cancel')}
                   </button>
                 </div>
-              </form>
+              ) : (
+                <form onSubmit={handleReturnToWarehouse} className="space-y-5">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 border border-gray-100 dark:border-gray-600/50">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('inventory.table.product')}</span>
+                        <p className="text-base font-bold text-gray-900 dark:text-gray-100 mt-0.5">{selectedItem.name}</p>
+                      </div>
+                      <div className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-amber-100 dark:border-amber-800/50">
+                        <span className="opacity-75">{t('inventory.movementsModal.stock')}: </span>
+                        <span>{formatDecimal(selectedItem.currentStock, i18n.language)} {translateUnit(selectedItem.unit)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.returnModal.warehouseProduct')}</label>
+                    {returnForm.warehouseItemId ? (
+                      (() => {
+                        const w = warehouseItems.find(wi => (wi.id || wi._id) === returnForm.warehouseItemId);
+                        return (
+                          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/50 rounded-xl p-3 flex items-center gap-3">
+                            <div className="bg-emerald-100 dark:bg-emerald-800/40 rounded-lg p-2">
+                              <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{w?.name || ''}</p>
+                              {w && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">{t('inventory.returnModal.available', { stock: formatDecimal(w.currentStock, i18n.language), unit: translateUnit(w.unit) })}</p>}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <select value={returnForm.warehouseItemId}
+                        onChange={e => setReturnForm({...returnForm, warehouseItemId: e.target.value})}
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all" required>
+                        <option value="">{t('inventory.returnModal.selectPlaceholder')}</option>
+                        {warehouseItems.map(w => (
+                          <option key={w.id || w._id} value={w.id || w._id}>
+                            {w.name} ({t('inventory.returnModal.available', { stock: formatDecimal(w.currentStock, i18n.language), unit: translateUnit(w.unit) })})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.deductModal.quantity')}</label>
+                    <div className="relative">
+                      <input type="number" value={returnForm.quantity} step="0.01" inputMode="decimal" placeholder="0.00"
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                            setReturnForm({...returnForm, quantity: val});
+                          }
+                        }}
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all pr-16" required />
+                      <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-sm text-gray-400 dark:text-gray-500 font-medium border-l border-gray-200 dark:border-gray-600 pl-3 ml-0">
+                        {translateUnit(selectedItem.unit)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.addModal.price')}</label>
+                    <div className="relative">
+                      <input type="number" value={returnForm.price} placeholder="0.00"
+                        onChange={e => setReturnForm({...returnForm, price: e.target.value})}
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all pr-16" />
+                      <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-sm text-gray-400 dark:text-gray-500 font-medium border-l border-gray-200 dark:border-gray-600 pl-3 ml-0">$</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.deductModal.reason')}</label>
+                    <input type="text" value={returnForm.reason} placeholder="..."
+                      onChange={e => setReturnForm({...returnForm, reason: e.target.value})}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all" />
+                  </div>
+
+                  {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-3"><p className="text-red-600 dark:text-red-400 text-sm">{error}</p></div>}
+
+                  <hr className="border-gray-200 dark:border-gray-600" />
+
+                  <div className="flex justify-end gap-3">
+                    <button type="button" onClick={() => setShowReturnToWarehouseModal(false)}
+                      className="px-5 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl font-medium transition-colors">
+                      {t('common.cancel')}</button>
+                    <button type="submit" disabled={loading}
+                      className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-200 dark:shadow-amber-900/30 transition-all duration-200 disabled:opacity-50 flex items-center gap-2">
+                      {loading ? (
+                        <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>{t('inventory.returnModal.returning')}</>
+                      ) : (
+                        <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>{t('inventory.returnModal.return')}</>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>
@@ -2714,123 +2545,129 @@ const Inventory = () => {
 
       {/* Modal سجل حركات المخزون */}
       {showMovementsModal && selectedItem && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowMovementsModal(false);
-            }
-          }}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg z-10">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.movementsModal.title')}</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{selectedItem.name}</p>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowMovementsModal(false); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-orange-600 to-orange-500 px-6 py-4 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <Package className="w-5 h-5 text-white" />
                 </div>
-                <button
-                  className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
-                  onClick={() => setShowMovementsModal(false)}
-                >×</button>
+                <div>
+                  <h3 className="text-lg font-bold text-white">{t('inventory.movementsModal.title')}</h3>
+                  <p className="text-sm text-white/80">{selectedItem.name}</p>
+                </div>
               </div>
+              <button onClick={() => setShowMovementsModal(false)}
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
-            <div className="p-6">
+            <div className="overflow-y-auto flex-1 p-6">
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
-                  <p className="mt-2 text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.loading')}</p>
+                <div className="flex flex-col items-center justify-center py-16">
+                  <svg className="animate-spin h-10 w-10 text-orange-600 mb-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <p className="text-gray-500 dark:text-gray-400">{t('inventory.movementsModal.loading')}</p>
                 </div>
               ) : itemMovements.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.noMovements')}</p>
+                <div className="text-center py-16">
+                  <div className="bg-gray-100 dark:bg-gray-700 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                    <Package className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 dark:text-gray-400">{t('inventory.movementsModal.noMovements')}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {/* ملخص المنتج */}
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 grid grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.currentStock')}</p>
-                      <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                <div className="space-y-6">
+                  {/* ملخص المنتج - بطاقات */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800/50">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="bg-blue-100 dark:bg-blue-800/40 rounded-lg p-2">
+                          <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                        </div>
+                        <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">{t('inventory.movementsModal.currentStock')}</p>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">
                         {formatQuantity(selectedItem.currentStock, translateUnit(selectedItem.unit), i18n.language)}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.totalValue')}</p>
-                      <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                    <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 rounded-xl p-5 border border-emerald-200 dark:border-emerald-800/50">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="bg-emerald-100 dark:bg-emerald-800/40 rounded-lg p-2">
+                          <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{t('inventory.movementsModal.totalValue')}</p>
+                        </div>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-800 dark:text-emerald-200">
                         {formatCurrency(selectedItem.totalValue || (selectedItem.currentStock * selectedItem.price), i18n.language)}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {t('inventory.movementsModal.totalValueHint')}
-                      </p>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{t('inventory.movementsModal.totalValueHint')}</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('inventory.movementsModal.movementsCount')}</p>
-                      <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl p-5 border border-purple-200 dark:border-purple-800/50">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="bg-purple-100 dark:bg-purple-800/40 rounded-lg p-2">
+                          <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                        </div>
+                        <p className="text-sm font-semibold text-purple-700 dark:text-purple-300">{t('inventory.movementsModal.movementsCount')}</p>
+                      </div>
+                      <p className="text-2xl font-bold text-purple-800 dark:text-purple-200">
                         {formatDecimal(itemMovements.length, i18n.language)}
                       </p>
                     </div>
                   </div>
 
                   {/* جدول الحركات */}
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-600">
                     <table className="w-full">
-                      <thead className="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.date')}</th>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.type')}</th>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.quantity')}</th>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.pricePerUnit')}</th>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.total')}</th>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.reason')}</th>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.balanceAfter')}</th>
-                          <th className={`px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 dark:text-gray-300 uppercase`}>{t('inventory.movementsModal.actions')}</th>
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-700">
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.date')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.type')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.quantity')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.pricePerUnit')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.total')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.reason')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.balanceAfter')}</th>
+                          <th className={`px-4 py-3.5 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.movementsModal.actions')}</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
                         {itemMovements.map((movement: any, index: number) => {
-                          // Use stored totalCost if available, otherwise calculate from price
                           const displayPrice = movement.price;
                           let displayTotal = null;
-                          
                           if (movement.totalCost !== null && movement.totalCost !== undefined) {
-                            // Use stored totalCost from database (FIFO calculated)
                             displayTotal = movement.totalCost;
                           } else if (movement.price) {
-                            // Fallback: calculate from price for old movements
                             displayTotal = movement.price * Math.abs(movement.quantity);
                           }
-                          
                           return (
-                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {movement.timestamp || movement.date 
-                                ? formatOrgDate(movement.timestamp || movement.date, {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })
-                                : t('inventory.movementsModal.notSpecified')}
+                                ? formatOrgDate(movement.timestamp || movement.date, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                : <span className="text-gray-400 italic">{t('inventory.movementsModal.notSpecified')}</span>}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ring-1 ${
                                 movement.type === 'in'
-                                  ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 ring-green-200 dark:ring-green-800'
                                   : movement.type === 'out'
-                                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                                  : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 ring-red-200 dark:ring-red-800'
+                                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 ring-blue-200 dark:ring-blue-800'
                               }`}>
                                 {t(`inventory.movementsModal.types.${movement.type}`)}
                               </span>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <span className={`font-medium ${
+                              <span className={`text-sm font-bold ${
                                 movement.type === 'in' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                               }`}>
-                                {movement.type === 'in' ? '+' : '-'}{formatQuantity(movement.quantity, translateUnit(selectedItem.unit), i18n.language)}
+                                {movement.type === 'in' ? '+' : '−'}{formatQuantity(movement.quantity, translateUnit(selectedItem.unit), i18n.language)}
                               </span>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
@@ -2838,49 +2675,40 @@ const Inventory = () => {
                                 <span className={(movement.type === 'out' || movement.type === 'adjustment') ? 'text-gray-500 dark:text-gray-400' : ''}>
                                   {formatCurrency(displayPrice, i18n.language)}
                                 </span>
-                              ) : '-'}
+                              ) : <span className="text-gray-400">—</span>}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">
                               {displayTotal ? (
                                 <span className={(movement.type === 'out' || movement.type === 'adjustment') ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>
                                   {formatCurrency(displayTotal, i18n.language)}
                                 </span>
-                              ) : '-'}
+                              ) : <span className="text-gray-400">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-[200px] truncate" title={movement.reason}>
                               {translateReason(movement.reason)}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100">
                               {formatQuantity(movement.balanceAfter, translateUnit(selectedItem.unit), i18n.language)}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <div className={`flex gap-2 ${isRTL ? 'justify-start' : 'justify-end'}`}>
-                                {/* لا يمكن تعديل أو حذف الحركات المرتبطة بالطلبات */}
+                              <div className={`flex gap-1 ${isRTL ? 'justify-start' : 'justify-end'}`}>
                                 {!movement.reason?.includes('طلب رقم') && !movement.reason?.includes('فاتورة') ? (
                                   <>
                                     <PermissionGuard requiredPermissions={['canEditStockMovement', 'all']}>
-                                      <button
-                                        onClick={() => openEditMovementModal(movement)}
-                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                        title={t('inventory.movementsModal.edit')}
-                                      >
+                                      <button onClick={() => openEditMovementModal(movement)}
+                                        className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.edit')}>
                                         <Edit2 className="w-4 h-4" />
                                       </button>
                                     </PermissionGuard>
                                     <PermissionGuard requiredPermissions={['canDeleteStockMovement', 'all']}>
-                                      <button
-                                        onClick={() => handleDeleteMovement(movement._id)}
-                                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                                        title={t('inventory.movementsModal.delete')}
-                                      >
+                                      <button onClick={() => handleDeleteMovement(movement._id)}
+                                        className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.delete')}>
                                         <Trash2 className="w-4 h-4" />
                                       </button>
                                     </PermissionGuard>
                                   </>
                                 ) : (
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 italic">
-                                    {t('inventory.movementsModal.linkedToOrder')}
-                                  </span>
+                                  <span className="text-xs text-gray-400 italic">{t('inventory.movementsModal.linkedToOrder')}</span>
                                 )}
                               </div>
                             </td>
@@ -2898,163 +2726,116 @@ const Inventory = () => {
 
       {/* Edit Movement Modal */}
       {showEditMovementModal && editingMovement && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-                {t('inventory.editMovementModal.title')}
-              </h2>
-
-              {/* نوع الحركة والتحذير */}
-              <div className={`mb-4 p-4 rounded-lg ${
-                editingMovement.type === 'in' 
-                  ? 'bg-green-50 dark:bg-green-900/20 border-2 border-green-300 dark:border-green-600' 
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowEditMovementModal(false); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <Edit2 className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white">{t('inventory.editMovementModal.title')}</h3>
+              </div>
+              <button onClick={() => { setShowEditMovementModal(false); setError(''); }}
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[70vh]">
+              <div className={`mb-5 p-5 rounded-xl border ${
+                editingMovement.type === 'in'
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/50'
                   : editingMovement.type === 'out'
-                  ? 'bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-600'
-                  : 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-600'
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700/50'
+                  : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/50'
               }`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-bold text-base">{t('inventory.editMovementModal.movementType')}:</span>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${
+                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('inventory.editMovementModal.movementType')}:</span>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ring-1 ${
                     editingMovement.type === 'in'
-                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 ring-green-200 dark:ring-green-800'
                       : editingMovement.type === 'out'
-                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                      : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                      ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 ring-red-200 dark:ring-red-800'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 ring-blue-200 dark:ring-blue-800'
                   }`}>
-                    {editingMovement.type === 'in' ? '➕ ' : editingMovement.type === 'out' ? '➖ ' : '🔄 '}{t(`inventory.movementsModal.types.${editingMovement.type}`)}
+                    {t(`inventory.movementsModal.types.${editingMovement.type}`)}
                   </span>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    {t('inventory.editMovementModal.warningTitle')}
-                  </p>
-                  {editingMovement.type === 'in' ? (
-                    <>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.inWarning1')}
-                      </p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.inWarning2')}
-                      </p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.inWarning3')}
-                      </p>
-                    </>
-                  ) : editingMovement.type === 'out' ? (
-                    <>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.outWarning1')}
-                      </p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.outWarning2')}
-                      </p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.outWarning3')}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.adjustmentWarning1')}
-                      </p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {t('inventory.editMovementModal.adjustmentWarning2')}
-                      </p>
-                    </>
-                  )}
-                </div>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">{t('inventory.editMovementModal.warningTitle')}</p>
+                {editingMovement.type === 'in' ? (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.inWarning1')}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.inWarning2')}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.inWarning3')}</p>
+                  </div>
+                ) : editingMovement.type === 'out' ? (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.outWarning1')}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.outWarning2')}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.outWarning3')}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.adjustmentWarning1')}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{t('inventory.editMovementModal.adjustmentWarning2')}</p>
+                  </div>
+                )}
               </div>
 
-              {error && (
-                <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded">
-                  {error}
-                </div>
-              )}
+              {error && <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-3.5"><p className="text-red-600 dark:text-red-400 text-sm">{error}</p></div>}
 
-              <form onSubmit={handleEditMovementSubmit} className="space-y-4">
+              <form onSubmit={handleEditMovementSubmit} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('inventory.editMovementModal.quantity')} <span className="text-red-500">{t('inventory.editMovementModal.required')}</span>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      {t('inventory.editMovementModal.quantity')} <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={editMovementForm.quantity}
+                    <input type="number" step="0.01" value={editMovementForm.quantity}
                       onChange={(e) => setEditMovementForm({ ...editMovementForm, quantity: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                      required
-                      placeholder={t('inventory.editMovementModal.quantityPlaceholder')}
-                    />
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" required
+                      placeholder={t('inventory.editMovementModal.quantityPlaceholder')} />
                   </div>
-
                   {editingMovement.type === 'in' && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        {t('inventory.editMovementModal.price')}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editMovementForm.price}
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.editMovementModal.price')}</label>
+                      <input type="number" step="0.01" value={editMovementForm.price}
                         onChange={(e) => setEditMovementForm({ ...editMovementForm, price: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                        placeholder={t('inventory.editMovementModal.pricePlaceholder')}
-                      />
+                        className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        placeholder={t('inventory.editMovementModal.pricePlaceholder')} />
                     </div>
                   )}
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('inventory.editMovementModal.reason')} <span className="text-red-500">{t('inventory.editMovementModal.required')}</span>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      {t('inventory.editMovementModal.reason')} <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
-                      value={editMovementForm.reason}
+                    <input type="text" value={editMovementForm.reason}
                       onChange={(e) => setEditMovementForm({ ...editMovementForm, reason: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                      required
-                      placeholder={t('inventory.editMovementModal.reasonPlaceholder')}
-                    />
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" required
+                      placeholder={t('inventory.editMovementModal.reasonPlaceholder')} />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('inventory.editMovementModal.date')}
-                    </label>
-                    <DatePicker
-                      showTime
-                      value={editMovementForm.date ? dayjs(editMovementForm.date) : null}
-                      onChange={(date) => {
-                        setEditMovementForm({ ...editMovementForm, date: date ? date.format('YYYY-MM-DDTHH:mm') : '' });
-                      }}
-                      format="YYYY/MM/DD HH:mm"
-                      className="w-full"
-                      size="large"
-                      placeholder={t('inventory.editMovementModal.date')}
-                    />
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{t('inventory.editMovementModal.date')}</label>
+                    <DatePicker showTime value={editMovementForm.date ? dayjs(editMovementForm.date) : null}
+                      onChange={(date) => setEditMovementForm({ ...editMovementForm, date: date ? date.format('YYYY-MM-DDTHH:mm') : '' })}
+                      format="YYYY/MM/DD HH:mm" className="w-full [&_.ant-picker]:!rounded-xl [&_.ant-picker]:!py-3" size="large" placeholder={t('inventory.editMovementModal.date')} />
                   </div>
                 </div>
-
-                <div className="flex gap-3 justify-end mt-6">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditMovementModal(false);
-                      setError('');
-                    }}
-                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-                    disabled={loading}
-                  >
+                <hr className="border-gray-200 dark:border-gray-600" />
+                <div className="flex justify-end gap-3">
+                  <button type="button" onClick={() => { setShowEditMovementModal(false); setError(''); }}
+                    className="px-5 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl font-medium transition-colors" disabled={loading}>
                     {t('inventory.editMovementModal.cancel')}
                   </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                    disabled={loading}
-                  >
-                    {loading ? t('inventory.editMovementModal.updating') : t('inventory.editMovementModal.update')}
+                  <button type="submit" disabled={loading}
+                    className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 dark:shadow-blue-900/30 transition-all duration-200 disabled:opacity-50 flex items-center gap-2">
+                    {loading ? (
+                      <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      {t('inventory.editMovementModal.updating')}</>
+                    ) : (
+                      <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      {t('inventory.editMovementModal.update')}</>
+                    )}
                   </button>
                 </div>
               </form>
@@ -3065,27 +2846,20 @@ const Inventory = () => {
 
       {/* Delete Movement Modal */}
       {showDeleteMovementModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowDeleteMovementModal(false);
-              setDeletingMovementId(null);
-            }
-          }}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
-            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 rounded-t-lg">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('inventory.deleteMovementModal.title')}</h2>
-                <button
-                  className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-2xl font-bold transition-colors duration-200"
-                  onClick={() => {
-                    setShowDeleteMovementModal(false);
-                    setDeletingMovementId(null);
-                  }}
-                >×</button>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowDeleteMovementModal(false); setDeletingMovementId(null); } }}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-red-600 to-red-500 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <Trash2 className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white">{t('inventory.deleteMovementModal.title')}</h3>
               </div>
+              <button onClick={() => { setShowDeleteMovementModal(false); setDeletingMovementId(null); }}
+                className="text-white/80 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
             <div className="p-6 text-center">
               <div className="mb-4 flex justify-center">
@@ -3093,45 +2867,24 @@ const Inventory = () => {
                   <Trash2 className="h-8 w-8 text-red-600 dark:text-red-400" />
                 </div>
               </div>
-              <p className="mb-4 text-gray-700 dark:text-gray-300 text-lg font-medium">
-                {t('inventory.deleteMovementModal.confirmMessage')}
-              </p>
-              <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600 rounded-lg p-3">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  ⚠️ {t('inventory.deleteMovementModal.warning')}
-                </p>
+              <p className="mb-3 text-gray-700 dark:text-gray-200 text-lg font-bold">{t('inventory.deleteMovementModal.confirmMessage')}</p>
+              <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl p-3.5 flex gap-3">
+                <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                <p className="text-sm text-amber-800 dark:text-amber-200">{t('inventory.deleteMovementModal.warning')}</p>
               </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{t('inventory.deleteMovementModal.cannotUndo')}</p>
-              
-              <div className="flex gap-3 justify-center">
-                <button
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 rounded-lg font-medium transition-colors duration-200"
-                  onClick={() => {
-                    setShowDeleteMovementModal(false);
-                    setDeletingMovementId(null);
-                  }}
-                  disabled={loading}
-                >
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">{t('inventory.deleteMovementModal.cannotUndo')}</p>
+              <div className="flex justify-center gap-3">
+                <button onClick={() => { setShowDeleteMovementModal(false); setDeletingMovementId(null); }}
+                  className="px-5 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl font-medium transition-colors" disabled={loading}>
                   {t('inventory.deleteMovementModal.cancel')}
                 </button>
-                <button
-                  className={`flex items-center justify-center gap-2 px-4 py-2 ${loading ? 'bg-red-500' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg font-medium transition-colors duration-200`}
-                  onClick={confirmDeleteMovement}
-                  disabled={loading}
-                >
+                <button onClick={confirmDeleteMovement} disabled={loading}
+                  className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 dark:shadow-red-900/30 transition-all duration-200 disabled:opacity-50 flex items-center gap-2">
                   {loading ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      {t('inventory.deleteMovementModal.deleting')}
-                    </>
+                    <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    {t('inventory.deleteMovementModal.deleting')}</>
                   ) : (
-                    <>
-                      <Trash2 className="h-4 w-4" />
-                      {t('inventory.deleteMovementModal.confirm')}
-                    </>
+                    <><Trash2 className="h-4 w-4" />{t('inventory.deleteMovementModal.confirm')}</>
                   )}
                 </button>
               </div>

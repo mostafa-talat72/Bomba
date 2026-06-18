@@ -1,4 +1,5 @@
 import InventoryItem from "../models/InventoryItem.js";
+import WarehouseItem from "../models/WarehouseItem.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import Cost from "../models/Cost.js";
@@ -120,10 +121,11 @@ export const createInventoryItem = async (req, res) => {
             costStatus = "pending",
             paidAmount = 0,
             date,
+            warehouseItem,
         } = req.body;
 
         // Validate required fields
-        if (!name || !category || !unit || !price || !minStock) {
+        if (!name || !category || !unit || !minStock) {
             return res.status(400).json({
                 success: false,
                 message: "جميع الحقول المطلوبة يجب أن تكون موجودة",
@@ -146,7 +148,7 @@ export const createInventoryItem = async (req, res) => {
             minStock,
             maxStock,
             unit,
-            price,
+            price: price !== undefined ? price : 0,
             cost,
             supplier,
             supplierContact,
@@ -155,6 +157,7 @@ export const createInventoryItem = async (req, res) => {
             isRawMaterial: Boolean(isRawMaterial),
             recipe,
             expiryDate,
+            warehouseItem: warehouseItem || null,
             organization: req.user.organization,
         });
 
@@ -283,6 +286,7 @@ export const updateInventoryItem = async (req, res) => {
             recipe,
             expiryDate,
             isActive,
+            warehouseItem,
         } = req.body;
 
         const item = await InventoryItem.findById(req.params.id);
@@ -311,6 +315,7 @@ export const updateInventoryItem = async (req, res) => {
         if (recipe) item.recipe = recipe;
         if (expiryDate !== undefined) item.expiryDate = expiryDate;
         if (isActive !== undefined) item.isActive = isActive;
+        if (warehouseItem !== undefined) item.warehouseItem = warehouseItem || null;
 
         await item.save();
 
@@ -1217,6 +1222,68 @@ export const updateStockMovement = async (req, res) => {
         });
 
         await item.save();
+
+        // Sync linked warehouse movement for transfer/return movements
+        if (movement.reference && (movement.type === "in" || movement.type === "out")) {
+            try {
+                const linkedWarehouseItem = await WarehouseItem.findById(movement.reference);
+                if (linkedWarehouseItem) {
+                    const counterpartType = movement.type === "in" ? "transfer_out" : "transfer_in";
+                    const movementTime = new Date(movement.timestamp || movement.date).getTime();
+                    let counterpartMovement = null;
+                    let closestDiff = Infinity;
+                    for (const m of linkedWarehouseItem.stockMovements) {
+                        if (m.type === counterpartType && m.reference && m.reference.toString() === item._id.toString()) {
+                            const mTime = new Date(m.timestamp || m.date).getTime();
+                            const diff = Math.abs(mTime - movementTime);
+                            if (diff < closestDiff) {
+                                closestDiff = diff;
+                                counterpartMovement = m;
+                            }
+                        }
+                    }
+                    if (counterpartMovement) {
+                        const oldCounterpartQty = counterpartMovement.quantity;
+                        if (quantity !== undefined) counterpartMovement.quantity = quantity;
+                        if (price !== undefined) counterpartMovement.price = price;
+                        if (reason !== undefined) counterpartMovement.reason = reason;
+                        if (date !== undefined) counterpartMovement.timestamp = new Date(date);
+
+                        const sortedWh = [...linkedWarehouseItem.stockMovements].sort((a, b) => {
+                            const aTime = new Date(a.timestamp || a.date).getTime();
+                            const bTime = new Date(b.timestamp || b.date).getTime();
+                            return aTime - bTime;
+                        });
+
+                        let whSimulated = 0;
+                        let whValid = true;
+                        for (const m of sortedWh) {
+                            if (m.type === "in" || m.type === "transfer_in") {
+                                whSimulated += m.quantity;
+                            } else if (m.type === "out" || m.type === "transfer_out") {
+                                whSimulated -= m.quantity;
+                                if (whSimulated < 0) { whValid = false; break; }
+                            } else if (m.type === "adjustment") {
+                                whSimulated = m.quantity;
+                            }
+                        }
+
+                        if (whValid) {
+                            linkedWarehouseItem.currentStock = whSimulated;
+                            await linkedWarehouseItem.save();
+                            if (req.io) {
+                                try { req.io.notifyInventoryUpdate(linkedWarehouseItem); } catch (ioError) { Logger.error("فشل في إرسال إشعار للمخزن المرتبط", ioError); }
+                            }
+                        } else {
+                            counterpartMovement.quantity = oldCounterpartQty;
+                            Logger.warn("لم يتم تحديث الحركة المرتبطة في المخزن الرئيسي لتجنب رصيد سالب");
+                        }
+                    }
+                }
+            } catch (linkError) {
+                Logger.error("خطأ في تحديث الحركة المرتبطة في المخزن الرئيسي", linkError);
+            }
+        }
 
         // Emit Socket.IO event for inventory update
         if (req.io) {

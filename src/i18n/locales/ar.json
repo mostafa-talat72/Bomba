@@ -2065,7 +2065,7 @@
   "inventory": {
     "title": "المخزون",
     "subtitle": "إدارة المخزون والمشتريات",
-    "addStock": "إضافة مخزون",
+    "addStock": "إضافة منتج جديد",
     "addNewProduct": "إضافة منتج جديد",
     "editProduct": "تعديل منتج",
     "deleteProduct": "حذف منتج",
@@ -2145,7 +2145,7 @@
       "infoLine3": "• يمكنك مراجعة السجل من زر \"سجل الحركات\" 📊",
       "importantNote": "ملاحظة مهمة",
       "noteCannotDuplicate": "• لا يمكن إضافة منتج بنفس الاسم لمنشأة واحدة",
-      "noteUseExisting": "• إذا كان المنتج موجود، استخدم \"إضافة كمية لمنتج موجود\"",
+      "noteUseExisting": "• إذا كان المنتج موجود، استخدم زر \"تحويل من المخزن الرئيسي\" لإضافة كمية",
       "noteDifferentBranches": "• يمكن إضافة منتجات بنفس الاسم في منشآت مختلفة",
       "selectProduct": "اختر المنتج",
       "searchProduct": "ابحث عن منتج بالكتابة...",
@@ -2189,7 +2189,9 @@
       "reason": "شراء مخزون جديد",
       "initialStock": "المخزون الأولي",
       "successMessage": "تم تسجيل هذه العملية أيضًا ضمن التكاليف تلقائيًا.",
-      "viewCosts": "عرض صفحة التكاليف"
+      "viewCosts": "عرض صفحة التكاليف",
+      "warehouseItem": "المنتج في المخزن الرئيسي",
+      "selectWarehouseItem": "اختر منتج من المخزن الرئيسي"
     },
     "editModal": {
       "title": "تعديل منتج",
@@ -2256,6 +2258,7 @@
     "movementsModal": {
       "title": "سجل حركات المخزون",
       "product": "المنتج",
+      "stock": "المخزون",
       "currentStock": "المخزون الحالي",
       "totalValue": "القيمة الإجمالية",
       "totalValueHint": "محسوبة بناءً على سعر كل دفعة (FIFO)",
@@ -2352,7 +2355,10 @@
       "returnFailed": "فشل الإرجاع إلى المخزن الرئيسي",
       "thisProduct": "هذا المنتج",
       "cannotDeleteInUse": "لا يمكن حذف {{name}} لأنه مستخدم في الأصناف التالية:\n{{list}}\n\nالرجاء إزالة المنتج من هذه الأصناف أولاً.",
-      "cannotDeleteSummary": "لا يمكن حذف {{name}} لأنه مستخدم في {{count}} صنف في القائمة"
+      "cannotDeleteSummary": "لا يمكن حذف {{name}} لأنه مستخدم في {{count}} صنف في القائمة",
+      "warehouseItemCreated": "تم إنشاء العنصر في المخزن الرئيسي وربطه بالمنتج",
+      "warehouseItemCreateError": "فشل إنشاء العنصر في المخزن الرئيسي",
+      "creating": "جاري الإنشاء..."
     },
     "notifications": {
       "quantityAdded": "تمت إضافة الكمية بنجاح!",
@@ -2380,7 +2386,9 @@
       "available": "متوفر: {{stock}} {{unit}}",
       "currentStock": "المخزون الحالي: {{stock}} {{unit}}",
       "transfer": "تحويل",
-      "transferring": "جاري التحويل..."
+      "transferring": "جاري التحويل...",
+      "noLinkMessage": "يجب ربط هذا المنتج بعنصر من المخزن الرئيسي أولاً. يمكنك تعديل المنتج واختيار العنصر المرتبط من المخزن الرئيسي.",
+      "createWarehouseItem": "إنشاء عنصر في المخزن الرئيسي"
     },
     "returnModal": {
       "title": "إرجاع للمخزن الرئيسي",
@@ -2388,8 +2396,11 @@
       "selectPlaceholder": "اختر من المخزن الرئيسي",
       "available": "المتوفر: {{stock}} {{unit}}",
       "currentStock": "المخزون الحالي: {{stock}} {{unit}}",
+      "return": "إرجاع",
       "returnToWarehouse": "إرجاع",
-      "returning": "جاري الإرجاع..."
+      "returning": "جاري الإرجاع...",
+      "noLinkMessage": "يجب ربط هذا المنتج بعنصر من المخزن الرئيسي أولاً. يمكنك تعديل المنتج واختيار العنصر المرتبط من المخزن الرئيسي.",
+      "createWarehouseItem": "إنشاء عنصر في المخزن الرئيسي"
     }
   },
   "warehouse": {

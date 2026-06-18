@@ -2072,7 +2072,7 @@
   "inventory": {
     "title": "Inventaire",
     "subtitle": "Gestion des stocks et des achats",
-    "addStock": "Ajouter du stock",
+    "addStock": "Ajouter un nouveau produit",
     "addNewProduct": "Ajouter un nouveau produit",
     "editProduct": "Modifier un produit",
     "deleteProduct": "Supprimer un produit",
@@ -2152,7 +2152,7 @@
       "infoLine3": "• Vous pouvez consulter l'historique à partir du bouton « Historique des transactions » 📊",
       "importantNote": "Remarque importante",
       "noteCannotDuplicate": "• Il n'est pas possible d'ajouter un produit portant le même nom à une seule installation",
-      "noteUseExisting": "• Si le produit existe, utilisez « Ajouter une quantité au produit existant »",
+      "noteUseExisting": "• Si le produit existe, utilisez le bouton « Transférer depuis l'entrepôt principal » pour ajouter la quantité",
       "noteDifferentBranches": "• Des produits portant le même nom peuvent être ajoutés dans différentes installations",
       "selectProduct": "Choisissez le produit",
       "searchProduct": "Recherchez un produit en tapant...",
@@ -2196,7 +2196,9 @@
       "reason": "Acheter du nouveau stock",
       "initialStock": "Inventaire initial",
       "successMessage": "Ce processus est également automatiquement enregistré dans les coûts.",
-      "viewCosts": "Voir la page des coûts"
+      "viewCosts": "Voir la page des coûts",
+      "warehouseItem": "Produit d'entrepôt",
+      "selectWarehouseItem": "Sélectionner un produit d'entrepôt"
     },
     "editModal": {
       "title": "Modifier un produit",
@@ -2263,6 +2265,7 @@
     "movementsModal": {
       "title": "Enregistrer les mouvements de stocks",
       "product": "Produit",
+      "stock": "Stock",
       "currentStock": "Stock actuel",
       "totalValue": "Valeur totale",
       "totalValueHint": "Calculé sur la base du prix par lot (FIFO)",
@@ -2354,12 +2357,15 @@
       "selectProduct": "Veuillez sélectionner le produit et saisir la quantité et le prix",
       "fillAllFields": "Veuillez remplir tous les champs obligatoires",
       "noProductSelected": "Aucun produit sélectionné pour la modification",
-      "notLinkedToWarehouse": "Le produit n'est pas lié à l'entrepôt. Veuillez d'abord sélectionner un produit d'entrepôt.",
+      "notLinkedToWarehouse": "Le produit n'est pas lié à l'entrepôt principal. Veuillez d'abord sélectionner un produit de l'entrepôt principal.",
       "transferFailed": "Échec du transfert depuis l'entrepôt principal",
       "returnFailed": "Échec du retour à l'entrepôt principal",
       "thisProduct": "Ce produit",
-      "cannotDeleteInUse": "Impossible de supprimer {{name}} car il est utilisé dans les éléments suivants :\n{{list}}\n\nVeuillez d'abord retirer le produit de ces éléments.",
-      "cannotDeleteSummary": "Impossible de supprimer {{name}} car il est utilisé dans {{count}} éléments"
+      "cannotDeleteInUse": "Impossible de supprimer {{name}} car il est utilisé dans les articles suivants :\n{{list}}\n\nVeuillez d'abord retirer le produit de ces articles.",
+      "cannotDeleteSummary": "Impossible de supprimer {{name}} car il est utilisé dans {{count}} articles de la liste",
+      "warehouseItemCreated": "Article d'entrepôt créé et lié au produit",
+      "warehouseItemCreateError": "Échec de la création de l'article d'entrepôt",
+      "creating": "Création en cours..."
     },
     "notifications": {
       "quantityAdded": "Quantité ajoutée avec succès !",
@@ -2387,7 +2393,9 @@
       "available": "Disponible: {{stock}} {{unit}}",
       "currentStock": "Stock actuel: {{stock}} {{unit}}",
       "transfer": "Transférer",
-      "transferring": "Transfert en cours..."
+      "transferring": "Transfert en cours...",
+      "noLinkMessage": "Ce produit doit d'abord être lié à un article d'entrepôt. Vous pouvez modifier le produit et sélectionner l'article d'entrepôt lié.",
+      "createWarehouseItem": "Créer un article d'entrepôt"
     },
     "returnModal": {
       "title": "Retour à l'Entrepôt Principal",
@@ -2395,8 +2403,11 @@
       "selectPlaceholder": "Sélectionner depuis l'Entrepôt Principal",
       "available": "Disponible: {{stock}} {{unit}}",
       "currentStock": "Stock actuel: {{stock}} {{unit}}",
+      "return": "Retourner",
       "returnToWarehouse": "Retourner",
-      "returning": "Retour en cours..."
+      "returning": "Retour en cours...",
+      "noLinkMessage": "Ce produit doit d'abord être lié à un article d'entrepôt. Vous pouvez modifier le produit et sélectionner l'article d'entrepôt lié.",
+      "createWarehouseItem": "Créer un article d'entrepôt"
     }
   },
   "warehouse": {

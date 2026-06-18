@@ -386,6 +386,15 @@ export const transferToInventory = async (req, res) => {
             );
         }
 
+        // Update warehouse transfer_out reference for new inventory items
+        if (!inventoryItemId && inventoryItem) {
+            const lastMovement = warehouseItem.stockMovements[warehouseItem.stockMovements.length - 1];
+            if (lastMovement && lastMovement.type === "transfer_out") {
+                lastMovement.reference = inventoryItem._id.toString();
+                await warehouseItem.save();
+            }
+        }
+
         // Emit socket events
         if (req.io) {
             try {
@@ -580,10 +589,7 @@ export const updateWarehouseStockMovement = async (req, res) => {
             return res.status(404).json({ success: false, message: "الحركة غير موجودة" });
         }
 
-        if (movement.type === "transfer_out" || movement.type === "transfer_in") {
-            return res.status(403).json({ success: false, message: "لا يمكن تعديل حركات النقل." });
-        }
-
+        // Validate quantity
         if (quantity !== undefined && quantity <= 0) {
             return res.status(400).json({ success: false, message: "الكمية يجب أن تكون أكبر من صفر" });
         }
@@ -622,6 +628,69 @@ export const updateWarehouseStockMovement = async (req, res) => {
 
         item.currentStock = simulatedStock;
         await item.save();
+
+        // Sync linked inventory movement for transfer/return
+        if ((movement.type === "transfer_out" || movement.type === "transfer_in") && movement.reference) {
+            try {
+                const linkedItem = await InventoryItem.findById(movement.reference);
+                if (linkedItem) {
+                    const counterpartType = movement.type === "transfer_out" ? "in" : "out";
+                    const movementTime = new Date(movement.timestamp || movement.date).getTime();
+                    // Find the counterpart movement by matching type + cross-reference + closest timestamp
+                    let counterpartMovement = null;
+                    let closestDiff = Infinity;
+                    for (const m of linkedItem.stockMovements) {
+                        if (m.type === counterpartType && m.reference && m.reference.toString() === item._id.toString()) {
+                            const mTime = new Date(m.timestamp || m.date).getTime();
+                            const diff = Math.abs(mTime - movementTime);
+                            if (diff < closestDiff) {
+                                closestDiff = diff;
+                                counterpartMovement = m;
+                            }
+                        }
+                    }
+                    if (counterpartMovement) {
+                        const oldCounterpartQty = counterpartMovement.quantity;
+                        if (quantity !== undefined) counterpartMovement.quantity = quantity;
+                        if (price !== undefined) counterpartMovement.price = price;
+                        if (reason !== undefined) counterpartMovement.reason = reason;
+                        if (date !== undefined) counterpartMovement.timestamp = new Date(date);
+
+                        const sortedInv = [...linkedItem.stockMovements].sort((a, b) => {
+                            const aTime = new Date(a.timestamp || a.date).getTime();
+                            const bTime = new Date(b.timestamp || b.date).getTime();
+                            return aTime - bTime;
+                        });
+
+                        let invSimulated = 0;
+                        let invValid = true;
+                        for (const m of sortedInv) {
+                            if (m.type === "in" || m.type === "transfer_in") {
+                                invSimulated += m.quantity;
+                            } else if (m.type === "out" || m.type === "transfer_out") {
+                                invSimulated -= m.quantity;
+                                if (invSimulated < 0) { invValid = false; break; }
+                            } else if (m.type === "adjustment") {
+                                invSimulated = m.quantity;
+                            }
+                        }
+
+                        if (invValid) {
+                            linkedItem.currentStock = invSimulated;
+                            await linkedItem.save();
+                            if (req.io) {
+                                try { req.io.notifyInventoryUpdate(linkedItem); } catch (ioError) { Logger.error("فشل في إرسال إشعار للمخزون المرتبط", ioError); }
+                            }
+                        } else {
+                            counterpartMovement.quantity = oldCounterpartQty;
+                            Logger.warn("لم يتم تحديث الحركة المرتبطة في المخزون لتجنب رصيد سالب");
+                        }
+                    }
+                }
+            } catch (linkError) {
+                Logger.error("خطأ في تحديث الحركة المرتبطة في المخزون", linkError);
+            }
+        }
 
         if (req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
