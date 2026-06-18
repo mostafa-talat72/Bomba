@@ -75,6 +75,7 @@
     "consumptionReport": "تقرير الاستهلاك",
     "soldItems": "الأصناف المباعة",
     "inventory": "المخزون",
+    "warehouse": "المخزن الرئيسي",
     "costs": "التكاليف",
     "payroll": "المرتبات",
     "users": "المستخدمين",
@@ -2280,7 +2281,9 @@
       },
       "edit": "تعديل",
       "delete": "حذف",
-      "close": "إغلاق"
+      "close": "إغلاق",
+      "system": "النظام",
+      "user": "المستخدم"
     },
     "editMovementModal": {
       "title": "تعديل حركة المخزون",
@@ -2342,7 +2345,14 @@
       "enterAllFields": "يرجى إدخال جميع الحقول المطلوبة",
       "productExists": "المنتج موجود بالفعل",
       "selectProduct": "يرجى اختيار المنتج وإدخال الكمية والسعر",
-      "fillAllFields": "يرجى تعبئة جميع الحقول المطلوبة"
+      "fillAllFields": "يرجى تعبئة جميع الحقول المطلوبة",
+      "noProductSelected": "لم يتم تحديد منتج للتعديل",
+      "notLinkedToWarehouse": "المنتج غير مرتبط بالمخزن الرئيسي. يرجى تحديد منتج المخزن الرئيسي أولاً.",
+      "transferFailed": "فشل التحويل من المخزن الرئيسي",
+      "returnFailed": "فشل الإرجاع إلى المخزن الرئيسي",
+      "thisProduct": "هذا المنتج",
+      "cannotDeleteInUse": "لا يمكن حذف {{name}} لأنه مستخدم في الأصناف التالية:\n{{list}}\n\nالرجاء إزالة المنتج من هذه الأصناف أولاً.",
+      "cannotDeleteSummary": "لا يمكن حذف {{name}} لأنه مستخدم في {{count}} صنف في القائمة"
     },
     "notifications": {
       "quantityAdded": "تمت إضافة الكمية بنجاح!",
@@ -2362,7 +2372,31 @@
       "movementDeleteError": "حدث خطأ أثناء حذف الحركة",
       "movementsLoadError": "فشل في جلب سجل الحركات",
       "confirmDeleteMovement": "هل أنت متأكد من حذف هذه الحركة؟ سيتم إعادة حساب المخزون تلقائياً."
+    },
+    "transferModal": {
+      "title": "تحويل من المخزن الرئيسي",
+      "warehouseProduct": "منتج المخزن الرئيسي",
+      "selectPlaceholder": "اختر من المخزن الرئيسي",
+      "available": "متوفر: {{stock}} {{unit}}",
+      "currentStock": "المخزون الحالي: {{stock}} {{unit}}",
+      "transfer": "تحويل",
+      "transferring": "جاري التحويل..."
+    },
+    "returnModal": {
+      "title": "إرجاع للمخزن الرئيسي",
+      "warehouseProduct": "منتج المخزن الرئيسي",
+      "selectPlaceholder": "اختر من المخزن الرئيسي",
+      "available": "المتوفر: {{stock}} {{unit}}",
+      "currentStock": "المخزون الحالي: {{stock}} {{unit}}",
+      "returnToWarehouse": "إرجاع",
+      "returning": "جاري الإرجاع..."
     }
+  },
+  "warehouse": {
+    "title": "المخزن الرئيسي",
+    "subtitle": "إدارة المخزون الرئيسي للشركة",
+    "transferIn": "عودة من المخزون",
+    "transferOut": "تحويل للمخزون"
   },
   "costs": {
     "title": "إدارة التكاليف",
@@ -3809,10 +3843,14 @@
     "inventory": {
       "added": "تم إضافة المنتج بنجاح",
       "updated": "تم تحديث المنتج بنجاح",
-      "stockUpdated": "تم {{operation}} {{quantity}} وحدة من المخزون بنجاح",
+      "stockUpdated": "تم تحديث المخزون بنجاح",
       "addError": "فشل في إضافة المنتج",
       "updateError": "فشل في تحديث المنتج",
-      "stockError": "فشل في تحديث المخزون"
+      "stockError": "فشل في تحديث المخزون",
+      "transferred": "تم النقل إلى المخزون الحالي بنجاح",
+      "transferError": "فشل في النقل إلى المخزون الحالي",
+      "returned": "تم الإرجاع إلى المخزن الرئيسي بنجاح",
+      "returnError": "فشل في الإرجاع إلى المخزن الرئيسي"
     },
     "bill": {
       "created": "تم إنشاء الفاتورة بنجاح",

@@ -145,6 +145,32 @@ export interface InventoryItem {
   isOutOfStock: boolean;
   profitMargin: number;
   totalValue?: number; // Virtual property: calculated based on purchase prices
+  warehouseItem?: string;
+  lastRestocked?: Date;
+  expiryDate?: Date;
+  createdAt: Date;
+}
+
+export interface WarehouseItem {
+  _id: string;
+  id: string;
+  name: string;
+  category: string;
+  currentStock: number;
+  minStock: number;
+  maxStock?: number;
+  unit: string;
+  price: number;
+  cost: number;
+  supplier?: string;
+  supplierContact?: string;
+  barcode?: string;
+  description?: string;
+  isActive: boolean;
+  isRawMaterial: boolean;
+  isLowStock: boolean;
+  isOutOfStock: boolean;
+  totalValue?: number;
   lastRestocked?: Date;
   expiryDate?: Date;
   createdAt: Date;
@@ -1193,6 +1219,113 @@ class ApiClient {
   async getStockMovements(id: string): Promise<ApiResponse<any[]>> {
     return this.request(`/inventory/${id}/movements`, {
       method: 'GET',
+    });
+  }
+
+  // Warehouse endpoints
+  async getWarehouseItems(params?: { category?: string; lowStock?: string; search?: string; page?: number; limit?: number }): Promise<ApiResponse<WarehouseItem[]>> {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) searchParams.append(key, value.toString());
+      });
+    }
+    const qs = searchParams.toString();
+    const response = await this.request<WarehouseItem[]>(`/warehouse${qs ? `?${qs}` : ''}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeArray(response.data);
+    }
+    return response;
+  }
+
+  async getWarehouseItem(id: string): Promise<ApiResponse<WarehouseItem>> {
+    const response = await this.request<WarehouseItem>(`/warehouse/${id}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async createWarehouseItem(itemData: Partial<WarehouseItem> & { costStatus?: string; paidAmount?: number }): Promise<ApiResponse<WarehouseItem>> {
+    const response = await this.request<WarehouseItem>('/warehouse', {
+      method: 'POST',
+      body: JSON.stringify(itemData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async updateWarehouseItem(id: string, updates: Partial<WarehouseItem>): Promise<ApiResponse<WarehouseItem>> {
+    const response = await this.request<WarehouseItem>(`/warehouse/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async updateWarehouseStock(id: string, stockData: {
+    type: 'in' | 'out' | 'adjustment';
+    quantity: number;
+    reason: string;
+    reference?: string;
+    price?: number;
+    supplier?: string;
+    date?: string;
+    costStatus?: string;
+    paidAmount?: number;
+  }): Promise<ApiResponse<WarehouseItem>> {
+    const response = await this.request<WarehouseItem>(`/warehouse/${id}/stock`, {
+      method: 'PUT',
+      body: JSON.stringify(stockData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async getWarehouseStockMovements(id: string): Promise<ApiResponse<any[]>> {
+    return this.request(`/warehouse/${id}/movements`, {
+      method: 'GET',
+    });
+  }
+
+  async deleteWarehouseItem(id: string): Promise<ApiResponse> {
+    return this.request(`/warehouse/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async transferToInventory(data: {
+    warehouseItemId: string;
+    inventoryItemId?: string;
+    quantity: number;
+    price?: number;
+    date?: string;
+    reason?: string;
+  }): Promise<ApiResponse<{ warehouseItem: WarehouseItem; inventoryItem: InventoryItem }>> {
+    return this.request('/warehouse/transfer-to-inventory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async returnToWarehouse(data: {
+    inventoryItemId: string;
+    warehouseItemId: string;
+    quantity: number;
+    price?: number;
+    date?: string;
+    reason?: string;
+  }): Promise<ApiResponse<{ warehouseItem: WarehouseItem; inventoryItem: InventoryItem }>> {
+    return this.request('/warehouse/return-to-warehouse', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

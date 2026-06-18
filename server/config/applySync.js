@@ -26,6 +26,7 @@ import Employee from "../models/Employee.js";
 import Deduction from "../models/Deduction.js";
 import Payment from "../models/Payment.js";
 import Payroll from "../models/Payroll.js";
+import WarehouseItem from "../models/WarehouseItem.js";
 
 /**
  * Apply sync middleware to all models
@@ -66,6 +67,7 @@ export function applySyncToAllModels() {
         { name: "Deduction", model: Deduction },
         { name: "Payment", model: Payment },
         { name: "Payroll", model: Payroll },
+        { name: "WarehouseItem", model: WarehouseItem },
     ];
 
     let verifiedCount = 0;

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useMemo } from 'react';
-import api, { User, Session, Order, InventoryItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem } from '../services/api';
+import api, { User, Session, Order, InventoryItem, WarehouseItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useSmartPolling } from '../hooks/useSmartPolling';
 import { useTranslation } from 'react-i18next';
@@ -71,6 +71,7 @@ interface AppContextType {
   tables: any[];
   settings: any;
   inventoryItems: InventoryItem[];
+  warehouseItems: WarehouseItem[];
   users: User[];
   notifications: any[];
   subscriptionStatus: 'active' | 'expired' | 'pending' | 'loading';
@@ -111,6 +112,14 @@ interface AppContextType {
   createInventoryItem: (itemData: any) => Promise<InventoryItem | null>;
   updateInventoryItem: (id: string, updates: any) => Promise<InventoryItem | null>;
   updateStock: (id: string, stockData: any) => Promise<InventoryItem | null>;
+
+  // Warehouse methods
+  fetchWarehouseItems: () => Promise<void>;
+  createWarehouseItem: (itemData: any) => Promise<WarehouseItem | null>;
+  updateWarehouseItem: (id: string, updates: any) => Promise<WarehouseItem | null>;
+  updateWarehouseStock: (id: string, stockData: any) => Promise<WarehouseItem | null>;
+  transferToInventory: (data: { warehouseItemId: string; inventoryItemId?: string; quantity: number; price?: number; date?: string; reason?: string }) => Promise<boolean>;
+  returnToWarehouse: (data: { inventoryItemId: string; warehouseItemId: string; quantity: number; price?: number; date?: string; reason?: string }) => Promise<boolean>;
 
   createBill: (billData: any) => Promise<Bill | null>;
   updateBill: (id: string, updates: any) => Promise<Bill | null>;
@@ -275,6 +284,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [tableSections, setTableSections] = useState<any[]>([]);
   const [tables, setTables] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [warehouseItems, setWarehouseItems] = useState<WarehouseItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [settings, setSettings] = useState<any>({});
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -808,6 +818,101 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     } catch (error) {
       }
+  };
+
+  const fetchWarehouseItems = async (): Promise<void> => {
+    try {
+      const response = await api.getWarehouseItems();
+      if (response.success && response.data) {
+        setWarehouseItems(response.data);
+      }
+    } catch (error) {
+      }
+  };
+
+  const createWarehouseItem = async (itemData: any): Promise<WarehouseItem | null> => {
+    try {
+      const response = await api.createWarehouseItem(itemData);
+      if (response.success && response.data) {
+        setWarehouseItems(prev => [...prev, response.data!]);
+        showNotification(t('toast.inventory.added'), 'success');
+        return response.data;
+      }
+      showNotification(response.message || t('toast.inventory.addError'), 'error');
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || t('toast.inventory.addError'), 'error');
+      return null;
+    }
+  };
+
+  const updateWarehouseItem = async (id: string, updates: any): Promise<WarehouseItem | null> => {
+    try {
+      const response = await api.updateWarehouseItem(id, updates);
+      if (response.success && response.data) {
+        setWarehouseItems(prev => prev.map(item => item.id === id ? response.data! : item));
+        showNotification(t('toast.inventory.updated'), 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || t('toast.inventory.updateError'), 'error');
+      return null;
+    }
+  };
+
+  const updateWarehouseStock = async (id: string, stockData: any): Promise<WarehouseItem | null> => {
+    try {
+      const response = await api.updateWarehouseStock(id, stockData);
+      if (response.success && response.data) {
+        setWarehouseItems(prev => prev.map(item => item.id === id ? response.data! : item));
+        showNotification(t('toast.inventory.stockUpdated'), 'success');
+        return response.data;
+      }
+      return null;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || t('toast.inventory.stockError'), 'error');
+      return null;
+    }
+  };
+
+  const transferToInventory = async (data: { warehouseItemId: string; inventoryItemId?: string; quantity: number; price?: number; date?: string; reason?: string }): Promise<boolean> => {
+    try {
+      const response = await api.transferToInventory(data);
+      if (response.success) {
+        showNotification(t('toast.inventory.transferred'), 'success');
+        await fetchWarehouseItems();
+        await fetchInventoryItems();
+        return true;
+      }
+      showNotification(response.message || t('toast.inventory.transferError'), 'error');
+      return false;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || t('toast.inventory.transferError'), 'error');
+      return false;
+    }
+  };
+
+  const returnToWarehouse = async (data: { inventoryItemId: string; warehouseItemId: string; quantity: number; price?: number; date?: string; reason?: string }): Promise<boolean> => {
+    try {
+      const response = await api.returnToWarehouse(data);
+      if (response.success) {
+        showNotification(t('toast.inventory.returned'), 'success');
+        await fetchInventoryItems();
+        await fetchWarehouseItems();
+        return true;
+      }
+      showNotification(response.message || t('toast.inventory.returnError'), 'error');
+      return false;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      showNotification(err.message || t('toast.inventory.returnError'), 'error');
+      return false;
+    }
   };
 
   const fetchUsers = async (): Promise<void> => {
@@ -2602,6 +2707,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     tables,
     settings,
     inventoryItems,
+    warehouseItems,
     users,
     notifications,
     subscriptionStatus,
@@ -2640,6 +2746,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     createInventoryItem,
     updateInventoryItem,
     updateStock,
+
+    // Warehouse methods
+    fetchWarehouseItems,
+    createWarehouseItem,
+    updateWarehouseItem,
+    updateWarehouseStock,
+    transferToInventory,
+    returnToWarehouse,
+
     createBill,
     updateBill,
     addPayment,

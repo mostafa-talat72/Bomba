@@ -36,6 +36,7 @@ import ResetPassword from './pages/ResetPassword';
 import ConsumptionReport from './pages/ConsumptionReport';
 import Payroll from './pages/Payroll';
 import SoldItems from './pages/SoldItems';
+import Warehouse from './pages/Warehouse';
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
@@ -211,6 +212,11 @@ const RouteHandler = () => {
           <Route path="sold-items" element={
             <ProtectedRoute requiredPermissions={['soldItems']}>
               <SoldItems />
+            </ProtectedRoute>
+          } />
+          <Route path="warehouse" element={
+            <ProtectedRoute requiredPermissions={['inventory']}>
+              <Warehouse />
             </ProtectedRoute>
           } />
           <Route path="inventory" element={

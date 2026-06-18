@@ -85,6 +85,7 @@
     "consumptionReport": "Rapport de consommation",
     "soldItems": "Articles Vendus",
     "inventory": "Inventaire",
+    "warehouse": "Entrepôt Principal",
     "costs": "Frais",
     "payroll": "Salaires",
     "users": "Utilisateurs",
@@ -2287,7 +2288,9 @@
       },
       "edit": "amendement",
       "delete": "supprimer",
-      "close": "clôture"
+      "close": "clôture",
+      "system": "Système",
+      "user": "Utilisateur"
     },
     "editMovementModal": {
       "title": "Modifier le mouvement des stocks",
@@ -2349,7 +2352,14 @@
       "enterAllFields": "Veuillez saisir tous les champs obligatoires",
       "productExists": "Le produit existe déjà",
       "selectProduct": "Veuillez sélectionner le produit et saisir la quantité et le prix",
-      "fillAllFields": "Veuillez remplir tous les champs obligatoires"
+      "fillAllFields": "Veuillez remplir tous les champs obligatoires",
+      "noProductSelected": "Aucun produit sélectionné pour la modification",
+      "notLinkedToWarehouse": "Le produit n'est pas lié à l'entrepôt. Veuillez d'abord sélectionner un produit d'entrepôt.",
+      "transferFailed": "Échec du transfert depuis l'entrepôt principal",
+      "returnFailed": "Échec du retour à l'entrepôt principal",
+      "thisProduct": "Ce produit",
+      "cannotDeleteInUse": "Impossible de supprimer {{name}} car il est utilisé dans les éléments suivants :\n{{list}}\n\nVeuillez d'abord retirer le produit de ces éléments.",
+      "cannotDeleteSummary": "Impossible de supprimer {{name}} car il est utilisé dans {{count}} éléments"
     },
     "notifications": {
       "quantityAdded": "Quantité ajoutée avec succès !",
@@ -2369,7 +2379,31 @@
       "movementDeleteError": "Une erreur s'est produite lors de la suppression de l'animation",
       "movementsLoadError": "Échec de la récupération du journal des transactions",
       "confirmDeleteMovement": "Êtes-vous sûr de vouloir supprimer cette animation ? L'inventaire sera recalculé automatiquement."
+    },
+    "transferModal": {
+      "title": "Transfert depuis l'Entrepôt Principal",
+      "warehouseProduct": "Produit de l'Entrepôt",
+      "selectPlaceholder": "Sélectionner depuis l'Entrepôt Principal",
+      "available": "Disponible: {{stock}} {{unit}}",
+      "currentStock": "Stock actuel: {{stock}} {{unit}}",
+      "transfer": "Transférer",
+      "transferring": "Transfert en cours..."
+    },
+    "returnModal": {
+      "title": "Retour à l'Entrepôt Principal",
+      "warehouseProduct": "Produit de l'Entrepôt",
+      "selectPlaceholder": "Sélectionner depuis l'Entrepôt Principal",
+      "available": "Disponible: {{stock}} {{unit}}",
+      "currentStock": "Stock actuel: {{stock}} {{unit}}",
+      "returnToWarehouse": "Retourner",
+      "returning": "Retour en cours..."
     }
+  },
+  "warehouse": {
+    "title": "Entrepôt Principal",
+    "subtitle": "Gérer l'entrepôt principal de l'entreprise",
+    "transferIn": "Retour de l'Inventaire",
+    "transferOut": "Transfert vers l'Inventaire"
   },
   "costs": {
     "title": "Gestion des coûts",
@@ -3813,10 +3847,14 @@
       "updated": "Le produit a été mis à jour avec succès",
       "stockAdded": "{{quantity}} unités de l'inventaire ont été ajoutées avec succès",
       "stockSubtracted": "{{quantity}} unités ont été déduites du stock avec succès",
-      "stockUpdated": "{{quantity}} unité d'inventaire a été mise à jour avec succès",
+      "stockUpdated": "Stock mis à jour avec succès",
       "addError": "Échec de l'ajout du produit",
       "updateError": "Échec de la mise à jour du produit",
-      "stockError": "Échec de la mise à jour de l'inventaire"
+      "stockError": "Échec de la mise à jour de l'inventaire",
+      "transferred": "Transféré à l'inventaire de travail avec succès",
+      "transferError": "Échec du transfert à l'inventaire de travail",
+      "returned": "Retourné à l'entrepôt principal avec succès",
+      "returnError": "Échec du retour à l'entrepôt principal"
     },
     "bill": {
       "created": "La facture a été créée avec succès",

@@ -85,6 +85,7 @@
     "consumptionReport": "Consumption report",
     "soldItems": "Sold Items",
     "inventory": "Inventory",
+    "warehouse": "Main Warehouse",
     "costs": "Costs",
     "payroll": "Salaries",
     "users": "Users",
@@ -2287,7 +2288,9 @@
       },
       "edit": "amendment",
       "delete": "delete",
-      "close": "closing"
+      "close": "closing",
+      "system": "System",
+      "user": "User"
     },
     "editMovementModal": {
       "title": "Modify inventory movement",
@@ -2349,7 +2352,14 @@
       "enterAllFields": "Please enter all required fields",
       "productExists": "The product already exists",
       "selectProduct": "Please select the product and enter the quantity and price",
-      "fillAllFields": "Please fill out all required fields"
+      "fillAllFields": "Please fill out all required fields",
+      "noProductSelected": "No product selected for editing",
+      "notLinkedToWarehouse": "Product is not linked to warehouse. Please select a warehouse product first.",
+      "transferFailed": "Transfer from main warehouse failed",
+      "returnFailed": "Return to main warehouse failed",
+      "thisProduct": "This product",
+      "cannotDeleteInUse": "Cannot delete {{name}} because it is used in the following items:\n{{list}}\n\nPlease remove the product from these items first.",
+      "cannotDeleteSummary": "Cannot delete {{name}} because it is used in {{count}} items"
     },
     "notifications": {
       "quantityAdded": "Quantity added successfully!",
@@ -2369,7 +2379,31 @@
       "movementDeleteError": "An error occurred while deleting the animation",
       "movementsLoadError": "Failed to fetch transaction log",
       "confirmDeleteMovement": "Are you sure you want to delete this animation? "
+    },
+    "transferModal": {
+      "title": "Transfer from Main Warehouse",
+      "warehouseProduct": "Warehouse Product",
+      "selectPlaceholder": "Select from Main Warehouse",
+      "available": "Available: {{stock}} {{unit}}",
+      "currentStock": "Current Stock: {{stock}} {{unit}}",
+      "transfer": "Transfer",
+      "transferring": "Transferring..."
+    },
+    "returnModal": {
+      "title": "Return to Main Warehouse",
+      "warehouseProduct": "Warehouse Product",
+      "selectPlaceholder": "Select from Main Warehouse",
+      "available": "Available: {{stock}} {{unit}}",
+      "currentStock": "Current Stock: {{stock}} {{unit}}",
+      "returnToWarehouse": "Return",
+      "returning": "Returning..."
     }
+  },
+  "warehouse": {
+    "title": "Main Warehouse",
+    "subtitle": "Manage the company's main warehouse",
+    "transferIn": "Return from Inventory",
+    "transferOut": "Transfer to Inventory"
   },
   "costs": {
     "title": "Cost management",
@@ -3822,10 +3856,14 @@
       "updated": "The product has been updated successfully",
       "stockAdded": "{{quantity}} units from inventory have been added successfully",
       "stockSubtracted": "{{quantity}} units have been successfully deducted from stock",
-      "stockUpdated": "{{quantity}} unit of inventory has been updated successfully",
+      "stockUpdated": "Stock updated successfully",
       "addError": "Failed to add product",
       "updateError": "Failed to update the product",
-      "stockError": "Failed to update inventory"
+      "stockError": "Failed to update inventory",
+      "transferred": "Transferred to working inventory successfully",
+      "transferError": "Failed to transfer to working inventory",
+      "returned": "Returned to main warehouse successfully",
+      "returnError": "Failed to return to main warehouse"
     },
     "bill": {
       "created": "The invoice was created successfully",

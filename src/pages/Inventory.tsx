@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2 } from 'lucide-react';
+import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2, ArrowLeftFromLine, ArrowRightFromLine } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { InventoryItem, MenuItem } from '../services/api';
+import { InventoryItem, MenuItem, WarehouseItem } from '../services/api';
 type IngredientItem = string | { _id?: string; id?: string };
 type Ingredient = { item: IngredientItem; quantity: number; unit: string; };
 import { api } from '../services/api';
@@ -52,6 +52,10 @@ const Inventory = () => {
     updateStock,
     createInventoryItem,
     updateInventoryItem,
+    warehouseItems,
+    fetchWarehouseItems,
+    transferToInventory,
+    returnToWarehouse,
     user,
   } = useApp();
 
@@ -93,6 +97,24 @@ const Inventory = () => {
     reason: '',
     type: 'out' as 'out' | 'adjustment',
     date: getCairoDateTime(timezone),
+  });
+
+  // Warehouse transfer/return states
+  const [showTransferFromWarehouseModal, setShowTransferFromWarehouseModal] = useState(false);
+  const [showReturnToWarehouseModal, setShowReturnToWarehouseModal] = useState(false);
+  const [transferForm, setTransferForm] = useState({
+    warehouseItemId: '',
+    quantity: '',
+    price: '',
+    date: getCairoDateTime(timezone),
+    reason: '',
+  });
+  const [returnForm, setReturnForm] = useState({
+    warehouseItemId: '',
+    quantity: '',
+    price: '',
+    date: getCairoDateTime(timezone),
+    reason: '',
   });
 
   // Search and filter states
@@ -252,6 +274,7 @@ const Inventory = () => {
   // جلب بيانات المخزون والفئات عند تحميل الصفحة
   useEffect(() => {
     fetchInventoryItems();
+    fetchWarehouseItems();
     fetchMenuCategories();
     // eslint-disable-next-line
   }, []);
@@ -335,6 +358,8 @@ const Inventory = () => {
         setShowDeleteModal(false);
         setShowMovementsModal(false);
         setShowDeductModal(false);
+        setShowTransferFromWarehouseModal(false);
+        setShowReturnToWarehouseModal(false);
         setShowProductDropdown(false);
         setShowEditMovementModal(false);
         setShowDeleteMovementModal(false);
@@ -450,6 +475,15 @@ const Inventory = () => {
       'Initial stock': t('inventory.addModal.initialStock'),
       'Achat de nouveau stock': t('inventory.addModal.reason'),
       'Stock initial': t('inventory.addModal.initialStock'),
+      // Warehouse transfer reasons (always stored as Arabic in DB)
+      'تحويل من المخزن الرئيسي': t('inventory.transferModal.title'),
+      'نقل إلى المخزون الحالي': t('inventory.transferModal.title'),
+      'إرجاع إلى المخزن الرئيسي': t('inventory.returnModal.title'),
+      'إرجاع من المخزون الحالي': t('inventory.returnModal.title'),
+      'Transfer from Main Warehouse': t('inventory.transferModal.title'),
+      'Return to Main Warehouse': t('inventory.returnModal.title'),
+      'Transfert depuis l\'Entrepôt Principal': t('inventory.transferModal.title'),
+      'Retour à l\'Entrepôt Principal': t('inventory.returnModal.title'),
     };
     
     return reasonMap[reason] || reason;
@@ -719,11 +753,131 @@ const Inventory = () => {
         });
         setError('');
       } else {
-        setError('حدث خطأ أثناء العملية');
+        setError(t('inventory.notifications.stockUpdateError'));
       }
     } catch (err) {
       const error = err as Error;
-      setError(error.message || 'حدث خطأ أثناء العملية');
+      setError(error.message || t('inventory.notifications.stockUpdateError'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // فتح نافذة تحويل من المخزن الرئيسي
+  const openTransferFromWarehouseModal = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setError('');
+    // Find a warehouse item with the same name
+    const matchingWarehouse = warehouseItems.find(w =>
+      w.name.toLowerCase() === item.name.toLowerCase()
+    );
+    setTransferForm({
+      warehouseItemId: matchingWarehouse?.id || matchingWarehouse?._id || '',
+      quantity: '',
+      price: '',
+      date: getCairoDateTime(timezone),
+      reason: t('inventory.transferModal.title'),
+    });
+    fetchWarehouseItems(); // Refresh warehouse items list
+    setShowTransferFromWarehouseModal(true);
+  };
+
+  // تأكيد التحويل من المخزن الرئيسي
+  const handleTransferFromWarehouse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItem) return;
+    setLoading(true);
+    setError('');
+    try {
+      const quantity = Number(transferForm.quantity);
+      if (!quantity || quantity <= 0) {
+        setError(t('inventory.messages.enterValidQuantity'));
+        setLoading(false);
+        return;
+      }
+      const res = await transferToInventory({
+        warehouseItemId: transferForm.warehouseItemId,
+        inventoryItemId: selectedItem.id || selectedItem._id,
+        quantity,
+        price: transferForm.price ? Number(transferForm.price) : undefined,
+        date: transferForm.date,
+        reason: transferForm.reason,
+      });
+      if (res) {
+        toast.success(t('toast.inventory.transferred'));
+        setShowTransferFromWarehouseModal(false);
+        setTransferForm({ warehouseItemId: '', quantity: '', price: '', date: getCairoDateTime(timezone), reason: '' });
+        setError('');
+      } else {
+        setError(t('inventory.messages.transferFailed'));
+      }
+    } catch (err) {
+      const error = err as Error;
+      setError(error.message || t('inventory.messages.transferFailed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // فتح نافذة إرجاع للمخزن الرئيسي
+  const openReturnToWarehouseModal = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setError('');
+    // Find or use warehouseItem reference
+    const warehouseId = item.warehouseItem || '';
+    setReturnForm({
+      warehouseItemId: warehouseId,
+      quantity: '',
+      price: '',
+      date: getCairoDateTime(timezone),
+      reason: t('inventory.returnModal.title'),
+    });
+    fetchWarehouseItems();
+    setShowReturnToWarehouseModal(true);
+  };
+
+  // تأكيد الإرجاع للمخزن الرئيسي
+  const handleReturnToWarehouse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItem) return;
+    setLoading(true);
+    setError('');
+    try {
+      const quantity = Number(returnForm.quantity);
+      if (!quantity || quantity <= 0) {
+        setError(t('inventory.messages.enterValidQuantity'));
+        setLoading(false);
+        return;
+      }
+      if (quantity > selectedItem.currentStock) {
+        setError(t('inventory.messages.quantityExceedsStock', { stock: selectedItem.currentStock, unit: selectedItem.unit }));
+        setLoading(false);
+        return;
+      }
+      if (!returnForm.warehouseItemId) {
+        setError(t('inventory.messages.notLinkedToWarehouse'));
+        setLoading(false);
+        return;
+      }
+      const res = await returnToWarehouse({
+        inventoryItemId: selectedItem.id || selectedItem._id,
+        warehouseItemId: returnForm.warehouseItemId,
+        quantity,
+        price: returnForm.price ? Number(returnForm.price) : undefined,
+        date: returnForm.date,
+        reason: returnForm.reason,
+      });
+      if (res) {
+        toast.success(t('toast.inventory.returned'));
+        setShowReturnToWarehouseModal(false);
+        setReturnForm({ warehouseItemId: '', quantity: '', price: '', date: getCairoDateTime(timezone), reason: '' });
+        setError('');
+      } else {
+        setError(t('inventory.messages.returnFailed'));
+      }
+    } catch (err) {
+      const error = err as Error;
+      setError(error.message || t('inventory.messages.returnFailed'));
     } finally {
       setLoading(false);
     }
@@ -807,7 +961,7 @@ const Inventory = () => {
           console.error('Error refreshing data:', err);
         });
       } else {
-        setError('حدث خطأ أثناء تحديث الحركة');
+        setError(t('inventory.notifications.movementUpdateError'));
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || err.message || t('inventory.notifications.movementUpdateError');
@@ -954,7 +1108,7 @@ const Inventory = () => {
         const res = await updateStock(addForm.productId, {
           type: 'in',
           quantity: Number(addForm.quantity),
-          reason: 'شراء مخزون جديد',
+          reason: t('inventory.addModal.reason'),
           price: Number(addForm.price),
           supplier: addForm.supplier,
           date: addForm.date,
@@ -989,10 +1143,9 @@ const Inventory = () => {
           setError('');
           setSuccess('');
         } else {
-          setError('حدث خطأ أثناء الإضافة');
+          setError(t('inventory.notifications.quantityAddError'));
         }
       } else {
-        // إضافة منتج جديد بالكامل
         if (!addForm.name || !addForm.category || !addForm.quantity || !addForm.price || !addForm.unit || !addForm.minStock) {
           setError(t('inventory.messages.enterAllFields'));
           setLoading(false);
@@ -1038,15 +1191,15 @@ const Inventory = () => {
           setError('');
           setSuccess('');
         } else {
-          setError('حدث خطأ أثناء إضافة المنتج');
+          setError(t('inventory.notifications.productAddError'));
         }
       }
     } catch (err) {
       const error = err as Error;
-      if (error?.message?.includes('موجود بالفعل')) {
+      if (error?.message?.includes('موجود بالفعل') || error?.message?.includes('already exists') || error?.message?.includes('existe déjà')) {
         setError(error.message);
       } else {
-        setError('حدث خطأ أثناء العملية');
+        setError(t('inventory.notifications.stockUpdateError'));
       }
     }
     setLoading(false);
@@ -1060,8 +1213,9 @@ const Inventory = () => {
     setSuccess('');
     try {
       if (!selectedItem) {
-        setError('لم يتم تحديد منتج للتعديل');
-        showAlertMessage('لم يتم تحديد منتج للتعديل', 'error');
+        const msg = t('inventory.messages.noProductSelected');
+        setError(msg);
+        showAlertMessage(msg, 'error');
         setLoading(false);
         return;
       }
@@ -1109,14 +1263,14 @@ const Inventory = () => {
         setError('');
         setSuccess('');
       } else {
-        setError('حدث خطأ أثناء التعديل');
+        setError(t('inventory.notifications.productUpdateError'));
       }
     } catch (err) {
       const error = err as Error;
-      if (error?.message?.includes('موجود بالفعل')) {
+      if (error?.message?.includes('موجود بالفعل') || error?.message?.includes('already exists') || error?.message?.includes('existe déjà')) {
         setError(error.message);
       } else {
-        setError('حدث خطأ أثناء العملية');
+        setError(t('inventory.notifications.stockUpdateError'));
       }
     } finally {
       setLoading(false);
@@ -1133,7 +1287,7 @@ const Inventory = () => {
 
       if (response.success && response.data) {
         // البحث في كل عنصر في القائمة
-        const itemName = inventoryItems.find(item => item.id === itemId || item._id === itemId)?.name || 'هذا المنتج';
+        const itemName = inventoryItems.find(item => item.id === itemId || item._id === itemId)?.name || t('inventory.messages.thisProduct');
         const menuItems = response.data.filter((menuItem: MenuItem) => {
           // التحقق من وجود مكونات للعنصر
           if (!menuItem.ingredients || !Array.isArray(menuItem.ingredients)) {
@@ -1156,9 +1310,11 @@ const Inventory = () => {
           itemName
         };
       }
-      return { isUsed: false, itemName: 'هذا المنتج' };
+      const fallback = t('inventory.messages.thisProduct');
+      return { isUsed: false, itemName: fallback };
     } catch (err) {
-      return { isUsed: true, itemName: 'هذا المنتج' }; // في حالة الخطأ، نمنع الحذف كإجراء احترازي
+      const fallback = t('inventory.messages.thisProduct');
+      return { isUsed: true, itemName: fallback };
     }
   };
 
@@ -1170,12 +1326,10 @@ const Inventory = () => {
     const { isUsed, menuItems, itemName } = await isItemUsedInMenu(deleteTarget.id || deleteTarget._id);
     if (isUsed && menuItems && menuItems.length > 0) {
       const menuItemsList = menuItems.map(item => `- ${item.name}`).join('\n');
-      const errorMsg = `
-        لا يمكن حذف ${itemName} لأنه مستخدم في الأصناف التالية:\n\n${menuItemsList}
-        \n\nالرجاء إزالة المنتج من هذه الأصناف أولاً.`;
+      const errorMsg = t('inventory.messages.cannotDeleteInUse', { name: itemName, list: menuItemsList });
 
       setError(errorMsg);
-      showAlertMessage(`لا يمكن حذف ${itemName} لأنه مستخدم في ${menuItems.length} صنف في القائمة`, 'error');
+      showAlertMessage(t('inventory.messages.cannotDeleteSummary', { name: itemName, count: menuItems.length }), 'error');
       setLoading(false);
       setShowDeleteModal(false);
       return;
@@ -1196,8 +1350,9 @@ const Inventory = () => {
         showAlertMessage(errorMsg, 'error');
       }
     } catch (err) {
-      setError('حدث خطأ أثناء حذف المنتج');
-      showAlertMessage('حدث خطأ أثناء حذف المنتج', 'error');
+      const errMsg = t('inventory.notifications.productDeleteError');
+      setError(errMsg);
+      showAlertMessage(errMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -1639,6 +1794,24 @@ const Inventory = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{item.supplier}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 space-x-reverse">
+                      <PermissionGuard requiredPermissions={['canAddStock', 'inventory', 'all']}>
+                        <button 
+                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center" 
+                          onClick={() => openTransferFromWarehouseModal(item)}
+                          title={t('inventory.transferModal.title')}
+                        >
+                          <ArrowRightFromLine className="h-4 w-4" />
+                        </button>
+                      </PermissionGuard>
+                      <PermissionGuard requiredPermissions={['canRemoveStock', 'inventory', 'all']}>
+                        <button 
+                          className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 inline-flex items-center" 
+                          onClick={() => openReturnToWarehouseModal(item)}
+                          title={t('inventory.returnModal.title')}
+                        >
+                          <ArrowLeftFromLine className="h-4 w-4" />
+                        </button>
+                      </PermissionGuard>
                       <PermissionGuard requiredPermissions={['canViewStockMovements', 'canViewInventory', 'all']}>
                         <button 
                           className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center" 
@@ -2401,6 +2574,136 @@ const Inventory = () => {
                         {deductForm.type === 'out' ? t('inventory.deductModal.deductQuantity') : t('inventory.deductModal.adjustStock')}
                       </>
                     )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal تحويل من المخزن الرئيسي */}
+      {showTransferFromWarehouseModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowTransferFromWarehouseModal(false); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('inventory.transferModal.title')}</h3>
+              <form onSubmit={handleTransferFromWarehouse} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.table.product')}</label>
+                  <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{selectedItem.name}</p>
+                  <p className="text-xs text-gray-500">{t('inventory.transferModal.currentStock', { stock: selectedItem.currentStock, unit: selectedItem.unit })}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.transferModal.warehouseProduct')}</label>
+                  <select value={transferForm.warehouseItemId}
+                    onChange={e => setTransferForm({...transferForm, warehouseItemId: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
+                    <option value="">{t('inventory.transferModal.selectPlaceholder')}</option>
+                    {warehouseItems.filter(w => w.currentStock > 0).map(w => (
+                      <option key={w.id || w._id} value={w.id || w._id}>
+                        {w.name} ({t('inventory.transferModal.available', { stock: w.currentStock, unit: w.unit })})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.quantity')}</label>
+                  <input type="number" value={transferForm.quantity}
+                    onChange={e => setTransferForm({...transferForm, quantity: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.price')} ({t('common.optional')})</label>
+                  <input type="number" value={transferForm.price}
+                    onChange={e => setTransferForm({...transferForm, price: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.reason')}</label>
+                  <input type="text" value={transferForm.reason}
+                    onChange={e => setTransferForm({...transferForm, reason: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
+                </div>
+
+                {error && <p className="text-red-600 text-sm">{error}</p>}
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setShowTransferFromWarehouseModal(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">{t('common.cancel')}</button>
+                  <button type="submit" disabled={loading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    {loading ? t('inventory.transferModal.transferring') : t('inventory.transferModal.transfer')}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal إرجاع للمخزن الرئيسي */}
+      {showReturnToWarehouseModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowReturnToWarehouseModal(false); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('inventory.returnModal.title')}</h3>
+              <form onSubmit={handleReturnToWarehouse} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.table.product')}</label>
+                  <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{selectedItem.name}</p>
+                  <p className="text-xs text-gray-500">{t('inventory.returnModal.currentStock', { stock: selectedItem.currentStock, unit: selectedItem.unit })}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.returnModal.warehouseProduct')}</label>
+                  <select value={returnForm.warehouseItemId}
+                    onChange={e => setReturnForm({...returnForm, warehouseItemId: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required>
+                    <option value="">{t('inventory.returnModal.selectPlaceholder')}</option>
+                    {warehouseItems.map(w => (
+                      <option key={w.id || w._id} value={w.id || w._id}>
+                        {w.name} ({t('inventory.returnModal.available', { stock: w.currentStock, unit: w.unit })})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.quantity')}</label>
+                  <input type="number" value={returnForm.quantity}
+                    onChange={e => setReturnForm({...returnForm, quantity: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" required />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.price')} ({t('common.optional')})</label>
+                  <input type="number" value={returnForm.price}
+                    onChange={e => setReturnForm({...returnForm, price: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.deductModal.reason')}</label>
+                  <input type="text" value={returnForm.reason}
+                    onChange={e => setReturnForm({...returnForm, reason: e.target.value})}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
+                </div>
+
+                {error && <p className="text-red-600 text-sm">{error}</p>}
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setShowReturnToWarehouseModal(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">{t('common.cancel')}</button>
+                  <button type="submit" disabled={loading}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                    {loading ? t('inventory.returnModal.returning') : t('inventory.returnModal.returnToWarehouse')}
                   </button>
                 </div>
               </form>

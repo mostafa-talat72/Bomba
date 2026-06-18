@@ -59,6 +59,7 @@ import syncRoutes from "./routes/syncRoutes.js";
 import organizationRoutes from "./routes/organizationRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
 import payrollRoutes from "./routes/payroll.js";
+import warehouseRoutes from "./routes/warehouseRoutes.js";
 
 // Environment variables already loaded at the top of the file
 
@@ -630,6 +631,7 @@ app.use("/api/performance", performanceRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/organization", organizationRoutes);
 app.use("/api/payroll", payrollRoutes);
+app.use("/api/warehouse", warehouseRoutes);
 app.use("/public", publicRoutes);
 
 // REMOVED: Public bill viewing route for security reasons

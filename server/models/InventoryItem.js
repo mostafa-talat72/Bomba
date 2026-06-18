@@ -139,6 +139,11 @@ const inventoryItemSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+        warehouseItem: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "WarehouseItem",
+            default: null,
+        },
         organization: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Organization",
