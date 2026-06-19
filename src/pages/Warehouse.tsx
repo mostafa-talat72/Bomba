@@ -42,7 +42,7 @@ const Warehouse = () => {
 
   const hasPermission = (permission: string) => {
     if (!user) return false;
-    return user.permissions.includes('all') || user.permissions.includes('inventory') || user.permissions.includes(permission);
+    return user.permissions.includes('all') || user.permissions.includes('warehouse') || user.permissions.includes(permission);
   };
 
   const getAntdLocale = () => {
@@ -601,7 +601,7 @@ const Warehouse = () => {
           </h1>
           <p className={`text-gray-600 dark:text-gray-300 ${isRTL ? 'mr-4' : 'ml-4'} xs:mr-0 xs:w-full xs:text-center`}>{t('warehouse.subtitle')}</p>
         </div>
-        <PermissionGuard requiredPermissions={['canAddInventoryItem', 'canAddStock', 'all']}>
+        <PermissionGuard requiredPermissions={['canAddWarehouseItem', 'all']}>
           <button onClick={() => openAddModal()}
             className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors duration-200 xs:w-full xs:justify-center xs:mt-2">
             <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
@@ -827,28 +827,28 @@ const Warehouse = () => {
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.supplier || <span className="text-gray-400">—</span>}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isRTL ? 'text-right' : 'text-left'}`}>
                       <div className="flex items-center gap-1">
-                        <PermissionGuard requiredPermissions={['canViewStockMovements', 'canViewInventory', 'all']}>
+                        <PermissionGuard requiredPermissions={['canViewWarehouseMovements', 'warehouse', 'all']}>
                           <button onClick={() => openMovementsModal(item)}
                             className="p-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
                             title={t('inventory.table.movementsHistory')}>
                             <History className="h-4 w-4" />
                           </button>
                         </PermissionGuard>
-                        <PermissionGuard requiredPermissions={['canAddStock', 'canRemoveStock', 'canAdjustStock', 'all']}>
+                        <PermissionGuard requiredPermissions={['canAdjustWarehouseStock', 'canAddWarehouseItem', 'all']}>
                           <button onClick={() => openDeductModal(item)}
                             className="p-1.5 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors"
                             title={t('inventory.table.deductQuantity')}>
                             <Minus className="h-4 w-4" />
                           </button>
                         </PermissionGuard>
-                        <PermissionGuard requiredPermissions={['canEditInventoryItem', 'all']}>
+                        <PermissionGuard requiredPermissions={['canEditWarehouseItem', 'all']}>
                           <button onClick={() => openEditModal(item)}
                             className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                             title={t('inventory.table.edit')}>
                             <Edit className="h-4 w-4" />
                           </button>
                         </PermissionGuard>
-                        <PermissionGuard requiredPermissions={['canDeleteInventoryItem', 'all']}>
+                        <PermissionGuard requiredPermissions={['canDeleteWarehouseItem', 'all']}>
                           <button onClick={() => { setDeleteTarget(item); setShowDeleteModal(true); }}
                             className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                             title={t('inventory.table.delete')}>
@@ -1534,14 +1534,18 @@ const Warehouse = () => {
                               <div className="flex items-center gap-2">
                                 {movement.type !== 'transfer_out' && movement.type !== 'transfer_in' && (
                                   <>
-                                    <button onClick={() => openEditMovementModal(movement)}
-                                      className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.edit')}>
-                                      <Edit2 className="h-4 w-4" />
-                                    </button>
-                                    <button onClick={() => handleDeleteMovement(movement._id)}
-                                      className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.delete')}>
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    <PermissionGuard requiredPermissions={['canEditWarehouseMovement', 'all']}>
+                                      <button onClick={() => openEditMovementModal(movement)}
+                                        className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.edit')}>
+                                        <Edit2 className="h-4 w-4" />
+                                      </button>
+                                    </PermissionGuard>
+                                    <PermissionGuard requiredPermissions={['canDeleteWarehouseMovement', 'all']}>
+                                      <button onClick={() => handleDeleteMovement(movement._id)}
+                                        className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title={t('inventory.movementsModal.delete')}>
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </PermissionGuard>
                                   </>
                                 )}
                                 {(movement.type === 'transfer_out' || movement.type === 'transfer_in') && (

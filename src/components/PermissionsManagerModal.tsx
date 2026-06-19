@@ -91,7 +91,7 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
       [t('users.permissionsModal.systemManagement')]: ['all', 'users', 'settings'],
       [t('users.permissionsModal.reportsAndStats')]: ['dashboard', 'reports', 'consumption'],
       [t('users.permissionsModal.gaming')]: ['playstation', 'computer'],
-      [t('users.permissionsModal.restaurantAndCafe')]: ['cafe', 'menu', 'inventory'],
+      [t('users.permissionsModal.restaurantAndCafe')]: ['cafe', 'menu', 'inventory', 'warehouse', 'canAddWarehouseItem', 'canEditWarehouseItem', 'canDeleteWarehouseItem', 'canViewWarehouseMovements', 'canAdjustWarehouseStock', 'canEditWarehouseMovement', 'canDeleteWarehouseMovement', 'canTransferToInventory', 'canReturnToWarehouse'],
       [t('users.permissionsModal.financial')]: ['billing', 'costs'],
     };
 

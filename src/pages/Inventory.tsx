@@ -1693,7 +1693,7 @@ const Inventory = () => {
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.supplier || <span className="text-gray-400">—</span>}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isRTL ? 'text-right' : 'text-left'}`}>
                       <div className="flex items-center gap-1">
-                      <PermissionGuard requiredPermissions={['canAddStock', 'inventory', 'all']}>
+                      <PermissionGuard requiredPermissions={['canTransferToInventory', 'all']}>
                         <button 
                           className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" 
                           onClick={() => openTransferFromWarehouseModal(item)}
@@ -1702,7 +1702,7 @@ const Inventory = () => {
                           <ArrowRightFromLine className="h-4 w-4" />
                         </button>
                       </PermissionGuard>
-                      <PermissionGuard requiredPermissions={['canRemoveStock', 'inventory', 'all']}>
+                      <PermissionGuard requiredPermissions={['canReturnToWarehouse', 'all']}>
                         <button 
                           className="p-1.5 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors" 
                           onClick={() => openReturnToWarehouseModal(item)}

@@ -77,6 +77,7 @@ const Users = () => {
     { id: 'consumption', name: t('users.permissions.consumption'), description: t('users.permissions.consumptionDesc') },
     { id: 'soldItems', name: t('users.permissions.soldItems'), description: t('users.permissions.soldItemsDesc') },
     { id: 'inventory', name: t('users.permissions.inventory'), description: t('users.permissions.inventoryDesc') },
+    { id: 'warehouse', name: t('users.permissions.warehouse'), description: t('users.permissions.warehouseDesc') },
     // Inventory detailed permissions
     { id: 'canViewInventory', name: 'عرض المخزون', description: 'السماح بعرض قائمة المخزون والمنتجات' },
     { id: 'canAddInventoryItem', name: 'إضافة منتج للمخزون', description: 'السماح بإضافة منتجات جديدة للمخزون' },
@@ -88,6 +89,16 @@ const Users = () => {
     { id: 'canViewStockMovements', name: 'عرض حركات المخزون', description: 'السماح بعرض سجل حركات المخزون' },
     { id: 'canEditStockMovement', name: 'تعديل حركة المخزون', description: 'السماح بتعديل حركات المخزون' },
     { id: 'canDeleteStockMovement', name: 'حذف حركة المخزون', description: 'السماح بحذف حركات المخزون' },
+    // Warehouse detailed permissions
+    { id: 'canTransferToInventory', name: t('users.permissions.canTransferToInventory'), description: t('users.permissions.canTransferToInventoryDesc') },
+    { id: 'canReturnToWarehouse', name: t('users.permissions.canReturnToWarehouse'), description: t('users.permissions.canReturnToWarehouseDesc') },
+    { id: 'canAddWarehouseItem', name: t('users.permissions.canAddWarehouseItem'), description: t('users.permissions.canAddWarehouseItemDesc') },
+    { id: 'canEditWarehouseItem', name: t('users.permissions.canEditWarehouseItem'), description: t('users.permissions.canEditWarehouseItemDesc') },
+    { id: 'canDeleteWarehouseItem', name: t('users.permissions.canDeleteWarehouseItem'), description: t('users.permissions.canDeleteWarehouseItemDesc') },
+    { id: 'canViewWarehouseMovements', name: t('users.permissions.canViewWarehouseMovements'), description: t('users.permissions.canViewWarehouseMovementsDesc') },
+    { id: 'canAdjustWarehouseStock', name: t('users.permissions.canAdjustWarehouseStock'), description: t('users.permissions.canAdjustWarehouseStockDesc') },
+    { id: 'canEditWarehouseMovement', name: t('users.permissions.canEditWarehouseMovement'), description: t('users.permissions.canEditWarehouseMovementDesc') },
+    { id: 'canDeleteWarehouseMovement', name: t('users.permissions.canDeleteWarehouseMovement'), description: t('users.permissions.canDeleteWarehouseMovementDesc') },
     { id: 'costs', name: t('users.permissions.costs'), description: t('users.permissions.costsDesc') },
     { id: 'users', name: t('users.permissions.users'), description: t('users.permissions.usersDesc') },
     { id: 'settings', name: t('users.permissions.settings'), description: t('users.permissions.settingsDesc') },
@@ -120,10 +131,11 @@ const Users = () => {
       consumption: ['consumption'],
       soldItems: ['soldItems'],
       inventory: ['inventory'],
+      warehouse: ['warehouse'],
       costs: ['costs'],
       users: ['users'],
       settings: ['settings'],
-      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'soldItems', 'inventory', 'costs', 'users', 'settings']
+      notifications: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'consumption', 'soldItems', 'inventory', 'warehouse', 'costs', 'users', 'settings']
     };
 
     const accessiblePages = [];
@@ -449,7 +461,7 @@ const Users = () => {
 
   const updateUserPermissions = async (userId: string, permissions: string[]) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/${userId}/permissions`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}/permissions`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

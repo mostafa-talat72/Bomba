@@ -165,12 +165,12 @@ const Layout = () => {
     { name: t('nav.consumptionReport'), href: '/consumption-report', icon: Package2, permissions: ['reports'] },
     { name: t('nav.soldItems'), href: '/sold-items', icon: ShoppingBag, permissions: ['reports'] },
     { name: t('nav.inventory'), href: '/inventory', icon: Package, permissions: ['inventory'] },
-    { name: t('nav.warehouse'), href: '/warehouse', icon: WarehouseIcon, permissions: ['inventory'] },
+    { name: t('nav.warehouse'), href: '/warehouse', icon: WarehouseIcon, permissions: ['warehouse'] },
     { name: t('nav.costs'), href: '/costs', icon: Wallet, permissions: ['costs'] },
     { name: t('nav.payroll'), href: '/payroll', icon: DollarSign, permissions: ['users'] },
     { name: t('nav.users'), href: '/users', icon: Users, permissions: ['users'] },
-    { name: t('nav.notifications'), href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'], badge: unreadNotifications },
-    { name: t('nav.subscriptions'), href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings'] },
+    { name: t('nav.notifications'), href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings'], badge: unreadNotifications },
+    { name: t('nav.subscriptions'), href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings'] },
     { name: t('nav.settings'), href: '/settings', icon: Settings, permissions: ['settings'] },
   ];
 

@@ -21,31 +21,31 @@ router.use(protect);
 // Main CRUD
 router
     .route("/")
-    .get(authorize("canViewInventory", "inventory", "all"), getWarehouseItems)
-    .post(authorize("canAddInventoryItem", "inventory", "all"), createWarehouseItem);
+    .get(authorize("warehouse", "all"), getWarehouseItems)
+    .post(authorize("canAddWarehouseItem", "all"), createWarehouseItem);
 
 // Single item
 router
     .route("/:id")
-    .get(authorize("canViewInventory", "inventory", "all"), getWarehouseItem)
-    .put(authorize("canEditInventoryItem", "inventory", "all"), updateWarehouseItem)
-    .delete(authorize("canDeleteInventoryItem", "inventory", "all"), deleteWarehouseItem);
+    .get(authorize("warehouse", "all"), getWarehouseItem)
+    .put(authorize("canEditWarehouseItem", "all"), updateWarehouseItem)
+    .delete(authorize("canDeleteWarehouseItem", "all"), deleteWarehouseItem);
 
 // Stock operations
-router.put("/:id/stock", authorize("canAddStock", "inventory", "all"), updateWarehouseStock);
+router.put("/:id/stock", authorize("canAdjustWarehouseStock", "canAddWarehouseItem", "all"), updateWarehouseStock);
 
 // Movements
-router.get("/:id/movements", authorize("canViewStockMovements", "inventory", "all"), getWarehouseStockMovements);
+router.get("/:id/movements", authorize("canViewWarehouseMovements", "warehouse", "all"), getWarehouseStockMovements);
 
 router
     .route("/:id/movements/:movementId")
-    .put(authorize("canEditStockMovement", "inventory", "all"), updateWarehouseStockMovement)
-    .delete(authorize("canDeleteStockMovement", "inventory", "all"), deleteWarehouseStockMovement);
+    .put(authorize("canEditWarehouseMovement", "all"), updateWarehouseStockMovement)
+    .delete(authorize("canDeleteWarehouseMovement", "all"), deleteWarehouseStockMovement);
 
 // Transfer: Warehouse → Inventory
-router.post("/transfer-to-inventory", authorize("canAddStock", "inventory", "all"), transferToInventory);
+router.post("/transfer-to-inventory", authorize("canTransferToInventory", "all"), transferToInventory);
 
 // Return: Inventory → Warehouse
-router.post("/return-to-warehouse", authorize("canAddStock", "inventory", "all"), returnToWarehouse);
+router.post("/return-to-warehouse", authorize("canReturnToWarehouse", "all"), returnToWarehouse);
 
 export default router;

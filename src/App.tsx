@@ -71,6 +71,7 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
         { path: '/billing', permission: 'billing' },
         { path: '/reports', permission: 'reports' },
         { path: '/inventory', permission: 'inventory' },
+        { path: '/warehouse', permission: 'warehouse' },
         { path: '/costs', permission: 'costs' },
         { path: '/users', permission: 'users' },
         { path: '/settings', permission: 'settings' },
@@ -215,7 +216,7 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="warehouse" element={
-            <ProtectedRoute requiredPermissions={['inventory']}>
+            <ProtectedRoute requiredPermissions={['warehouse']}>
               <Warehouse />
             </ProtectedRoute>
           } />
@@ -245,7 +246,7 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="notifications" element={
-            <ProtectedRoute requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'costs', 'users', 'settings']}>
+            <ProtectedRoute requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings']}>
               <NotificationManagement />
             </ProtectedRoute>
           } />
