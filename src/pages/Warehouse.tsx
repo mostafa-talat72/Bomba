@@ -1600,8 +1600,10 @@ const Warehouse = () => {
                       ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 ring-1 ring-red-200 dark:ring-red-800'
                       : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 ring-1 ring-yellow-200 dark:ring-yellow-800'
                   }`}>
-                    {editingMovement.type === 'in' || editingMovement.type === 'transfer_in' ? t('inventory.movementsModal.types.in') :
-                     editingMovement.type === 'out' || editingMovement.type === 'transfer_out' ? t('inventory.movementsModal.types.out') :
+                    {editingMovement.type === 'transfer_in' ? t('warehouse.transferIn') :
+                     editingMovement.type === 'transfer_out' ? t('warehouse.transferOut') :
+                     editingMovement.type === 'in' ? t('inventory.movementsModal.types.in') :
+                     editingMovement.type === 'out' ? t('inventory.movementsModal.types.out') :
                      t('inventory.movementsModal.types.adjustment')}
                   </span>
                 </div>

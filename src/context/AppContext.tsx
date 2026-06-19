@@ -3,6 +3,8 @@ import api, { User, Session, Order, InventoryItem, WarehouseItem, Bill, Cost, De
 import { useNavigate } from 'react-router-dom';
 import { useSmartPolling } from '../hooks/useSmartPolling';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // ==================== دوال مساعدة للأرقام ====================
 
@@ -2028,37 +2030,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const showNotification = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info'): void => {
-    // Create a simple toast notification
-    const toast = document.createElement('div');
-    toast.className = `fixed bottom-4 right-4 z-50 p-4 rounded-lg text-white max-w-sm shadow-lg transition-all duration-300 ${
-      type === 'success' ? 'bg-green-500' :
-      type === 'error' ? 'bg-red-500' :
-      type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
-    }`;
-    toast.textContent = message;
-
-    // Add RTL support
-    toast.style.direction = 'rtl';
-    toast.style.textAlign = 'right';
-
-    document.body.appendChild(toast);
-
-    // Animate in
-    setTimeout(() => {
-      toast.style.transform = 'translateX(0)';
-      toast.style.opacity = '1';
-    }, 100);
-
-    setTimeout(() => {
-      // Animate out
-      toast.style.transform = 'translateX(100%)';
-      toast.style.opacity = '0';
-      setTimeout(() => {
-        if (document.body.contains(toast)) {
-          document.body.removeChild(toast);
-        }
-      }, 300);
-    }, 3000);
+    const options = {
+      autoClose: 3500,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      rtl: true,
+    };
+    switch (type) {
+      case 'success':
+        toast.success(message, options);
+        break;
+      case 'error':
+        toast.error(message, options);
+        break;
+      case 'warning':
+        toast.warning(message, options);
+        break;
+      case 'info':
+        toast.info(message, options);
+        break;
+    }
   };
 
   const getRecentActivity = async (limit?: number): Promise<any[]> => {

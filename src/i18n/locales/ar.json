@@ -3862,65 +3862,6 @@
       "created": "تم إنشاء طلب جديد: {{orderNumber}}",
       "updated": "تم تحديث الطلب بنجاح",
       "preparingUpdated": "تم تحديث حالة التجهيز بنجاح",
-      "statusUpdated": "تم تحديث حالة الطلب بنجاح",
-      "incompleteData": "بيانات الطلب غير مكتملة",
-      "incompleteItems": "بيانات العناصر غير مكتملة",
-      "invalidTable": "معرف الطاولة غير صحيح",
-      "insufficientStock": "المخزون غير كافي لتحديث الطلب",
-      "createError": "فشل في إنشاء الطلب",
-      "updateError": "فشل في تحديث الطلب",
-      "statusError": "فشل في تحديث حالة الطلب"
-    },
-    "inventory": {
-      "added": "تم إضافة المنتج بنجاح",
-      "updated": "تم تحديث المنتج بنجاح",
-      "stockUpdated": "تم تحديث المخزون بنجاح",
-      "addError": "فشل في إضافة المنتج",
-      "updateError": "فشل في تحديث المنتج",
-      "stockError": "فشل في تحديث المخزون",
-      "transferred": "تم النقل إلى المخزون الحالي بنجاح",
-      "transferError": "فشل في النقل إلى المخزون الحالي",
-      "returned": "تم الإرجاع إلى المخزن الرئيسي بنجاح",
-      "returnError": "فشل في الإرجاع إلى المخزن الرئيسي"
-    },
-    "bill": {
-      "created": "تم إنشاء الفاتورة بنجاح",
-      "updated": "تم تحديث الفاتورة بنجاح",
-      "cancelled": "تم إلغاء الفاتورة بنجاح",
-      "paymentAdded": "تم إضافة دفعة {{amount}} {{currency}} {{method}} بنجاح",
-      "partialPayment": "تم تسجيل الدفع الجزئي بنجاح",
-      "createError": "فشل في إنشاء الفاتورة",
-      "updateError": "فشل في تحديث الفاتورة",
-      "cancelError": "فشل في إلغاء الفاتورة",
-      "paymentError": "فشل في إضافة الدفعة",
-      "partialPaymentError": "فشل في تسجيل الدفع الجزئي"
-    },
-    "stockOperations": {
-      "add": "إضافة",
-      "subtract": "خصم",
-      "update": "تحديث"
-    },
-    "paymentMethods": {
-      "cash": "نقداً",
-      "card": "بطاقة",
-      "online": "إلكتروني"
-    }
-  },
-  "toast": {
-    "session": {
-      "started": "تم بدء جلسة جديدة على {{deviceName}}",
-      "startedWithBill": "تم بدء جلسة جديدة على {{deviceName}} - الفاتورة: {{billNumber}}",
-      "updated": "تم تحديث الجلسة بنجاح",
-      "ended": "تم إنهاء الجلسة على {{deviceName}} - إجمالي التكلفة: {{cost}}",
-      "endedSuccess": "تم إنهاء الجلسة على {{deviceName}} بنجاح",
-      "createError": "فشل في إنشاء الجلسة",
-      "updateError": "فشل في تحديث الجلسة",
-      "endError": "فشل في إنهاء الجلسة"
-    },
-    "order": {
-      "created": "تم إنشاء طلب جديد: {{orderNumber}}",
-      "updated": "تم تحديث الطلب بنجاح",
-      "preparingUpdated": "تم تحديث حالة التجهيز بنجاح",
       "statusPending": "تم تحديث حالة الطلب إلى: قيد الانتظار",
       "statusPreparing": "تم تحديث حالة الطلب إلى: قيد التجهيز",
       "statusReady": "تم تحديث حالة الطلب إلى: جاهز",
@@ -3943,7 +3884,11 @@
       "stockUpdated": "تم تحديث {{quantity}} وحدة من المخزون بنجاح",
       "addError": "فشل في إضافة المنتج",
       "updateError": "فشل في تحديث المنتج",
-      "stockError": "فشل في تحديث المخزون"
+      "stockError": "فشل في تحديث المخزون",
+      "transferred": "تم النقل إلى المخزون الحالي بنجاح",
+      "transferError": "فشل في النقل إلى المخزون الحالي",
+      "returned": "تم الإرجاع إلى المخزن الرئيسي بنجاح",
+      "returnError": "فشل في الإرجاع إلى المخزن الرئيسي"
     },
     "bill": {
       "created": "تم إنشاء الفاتورة بنجاح",

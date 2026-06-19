@@ -766,7 +766,6 @@ const Inventory = () => {
         reason: transferForm.reason,
       });
       if (res) {
-        toast.success(t('toast.inventory.transferred'));
         setShowTransferFromWarehouseModal(false);
         setTransferForm({ warehouseItemId: '', quantity: '', price: '', date: getCairoDateTime(timezone), reason: '' });
         setError('');
@@ -868,7 +867,6 @@ const Inventory = () => {
         reason: returnForm.reason,
       });
       if (res) {
-        toast.success(t('toast.inventory.returned'));
         setShowReturnToWarehouseModal(false);
         setReturnForm({ warehouseItemId: '', quantity: '', price: '', date: getCairoDateTime(timezone), reason: '' });
         setError('');
@@ -2743,9 +2741,9 @@ const Inventory = () => {
             </div>
             <div className="p-6 overflow-y-auto max-h-[70vh]">
               <div className={`mb-5 p-5 rounded-xl border ${
-                editingMovement.type === 'in'
+                editingMovement.type === 'in' || editingMovement.type === 'transfer_in'
                   ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/50'
-                  : editingMovement.type === 'out'
+                  : editingMovement.type === 'out' || editingMovement.type === 'transfer_out'
                   ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700/50'
                   : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/50'
               }`}>
@@ -2753,13 +2751,15 @@ const Inventory = () => {
                   <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
                   <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('inventory.editMovementModal.movementType')}:</span>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ring-1 ${
-                    editingMovement.type === 'in'
+                    editingMovement.type === 'in' || editingMovement.type === 'transfer_in'
                       ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 ring-green-200 dark:ring-green-800'
-                      : editingMovement.type === 'out'
+                      : editingMovement.type === 'out' || editingMovement.type === 'transfer_out'
                       ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 ring-red-200 dark:ring-red-800'
                       : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 ring-blue-200 dark:ring-blue-800'
                   }`}>
-                    {t(`inventory.movementsModal.types.${editingMovement.type}`)}
+                    {editingMovement.type === 'transfer_in' ? t('warehouse.transferIn') :
+                     editingMovement.type === 'transfer_out' ? t('warehouse.transferOut') :
+                     t(`inventory.movementsModal.types.${editingMovement.type}`)}
                   </span>
                 </div>
                 <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">{t('inventory.editMovementModal.warningTitle')}</p>
