@@ -456,7 +456,14 @@ export const getOrders = async (req, res) => {
         } = req.query;
 
         const query = {};
-        if (status) query.status = status;
+        if (status) {
+            const statuses = status.split(',').filter(Boolean);
+            if (statuses.length === 1) {
+                query.status = statuses[0];
+            } else if (statuses.length > 1) {
+                query.status = { $in: statuses };
+            }
+        }
         if (table) query.table = table;
         query.organization = req.user.organization;
 
@@ -726,8 +733,9 @@ export const createOrder = async (req, res) => {
         
         if (menuItemIds.length > 0) {
             const menuItems = await MenuItem.find({ _id: { $in: menuItemIds } })
-                .select('_id name arabicName price isAvailable preparationTime')
-                .lean(); // استخدام lean() لتحسين الأداء
+                .select('_id name arabicName price isAvailable preparationTime category')
+                .populate({ path: 'category', select: 'section', populate: { path: 'section', select: '_id' } })
+                .lean();
             
             menuItems.forEach(mi => {
                 menuItemsMap.set(mi._id.toString(), mi);
@@ -753,6 +761,7 @@ export const createOrder = async (req, res) => {
                 // Calculate item total
                 const itemTotal = (menuItem.price || 0) * (item.quantity || 1);
                 subtotal += itemTotal;
+                const sectionId = menuItem.category?.section?._id || null;
                 processedItems.push({
                     menuItem: menuItem._id,
                     name: menuItem.name,
@@ -762,6 +771,7 @@ export const createOrder = async (req, res) => {
                     itemTotal: itemTotal,
                     notes: item.notes,
                     preparationTime: menuItem.preparationTime || 5,
+                    section: sectionId,
                 });
             } else {
                 // إذا لم يوجد menuItem، استخدم بيانات العنصر كما هي
@@ -2109,17 +2119,7 @@ export const updateOrderStatus = async (req, res) => {
 
         // تحقق قبل السماح بتغيير الحالة إلى delivered
         if (status === "delivered") {
-            // يجب أن تكون كل الأصناف تم تجهيزها بالكامل (preparedCount === quantity)
-            const allItemsReady = order.items.every(
-                (item) => (item.preparedCount || 0) >= (item.quantity || 0)
-            );
-            if (!allItemsReady) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "لا يمكن تسليم الطلب إلا بعد تجهيز جميع الأصناف بالكامل.",
-                });
-            }
+            // السماح بالتوصيل طالما الطلب في حالة ready
         }
 
         const updateData = { status };
@@ -2227,6 +2227,15 @@ export const updateOrderStatus = async (req, res) => {
             }
         } catch (notificationError) {
             //
+        }
+
+        // Emit socket event for real-time updates
+        if (req.io) {
+            try {
+                req.io.notifyOrderUpdate("status-changed", updatedOrder);
+            } catch (socketError) {
+                Logger.error('فشل إرسال حدث Socket.IO', socketError);
+            }
         }
 
         res.json({
@@ -2743,6 +2752,101 @@ export const deliverItem = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "خطأ في تسليم الصنف",
+            error: error.message,
+        });
+    }
+};
+
+// @desc    Deliver all items of a specific section within an order
+// @route   PUT /api/orders/:orderId/deliver-section
+// @access  Private
+export const deliverOrderSection = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const { sectionId } = req.body;
+
+        if (!sectionId) {
+            return res.status(400).json({
+                success: false,
+                message: "معرف القسم مطلوب",
+            });
+        }
+
+        const order = await Order.findOne({
+            _id: orderId,
+            organization: req.user.organization,
+        });
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: "الطلب غير موجود",
+            });
+        }
+
+        // Mark all items of this section as delivered
+        let anyItemDelivered = false;
+        let allItemsFullyDelivered = true;
+
+        for (const item of order.items) {
+            if (item.section && item.section.toString() === sectionId) {
+                const deliveredHere = Math.min(
+                    item.preparedCount || 0,
+                    item.quantity || 0
+                );
+                const previousDelivered = item.deliveredCount || 0;
+
+                if (deliveredHere > previousDelivered) {
+                    item.deliveredCount = deliveredHere;
+                    anyItemDelivered = true;
+                }
+            }
+            // Check if this item is still undelivered across all sections
+            if ((item.deliveredCount || 0) < (item.quantity || 0)) {
+                allItemsFullyDelivered = false;
+            }
+        }
+
+        if (!anyItemDelivered) {
+            const sectionItem = order.items.find(
+                (item) => item.section && item.section.toString() === sectionId
+            );
+            const reason = sectionItem
+                ? `أصناف القسم لم يتم تجهيزها بعد (preparedCount = ${sectionItem.preparedCount || 0}, quantity = ${sectionItem.quantity || 0})`
+                : "لا توجد أصناف تابعة لهذا القسم في الطلب";
+            return res.status(400).json({
+                success: false,
+                message: reason,
+            });
+        }
+
+        if (allItemsFullyDelivered && order.status !== "delivered") {
+            order.status = "delivered";
+            order.deliveredTime = new Date();
+            order.deliveredBy = req.user.id;
+        }
+
+        await order.save();
+
+        await order.populate([
+            "createdBy",
+            "preparedBy",
+            "deliveredBy",
+        ], "name");
+
+        if (req.io) {
+            req.io.notifyOrderUpdate("item-delivered", order);
+        }
+
+        res.json({
+            success: true,
+            message: "تم تسليم أصناف القسم بنجاح",
+            data: order,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في تسليم أصناف القسم",
             error: error.message,
         });
     }

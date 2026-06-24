@@ -11,6 +11,7 @@ import {
     updateOrderItemPrepared,
     getTodayOrdersStats,
     deliverItem,
+    deliverOrderSection,
     updateOrder,
     deleteOrder,
     calculateOrderRequirements,
@@ -101,6 +102,13 @@ router.put(
     "/:id/deliver-item/:itemIndex",
     authorize("cafe", "menu", "all"),
     deliverItem
+);
+
+// Deliver all items of a section within an order (cafe and menu permissions)
+router.put(
+    "/:orderId/deliver-section",
+    authorize("cafe", "menu", "all"),
+    deliverOrderSection
 );
 
 export default router;

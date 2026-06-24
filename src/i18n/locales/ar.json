@@ -13,6 +13,7 @@
     "saveChanges": "حفظ التعديلات",
     "cannotUndo": "لا يمكن التراجع عن هذا الإجراء",
     "search": "بحث",
+    "scan": "مسح",
     "filter": "تصفية",
     "export": "تصدير",
     "import": "استيراد",
@@ -61,7 +62,9 @@
     "scrollToTop": "الصعود للأعلى",
     "scrollToBottom": "النزول للأسفل",
     "permissionDenied": "ليس لديك صلاحية للقيام بهذا الإجراء",
-    "contactAdmin": "يرجى التواصل مع المدير للحصول على الصلاحية"
+    "contactAdmin": "يرجى التواصل مع المدير للحصول على الصلاحية",
+    "minutes": "دقيقة",
+    "refresh": "تحديث"
   },
   "nav": {
     "dashboard": "لوحة التحكم",
@@ -76,6 +79,7 @@
     "soldItems": "الأصناف المباعة",
     "inventory": "المخزون",
     "warehouse": "المخزن الرئيسي",
+    "kitchenDisplay": "شاشة المطبخ",
     "costs": "التكاليف",
     "payroll": "المرتبات",
     "users": "المستخدمين",
@@ -471,8 +475,8 @@
       "itemNotesPlaceholder": "ملاحظات على العنصر",
       "orderNotesPlaceholder": "ملاحظات على الطلب",
       "cancel": "إلغاء",
-      "save": "حفظ",
-      "update": "تحديث",
+      "save": "حفظ وإرسال للمطبخ",
+      "update": "تحديث وإرسال للمطبخ",
       "saveAndPrint": "حفظ وطباعة",
       "updateAndPrint": "تحديث وطباعة",
       "saving": "جاري الحفظ..."
@@ -732,6 +736,10 @@
     "title": "الفواتير",
     "pageTitle": "إدارة الفواتير",
     "pageSubtitle": "متابعة الفواتير والمدفوعات",
+    "barcodeSearch": "بحث بالباركود",
+    "barcodePlaceholder": "امسح الباركود أو أدخل الرمز",
+    "barcodeNotFound": "لم يتم العثور على منتج بهذا الباركود",
+    "barcodeError": "حدث خطأ أثناء البحث بالباركود",
     "newBill": "فاتورة جديدة",
     "billNumber": "رقم الفاتورة",
     "customer": "العميل",
@@ -2103,6 +2111,8 @@
       "remaining": "متبقي",
       "minimum": "الحد الأدنى"
     },
+    "barcode": "الباركود",
+    "barcodePlaceholder": "أدخل الباركود أو امسحه",
     "table": {
       "product": "منتج",
       "type": "النوع",
@@ -2422,6 +2432,21 @@
       "noLinkMessage": "يجب ربط هذا المنتج بعنصر من المخزن الرئيسي أولاً. يمكنك تعديل المنتج واختيار العنصر المرتبط من المخزن الرئيسي.",
       "createWarehouseItem": "إنشاء عنصر في المخزن الرئيسي"
     }
+  },
+  "kitchenDisplay": {
+    "title": "شاشة المطبخ",
+    "pending": "قيد الانتظار",
+    "preparing": "قيد التجهيز",
+    "ready": "جاهز",
+    "noOrders": "لا توجد طلبات",
+    "orderNumber": "طلب",
+    "table": "طاولة",
+    "markPreparing": "بدء التجهيز",
+    "markReady": "تأكيد الجاهزية",
+    "markDelivered": "تم التوصيل",
+    "newOrder": "طلب جديد!",
+    "allSections": "جميع الأقسام",
+    "unknownSection": "قسم غير محدد"
   },
   "warehouse": {
     "title": "المخزن الرئيسي",

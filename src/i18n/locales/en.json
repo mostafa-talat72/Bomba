@@ -13,6 +13,7 @@
     "saveChanges": "Save modifications",
     "cannotUndo": "This action cannot be undone",
     "search": "research",
+    "scan": "Scan",
     "filter": "filtering",
     "export": "export",
     "import": "import",
@@ -61,7 +62,9 @@
     "scrollToTop": "Climb to the top",
     "scrollToBottom": "Go down",
     "permissionDenied": "You don't have permission to perform this action",
-    "contactAdmin": "Please contact the administrator to get permission"
+    "contactAdmin": "Please contact the administrator to get permission",
+    "minutes": "min",
+    "refresh": "Refresh"
   },
   "_meta": {
     "languageCode": "en",
@@ -478,8 +481,8 @@
       "itemNotesPlaceholder": "Notes on the item",
       "orderNotesPlaceholder": "Notes on order",
       "cancel": "cancellation",
-      "save": "save",
-      "update": "to update",
+      "save": "Save & Send to Kitchen",
+      "update": "Update & Send to Kitchen",
       "saveAndPrint": "Save and print",
       "updateAndPrint": "Update and print",
       "saving": "Saving..."
@@ -530,7 +533,8 @@
       "soldItemsDesc": "View and analyze sold items reports and revenue",
       "inventory": "Inventory",
       "inventoryDesc": "Complete control of inventory, items and purchases",
-      "warehouse": "Main Warehouse",
+    "warehouse": "Main Warehouse",
+    "kitchenDisplay": "Kitchen Display",
       "warehouseDesc": "Full control over main warehouse, items and quantities",
       "costs": "Costs",
       "costsDesc": "Complete control of costs, expenses and budget",
@@ -739,6 +743,10 @@
     "title": "Invoices",
     "pageTitle": "Billing management",
     "pageSubtitle": "Follow up on invoices and payments",
+    "barcodeSearch": "Barcode Search",
+    "barcodePlaceholder": "Scan or enter barcode",
+    "barcodeNotFound": "No product found with this barcode",
+    "barcodeError": "Error searching by barcode",
     "newBill": "New invoice",
     "billNumber": "Invoice number",
     "customer": "Client",
@@ -2110,6 +2118,8 @@
       "remaining": "remaining",
       "minimum": "minimum"
     },
+    "barcode": "Barcode",
+    "barcodePlaceholder": "Enter or scan barcode",
     "table": {
       "product": "project",
       "type": "Type",
@@ -2429,6 +2439,21 @@
       "noLinkMessage": "This product must first be linked to a warehouse item. You can edit the product and select the linked warehouse item.",
       "createWarehouseItem": "Create warehouse item"
     }
+  },
+  "kitchenDisplay": {
+    "title": "Kitchen Display",
+    "pending": "Pending",
+    "preparing": "Preparing",
+    "ready": "Ready",
+    "noOrders": "No orders yet",
+    "orderNumber": "Order",
+    "table": "Table",
+    "markPreparing": "Start Preparing",
+    "markReady": "Mark Ready",
+    "markDelivered": "Delivered",
+    "newOrder": "New Order!",
+    "allSections": "All Sections",
+    "unknownSection": "Unknown Section"
   },
   "warehouse": {
     "title": "Main Warehouse",

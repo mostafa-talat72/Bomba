@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle, DollarSign } from 'lucide-react';
+import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle, DollarSign, ChefHat } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
@@ -2425,8 +2425,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
           <button
             onClick={onSave}
             disabled={loading || orderItems.length === 0}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
+            <ChefHat className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
             {loading ? t('cafe.orderModal.saving') : isEdit ? t('cafe.orderModal.update') : t('cafe.orderModal.save')}
           </button>
           <button

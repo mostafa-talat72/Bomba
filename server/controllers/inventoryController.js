@@ -97,6 +97,52 @@ export const getInventoryItem = async (req, res) => {
     }
 };
 
+// @desc    Lookup inventory item by barcode
+// @route   GET /api/inventory/barcode/:barcode
+// @access  Private
+export const getItemByBarcode = async (req, res) => {
+    try {
+        if (!req.user || !req.user.organization) {
+            return res.status(400).json({
+                success: false,
+                message: "معلومات المستخدم غير صحيحة",
+            });
+        }
+
+        const { barcode } = req.params;
+        if (!barcode) {
+            return res.status(400).json({
+                success: false,
+                message: "الباركود مطلوب",
+            });
+        }
+
+        const item = await InventoryItem.findOne({
+            barcode: barcode,
+            organization: req.user.organization,
+            isActive: true,
+        }).populate("recipe.ingredient", "name unit");
+
+        if (!item) {
+            return res.status(404).json({
+                success: false,
+                message: "لم يتم العثور على منتج بهذا الباركود",
+            });
+        }
+
+        res.json({
+            success: true,
+            data: item,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "خطأ في البحث بالباركود",
+            error: error.message,
+        });
+    }
+};
+
 // @desc    Create new inventory item
 // @route   POST /api/inventory
 // @access  Private

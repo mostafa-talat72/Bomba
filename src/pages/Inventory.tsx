@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2, ArrowLeftFromLine, ArrowRightFromLine } from 'lucide-react';
+import { Package, Plus, AlertTriangle, Edit, Trash2, History, Minus, ChevronDown, ChevronUp, Edit2, ArrowLeftFromLine, ArrowRightFromLine, QrCode } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { InventoryItem, MenuItem, WarehouseItem } from '../services/api';
 type IngredientItem = string | { _id?: string; id?: string };
@@ -153,6 +153,7 @@ const Inventory = () => {
     unit: '',
     isRawMaterial: false,
     warehouseItem: '',
+    barcode: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -505,8 +506,13 @@ const Inventory = () => {
   const filteredItems = useMemo(() => {
     return inventoryItems.filter(item => {
       // Search filter
-      if (searchTerm && !item.name.toLowerCase().includes(searchTerm.toLowerCase())) {
-        return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const nameMatch = item.name.toLowerCase().includes(term);
+        const barcodeMatch = item.barcode && item.barcode.toLowerCase().includes(term);
+        if (!nameMatch && !barcodeMatch) {
+          return false;
+        }
       }
       
       // Category filter
@@ -574,6 +580,7 @@ const Inventory = () => {
       paidAmount: '',
       isRawMaterial: item.isRawMaterial || false,
       warehouseItem: item.warehouseItem || '',
+      barcode: item.barcode || '',
     });
     setError('');
     setSuccess('');
@@ -1057,6 +1064,7 @@ const Inventory = () => {
         unit: addForm.unit,
         price: addForm.price ? Number(addForm.price) : 0,
         supplier: addForm.supplier,
+        barcode: addForm.barcode || undefined,
         isRawMaterial: addForm.isRawMaterial,
         warehouseItem: addForm.warehouseItem || undefined,
       });
@@ -1077,6 +1085,7 @@ const Inventory = () => {
           unit: '',
           isRawMaterial: false,
           warehouseItem: '',
+          barcode: '',
         });
         setError('');
         setSuccess('');
@@ -1122,6 +1131,7 @@ const Inventory = () => {
         minStock: Number(addForm.minStock),
         unit: addForm.unit,
         supplier: addForm.supplier,
+        barcode: addForm.barcode || null,
         isRawMaterial: addForm.isRawMaterial,
         warehouseItem: addForm.warehouseItem || null,
       });
@@ -1639,6 +1649,7 @@ const Inventory = () => {
                 <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.currentStock')}</th>
                 <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.minStock')}</th>
                 <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.unit')}</th>
+                <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.barcode')}</th>
                 <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.lastPurchasePrice')}</th>
                 <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.totalValue')}</th>
                 <th className={`px-6 py-3 ${isRTL ? 'text-right' : 'text-left'} text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider`}>{t('inventory.table.supplier')}</th>
@@ -1684,6 +1695,7 @@ const Inventory = () => {
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatQuantity(item.minStock, translateUnit(item.unit), i18n.language)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{translateUnit(item.unit)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{item.barcode || <span className="text-gray-400">—</span>}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>{formatCurrency(item.price)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100 ${isRTL ? 'text-right' : 'text-left'}`}>
                       {formatCurrency(item.totalValue || (item.currentStock * item.price))}
@@ -1835,6 +1847,15 @@ const Inventory = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.supplier')}</label>
                   <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.barcode')}</label>
+                  <div className="flex gap-2">
+                    <input type="text" name="barcode" value={addForm.barcode} onChange={handleFormChange} placeholder={t('inventory.barcodePlaceholder')} className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100 font-mono" />
+                    <button type="button" className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors" title={t('common.scan')}>
+                      <QrCode className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center">
                     <input
@@ -1958,6 +1979,15 @@ const Inventory = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.supplier')}</label>
                 <input type="text" name="supplier" value={addForm.supplier} onChange={handleFormChange} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.barcode')}</label>
+                <div className="flex gap-2">
+                  <input type="text" name="barcode" value={addForm.barcode} onChange={handleFormChange} placeholder={t('inventory.barcodePlaceholder')} className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 dark:text-gray-100 font-mono" />
+                  <button type="button" className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors" title={t('common.scan')}>
+                    <QrCode className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('inventory.addModal.warehouseItem')}</label>

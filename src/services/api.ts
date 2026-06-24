@@ -116,9 +116,12 @@ export interface Order {
 
 export interface OrderItem {
   name: string;
+  arabicName?: string;
   price: number;
   quantity: number;
   preparedCount?: number;
+  deliveredCount?: number;
+  section?: string;
   notes?: string;
   additionalPrice?: number;
   inventoryItem?: string;
@@ -1113,6 +1116,13 @@ class ApiClient {
     });
   }
 
+  async deliverOrderSection(orderId: string, sectionId: string): Promise<ApiResponse<Order>> {
+    return this.request<Order>(`/orders/${orderId}/deliver-section`, {
+      method: 'PUT',
+      body: JSON.stringify({ sectionId }),
+    });
+  }
+
   async deleteOrder(id: string): Promise<ApiResponse> {
     return this.request(`/orders/${id}`, {
       method: 'DELETE',
@@ -1208,6 +1218,31 @@ class ApiClient {
       response.data = this.normalizeArray(response.data);
     }
     return response;
+  }
+
+  async getItemByBarcode(barcode: string): Promise<ApiResponse<InventoryItem>> {
+    const response = await this.request<InventoryItem>(`/inventory/barcode/${barcode}`);
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  async getBillingItemByBarcode(barcode: string): Promise<ApiResponse<InventoryItem>> {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${apiUrl}/inventory/barcode/${barcode}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (data.success && data.data) {
+        data.data = this.normalizeData(data.data);
+      }
+      return data;
+    } catch {
+      return { success: false, message: 'Network error' };
+    }
   }
 
   async deleteInventoryItem(id: string): Promise<ApiResponse> {

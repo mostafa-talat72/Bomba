@@ -37,6 +37,7 @@ import ConsumptionReport from './pages/ConsumptionReport';
 import Payroll from './pages/Payroll';
 import SoldItems from './pages/SoldItems';
 import Warehouse from './pages/Warehouse';
+import KitchenDisplay from './pages/KitchenDisplay';
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
@@ -72,6 +73,7 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
         { path: '/reports', permission: 'reports' },
         { path: '/inventory', permission: 'inventory' },
         { path: '/warehouse', permission: 'warehouse' },
+        { path: '/kitchen-display', permission: 'kitchenDisplay' },
         { path: '/costs', permission: 'costs' },
         { path: '/users', permission: 'users' },
         { path: '/settings', permission: 'settings' },
@@ -218,6 +220,11 @@ const RouteHandler = () => {
           <Route path="warehouse" element={
             <ProtectedRoute requiredPermissions={['warehouse']}>
               <Warehouse />
+            </ProtectedRoute>
+          } />
+          <Route path="kitchen-display" element={
+            <ProtectedRoute requiredPermissions={['kitchenDisplay']}>
+              <KitchenDisplay />
             </ProtectedRoute>
           } />
           <Route path="inventory" element={

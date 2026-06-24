@@ -9,7 +9,8 @@ import {
   getStockMovements,
   deleteInventoryItem,
   deleteStockMovement,
-  updateStockMovement
+  updateStockMovement,
+  getItemByBarcode
 } from '../controllers/inventoryController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { validateInventoryItem, validateRequest } from '../middleware/validation.js';
@@ -23,6 +24,9 @@ router.use(protect);
 router.route('/')
   .get(authorize('canViewInventory', 'inventory', 'all'), getInventoryItems)
   .post(authorize('canAddInventoryItem', 'inventory', 'all'), validateInventoryItem, validateRequest, createInventoryItem);
+
+// Barcode lookup - requires canViewInventory or inventory or all permission
+router.get('/barcode/:barcode', authorize('canViewInventory', 'inventory', 'all'), getItemByBarcode);
 
 // View low stock items - requires canViewInventory or inventory or all permission
 router.get('/low-stock', authorize('canViewInventory', 'inventory', 'all'), getLowStockItems);

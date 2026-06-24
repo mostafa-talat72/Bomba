@@ -343,6 +343,9 @@ const Billing = () => {
   const [showTableBillsModal, setShowTableBillsModal] = useState(false);
   const [tableBillsFilter, setTableBillsFilter] = useState('unpaid'); // الافتراضي: غير مدفوع
   const [searchQuery, setSearchQuery] = useState('');
+  const [barcodeQuery, setBarcodeQuery] = useState('');
+  const [barcodeProduct, setBarcodeProduct] = useState<any>(null);
+  const [barcodeSearching, setBarcodeSearching] = useState(false);
   const [billTypeFilter, setBillTypeFilter] = useState<'all' | 'cafe' | 'playstation' | 'computer'>('all');
   const [playstationSearchQuery, setPlaystationSearchQuery] = useState('');
   const [gamingDeviceTypeFilter, setGamingDeviceTypeFilter] = useState<'all' | 'playstation' | 'computer'>('all'); // فلتر نوع الجهاز
@@ -2121,6 +2124,77 @@ const Billing = () => {
           </div>
         </div>
       )}
+
+      {/* Barcode Scanner */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <QrCode className={`absolute top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 ${isRTL ? 'right-3' : 'left-3'}`} />
+            <input
+              type="text"
+              value={barcodeQuery}
+              onChange={(e) => setBarcodeQuery(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter' && barcodeQuery.trim()) {
+                  setBarcodeSearching(true);
+                  setBarcodeProduct(null);
+                  try {
+                    const res = await api.getBillingItemByBarcode(barcodeQuery.trim());
+                    if (res.success && res.data) {
+                      setBarcodeProduct(res.data);
+                    } else {
+                      showNotification(t('billing.barcodeNotFound'), 'warning');
+                    }
+                  } catch {
+                    showNotification(t('billing.barcodeError'), 'error');
+                  }
+                  setBarcodeSearching(false);
+                }
+              }}
+              placeholder={t('billing.barcodePlaceholder')}
+              className={`w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 ${isRTL ? 'pr-10' : 'pl-10'} dark:bg-gray-700 dark:text-gray-100 text-sm font-mono`}
+              autoFocus
+            />
+          </div>
+          <button
+            onClick={async () => {
+              if (!barcodeQuery.trim()) return;
+              setBarcodeSearching(true);
+              setBarcodeProduct(null);
+              try {
+                const res = await api.getBillingItemByBarcode(barcodeQuery.trim());
+                if (res.success && res.data) {
+                  setBarcodeProduct(res.data);
+                } else {
+                  showNotification(t('billing.barcodeNotFound'), 'warning');
+                }
+              } catch {
+                showNotification(t('billing.barcodeError'), 'error');
+              }
+              setBarcodeSearching(false);
+            }}
+            disabled={barcodeSearching || !barcodeQuery.trim()}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            {barcodeSearching ? t('common.loading') : t('common.search')}
+          </button>
+        </div>
+        {barcodeProduct && (
+          <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bold text-gray-900 dark:text-gray-100">{barcodeProduct.name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {barcodeProduct.barcode} — {formatCurrency(barcodeProduct.price)}
+                </p>
+              </div>
+              <button onClick={() => setBarcodeProduct(null)} className="p-1 hover:bg-green-200 dark:hover:bg-green-800 rounded">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Gaming Devices Section (PlayStation & Computer) */}
       {(billTypeFilter === 'all' || billTypeFilter === 'playstation' || billTypeFilter === 'computer') && (

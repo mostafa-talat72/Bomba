@@ -43,6 +43,16 @@ const orderItemSchema = new mongoose.Schema({
         type: Number, // in minutes
         default: 5,
     },
+    section: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "MenuSection",
+        default: null,
+    },
+    deliveredCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
     isReady: {
         type: Boolean,
         default: false,

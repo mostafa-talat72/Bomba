@@ -25,6 +25,7 @@ import {
   CreditCard,
   DollarSign,
   ShoppingBag,
+  ChefHat,
   Warehouse as WarehouseIcon
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -166,6 +167,7 @@ const Layout = () => {
     { name: t('nav.soldItems'), href: '/sold-items', icon: ShoppingBag, permissions: ['reports'] },
     { name: t('nav.inventory'), href: '/inventory', icon: Package, permissions: ['inventory'] },
     { name: t('nav.warehouse'), href: '/warehouse', icon: WarehouseIcon, permissions: ['warehouse'] },
+    { name: t('nav.kitchenDisplay'), href: '/kitchen-display', icon: ChefHat, permissions: ['kitchenDisplay'] },
     { name: t('nav.costs'), href: '/costs', icon: Wallet, permissions: ['costs'] },
     { name: t('nav.payroll'), href: '/payroll', icon: DollarSign, permissions: ['users'] },
     { name: t('nav.users'), href: '/users', icon: Users, permissions: ['users'] },

@@ -13,6 +13,7 @@
     "saveChanges": "Enregistrer les modifications",
     "cannotUndo": "Cette action ne peut pas être annulée",
     "search": "recherche",
+    "scan": "Scanner",
     "filter": "filtration",
     "export": "exporter",
     "import": "importer",
@@ -61,7 +62,9 @@
     "scrollToTop": "Monter au sommet",
     "scrollToBottom": "Descendre",
     "permissionDenied": "Vous n'avez pas la permission d'effectuer cette action",
-    "contactAdmin": "Veuillez contacter l'administrateur pour obtenir l'autorisation"
+    "contactAdmin": "Veuillez contacter l'administrateur pour obtenir l'autorisation",
+    "minutes": "min",
+    "refresh": "Actualiser"
   },
   "_meta": {
     "languageCode": "fr",
@@ -478,8 +481,8 @@
       "itemNotesPlaceholder": "Notes sur l'article",
       "orderNotesPlaceholder": "Notes sur la commande",
       "cancel": "annulation",
-      "save": "sauvegarder",
-      "update": "mettre à jour",
+      "save": "Envoyer à la cuisine",
+      "update": "Mettre à jour et envoyer",
       "saveAndPrint": "Enregistrer et imprimer",
       "updateAndPrint": "Mettre à jour et imprimer",
       "saving": "Économie..."
@@ -530,7 +533,8 @@
       "soldItemsDesc": "Afficher et analyser les rapports d'articles vendus et les revenus",
       "inventory": "Inventaire",
       "inventoryDesc": "Contrôle complet des stocks, des articles et des achats",
-      "warehouse": "Entrepôt Principal",
+    "warehouse": "Entrepôt Principal",
+    "kitchenDisplay": "Écran Cuisine",
       "warehouseDesc": "Contrôle total de l'entrepôt principal, des articles et des quantités",
       "costs": "Frais",
       "costsDesc": "Contrôle total des coûts, des dépenses et du budget",
@@ -739,6 +743,10 @@
     "title": "Factures",
     "pageTitle": "Gestion de la facturation",
     "pageSubtitle": "Suivi des factures et des paiements",
+    "barcodeSearch": "Recherche par code-barres",
+    "barcodePlaceholder": "Scannez ou saisissez le code-barres",
+    "barcodeNotFound": "Aucun produit trouvé avec ce code-barres",
+    "barcodeError": "Erreur lors de la recherche par code-barres",
     "newBill": "Nouvelle facture",
     "billNumber": "Numéro de facture",
     "customer": "Client",
@@ -2110,6 +2118,8 @@
       "remaining": "restant",
       "minimum": "minimum"
     },
+    "barcode": "Code-barres",
+    "barcodePlaceholder": "Entrez ou scannez le code-barres",
     "table": {
       "product": "projet",
       "type": "Taper",
@@ -2429,6 +2439,21 @@
       "noLinkMessage": "Ce produit doit d'abord être lié à un article d'entrepôt. Vous pouvez modifier le produit et sélectionner l'article d'entrepôt lié.",
       "createWarehouseItem": "Créer un article d'entrepôt"
     }
+  },
+  "kitchenDisplay": {
+    "title": "Écran Cuisine",
+    "pending": "En attente",
+    "preparing": "En préparation",
+    "ready": "Prêt",
+    "noOrders": "Aucune commande",
+    "orderNumber": "Commande",
+    "table": "Table",
+    "markPreparing": "Commencer",
+    "markReady": "Marquer Prêt",
+    "markDelivered": "Livré",
+    "newOrder": "Nouvelle commande!",
+    "allSections": "Toutes les sections",
+    "unknownSection": "Section inconnue"
   },
   "warehouse": {
     "title": "Entrepôt Principal",
