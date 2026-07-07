@@ -676,7 +676,7 @@ export const calculateOrderRequirements = async (req, res) => {
 // @access  Private
 export const createOrder = async (req, res) => {
     try {
-        const { table, customerName, customerPhone, items, notes, bill } =
+        const { table, customerName, customerPhone, items, notes, bill, status } =
             req.body;
 
         // Validate items
@@ -706,21 +706,23 @@ export const createOrder = async (req, res) => {
             }
         }
 
-        // حساب المخزون المطلوب لجميع الأصناف
-        const inventoryNeeded = await calculateTotalInventoryNeeded(items);
+        // حساب المخزون المطلوب لجميع الأصناف (إلا إذا كان حفظ فقط/draft)
+        if (status !== 'draft') {
+            const inventoryNeeded = await calculateTotalInventoryNeeded(items);
 
-        // التحقق من توفر المخزون
-        const { errors: validationErrors, details: insufficientDetails } =
-            await validateInventoryAvailability(inventoryNeeded);
+            // التحقق من توفر المخزون
+            const { errors: validationErrors, details: insufficientDetails } =
+                await validateInventoryAvailability(inventoryNeeded);
 
-        if (validationErrors.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: "المخزون غير كافي لإنشاء الطلب - راجع التفاصيل أدناه",
-                errors: validationErrors,
-                details: insufficientDetails,
-                inventoryErrors: validationErrors,
-            });
+            if (validationErrors.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "المخزون غير كافي لإنشاء الطلب - راجع التفاصيل أدناه",
+                    errors: validationErrors,
+                    details: insufficientDetails,
+                    inventoryErrors: validationErrors,
+                });
+            }
         }
 
         // Process items and calculate totals
@@ -798,7 +800,7 @@ export const createOrder = async (req, res) => {
             finalAmount: subtotal - (req.body.discount || 0), // حساب المبلغ النهائي
             organization: req.user.organization,
             createdBy: req.user._id,
-            status: 'pending',
+            status: status || 'pending',
             // سيتم إنشاء رقم الطلب تلقائيًا في الخطاف pre-save
         };
 
@@ -1065,7 +1067,7 @@ export const updateOrder = async (req, res) => {
             });
         }
 
-        // إذا تم تحديث العناصر، تحقق من المخزون
+        // إذا تم تحديث العناصر، تحقق من المخزون (إلا إذا كان الحالة draft)
         let calculatedTotalCost = 0; // متغير لتخزين التكلفة المحسوبة
         
         // حفظ نسخة من العناصر القديمة قبل التعديل (للمخزون)
@@ -1076,7 +1078,7 @@ export const updateOrder = async (req, res) => {
         }));
 
         // حساب التكلفة الإجمالية دائماً (حتى لو لم يتم تمرير items)
-        if (items && Array.isArray(items) && items.length > 0) {
+        if (items && Array.isArray(items) && items.length > 0 && status !== 'draft') {
             // حساب المخزون المطلوب للطلب الجديد
             const newInventoryNeeded = await calculateTotalInventoryNeeded(items);
             

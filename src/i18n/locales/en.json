@@ -64,6 +64,10 @@
     "permissionDenied": "You don't have permission to perform this action",
     "contactAdmin": "Please contact the administrator to get permission",
     "minutes": "min",
+    "hours": "h",
+    "quantity": "x{{count}}",
+    "elapsedMinutes": "{{minutes}} min",
+    "elapsedHours": "{{hours}}h {{minutes}}m",
     "refresh": "Refresh"
   },
   "_meta": {
@@ -481,6 +485,8 @@
       "itemNotesPlaceholder": "Notes on the item",
       "orderNotesPlaceholder": "Notes on order",
       "cancel": "cancellation",
+      "saveOnly": "Save",
+      "saveAndSend": "Save & Send to Kitchen",
       "save": "Save & Send to Kitchen",
       "update": "Update & Send to Kitchen",
       "saveAndPrint": "Save and print",

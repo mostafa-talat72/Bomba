@@ -1113,10 +1113,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
-          const errorsMessage = (response.data as any).errors.join('\n');
+          const errorsArray = (response.data as any).errors;
+          const errorsMessage = typeof errorsArray[0] === 'object' && errorsArray[0] !== null
+            ? errorsArray.map((e: any) => e.message || e.msg || JSON.stringify(e)).join('\n')
+            : errorsArray.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
         } else if (responseWithErrors.errors && Array.isArray(responseWithErrors.errors) && responseWithErrors.errors.length > 0) {
-          const errorsMessage = responseWithErrors.errors.join('\n');
+          const errorsArray = responseWithErrors.errors;
+          const errorsMessage = typeof errorsArray[0] === 'object' && errorsArray[0] !== null
+            ? errorsArray.map((e: any) => e.message || e.msg || JSON.stringify(e)).join('\n')
+            : errorsArray.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
         } else if (responseWithErrors.details && Array.isArray(responseWithErrors.details) && responseWithErrors.details.length > 0) {
           const detailsMessage = responseWithErrors.details
@@ -1177,10 +1183,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             .join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${detailsMessage}`, 'error');
         } else if (response.data && typeof response.data === 'object' && 'errors' in response.data && Array.isArray((response.data as any).errors) && (response.data as any).errors.length > 0) {
-          const errorsMessage = (response.data as any).errors.join('\n');
+          const errorsArray = (response.data as any).errors;
+          const errorsMessage = typeof errorsArray[0] === 'object' && errorsArray[0] !== null
+            ? errorsArray.map((e: any) => e.message || e.msg || JSON.stringify(e)).join('\n')
+            : errorsArray.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
         } else if (responseWithErrors.errors && Array.isArray(responseWithErrors.errors) && responseWithErrors.errors.length > 0) {
-          const errorsMessage = responseWithErrors.errors.join('\n');
+          const errorsArray = responseWithErrors.errors;
+          const errorsMessage = typeof errorsArray[0] === 'object' && errorsArray[0] !== null
+            ? errorsArray.map((e: any) => e.message || e.msg || JSON.stringify(e)).join('\n')
+            : errorsArray.join('\n');
           showNotification(`${t('toast.order.insufficientStock')}\n\n${errorsMessage}`, 'error');
         } else if (responseWithErrors.details && Array.isArray(responseWithErrors.details) && responseWithErrors.details.length > 0) {
           const detailsMessage = responseWithErrors.details

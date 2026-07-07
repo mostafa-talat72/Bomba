@@ -64,6 +64,10 @@
     "permissionDenied": "ليس لديك صلاحية للقيام بهذا الإجراء",
     "contactAdmin": "يرجى التواصل مع المدير للحصول على الصلاحية",
     "minutes": "دقيقة",
+    "hours": "ساعة",
+    "quantity": "x{{count}}",
+    "elapsedMinutes": "{{minutes}} د",
+    "elapsedHours": "{{hours}}س {{minutes}}د",
     "refresh": "تحديث"
   },
   "nav": {
@@ -475,6 +479,8 @@
       "itemNotesPlaceholder": "ملاحظات على العنصر",
       "orderNotesPlaceholder": "ملاحظات على الطلب",
       "cancel": "إلغاء",
+      "saveOnly": "حفظ",
+      "saveAndSend": "حفظ وإرسال للمطبخ",
       "save": "حفظ وإرسال للمطبخ",
       "update": "تحديث وإرسال للمطبخ",
       "saveAndPrint": "حفظ وطباعة",

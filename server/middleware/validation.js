@@ -195,7 +195,7 @@ export const validateOrderUpdate = [
         .withMessage("ملاحظات الطلب يجب أن تكون أقل من 500 حرف"),
     body("status")
         .optional()
-        .isIn(["pending", "preparing", "ready", "delivered", "cancelled"])
+        .isIn(["draft", "pending", "preparing", "ready", "delivered", "cancelled"])
         .withMessage("حالة الطلب غير صحيحة"),
 ];
 

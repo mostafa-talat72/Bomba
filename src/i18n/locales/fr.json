@@ -64,6 +64,10 @@
     "permissionDenied": "Vous n'avez pas la permission d'effectuer cette action",
     "contactAdmin": "Veuillez contacter l'administrateur pour obtenir l'autorisation",
     "minutes": "min",
+    "hours": "h",
+    "quantity": "x{{count}}",
+    "elapsedMinutes": "{{minutes}} min",
+    "elapsedHours": "{{hours}}h {{minutes}}m",
     "refresh": "Actualiser"
   },
   "_meta": {
@@ -481,6 +485,8 @@
       "itemNotesPlaceholder": "Notes sur l'article",
       "orderNotesPlaceholder": "Notes sur la commande",
       "cancel": "annulation",
+      "saveOnly": "Enregistrer",
+      "saveAndSend": "Envoyer à la cuisine",
       "save": "Envoyer à la cuisine",
       "update": "Mettre à jour et envoyer",
       "saveAndPrint": "Enregistrer et imprimer",

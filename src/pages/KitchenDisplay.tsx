@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { api, Order } from '../services/api';
 import { io, Socket } from 'socket.io-client';
-import { Clock, ChefHat, Bell, RefreshCw, AlertCircle, Layers } from 'lucide-react';
+import { Clock, ChefHat, Bell, RefreshCw, AlertCircle, Layers, Check } from 'lucide-react';
 
 const SOUND_URL = '/sounds/new-order.mp3';
 const STATUS_COLUMNS = ['pending', 'preparing', 'ready'] as const;
@@ -14,6 +14,15 @@ interface MenuSection {
 }
 
 const VISIBLE_STATUSES = ['pending', 'preparing', 'ready'];
+
+const CARD_BORDER_COLORS = [
+  'border-s-4 border-orange-500',
+  'border-s-4 border-cyan-500',
+  'border-s-4 border-purple-500',
+  'border-s-4 border-pink-500',
+  'border-s-4 border-indigo-500',
+  'border-s-4 border-teal-500',
+];
 
 export function KitchenDisplay() {
   const { t, i18n } = useTranslation();
@@ -42,7 +51,7 @@ export function KitchenDisplay() {
 
   useEffect(() => {
     Promise.all([fetchOrders(), fetchSections()]).then(() => setLoading(false));
-    const interval = setInterval(fetchOrders, 30000);
+    const interval = setInterval(fetchOrders, 5000);
     return () => clearInterval(interval);
   }, [fetchOrders, fetchSections]);
 
@@ -103,6 +112,19 @@ export function KitchenDisplay() {
     } catch { }
   };
 
+  const handleItemToggle = async (orderId: string, item: Order['items'][number]) => {
+    const order = orders.find(o => o._id === orderId);
+    if (!order) return;
+    const itemIndex = order.items.findIndex(oi => oi._id === item._id);
+    if (itemIndex === -1) return;
+    const current = order.items[itemIndex];
+    const newCount = (current.preparedCount ?? 0) >= (current.quantity ?? 1) ? 0 : (current.quantity ?? 1);
+    const res = await api.updateOrderItemPrepared(orderId, itemIndex, { preparedCount: newCount });
+    if (!res.success) return;
+    const fetchRes = await api.getOrders({ status: 'pending,preparing,ready' });
+    if (fetchRes.success && fetchRes.data) setOrders(fetchRes.data);
+  };
+
   const handleSectionDeliver = async (orderId: string, sectionId: string) => {
     const res = await api.deliverOrderSection(orderId, sectionId);
     if (!res.success) return;
@@ -121,6 +143,10 @@ export function KitchenDisplay() {
   };
 
   const handleSectionAction = async (orderId: string, sectionId: string, action: 'prepare' | 'ready') => {
+    if (action === 'prepare') {
+      await handleStatusChange(orderId, 'preparing');
+      return;
+    }
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
     const itemIndices = order.items
@@ -132,7 +158,7 @@ export function KitchenDisplay() {
     if (itemIndices.length === 0) return;
     try {
       for (const { item, idx } of itemIndices) {
-        const newCount = action === 'ready' ? item.quantity : Math.min(1, item.quantity || 1);
+        const newCount = item.quantity;
         const res = await api.updateOrderItemPrepared(orderId, idx, { preparedCount: newCount });
         if (!res.success) break;
       }
@@ -143,16 +169,20 @@ export function KitchenDisplay() {
 
   const getElapsed = (createdAt: Date) => {
     const diff = Date.now() - new Date(createdAt).getTime();
-    const min = Math.floor(diff / 60000);
-    if (min < 60) return `${min} ${t('common.minutes')}`;
-    return `${Math.floor(min / 60)}h ${min % 60}m`;
+    const totalMinutes = Math.floor(diff / 60000);
+    if (totalMinutes < 60) return t('common.elapsedMinutes', { minutes: formatNumber(totalMinutes) });
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return t('common.elapsedHours', { hours: formatNumber(hours), minutes: formatNumber(minutes) });
   };
+
+  const formatNumber = (num: number) => new Intl.NumberFormat(i18n.language === 'ar' ? 'ar-SA' : i18n.language).format(num);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10';
-      case 'preparing': return 'border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/10';
-      case 'ready': return 'border-l-4 border-green-500 bg-green-50 dark:bg-green-900/10';
+      case 'pending': return 'bg-yellow-50 dark:bg-yellow-900/10';
+      case 'preparing': return 'bg-blue-50 dark:bg-blue-900/10';
+      case 'ready': return 'bg-green-50 dark:bg-green-900/10';
       default: return '';
     }
   };
@@ -167,7 +197,9 @@ export function KitchenDisplay() {
   };
 
   const visibleOrders = useMemo(() =>
-    orders.filter(o => o.status && VISIBLE_STATUSES.includes(o.status)),
+    orders
+      .filter(o => o.status && VISIBLE_STATUSES.includes(o.status))
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
   [orders]);
 
   const getSectionStatus = (order: Order, sectionId: string): string | null => {
@@ -180,6 +212,7 @@ export function KitchenDisplay() {
     const allPrepared = sectionItems.every(item => (item.preparedCount ?? 0) >= (item.quantity ?? 0));
     if (allPrepared) return 'ready';
     if (anyPrepared) return 'preparing';
+    if (order.status === 'preparing') return 'preparing';
     return 'pending';
   };
 
@@ -261,7 +294,7 @@ export function KitchenDisplay() {
             {t('kitchenDisplay.allSections')}
             <span className={`text-xs px-1.5 py-0.5 rounded-full ${
               selectedSection === 'all' ? 'bg-white/20' : 'bg-gray-300 dark:bg-gray-600'
-            }`}>{getSectionOrderCount('all')}</span>
+            }`}>{formatNumber(getSectionOrderCount('all'))}</span>
           </button>
           {sections.map(s => (
             <button
@@ -276,7 +309,7 @@ export function KitchenDisplay() {
               {s.name}
               <span className={`text-xs px-1.5 py-0.5 rounded-full ${
                 selectedSection === s._id ? 'bg-white/20' : 'bg-gray-300 dark:bg-gray-600'
-              }`}>{getSectionOrderCount(s._id)}</span>
+              }`}>{formatNumber(getSectionOrderCount(s._id))}</span>
             </button>
           ))}
           <button onClick={fetchOrders} className="p-2 text-gray-500 hover:text-orange-600 rounded-lg hover:bg-orange-50 transition-colors flex-shrink-0" title={t('common.refresh')}>
@@ -297,38 +330,77 @@ export function KitchenDisplay() {
                 'bg-green-500 text-white'
               }`}>
                 <span>{t(`kitchenDisplay.${status}`)}</span>
-                <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">{items.length}</span>
+                <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">{formatNumber(items.length)}</span>
               </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[calc(100vh-220px)] overflow-y-auto">
+              <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto p-2">
                 {items.length === 0 ? (
-                  <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">
+                  <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     {t('kitchenDisplay.noOrders')}
                   </div>
-                ) : items.map(order => (
-                  <div key={order._id} className={`p-4 ${getStatusColor(status)}`}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <span className="font-bold text-gray-900 dark:text-gray-100">{t('kitchenDisplay.orderNumber')} #{order.orderNumber || order._id.slice(-6)}</span>
-                        {order.table && <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">{t('kitchenDisplay.table')} {order.table.number || order.table.name}</span>}
+                ) : items.map((order, idx) => (
+                  <div key={order._id} className={`p-3 rounded-lg shadow-sm border border-gray-200/60 dark:border-gray-700/60 ${CARD_BORDER_COLORS[idx % CARD_BORDER_COLORS.length]} ${getStatusColor(status)}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="font-extrabold text-base text-gray-900 dark:text-gray-100 tracking-tight">
+                          #{order.orderNumber || order._id.slice(-6)}
+                        </span>
+                        {order.table && (
+                          <span className="inline-flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-sm font-bold px-2.5 h-7 rounded-md">
+                            {(() => {
+                              const tn = order.table.number;
+                              const nm = order.table.name;
+                              if (tn != null) {
+                                if (!Number.isNaN(Number(tn))) return formatNumber(Number(tn));
+                                return tn;
+                              }
+                              return nm || '';
+                            })()}
+                          </span>
+                        )}
                       </div>
-                      <span className="flex items-center gap-1 text-xs text-gray-500">
-                        <Clock className="h-3 w-3" /> {getElapsed(order.createdAt)}
+                      <span className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap">
+                        <Clock className="h-3.5 w-3.5" />
+                        {getElapsed(order.createdAt)}
                       </span>
                     </div>
 
                     {selectedSection === 'all' ? (
-                      <GroupedItemsBySection order={order} sections={sections} getSectionName={getSectionName} />
+                      <GroupedItemsBySection order={order} sections={sections} getSectionName={getSectionName} onItemToggle={handleItemToggle} onSectionAction={handleSectionAction} onSectionDeliver={handleSectionDeliver} />
                     ) : (
                       <ul className="space-y-1 mb-3">
-                        {order.items.map((item, i) => (
-                          <li key={i} className="flex justify-between text-sm">
-                            <span className="text-gray-700 dark:text-gray-300">
-                              {i18n.language === 'ar' ? item.arabicName || item.name : item.name}
-                            </span>
-                            <span className="text-gray-500 font-medium">x{item.quantity}</span>
-                          </li>
-                        ))}
+                        {order.items.map((item, i) => {
+                          const isItemPrepared = (item.preparedCount ?? 0) >= (item.quantity ?? 1);
+                          return (
+                            <li key={i} className="flex items-center justify-between text-sm py-0.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {status !== 'pending' && (
+                                  <label className="flex items-center cursor-pointer flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={isItemPrepared}
+                                      onChange={() => handleItemToggle(order._id, item)}
+                                      className="sr-only"
+                                    />
+                                    <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-150 ${
+                                      isItemPrepared
+                                        ? 'bg-green-500 border-green-500 scale-110'
+                                        : 'border-gray-300 dark:border-gray-600 hover:border-green-400 hover:shadow-sm'
+                                    }`}>
+                                      {isItemPrepared && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                                    </span>
+                                  </label>
+                                )}
+                                <span className={`text-gray-700 dark:text-gray-300 truncate ${
+                                  isItemPrepared ? 'line-through text-gray-400 dark:text-gray-500' : ''
+                                }`}>
+                                  {i18n.language === 'ar' ? item.arabicName || item.name : item.name}
+                                </span>
+                              </div>
+                              <span className="text-gray-500 font-medium flex-shrink-0 ms-2">{t('common.quantity', { count: formatNumber(item.quantity) })}</span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
 
@@ -338,26 +410,19 @@ export function KitchenDisplay() {
                       </p>
                     )}
 
-                    <div className="flex gap-2">
-                      {status === 'pending' && selectedSection !== 'all' && (
-                        <button onClick={() => handleSectionAction(order._id, selectedSection, 'prepare')} className="flex-1 text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markPreparing')}</button>
-                      )}
-                      {status === 'pending' && selectedSection === 'all' && (
-                        <button onClick={() => handleStatusChange(order._id, 'preparing')} className="flex-1 text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markPreparing')}</button>
-                      )}
-                      {status === 'preparing' && selectedSection !== 'all' && (
-                        <button onClick={() => handleSectionAction(order._id, selectedSection, 'ready')} className="flex-1 text-xs bg-green-500 hover:bg-green-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markReady')}</button>
-                      )}
-                      {status === 'preparing' && selectedSection === 'all' && (
-                        <button onClick={() => handleStatusChange(order._id, 'ready')} className="flex-1 text-xs bg-green-500 hover:bg-green-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markReady')}</button>
-                      )}
-                      {status === 'ready' && selectedSection !== 'all' && (
-                        <button onClick={() => handleSectionDeliver(order._id, selectedSection)} className="flex-1 text-xs bg-gray-500 hover:bg-gray-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markDelivered')}</button>
-                      )}
-                      {status === 'ready' && selectedSection === 'all' && (
-                        <button onClick={() => handleStatusChange(order._id, 'delivered')} className="flex-1 text-xs bg-gray-500 hover:bg-gray-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markDelivered')}</button>
-                      )}
-                    </div>
+                    {selectedSection !== 'all' && (
+                      <div className="flex gap-2">
+                        {status === 'pending' && (
+                          <button onClick={() => handleSectionAction(order._id, selectedSection, 'prepare')} className="flex-1 text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markPreparing')}</button>
+                        )}
+                        {status === 'preparing' && (
+                          <button onClick={() => handleSectionAction(order._id, selectedSection, 'ready')} className="flex-1 text-xs bg-green-500 hover:bg-green-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markReady')}</button>
+                        )}
+                        {status === 'ready' && (
+                          <button onClick={() => handleSectionDeliver(order._id, selectedSection)} className="flex-1 text-xs bg-gray-500 hover:bg-gray-600 text-white py-1.5 rounded-lg transition-colors">{t('kitchenDisplay.markDelivered')}</button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -369,12 +434,16 @@ export function KitchenDisplay() {
   );
 }
 
-function GroupedItemsBySection({ order, sections, getSectionName }: {
+function GroupedItemsBySection({ order, sections, getSectionName, onItemToggle, onSectionAction, onSectionDeliver }: {
   order: Order;
   sections: MenuSection[];
   getSectionName: (id: string) => string;
+  onItemToggle?: (orderId: string, item: Order['items'][number]) => void;
+  onSectionAction?: (orderId: string, sectionId: string, action: 'prepare' | 'ready') => void;
+  onSectionDeliver?: (orderId: string, sectionId: string) => void;
 }) {
   const { t, i18n } = useTranslation();
+  const formatNumber = (num: number) => new Intl.NumberFormat(i18n.language === 'ar' ? 'ar-SA' : i18n.language).format(num);
   const visibleItems = order.items.filter(item => (item.deliveredCount ?? 0) < (item.quantity ?? 0));
   const grouped = new Map<string, typeof order.items>();
   visibleItems.forEach(item => {
@@ -395,6 +464,7 @@ function GroupedItemsBySection({ order, sections, getSectionName }: {
     const allPrepared = items.every(item => (item.preparedCount ?? 0) >= (item.quantity ?? 0));
     if (allPrepared) return 'ready';
     if (anyPrepared) return 'preparing';
+    if (order.status === 'preparing') return 'preparing';
     return 'pending';
   };
 
@@ -407,20 +477,62 @@ function GroupedItemsBySection({ order, sections, getSectionName }: {
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">
               <Layers className="h-3 w-3" />
               {sectionId === '__unknown__' ? '' : getSectionName(sectionId)}
-              <span className={`ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusBadgeClass[groupStatus] || ''}`}>
+              <span className={`ms-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusBadgeClass[groupStatus] || ''}`}>
                 {t(`kitchenDisplay.${groupStatus}`)}
               </span>
             </div>
             <ul className="space-y-0.5">
-              {items.map((item, i) => (
-                <li key={i} className="flex justify-between text-sm py-0.5">
-                  <span className="text-gray-700 dark:text-gray-300">
-                    {i18n.language === 'ar' ? item.arabicName || item.name : item.name}
-                  </span>
-                  <span className="text-gray-500 font-medium">x{item.quantity}</span>
-                </li>
-              ))}
+              {items.map((item, i) => {
+                const isItemPrepared = (item.preparedCount ?? 0) >= (item.quantity ?? 1);
+                return (
+                  <li key={i} className="flex items-center justify-between text-sm py-0.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {groupStatus !== 'pending' && onItemToggle && (
+                        <label className="flex items-center cursor-pointer flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isItemPrepared}
+                            onChange={() => onItemToggle(order._id, item)}
+                            className="sr-only"
+                          />
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-150 ${
+                            isItemPrepared
+                              ? 'bg-green-500 border-green-500 scale-110'
+                              : 'border-gray-300 dark:border-gray-600 hover:border-green-400 hover:shadow-sm'
+                          }`}>
+                            {isItemPrepared && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                          </span>
+                        </label>
+                      )}
+                      <span className={`text-gray-700 dark:text-gray-300 truncate ${
+                        isItemPrepared ? 'line-through text-gray-400 dark:text-gray-500' : ''
+                      }`}>
+                        {i18n.language === 'ar' ? item.arabicName || item.name : item.name}
+                      </span>
+                    </div>
+                    <span className="text-gray-500 font-medium flex-shrink-0 ms-2">{t('common.quantity', { count: formatNumber(item.quantity) })}</span>
+                  </li>
+                );
+              })}
             </ul>
+            {onSectionAction && groupStatus === 'pending' && (
+              <button onClick={() => onSectionAction(order._id, sectionId, 'prepare')}
+                className="w-full mt-2 text-xs bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded-lg transition-colors">
+                {t('kitchenDisplay.markPreparing')}
+              </button>
+            )}
+            {onSectionAction && groupStatus === 'preparing' && (
+              <button onClick={() => onSectionAction(order._id, sectionId, 'ready')}
+                className="w-full mt-2 text-xs bg-green-500 hover:bg-green-600 text-white py-1.5 rounded-lg transition-colors">
+                {t('kitchenDisplay.markReady')}
+              </button>
+            )}
+            {onSectionDeliver && groupStatus === 'ready' && (
+              <button onClick={() => onSectionDeliver(order._id, sectionId)}
+                className="w-full mt-2 text-xs bg-gray-500 hover:bg-gray-600 text-white py-1.5 rounded-lg transition-colors">
+                {t('kitchenDisplay.markDelivered')}
+              </button>
+            )}
           </div>
         );
       })}

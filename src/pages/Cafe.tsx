@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle, DollarSign, ChefHat } from 'lucide-react';
+import { ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer, Settings, AlertTriangle, Search, CheckCircle, DollarSign, ChefHat, Save } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { printOrder } from '../utils/printOrder';
 import { canAddOrder, canEditOrder, canDeleteOrder } from '../utils/permissionHelper';
 import PermissionDenied from '../components/PermissionDenied';
@@ -339,6 +340,12 @@ const Cafe: React.FC = () => {
     };
   }, [showOrderModal, showEditOrderModal, showManagementModal, showSectionModal, 
       showTableModal, showConfirmModal, showTableOrdersModal]);
+
+  // Lock body scroll when any modal is open
+  const anyModalOpen = showOrderModal || showEditOrderModal || showManagementModal || 
+                       showSectionModal || showTableModal || showConfirmModal || 
+                       showTableOrdersModal;
+  useBodyScrollLock(anyModalOpen);
 
   // Handle navigation from Billing page to open table modal
   useEffect(() => {
@@ -895,7 +902,7 @@ const Cafe: React.FC = () => {
   };
 
   // Save order
-  const handleSaveOrder = async (shouldPrint: boolean = false) => {
+  const handleSaveOrder = async (status: string = 'pending', shouldPrint: boolean = false) => {
     if (!selectedTable || currentOrderItems.length === 0) {
       showNotification(t('cafe.addAtLeastOne'), 'error');
       return;
@@ -916,6 +923,7 @@ const Cafe: React.FC = () => {
           notes: item.notes || null,
         })),
         notes: orderNotes || null,
+        status,
       };
 
       // لا تغلق النافذة حتى نتأكد من نجاح العملية
@@ -1008,7 +1016,7 @@ const Cafe: React.FC = () => {
   };
 
   // Update order
-  const handleUpdateOrder = async (shouldPrint: boolean = false) => {
+  const handleUpdateOrder = async (shouldPrint: boolean = false, status?: string) => {
     if (!selectedOrder || currentOrderItems.length === 0) {
       showNotification(t('cafe.addAtLeastOne'), 'error');
       return;
@@ -1137,7 +1145,7 @@ const Cafe: React.FC = () => {
         `هل أنت متأكد من تحديث الطلب ${selectedOrder.orderNumber}؟\n\n${warningMessage}`,
         async () => {
           setConfirmLoading(true);
-          await executeUpdateOrder(shouldPrint);
+          await executeUpdateOrder(shouldPrint, status);
           setConfirmLoading(false);
           setShowConfirmModal(false);
         },
@@ -1147,12 +1155,12 @@ const Cafe: React.FC = () => {
       );
     } else {
       // لا توجد دفعات جزئية، نفذ التحديث مباشرة
-      await executeUpdateOrder(shouldPrint);
+      await executeUpdateOrder(shouldPrint, status);
     }
   };
 
   // دالة منفصلة لتنفيذ التحديث
-  const executeUpdateOrder = async (shouldPrint: boolean = false) => {
+  const executeUpdateOrder = async (shouldPrint: boolean = false, status?: string) => {
     if (!selectedOrder || currentOrderItems.length === 0) {
       return;
     }
@@ -1161,7 +1169,7 @@ const Cafe: React.FC = () => {
     const previousTableStatuses = { ...tableStatuses };
 
     try {
-      const orderData = {
+      const orderData: Record<string, any> = {
         items: currentOrderItems.map(item => ({
           menuItem: item.menuItem,
           name: item.name,
@@ -1171,6 +1179,7 @@ const Cafe: React.FC = () => {
         })),
         notes: orderNotes || null,
       };
+      if (status) orderData.status = status;
 
       // لا تغلق النافذة حتى نتأكد من نجاح العملية
       const orderToUpdate = selectedOrder;
@@ -1567,8 +1576,9 @@ const Cafe: React.FC = () => {
           updateItemNotes={updateItemNotes}
           removeItemFromOrder={removeItemFromOrder}
           calculateTotal={calculateOrderTotal}
-          onSave={() => handleSaveOrder(false)}
-          onSaveAndPrint={() => handleSaveOrder(true)}
+          onSaveOnly={() => handleSaveOrder('draft', false)}
+          onSave={() => handleSaveOrder('pending', false)}
+          onSaveAndPrint={() => handleSaveOrder('pending', true)}
           onClose={() => {
             setShowOrderModal(false);
             setSelectedTable(null);
@@ -1602,8 +1612,9 @@ const Cafe: React.FC = () => {
           updateItemNotes={updateItemNotes}
           removeItemFromOrder={removeItemFromOrder}
           calculateTotal={calculateOrderTotal}
-          onSave={() => handleUpdateOrder(false)}
-          onSaveAndPrint={() => handleUpdateOrder(true)}
+          onSaveOnly={() => handleUpdateOrder(false, 'draft')}
+          onSave={() => handleUpdateOrder(false, 'pending')}
+          onSaveAndPrint={() => handleUpdateOrder(true, 'pending')}
           onClose={() => {
             setShowEditOrderModal(false);
             setSelectedTable(null);
@@ -2013,6 +2024,7 @@ interface OrderModalProps {
   calculateTotal: () => number;
   onSave: () => void;
   onSaveAndPrint: () => void;
+  onSaveOnly: () => void;
   onClose: () => void;
   loading: boolean;
   isEdit: boolean;
@@ -2039,6 +2051,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   calculateTotal,
   onSave,
   onSaveAndPrint,
+  onSaveOnly,
   onClose,
   loading,
   isEdit,
@@ -2423,12 +2436,20 @@ const OrderModal: React.FC<OrderModalProps> = ({
             {t('cafe.orderModal.cancel')}
           </button>
           <button
+            onClick={onSaveOnly}
+            disabled={loading || orderItems.length === 0}
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Save className={`h-4 w-4`} />
+            {loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.saveOnly')}
+          </button>
+          <button
             onClick={onSave}
             disabled={loading || orderItems.length === 0}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <ChefHat className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
-            {loading ? t('cafe.orderModal.saving') : isEdit ? t('cafe.orderModal.update') : t('cafe.orderModal.save')}
+            {loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.saveAndSend')}
           </button>
           <button
             onClick={onSaveAndPrint}
@@ -2436,7 +2457,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Printer className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
-            {loading ? t('cafe.orderModal.saving') : isEdit ? t('cafe.orderModal.updateAndPrint') : t('cafe.orderModal.saveAndPrint')}
+            {loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.saveAndPrint')}
           </button>
         </div>
       </div>

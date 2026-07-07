@@ -89,7 +89,7 @@ export interface Order {
   customerName?: string;
   customerPhone?: string;
   items: OrderItem[];
-  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  status: 'draft' | 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
   totalAmount?: number;
   subtotal?: number;
   discount?: number;
@@ -115,6 +115,7 @@ export interface Order {
 }
 
 export interface OrderItem {
+  _id?: string;
   name: string;
   arabicName?: string;
   price: number;
@@ -1103,7 +1104,7 @@ class ApiClient {
     });
   }
 
-  async updateOrderStatus(orderId: string, status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'): Promise<ApiResponse<Order>> {
+  async updateOrderStatus(orderId: string, status: 'draft' | 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'): Promise<ApiResponse<Order>> {
     return this.request<Order>(`/orders/${orderId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
