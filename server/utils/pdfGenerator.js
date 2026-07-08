@@ -300,7 +300,7 @@ export const generatePayrollSummaryPDF = async (payrollData, language = 'ar', cu
                 type: 'النوع',
                 method: 'الطريقة',
                 notes: 'الملاحظات',
-                developedBy: 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية - ٠١١١٦٦٢٦١٦٤'
+                developedBy: 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية - ٠١١١٦٦٢٦١٦٤'
             },
             en: {
                 comprehensivePayroll: 'Comprehensive Payroll Summary',

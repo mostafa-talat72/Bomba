@@ -311,7 +311,7 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
       ]),
       
       // Footer
-      h(Text, { key: 'footer', style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+      h(Text, { key: 'footer', style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
     ])
   );
 
@@ -347,7 +347,7 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
             )
           ])
         ]),
-        h(Text, { key: 'footer2', style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+        h(Text, { key: 'footer2', style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
       ])
     );
   }
@@ -405,7 +405,7 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
                 )
               ])
             ]),
-            h(Text, { key: `footer-s${sectionIndex}`, style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+            h(Text, { key: `footer-s${sectionIndex}`, style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
           ])
         );
       }
@@ -444,7 +444,7 @@ export const DailyReportPDFDocument = ({ reportData, t, currentLanguage, isRTL, 
             )
           ])
         ]),
-        h(Text, { key: 'footer-all', style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+        h(Text, { key: 'footer-all', style: styles.footer, fixed: true }, cleanText(safeT.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
       ])
     );
   }

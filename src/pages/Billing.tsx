@@ -903,17 +903,16 @@ const Billing = () => {
         showNotification(t('billing.notifications.sessionTimeUpdated'), 'success');
         setShowEditSessionTimeModal(false);
         setSessionToEdit(null);
-        
-        // Refresh bills to show updated session and cost
-        await fetchBills();
-        
-        // If payment modal is open, refresh the selected bill
-        if (showPaymentModal && selectedBill) {
+
+        // Refresh the specific bill to show updated session and cost
+        if (selectedBill) {
           const updatedBillResult = await api.getBill(selectedBill.id || selectedBill._id);
           if (updatedBillResult && updatedBillResult.data) {
             setSelectedBill(updatedBillResult.data);
-            setPaymentAmount(updatedBillResult.data.remaining?.toString() || '0');
-            setOriginalAmount(updatedBillResult.data.remaining?.toString() || '0');
+            if (showPaymentModal) {
+              setPaymentAmount(updatedBillResult.data.remaining?.toString() || '0');
+              setOriginalAmount(updatedBillResult.data.remaining?.toString() || '0');
+            }
           }
         }
       } else {
@@ -983,17 +982,16 @@ const Billing = () => {
         setSessionToEdit(null);
         setPeriodToEdit(null);
         setPeriodIndex(-1);
-        
-        // Refresh bills to show updated session and cost
-        await fetchBills();
-        
-        // If payment modal is open, refresh the selected bill
-        if (showPaymentModal && selectedBill) {
+
+        // Refresh the specific bill to show updated session and cost
+        if (selectedBill) {
           const updatedBillResult = await api.getBill(selectedBill.id || selectedBill._id);
           if (updatedBillResult && updatedBillResult.data) {
             setSelectedBill(updatedBillResult.data);
-            setPaymentAmount(updatedBillResult.data.remaining?.toString() || '0');
-            setOriginalAmount(updatedBillResult.data.remaining?.toString() || '0');
+            if (showPaymentModal) {
+              setPaymentAmount(updatedBillResult.data.remaining?.toString() || '0');
+              setOriginalAmount(updatedBillResult.data.remaining?.toString() || '0');
+            }
           }
         }
       } else {
@@ -1311,22 +1309,13 @@ const Billing = () => {
       if (result && result.data) {
         // إعادة جلب الفاتورة للحصول على QR code المحدث
         const updatedBillResult = await api.getBill(selectedBill.id || selectedBill._id);
-        if (updatedBillResult && updatedBillResult.data) {
-          setSelectedBill(updatedBillResult.data);
-        } else {
-          setSelectedBill(result.data);
-        }
-        
+        const finalBill = updatedBillResult?.data || result.data;
+        setSelectedBill(finalBill);
+
         handleClosePaymentModal();
 
         // لا نستدعي updateBillStatus هنا لأن الـ Backend يتولى ذلك
         // والاستدعاء هنا قد يُعيد حساب الحالة بشكل خاطئ
-
-        // إعادة تحميل البيانات (Tables و Bills معاً)
-        await Promise.all([
-          fetchTables(),
-          fetchBills()
-        ]);
 
         showNotification(t('billing.notifications.paymentSuccess'), 'success');
       }
@@ -1414,14 +1403,13 @@ const Billing = () => {
         setBillToPayFull(null);
         setIsProcessingPayment(false);
 
+        // تحديث selectedBill إذا كان هو نفسه
+        if (selectedBill && (selectedBill.id === billToPayFull.id || selectedBill._id === billToPayFull._id)) {
+          setSelectedBill(result.data);
+        }
+
         // إظهار رسالة نجاح فوراً
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
-
-        // إعادة تحميل البيانات في الخلفية
-        Promise.all([
-          fetchTables(),
-          fetchBills()
-        ]).catch(err => console.error('Error refreshing data:', err));
       }
     } catch (error) {
       showNotification(t('billing.notifications.payFullBillError'), 'error');
@@ -1519,18 +1507,9 @@ const Billing = () => {
       const result = await api.updateBill(billId, { status: newStatus });
 
       if (result && result.data) {
-        // تحديث الفاتورة المحلية
         setSelectedBill(result.data);
-        // إعادة تحميل قائمة الفواتير
-        fetchBills();
-        
-        // إذا أصبحت الفاتورة مدفوعة بالكامل، تحديث حالة الطاولة
-        if (newStatus === 'paid') {
-          await fetchTables();
-          await fetchBills();
-        }
       }
-      
+
       return newStatus;
     } catch (error) {
       showNotification(t('billing.notifications.updateBillStatusError'), 'error');
@@ -1560,29 +1539,24 @@ const Billing = () => {
           const aggregatedItem = backendAggregatedItems.find(aggItem => aggItem.id === item.itemId);
           return sum + (aggregatedItem ? aggregatedItem.price * item.quantity : 0);
         }, 0);
-        
+
+        // جلب أحدث بيانات الفاتورة من الرد
+        const updatedBill = response.data as Bill | undefined;
+
         // إظهار رسالة النجاح فوراً (بدون إغلاق النافذة)
         setIsProcessingPartialPayment(false);
         showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(totalPaid) }), 'success');
 
-        // إعادة تحميل البيانات في الخلفية
-        Promise.all([
-          fetchBills(),
-          fetchTables()
-        ]).then(async () => {
-          // تحديث الفاتورة المحددة للحصول على أحدث البيانات
-          const refreshedBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
-          if (refreshedBillResponse.success && refreshedBillResponse.data) {
-            const updatedBill = refreshedBillResponse.data;
-            setSelectedBill(updatedBill);
-            
-            // إذا أصبحت الفاتورة مدفوعة بالكامل، إغلاق النافذة
-            if (updatedBill.status === 'paid' && (updatedBill.remaining === 0 || updatedBill.paid >= updatedBill.total)) {
-              setShowPartialPaymentModal(false);
-              showNotification(t('billing.notifications.billCompleted'), 'success');
-            }
+        // تحديث محلي للفاتورة
+        if (updatedBill) {
+          setSelectedBill(updatedBill);
+
+          // إذا أصبحت الفاتورة مدفوعة بالكامل، إغلاق النافذة
+          if (updatedBill.status === 'paid' && (updatedBill.remaining === 0 || updatedBill.paid >= updatedBill.total)) {
+            setShowPartialPaymentModal(false);
+            showNotification(t('billing.notifications.billCompleted'), 'success');
           }
-        }).catch(err => console.error('Error refreshing data:', err));
+        }
       } else {
         const errorMessage = response.message || t('billing.notifications.partialPaymentError');
         showNotification(errorMessage, 'error');
@@ -1689,6 +1663,8 @@ const Billing = () => {
       });
 
       if (result.success && result.data) {
+        setSelectedBill(result.data);
+
         // إغلاق نافذة التأكيد فوراً
         setShowSessionPaymentConfirmModal(false);
         setSessionToPayData(null);
@@ -1700,22 +1676,6 @@ const Billing = () => {
 
         // إظهار رسالة نجاح فوراً
         showNotification(t('billing.notifications.sessionPaymentSuccess'), 'success');
-
-        // إعادة تحميل البيانات في الخلفية
-        Promise.all([
-          fetchTables(),
-          fetchBills()
-        ]).then(async () => {
-          // جلب الفاتورة المحدثة بكل التفاصيل
-          try {
-            const fullBillResponse = await api.getBill(selectedBill.id || selectedBill._id);
-            if (fullBillResponse && fullBillResponse.success && fullBillResponse.data) {
-              setSelectedBill(fullBillResponse.data);
-            }
-          } catch (fetchError) {
-            console.error('خطأ في جلب تفاصيل الفاتورة:', fetchError);
-          }
-        }).catch(err => console.error('Error refreshing data:', err));
       } else {
         showNotification(result.message || t('billing.notifications.sessionPaymentError'), 'error');
         setIsProcessingSessionPayment(false);
@@ -1755,33 +1715,20 @@ const Billing = () => {
       
       if (result && result.success) {
         // تحديث البيانات أولاً
-        await Promise.all([fetchBills(), fetchTables()]);
-        
-        // جلب الفاتورة المحدثة بكل التفاصيل (orders و sessions populated)
-        if (result.data && result.data._id) {
-          try {
-            const fullBillResponse = await api.getBill(result.data._id);
-            if (fullBillResponse && fullBillResponse.success && fullBillResponse.data) {
-              setSelectedBill(fullBillResponse.data);
-            } else {
-              setSelectedBill(result.data);
-            }
-          } catch (fetchError) {
-            console.error('خطأ في جلب تفاصيل الفاتورة:', fetchError);
-            setSelectedBill(result.data);
-          }
-          
-          // إذا كانت رسالة تشير إلى دمج الفواتير
-          if (result.message && result.message.includes('دمج')) {
-            showNotification(`✅ ${result.message}`, 'success');
-          } else {
-            showNotification(
-              t('billing.notifications.tableChangeSuccess', { tableNumber: targetTable?.number || newTableNumber }), 
-              'success'
-            );
-          }
+        if (result.data) {
+          setSelectedBill(result.data);
         }
-        
+
+        // إذا كانت رسالة تشير إلى دمج الفواتير
+        if (result.message && result.message.includes('دمج')) {
+          showNotification(`✅ ${result.message}`, 'success');
+        } else {
+          showNotification(
+            t('billing.notifications.tableChangeSuccess', { tableNumber: targetTable?.number || newTableNumber }), 
+            'success'
+          );
+        }
+
         // إغلاق نافذة تغيير الطاولة
         setShowChangeTableModal(false);
         setNewTableNumber(null);
@@ -1837,6 +1784,11 @@ const Billing = () => {
     try {
       const result = await api.endSession(sessionToEnd, customerNameForEndSession.trim() || undefined);
       if (result && result.success) {
+        // إذا كانت النتيجة تحتوي على بيانات الفاتورة المحدثة، استخدمها
+        if (result.data) {
+          setSelectedBill(result.data);
+        }
+
         // إغلاق النافذة وإظهار رسالة النجاح فوراً
         setShowSessionEndModal(false);
         setSessionToEnd(null);
@@ -1849,20 +1801,18 @@ const Billing = () => {
         setPaymentMethod('cash');
         setPaymentReference('');
 
-        // إعادة تحميل البيانات في الخلفية
-        fetchBills().then(async () => {
-          // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
-          if (selectedBill) {
-            const updatedStatus = await updateBillStatus(selectedBill.id || selectedBill._id);
-            
-            // إذا أصبحت الفاتورة مدفوعة بالكامل بعد إنهاء الجلسة، تحديث حالة الطاولة
-            if (updatedStatus === 'paid') {
-              await fetchTables();
-              await fetchBills();
+        // تحديث حالة الفاتورة بناءً على الأصناف والجلسات
+        if (selectedBill) {
+          const updatedStatus = await updateBillStatus(selectedBill.id || selectedBill._id);
+          
+          // إذا أصبحت الفاتورة مدفوعة بالكامل بعد إنهاء الجلسة، جلب البيانات المحدثة
+          if (updatedStatus === 'paid' && selectedBill) {
+            const refreshedBill = await api.getBill(selectedBill.id || selectedBill._id);
+            if (refreshedBill?.data) {
+              setSelectedBill(refreshedBill.data);
             }
           }
-        }).catch(err => console.error('Error refreshing data:', err));
-
+        }
       } else {
         showNotification(t('billing.notifications.endSessionError'), 'error');
         setIsEndingSession(false);

@@ -84,7 +84,7 @@ export const getOrganizationPublicPage = async (req, res) => {
                         <div class="developer-info">
                             <div>
                                 <i class="fas fa-code"></i>
-                                تصميم وتطوير: مصطفى طلعت للحلول البرمجية
+                                تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية
                             </div>
                             <div style="margin-top: 5px;">
                                 <i class="fas fa-phone"></i>
@@ -176,7 +176,7 @@ export const getOrganizationPublicPage = async (req, res) => {
                     <div class="developer-info">
                         <div>
                             <i class="fas fa-code"></i>
-                            تصميم وتطوير: مصطفى طلعت للحلول البرمجية
+                            تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية
                         </div>
                         <div style="margin-top: 5px;">
                             <i class="fas fa-phone"></i>
@@ -591,7 +591,7 @@ function generateOrganizationHTML(organization, req) {
                 <div class="developer-info">
                     <div class="dev-name">
                         <i class="fas fa-code"></i>
-                        تصميم وتطوير هذا النظام بواسطة مصطفى طلعت للحلول البرمجية
+                        تصميم وتطوير هذا النظام بواسطة المهندس مصطفى طلعت للحلول البرمجية
                     </div>
                     <div class="dev-contact">
                         <i class="fas fa-phone"></i>

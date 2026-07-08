@@ -698,7 +698,7 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
           key: 'dc',
           style: styles.developerCredit,
           fixed: true
-        }, cleanText(t.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+        }, cleanText(t.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
       ];
 
       // حساب الطول المناسب للصفحة الأولى (معلومات الموظف) - زيادة الارتفاع
@@ -756,7 +756,7 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
             key: 'dc2',
             style: styles.developerCredit,
             fixed: true
-          }, cleanText(t.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+          }, cleanText(t.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
         ];
 
         detailedPages.push(h(Page, { key: `detail-${idx}-p2`, size: [595, page2Height], style: styles.page }, page2Elements));
@@ -904,7 +904,7 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
             key: 'dc3',
             style: styles.developerCredit,
             fixed: true
-          }, cleanText(t.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+          }, cleanText(t.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
         );
 
         // Add footer space: 80
@@ -1009,7 +1009,7 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
         key: 'dev-credit1', 
         style: styles.developerCredit,
         fixed: true 
-      }, cleanText(t.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+      }, cleanText(t.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
     ]),
     
     // الصفحة الثانية - تفاصيل الموظفين
@@ -1059,7 +1059,7 @@ export const PayrollPDFDocument = ({ data, monthName, t, currentLanguage, isRTL,
         key: 'dev-credit2', 
         style: styles.developerCredit,
         fixed: true 
-      }, cleanText(t.developedBy || 'تصميم وتطوير: مصطفى طلعت للحلول البرمجية'))
+      }, cleanText(t.developedBy || 'تصميم وتطوير: المهندس مصطفى طلعت للحلول البرمجية'))
     ]),
     
     // صفحات تفصيلية لكل موظف
