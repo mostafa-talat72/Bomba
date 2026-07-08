@@ -316,6 +316,7 @@ const Billing = () => {
   const [customerNameForEndSession, setCustomerNameForEndSession] = useState('');
   const [showChangeTableModal, setShowChangeTableModal] = useState(false);
   const [newTableNumber, setNewTableNumber] = useState<string | null>(null);
+  const [tableChangeSearch, setTableChangeSearch] = useState('');
   const [isChangingTable, setIsChangingTable] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
@@ -343,9 +344,6 @@ const Billing = () => {
   const [showTableBillsModal, setShowTableBillsModal] = useState(false);
   const [tableBillsFilter, setTableBillsFilter] = useState('unpaid'); // الافتراضي: غير مدفوع
   const [searchQuery, setSearchQuery] = useState('');
-  const [barcodeQuery, setBarcodeQuery] = useState('');
-  const [barcodeProduct, setBarcodeProduct] = useState<any>(null);
-  const [barcodeSearching, setBarcodeSearching] = useState(false);
   const [billTypeFilter, setBillTypeFilter] = useState<'all' | 'cafe' | 'playstation' | 'computer'>('all');
   const [playstationSearchQuery, setPlaystationSearchQuery] = useState('');
   const [gamingDeviceTypeFilter, setGamingDeviceTypeFilter] = useState<'all' | 'playstation' | 'computer'>('all'); // فلتر نوع الجهاز
@@ -1733,6 +1731,7 @@ const Billing = () => {
     setSelectedBill(bill);
     setShowChangeTableModal(true);
     setNewTableNumber(null);
+    setTableChangeSearch('');
   };
 
   // دالة تغيير الطاولة
@@ -1786,6 +1785,7 @@ const Billing = () => {
         // إغلاق نافذة تغيير الطاولة
         setShowChangeTableModal(false);
         setNewTableNumber(null);
+        setTableChangeSearch('');
       } else {
         showNotification(t('billing.notifications.tableChangeError'), 'error');
       }
@@ -2124,77 +2124,6 @@ const Billing = () => {
           </div>
         </div>
       )}
-
-      {/* Barcode Scanner */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <QrCode className={`absolute top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 ${isRTL ? 'right-3' : 'left-3'}`} />
-            <input
-              type="text"
-              value={barcodeQuery}
-              onChange={(e) => setBarcodeQuery(e.target.value)}
-              onKeyDown={async (e) => {
-                if (e.key === 'Enter' && barcodeQuery.trim()) {
-                  setBarcodeSearching(true);
-                  setBarcodeProduct(null);
-                  try {
-                    const res = await api.getBillingItemByBarcode(barcodeQuery.trim());
-                    if (res.success && res.data) {
-                      setBarcodeProduct(res.data);
-                    } else {
-                      showNotification(t('billing.barcodeNotFound'), 'warning');
-                    }
-                  } catch {
-                    showNotification(t('billing.barcodeError'), 'error');
-                  }
-                  setBarcodeSearching(false);
-                }
-              }}
-              placeholder={t('billing.barcodePlaceholder')}
-              className={`w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 ${isRTL ? 'pr-10' : 'pl-10'} dark:bg-gray-700 dark:text-gray-100 text-sm font-mono`}
-              autoFocus
-            />
-          </div>
-          <button
-            onClick={async () => {
-              if (!barcodeQuery.trim()) return;
-              setBarcodeSearching(true);
-              setBarcodeProduct(null);
-              try {
-                const res = await api.getBillingItemByBarcode(barcodeQuery.trim());
-                if (res.success && res.data) {
-                  setBarcodeProduct(res.data);
-                } else {
-                  showNotification(t('billing.barcodeNotFound'), 'warning');
-                }
-              } catch {
-                showNotification(t('billing.barcodeError'), 'error');
-              }
-              setBarcodeSearching(false);
-            }}
-            disabled={barcodeSearching || !barcodeQuery.trim()}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            {barcodeSearching ? t('common.loading') : t('common.search')}
-          </button>
-        </div>
-        {barcodeProduct && (
-          <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-bold text-gray-900 dark:text-gray-100">{barcodeProduct.name}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {barcodeProduct.barcode} — {formatCurrency(barcodeProduct.price)}
-                </p>
-              </div>
-              <button onClick={() => setBarcodeProduct(null)} className="p-1 hover:bg-green-200 dark:hover:bg-green-800 rounded">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Gaming Devices Section (PlayStation & Computer) */}
       {(billTypeFilter === 'all' || billTypeFilter === 'playstation' || billTypeFilter === 'computer') && (
@@ -4169,24 +4098,69 @@ const Billing = () => {
               <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 {t('billing.selectNewTable')}
               </label>
-              <select
-                value={newTableNumber || ''}
-                onChange={(e) => setNewTableNumber(e.target.value ? e.target.value : null)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 text-sm sm:text-base"
-                disabled={isChangingTable}
-              >
-                <option value="">{t('billing.selectTablePlaceholder')}</option>
+
+              {newTableNumber && (() => {
+                const st = tables.find((t: any) => t._id === newTableNumber);
+                return st ? (
+                  <div className="mb-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 rounded-lg flex items-center justify-between">
+                    <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">
+                      {t('billing.tableWithNumber', { number: getTableDisplay(st.number, i18n.language) })} ✓
+                    </span>
+                    <button
+                      onClick={() => { setNewTableNumber(null); setTableChangeSearch(''); }}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                ) : null;
+              })()}
+
+              <div className="relative">
+                <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 ${isRTL ? 'right-3' : 'left-3'}`} />
+                <input
+                  type="text"
+                  value={tableChangeSearch}
+                  onChange={(e) => setTableChangeSearch(e.target.value)}
+                  placeholder={t('billing.searchTable') || 'بحث...'}
+                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 text-sm sm:text-base ${isRTL ? 'pr-10' : 'pl-10'}`}
+                  disabled={isChangingTable}
+                />
+                {tableChangeSearch && (
+                  <button onClick={() => setTableChangeSearch('')} className={`absolute top-1/2 -translate-y-1/2 ${isRTL ? 'left-2' : 'right-2'} p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full`}>
+                    <X className="h-3.5 w-3.5 text-gray-400" />
+                  </button>
+                )}
+              </div>
+              <div className="mt-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                <button
+                  onClick={() => { setNewTableNumber(null); setTableChangeSearch(''); }}
+                  disabled={isChangingTable}
+                  className={`w-full text-right px-3 py-2 text-sm transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30 border-b border-gray-100 dark:border-gray-800 ${!newTableNumber ? 'bg-blue-50 dark:bg-blue-900/30 font-semibold text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                >
+                  {t('billing.selectTablePlaceholder')}
+                </button>
                 {tables
                   .filter((t: any) => t.isActive && t._id !== selectedBill.table?._id)
+                  .filter((t: any) => {
+                    if (!tableChangeSearch) return true;
+                    const q = tableChangeSearch.toLowerCase();
+                    return String(t.number).toLowerCase().includes(q) || (t.name || '').toLowerCase().includes(q);
+                  })
                   .sort((a: any, b: any) => {
                     return String(a.number).localeCompare(String(b.number), i18n.language === 'ar' ? 'ar' : i18n.language === 'fr' ? 'fr' : 'en', { numeric: true });
                   })
                   .map((table: any) => (
-                    <option key={table._id} value={table._id}>
+                    <button
+                      key={table._id}
+                      onClick={() => { setNewTableNumber(table._id); setTableChangeSearch(''); }}
+                      disabled={isChangingTable}
+                      className={`w-full text-right px-3 py-2 text-sm transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30 border-b border-gray-100 dark:border-gray-800 last:border-b-0 ${newTableNumber === table._id ? 'bg-blue-100 dark:bg-blue-900/50 font-semibold text-blue-800 dark:text-blue-200 ring-2 ring-blue-400 dark:ring-blue-600' : 'text-gray-700 dark:text-gray-300'}`}
+                    >
                       {t('billing.tableWithNumber', { number: getTableDisplay(table.number, i18n.language) })}
-                    </option>
+                    </button>
                   ))}
-              </select>
+              </div>
             </div>
             
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-2 sm:p-3 mb-4 sm:mb-6">
@@ -4200,6 +4174,7 @@ const Billing = () => {
                 onClick={() => {
                   setShowChangeTableModal(false);
                   setNewTableNumber(null);
+                  setTableChangeSearch('');
                 }}
                 className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-gray-100 transition-colors text-sm sm:text-base order-2 sm:order-1"
                 disabled={isChangingTable}
