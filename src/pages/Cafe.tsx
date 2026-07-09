@@ -1576,8 +1576,8 @@ const Cafe: React.FC = () => {
           updateItemNotes={updateItemNotes}
           removeItemFromOrder={removeItemFromOrder}
           calculateTotal={calculateOrderTotal}
-          onSaveOnly={() => handleSaveOrder('draft', false)}
-          onSave={() => handleSaveOrder('pending', false)}
+          onSave={() => handleSaveOrder('confirmed', false)} // confirmed: يخصم المخزون بدون طباعة أو إرسال للمطبخ
+          onSaveAndSend={() => handleSaveOrder('pending', false)}
           onSaveAndPrint={() => handleSaveOrder('pending', true)}
           onClose={() => {
             setShowOrderModal(false);
@@ -1612,8 +1612,8 @@ const Cafe: React.FC = () => {
           updateItemNotes={updateItemNotes}
           removeItemFromOrder={removeItemFromOrder}
           calculateTotal={calculateOrderTotal}
-          onSaveOnly={() => handleUpdateOrder(false, 'draft')}
           onSave={() => handleUpdateOrder(false, 'pending')}
+          onSaveAndSend={() => handleUpdateOrder(false, 'pending')}
           onSaveAndPrint={() => handleUpdateOrder(true, 'pending')}
           onClose={() => {
             setShowEditOrderModal(false);
@@ -2024,7 +2024,7 @@ interface OrderModalProps {
   calculateTotal: () => number;
   onSave: () => void;
   onSaveAndPrint: () => void;
-  onSaveOnly: () => void;
+  onSaveAndSend: () => void;
   onClose: () => void;
   loading: boolean;
   isEdit: boolean;
@@ -2051,7 +2051,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   calculateTotal,
   onSave,
   onSaveAndPrint,
-  onSaveOnly,
+  onSaveAndSend,
   onClose,
   loading,
   isEdit,
@@ -2436,17 +2436,17 @@ const OrderModal: React.FC<OrderModalProps> = ({
             {t('cafe.orderModal.cancel')}
           </button>
           <button
-            onClick={onSaveOnly}
-            disabled={loading || orderItems.length === 0}
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <Save className={`h-4 w-4`} />
-            {loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.saveOnly')}
-          </button>
-          <button
             onClick={onSave}
             disabled={loading || orderItems.length === 0}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <CheckCircle className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+            {loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.save')}
+          </button>
+          <button
+            onClick={onSaveAndSend}
+            disabled={loading || orderItems.length === 0}
+            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <ChefHat className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
             {loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.saveAndSend')}

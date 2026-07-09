@@ -706,23 +706,21 @@ export const createOrder = async (req, res) => {
             }
         }
 
-        // حساب المخزون المطلوب لجميع الأصناف (إلا إذا كان حفظ فقط/draft)
-        if (status !== 'draft') {
-            const inventoryNeeded = await calculateTotalInventoryNeeded(items);
+        // حساب المخزون المطلوب لجميع الأصناف
+        const inventoryNeeded = await calculateTotalInventoryNeeded(items);
 
-            // التحقق من توفر المخزون
-            const { errors: validationErrors, details: insufficientDetails } =
-                await validateInventoryAvailability(inventoryNeeded);
+        // التحقق من توفر المخزون
+        const { errors: validationErrors, details: insufficientDetails } =
+            await validateInventoryAvailability(inventoryNeeded);
 
-            if (validationErrors.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "المخزون غير كافي لإنشاء الطلب - راجع التفاصيل أدناه",
-                    errors: validationErrors,
-                    details: insufficientDetails,
-                    inventoryErrors: validationErrors,
-                });
-            }
+        if (validationErrors.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "المخزون غير كافي لإنشاء الطلب - راجع التفاصيل أدناه",
+                errors: validationErrors,
+                details: insufficientDetails,
+                inventoryErrors: validationErrors,
+            });
         }
 
         // Process items and calculate totals
@@ -912,7 +910,6 @@ export const createOrder = async (req, res) => {
 
         // خصم المخزون فوراً عند إنشاء الطلب
         try {
-            // جلب معلومات الفاتورة إذا كانت موجودة
             let billNumber = null;
             if (order.bill) {
                 const Bill = (await import("../models/Bill.js")).default;
@@ -923,19 +920,14 @@ export const createOrder = async (req, res) => {
             }
             await deductInventoryForOrder(order, req.user._id, billNumber);
             Logger.info(`✓ تم خصم المخزون للطلب ${order.orderNumber}`);
-            
-            // إطلاق حدث تحديث المخزون عبر Socket.IO
+
             if (req.io) {
-                const connectedClients = req.io.engine.clientsCount;
-                
-                // استخدام الدالة المخصصة من socketHandler
                 req.io.notifyInventoryUpdate({
                     type: 'deducted',
                     orderId: order._id,
                     orderNumber: order.orderNumber,
                     timestamp: new Date()
                 });
-                
             } else {
                 console.error('❌ req.io is not available in createOrder');
             }
@@ -1078,7 +1070,7 @@ export const updateOrder = async (req, res) => {
         }));
 
         // حساب التكلفة الإجمالية دائماً (حتى لو لم يتم تمرير items)
-        if (items && Array.isArray(items) && items.length > 0 && status !== 'draft') {
+        if (items && Array.isArray(items) && items.length > 0) {
             // حساب المخزون المطلوب للطلب الجديد
             const newInventoryNeeded = await calculateTotalInventoryNeeded(items);
             
@@ -1087,6 +1079,7 @@ export const updateOrder = async (req, res) => {
             
             // حساب الفرق (المخزون الإضافي المطلوب)
             const additionalInventoryNeeded = new Map();
+            const EPSILON = 0.0001; // للتسامح مع أخطاء الفاصلة العائمة
             
             for (const [inventoryItemId, newData] of newInventoryNeeded) {
                 const oldData = oldInventoryNeeded.get(inventoryItemId);
@@ -1096,15 +1089,24 @@ export const updateOrder = async (req, res) => {
                 // تحويل الكمية القديمة إلى نفس وحدة الكمية الجديدة
                 const convertedOldQuantity = convertQuantity(oldQuantity, oldUnit, newData.unit);
                 
-                // حساب الفرق
-                const difference = newData.quantity - convertedOldQuantity;
+                // حساب الفرق مع تقريب لتجنب أخطاء الفاصلة العائمة
+                const difference = Math.round((newData.quantity - convertedOldQuantity) * 1000000) / 1000000;
                 
-                // إذا كان هناك زيادة في الكمية، أضفها للتحقق
-                if (difference > 0) {
+                // إذا كان هناك زيادة في الكمية (أكبر من قيمة إبسيلون)، أضفها للتحقق
+                if (difference > EPSILON) {
                     additionalInventoryNeeded.set(inventoryItemId, {
-                        quantity: difference,
+                        quantity: Math.round(difference * 1000000) / 1000000,
                         unit: newData.unit
                     });
+                }
+            }
+            
+            // أيضاً تحقق من العناصر التي كانت موجودة في الطلب القديم ولكن تم حذفها
+            // (هذه العناصر لا تحتاج تحقق مخزون إضافي، فقط للتسجيل)
+            for (const [inventoryItemId, oldData] of oldInventoryNeeded) {
+                if (!newInventoryNeeded.has(inventoryItemId)) {
+                    // تم حذف هذا المخزون بالكامل - لا نحتاج تحقق، فقط تعديل المخزون لاحقاً
+                    Logger.info(`تم حذف المخزون ${inventoryItemId} بالكامل من الطلب`);
                 }
             }
 

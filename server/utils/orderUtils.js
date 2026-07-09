@@ -3,15 +3,20 @@ import InventoryItem from "../models/InventoryItem.js";
 
 // دالة مساعدة لتحويل الوحدات
 const convertQuantity = (quantity, fromUnit, toUnit) => {
+    // إذا كانت الوحدات متطابقة، إرجاع الكمية كما هي
+    if (fromUnit === toUnit) {
+        return quantity;
+    }
+
     const conversions = {
         // تحويلات الحجم
         لتر: { مل: 1000, لتر: 1 },
         مل: { لتر: 0.001, مل: 1 },
-        // تحويلات الوزن
-        كيلو: { جرام: 1000, كيلو: 1 },
-        جرام: { كيلو: 0.001, جرام: 1 },
-        كيلوغرام: { جرام: 1000, كيلوغرام: 1, كيلو: 1 },
-        غرام: { كيلوغرام: 0.001, غرام: 1, كيلو: 0.001 },
+        // تحويلات الوزن - مع جميع المرادفات والتحويلات البينية
+        كيلو: { جرام: 1000, كيلو: 1, كيلوغرام: 1, غرام: 1000 },
+        جرام: { كيلو: 0.001, جرام: 1, كيلوغرام: 0.001, غرام: 1 },
+        كيلوغرام: { جرام: 1000, كيلوغرام: 1, كيلو: 1, غرام: 1000 },
+        غرام: { كيلوغرام: 0.001, غرام: 1, كيلو: 0.001, جرام: 1 },
         // الوحدات الأخرى
         قطعة: { قطعة: 1 },
         علبة: { علبة: 1 },
@@ -22,17 +27,22 @@ const convertQuantity = (quantity, fromUnit, toUnit) => {
         ملعقة: { ملعقة: 1 },
     };
 
-    // إذا كانت الوحدات متطابقة، إرجاع الكمية كما هي
-    if (fromUnit === toUnit) {
-        return quantity;
+    const conversionRate = conversions[fromUnit]?.[toUnit];
+    if (conversionRate !== undefined) {
+        const result = quantity * conversionRate;
+        return Math.round(result * 1000000) / 1000000; // تقريب لتجنب أخطاء الفاصلة العائمة
     }
 
-    const conversionRate = conversions[fromUnit]?.[toUnit];
-    if (conversionRate) {
-        return quantity * conversionRate;
-    } else {
-        return quantity;
+    // إذا لم نجد تحويلاً، نحاول عكس الوحدات (fromUnit و toUnit قد يكونان معكوسين)
+    const reverseRate = conversions[toUnit]?.[fromUnit];
+    if (reverseRate !== undefined) {
+        const result = quantity / reverseRate;
+        return Math.round(result * 1000000) / 1000000;
     }
+
+    // إذا لم نجد أي تحويل، نعيد الكمية كما هي مع رسالة تحذير
+    console.warn(`تحذير: لا يوجد تحويل للوحدة "${fromUnit}" إلى "${toUnit}"`);
+    return quantity;
 };
 
 // دالة مساعدة لحساب المخزون المطلوب لجميع الأصناف
@@ -186,8 +196,12 @@ const calculateTotalInventoryNeeded = async (orderItems) => {
 const validateInventoryAvailability = async (inventoryNeeded) => {
     const validationErrors = [];
     const details = [];
+    const EPSILON = 0.0001; // للتسامح مع أخطاء الفاصلة العائمة
 
     for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
+        // تجاهل الكميات الصفرية أو السالبة
+        if (quantity <= EPSILON) continue;
+
         const inventoryItem = await InventoryItem.findById(inventoryItemId);
         if (!inventoryItem) {
             validationErrors.push(
@@ -203,13 +217,12 @@ const validateInventoryAvailability = async (inventoryNeeded) => {
         }
 
         // تحويل الكمية المطلوبة من وحدة المكون إلى وحدة المخزون
-        const convertedQuantityNeeded = convertQuantity(
-            quantity,
-            unit,
-            inventoryItem.unit
-        );
+        const convertedQuantityNeeded = Math.round(
+            convertQuantity(quantity, unit, inventoryItem.unit) * 1000000
+        ) / 1000000;
 
-        if (inventoryItem.currentStock < convertedQuantityNeeded) {
+        // مقارنة مع تسامح للفاصلة العائمة
+        if (inventoryItem.currentStock + EPSILON < convertedQuantityNeeded) {
             const errorMsg = `${inventoryItem.name}: المطلوب ${convertedQuantityNeeded} ${inventoryItem.unit}، المتوفر ${inventoryItem.currentStock} ${inventoryItem.unit}`;
             validationErrors.push(errorMsg);
             details.push({
@@ -218,7 +231,6 @@ const validateInventoryAvailability = async (inventoryNeeded) => {
                 available: inventoryItem.currentStock,
                 unit: inventoryItem.unit,
             });
-        } else {
         }
     }
 

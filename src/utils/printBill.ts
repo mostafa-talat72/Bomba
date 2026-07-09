@@ -634,6 +634,8 @@ export const printBill = async (
           }
         }
         
+
+        
         @media screen {
           body {
             max-width: auto;

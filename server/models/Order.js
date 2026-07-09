@@ -90,7 +90,7 @@ const orderSchema = new mongoose.Schema(
         items: [orderItemSchema],
         status: {
             type: String,
-            enum: ["draft", "pending", "preparing", "ready", "delivered", "cancelled"],
+            enum: ["draft", "confirmed", "pending", "preparing", "ready", "delivered", "cancelled"], // confirmed: يخصم المخزون لكن لا يظهر في المطبخ
             default: "pending",
         },
         subtotal: {
