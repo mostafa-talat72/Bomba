@@ -1576,7 +1576,7 @@ const Cafe: React.FC = () => {
           updateItemNotes={updateItemNotes}
           removeItemFromOrder={removeItemFromOrder}
           calculateTotal={calculateOrderTotal}
-          onSave={() => handleSaveOrder('confirmed', false)} // confirmed: يخصم المخزون بدون طباعة أو إرسال للمطبخ
+          onSave={() => handleSaveOrder('pending', false)}
           onSaveAndSend={() => handleSaveOrder('pending', false)}
           onSaveAndPrint={() => handleSaveOrder('pending', true)}
           onClose={() => {
