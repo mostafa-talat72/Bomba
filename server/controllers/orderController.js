@@ -814,7 +814,10 @@ export const createOrder = async (req, res) => {
 
         // Generate order number manually
         const today = new Date();
-        const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
+        const year = today.getFullYear().toString().slice(-2);
+        const month = String(today.getMonth() + 1).padStart(2, "0");
+        const day = String(today.getDate()).padStart(2, "0");
+        const dateStr = `${year}${month}${day}`;
         const count = await Order.countDocuments({
             createdAt: {
                 $gte: new Date(
@@ -829,10 +832,7 @@ export const createOrder = async (req, res) => {
                 ),
             },
         });
-        orderData.orderNumber = `ORD-${dateStr}-${String(count + 1).padStart(
-            3,
-            "0"
-        )}`;
+        orderData.orderNumber = `ORD-${dateStr}-${count + 1}`;
 
         // البحث عن فاتورة غير مدفوعة للطاولة أو إنشاء فاتورة جديدة
         let billToUse = bill;

@@ -475,20 +475,21 @@ billSchema.pre("save", async function (next) {
         try {
             const now = new Date();
 
-            // Format date and time components
+            // Format date YYMMDD
             const year = now.getFullYear().toString().slice(-2);
             const month = String(now.getMonth() + 1).padStart(2, "0");
             const day = String(now.getDate()).padStart(2, "0");
-            const hours = String(now.getHours()).padStart(2, "0");
-            const minutes = String(now.getMinutes()).padStart(2, "0");
-            const seconds = String(now.getSeconds()).padStart(2, "0");
-            const milliseconds = String(now.getMilliseconds()).padStart(3, "0");
+            const dateStr = `${year}${month}${day}`;
 
-            // Create a unique identifier using the full timestamp
-            const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}${milliseconds}`;
+            // Count bills created today for sequential numbering
+            const count = await this.constructor.countDocuments({
+                createdAt: {
+                    $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+                    $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+                }
+            });
 
-            // Create bill number using the timestamp
-            this.billNumber = `BILL-${timestamp}`;
+            this.billNumber = `BILL-${dateStr}-${count + 1}`;
         } catch (error) {
             // Fallback bill number
             this.billNumber = `INV-${Date.now()}`;

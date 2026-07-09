@@ -1,6 +1,6 @@
 import { Bill, Order, Session, ItemPayment, SessionPayment } from '../services/api';
 import { aggregateItemsWithPayments, AggregatedItem } from './billAggregation';
-import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol } from './formatters';
+import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
 import QRCode from 'qrcode';
 import { api } from '../services/api';
 import { getLocaleFromLanguage } from './localeMapper';
@@ -162,9 +162,24 @@ export const printBill = async (
     }
   }
   
-  // Generate QR Code if organization data is available
+  // Ensure printSettings is available
+  let showQRCode = true;
+  if (organizationData?.printSettings?.printQRCode !== undefined) {
+    showQRCode = organizationData.printSettings.printQRCode;
+  } else if (bill.organization) {
+    try {
+      const orgId = typeof bill.organization === 'object' ? (bill.organization as any)._id || bill.organization : bill.organization;
+      const orgRes = await api.getOrganizationById(orgId);
+      if (orgRes.success && orgRes.data) {
+        organizationData = orgRes.data;
+        showQRCode = orgRes.data.printSettings?.printQRCode !== false;
+      }
+    } catch (_) {}
+  }
+  
+  // Generate QR Code if organization data is available and printing QR is enabled
   let qrInfo: { link: string; platform: string } | null = null;
-  if (organizationData && organizationData.socialLinks) {
+  if (showQRCode && organizationData && organizationData.socialLinks) {
     qrInfo = getSocialLinkForQR(organizationData.socialLinks);
     if (qrInfo) {
       qrCodeDataURL = await generateQRCode(qrInfo.link);
@@ -172,7 +187,7 @@ export const printBill = async (
   }
   
   // Generate fallback QR Code if no social links found
-  if (!qrCodeDataURL && organizationData) {
+  if (showQRCode && !qrCodeDataURL && organizationData) {
     let fallbackText = organizationName;
     
     // Add additional information if available
@@ -191,7 +206,7 @@ export const printBill = async (
   }
   
   // Generate basic QR Code if no data found
-  if (!qrCodeDataURL && organizationName && organizationName !== t('billPrint.defaultEstablishment')) {
+  if (showQRCode && !qrCodeDataURL && organizationName && organizationName !== t('billPrint.defaultEstablishment')) {
     qrCodeDataURL = await generateQRCode(organizationName);
     qrInfo = { link: organizationName, platform: t('billPrint.organizationName') };
   }
@@ -376,7 +391,7 @@ export const printBill = async (
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${t('billPrint.title')} ${bill.billNumber || ''}</title>
+      <title>${getDisplayNumber(bill.billNumber) || ''}</title>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
         * { 
@@ -631,13 +646,11 @@ export const printBill = async (
     <body>
       <div class="header">
         ${organizationName ? `<div class="org-name">${organizationName}</div>` : `<div class="org-name">${t('billPrint.defaultEstablishment')}</div>`}
-        <div class="title">${t('billPrint.title')} ${bill.billNumber || ''}</div>
+        <div class="title" style="font-weight: 900; font-size: 22px;">${getDisplayNumber(bill.billNumber) || ''}</div>
         <div class="info">${formatDate(bill.createdAt || new Date())}</div>
-        ${bill.customerName ? `<div class="info">${t('billPrint.customer')}: ${bill.customerName}</div>` : ''}
+        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.2em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.4em;">${bill.table.number}</strong></div>` : (bill.customerName ? `<div class="info">${t('billPrint.customer')}: ${bill.customerName}</div>` : '')}
         ${bill.customerPhone ? `<div class="info">${t('billPrint.phone')}: ${bill.customerPhone}</div>` : ''}
       </div>
-
-      <div class="divider"></div>
 
       ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total) : ''}
 
@@ -678,8 +691,7 @@ export const printBill = async (
       ` : ''}
       
       <div class="footer">
-        <div>
-        <strong style="font-weight: 900; font-size: 14px;">${t('billPrint.footer')}</strong> </div>
+        <strong style="font-weight: 900; font-size: 14px;">${t('billPrint.footer')}</strong>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center; padding: 10px;">

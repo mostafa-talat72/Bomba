@@ -1754,6 +1754,11 @@
         "noPermission": "No validity",
         "noPermissionMessage": "You do not have permission to manage report settings. "
       },
+      "printSettings": {
+        "title": "Print settings",
+        "printQRCode": "Show QR code on bill print",
+        "printQRCodeDesc": "Display the QR code containing contact information on printed bills"
+      },
       "saveSettings": "Save settings",
       "saveAllSettings": "All settings have been saved successfully",
       "success": "The facility data has been updated successfully",
@@ -2071,6 +2076,7 @@
   "billPrint": {
     "title": "Invoice no",
     "customer": "Client",
+    "table": "Table",
     "date": "the date",
     "time": "the time",
     "orders": "Requests",

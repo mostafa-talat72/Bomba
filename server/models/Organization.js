@@ -113,6 +113,11 @@ const OrganizationSchema = new mongoose.Schema({
         }]
     },
 
+    // إعدادات الطباعة
+    printSettings: {
+        printQRCode: { type: Boolean, default: true },
+    },
+
     // معلومات إضافية
     logo: { type: String, default: "" },
     websiteUrl: { type: String, default: "" },

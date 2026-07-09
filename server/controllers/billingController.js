@@ -244,6 +244,7 @@ export const getBill = async (req, res) => {
                     ],
                 })
                 .populate("organization", "name") // إضافة populate للمنشأة
+                .populate("table", "number name")
                 .populate("createdBy", "name")
                 .populate("updatedBy", "name")
                 .populate("payments.user", "name")
@@ -333,6 +334,7 @@ export const getBill = async (req, res) => {
                 ],
             })
             .populate("organization", "name") // إضافة populate للمنشأة
+            .populate("table", "number name")
             .populate("createdBy", "name")
             .populate("updatedBy", "name")
             .populate("payments.user", "name")

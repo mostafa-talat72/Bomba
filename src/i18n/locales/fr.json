@@ -1753,6 +1753,11 @@
         "noPermission": "Aucune validité",
         "noPermissionMessage": "Vous n'êtes pas autorisé à gérer les paramètres du rapport. Veuillez contacter le propriétaire de l'établissement."
       },
+      "printSettings": {
+        "title": "Paramètres d'impression",
+        "printQRCode": "Afficher le QR code sur l'impression de facture",
+        "printQRCodeDesc": "Afficher le QR code contenant les informations de contact sur les factures imprimées"
+      },
       "saveSettings": "Enregistrer les paramètres",
       "saveAllSettings": "Tous les paramètres ont été enregistrés avec succès",
       "success": "Les données de l'établissement ont été mises à jour avec succès",
@@ -2068,6 +2073,7 @@
   "billPrint": {
     "title": "Numéro de facture",
     "customer": "Client",
+    "table": "Table",
     "date": "la date",
     "time": "le temps",
     "orders": "Demandes",

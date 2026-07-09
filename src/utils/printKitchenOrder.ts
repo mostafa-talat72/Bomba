@@ -1,4 +1,4 @@
-import { getCurrencySymbol } from './formatters';
+import { getCurrencySymbol, getDisplayNumber } from './formatters';
 
 interface OrderItem {
   _id: string;
@@ -55,7 +55,7 @@ export const printKitchenOrder = (order: Order, establishmentName: string = 'ا�
     <html dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <title>${isUpdatedOrder ? 'تعديل ' : ''}طباعة الطلب #${order.orderNumber}</title>
+      <title>${isUpdatedOrder ? 'تعديل ' : ''}طباعة الطلب #${getDisplayNumber(order.orderNumber)}</title>
       <style>
         @page {
           size: 80mm auto;
@@ -235,7 +235,7 @@ export const printKitchenOrder = (order: Order, establishmentName: string = 'ا�
 
       <div class="order-info">
         <div style="margin-bottom: 10px;">
-          <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${order.orderNumber}</strong></div>
+          <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${getDisplayNumber(order.orderNumber)}</strong></div>
           <div style="font-size: 16px; color: #333; margin: 8px 0;">${dateTimeString}</div>
           ${order.customerName ? `
             <div style="font-size: 16px; margin: 8px 0; text-align: center;">

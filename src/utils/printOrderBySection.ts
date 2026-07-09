@@ -1,4 +1,4 @@
-import { getCurrencySymbol } from './formatters';
+import { getCurrencySymbol, getDisplayNumber } from './formatters';
 
 interface OrderItem {
   _id: string;
@@ -217,7 +217,7 @@ const printAllSectionsInOnePage = (
         <!-- معلومات الطلب لكل قسم -->
         <div class="order-info">
           <div style="margin-bottom: 10px;">
-            <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${order.orderNumber}</strong></div>
+            <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${getDisplayNumber(order.orderNumber)}</strong></div>
             <div style="font-size: 16px; color: #333; margin: 8px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
               <div style="font-size: 16px; margin: 8px 0; text-align: center;">
@@ -285,7 +285,7 @@ const printAllSectionsInOnePage = (
         <!-- Footer لكل قسم -->
         <div class="footer">
           شكراً لزيارتكم<br>
-          <strong style="font-weight: 900; font-size: 14px;"تم تصميم وتطوير هذا النظام بواسطة المهندس مصطفى طلعت للحلول البرمجية | 01116626164</strong>       </div>
+          <strong style="font-weight: 900; font-size: 14px;">تم تصميم وتطوير هذا النظام بواسطة<br><strong style="font-weight:900">المهندس مصطفى طلعت للحلول البرمجية</strong><br>01116626164</strong>       </div>
       </div>
     `;
   }).join('');
@@ -295,7 +295,7 @@ const printAllSectionsInOnePage = (
     <html dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <title>طباعة الطلب #${order.orderNumber}</title>
+      <title>طباعة الطلب #${getDisplayNumber(order.orderNumber)}</title>
       <style>
         @page {
           size: 80mm auto;
@@ -544,7 +544,7 @@ const printSectionOrder = (
     <html dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <title>طباعة الطلب #${order.orderNumber} - ${sectionName}</title>
+      <title>طباعة الطلب #${getDisplayNumber(order.orderNumber)} - ${sectionName}</title>
       <style>
         @page {
           size: 80mm auto;
@@ -731,7 +731,7 @@ const printSectionOrder = (
 
       <div class="order-info">
         <div style="margin-bottom: 10px;">
-          <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${order.orderNumber}</strong></div>
+          <div style="font-size: 20px; font-weight: bold; margin: 10px 0;"><strong>${getDisplayNumber(order.orderNumber)}</strong></div>
           <div style="font-size: 16px; color: #333; margin: 8px 0;">${dateTimeString}</div>
           ${order.table?.number ? `
             <div style="font-size: 16px; margin: 8px 0; text-align: center;">
@@ -806,7 +806,7 @@ const printSectionOrder = (
 
       <div class="footer">
         شكراً لزيارتكم<br>
-        <strong style="font-weight: 900; font-size: 14px;">تم تصميم وتطوير هذا النظام بواسطة المهندس مصطفى طلعت للحلول البرمجية | 01116626164</strong>       </div>
+        <strong style="font-weight: 900; font-size: 14px;">تم تصميم وتطوير هذا النظام بواسطة<br><strong style="font-weight:900">المهندس مصطفى طلعت للحلول البرمجية</strong><br>01116626164</strong>       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center;">
         <button onclick="window.print()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">

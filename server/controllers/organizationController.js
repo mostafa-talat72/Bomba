@@ -123,7 +123,8 @@ export const updateOrganization = async (req, res) => {
             workingHours,
             logo,
             currency,
-            timezone
+            timezone,
+            printSettings
         } = req.body;
 
         // تحديث البيانات
@@ -148,6 +149,13 @@ export const updateOrganization = async (req, res) => {
             organization.workingHours = {
                 ...organization.workingHours,
                 ...workingHours
+            };
+        }
+
+        if (printSettings) {
+            organization.printSettings = {
+                ...organization.printSettings,
+                ...printSettings
             };
         }
 

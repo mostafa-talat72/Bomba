@@ -1,4 +1,4 @@
-import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol } from './formatters';
+import { formatDecimal, formatCurrency as formatCurrencyUtil, getCurrencySymbol, getDisplayNumber } from './formatters';
 import { getLocaleFromLanguage } from './localeMapper';
 import type { TFunction } from 'i18next';
 
@@ -254,7 +254,7 @@ const printAllSectionsInOnePage = (
         <!-- Order info for each section -->
         <div class="order-info">
           <div style="margin-bottom: 2px;">
-            <div style="font-size: 20px; font-weight: bold; margin: 2px 0;"><strong>${order.orderNumber}</strong></div>
+            <div style="font-size: 20px; font-weight: bold; margin: 2px 0;"><strong>${getDisplayNumber(order.orderNumber)}</strong></div>
             <div style="font-size: 16px; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
               <div style="font-size: 16px; margin: 2px 0; text-align: center;">
@@ -324,7 +324,7 @@ const printAllSectionsInOnePage = (
 <html dir="${dir}">
 <head>
 <meta charset="UTF-8">
-<title>${t('orderPrint.printButton')} #${order.orderNumber}</title>
+<title>${t('orderPrint.printButton')} #${getDisplayNumber(order.orderNumber)}</title>
 
 <style>
 @page {

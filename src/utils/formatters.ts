@@ -30,6 +30,11 @@ export const replaceAMPM = (formattedTime: string): string => {
         .replace(/PM/gi, labels.pm);
 };
 
+/** عرض رقم الفاتورة/الطلب بدون التاريخ للطباعة (BILL-260709-1 → BILL-1) */
+export const getDisplayNumber = (num: string): string => {
+    return num?.replace(/-\d{6}-/, '-') || num;
+};
+
 /**
  * Get currency symbol based on currency code and language
  */
