@@ -890,30 +890,27 @@ export const createOrder = async (req, res) => {
             orderData.bill = billToUse;
         }
 
-        // Create order with retry on duplicate order number
+        // Find a unique order number (keep incrementing until free)
         const lastOrder = await Order.findOne({ orderNumber: { $regex: `^${prefix}` } })
             .sort({ orderNumber: -1 })
             .select('orderNumber');
-        let nextSeq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
+        let seq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
 
         let order;
-        for (let attempt = 0; attempt < 10; attempt++) {
-            try {
-                const num = nextSeq + attempt;
-                const orderNum = `${prefix}${num}`;
-                const existing = await Order.findOne({ orderNumber: orderNum }).select('_id');
-                if (existing) {
-                    Logger.warn(`⚠️ Order number ${orderNum} already exists, retrying (${attempt + 1}/10)`);
-                    continue;
+        while (true) {
+            const orderNum = `${prefix}${seq}`;
+            const existing = await Order.findOne({ orderNumber: orderNum }).select('_id');
+            if (!existing) {
+                try {
+                    const orderDataCopy = { ...orderData, orderNumber: orderNum };
+                    order = new Order(orderDataCopy);
+                    await order.save();
+                    break;
+                } catch (err) {
+                    if (err.code !== 11000) throw err;
                 }
-                const orderDataCopy = { ...orderData, orderNumber: orderNum };
-                order = new Order(orderDataCopy);
-                await order.save();
-                break;
-            } catch (err) {
-                Logger.error(`❌ Save attempt ${attempt + 1} failed: ${err.code} ${err.message}`);
-                if (attempt === 9) throw err;
             }
+            seq++;
         }
 
         // خصم المخزون فوراً عند إنشاء الطلب
