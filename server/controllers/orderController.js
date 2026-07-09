@@ -900,12 +900,19 @@ export const createOrder = async (req, res) => {
         for (let attempt = 0; attempt < 10; attempt++) {
             try {
                 const num = nextSeq + attempt;
-                const orderDataCopy = { ...orderData, orderNumber: `${prefix}${num}` };
+                const orderNum = `${prefix}${num}`;
+                const existing = await Order.findOne({ orderNumber: orderNum }).select('_id');
+                if (existing) {
+                    Logger.warn(`⚠️ Order number ${orderNum} already exists, retrying (${attempt + 1}/10)`);
+                    continue;
+                }
+                const orderDataCopy = { ...orderData, orderNumber: orderNum };
                 order = new Order(orderDataCopy);
                 await order.save();
                 break;
             } catch (err) {
-                if (err.code !== 11000 || attempt === 9) throw err;
+                Logger.error(`❌ Save attempt ${attempt + 1} failed: ${err.code} ${err.message}`);
+                if (attempt === 9) throw err;
             }
         }
 
