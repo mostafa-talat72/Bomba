@@ -810,22 +810,22 @@ export const createOrder = async (req, res) => {
         const totalCost = await calculateOrderTotalCost(processedItems);
         orderData.totalCost = totalCost;
 
-        // Generate order number manually with retry on duplicate key
-        const generateOrderNumber = async () => {
-            const today = new Date();
-            const year = today.getFullYear().toString().slice(-2);
-            const month = String(today.getMonth() + 1).padStart(2, "0");
-            const day = String(today.getDate()).padStart(2, "0");
-            const dateStr = `${year}${month}${day}`;
-            const count = await Order.countDocuments({
-                createdAt: {
-                    $gte: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
-                    $lt: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1),
-                },
-            });
-            return `ORD-${dateStr}-${count + 1}`;
-        };
-        orderData.orderNumber = await generateOrderNumber();
+        // Generate order number atomically to prevent duplicates
+        const today = new Date();
+        const year = today.getFullYear().toString().slice(-2);
+        const month = String(today.getMonth() + 1).padStart(2, "0");
+        const day = String(today.getDate()).padStart(2, "0");
+        const dateStr = `${year}${month}${day}`;
+        if (!mongoose.models.OrderCounter) {
+            const counterSchema = new mongoose.Schema({ _id: String, seq: { type: Number, default: 0 } });
+            mongoose.model('OrderCounter', counterSchema);
+        }
+        const counter = await mongoose.models.OrderCounter.findByIdAndUpdate(
+            `order_${dateStr}`,
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+        );
+        orderData.orderNumber = `ORD-${dateStr}-${counter.seq}`;
 
         // البحث عن فاتورة غير مدفوعة للطاولة أو إنشاء فاتورة جديدة
         let billToUse = bill;
@@ -899,23 +899,8 @@ export const createOrder = async (req, res) => {
             orderData.bill = billToUse;
         }
 
-        // Retry on duplicate orderNumber (E11000) with fresh instance each time
-        const MAX_RETRIES = 3;
-        let order;
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                const num = attempt === 1 ? orderData.orderNumber : await generateOrderNumber();
-                order = new Order({ ...orderData, orderNumber: num });
-                await order.save();
-                break;
-            } catch (saveErr) {
-                if (saveErr.code === 11000 && attempt < MAX_RETRIES) {
-                    Logger.warn(`⚠️ Duplicate orderNumber, retrying (${attempt}/${MAX_RETRIES})`);
-                } else {
-                    throw saveErr;
-                }
-            }
-        }
+        const order = new Order(orderData);
+        await order.save();
 
         // خصم المخزون فوراً عند إنشاء الطلب
         try {

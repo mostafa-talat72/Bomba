@@ -172,25 +172,23 @@ orderSchema.pre("validate", function (next) {
 // Combined pre-save hook for all operations
 orderSchema.pre("save", async function (next) {
     try {
-        // Generate order number if new or if it's temporary
+        // Generate order number if new or if it's temporary (atomic counter)
         if (this.isNew || this.orderNumber === "TEMP") {
             const now = new Date();
-
-            // Format date YYMMDD
             const year = now.getFullYear().toString().slice(-2);
             const month = String(now.getMonth() + 1).padStart(2, "0");
             const day = String(now.getDate()).padStart(2, "0");
             const dateStr = `${year}${month}${day}`;
-
-            // Count orders created today for sequential numbering
-            const count = await this.constructor.countDocuments({
-                createdAt: {
-                    $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-                    $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-                }
-            });
-
-            this.orderNumber = `ORD-${dateStr}-${count + 1}`;
+            if (!mongoose.models.OrderCounter) {
+                const counterSchema = new mongoose.Schema({ _id: String, seq: { type: Number, default: 0 } });
+                mongoose.model('OrderCounter', counterSchema);
+            }
+            const counter = await mongoose.models.OrderCounter.findByIdAndUpdate(
+                `order_${dateStr}`,
+                { $inc: { seq: 1 } },
+                { new: true, upsert: true }
+            );
+            this.orderNumber = `ORD-${dateStr}-${counter.seq}`;
         }
 
         // Calculate item totals and subtotal
