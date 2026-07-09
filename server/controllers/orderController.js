@@ -810,20 +810,31 @@ export const createOrder = async (req, res) => {
         const totalCost = await calculateOrderTotalCost(processedItems);
         orderData.totalCost = totalCost;
 
-        // Generate order number atomically to prevent duplicates
+        // Generate order number atomically via counter (no race conditions)
         const today = new Date();
         const year = today.getFullYear().toString().slice(-2);
         const month = String(today.getMonth() + 1).padStart(2, "0");
         const day = String(today.getDate()).padStart(2, "0");
         const dateStr = `${year}${month}${day}`;
+        const counterId = `order_${dateStr}`;
         if (!mongoose.models.OrderCounter) {
             const counterSchema = new mongoose.Schema({ _id: String, seq: { type: Number, default: 0 } });
             mongoose.model('OrderCounter', counterSchema);
         }
+        // Initialize counter with current max from existing orders (first run only)
+        const lastOrder = await Order.findOne({ orderNumber: { $regex: `^ORD-${dateStr}-` } })
+            .sort({ orderNumber: -1 })
+            .select('orderNumber');
+        const startSeq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) : 0;
+        await mongoose.models.OrderCounter.updateOne(
+            { _id: counterId },
+            { $setOnInsert: { seq: startSeq } },
+            { upsert: true }
+        );
         const counter = await mongoose.models.OrderCounter.findByIdAndUpdate(
-            `order_${dateStr}`,
+            counterId,
             { $inc: { seq: 1 } },
-            { new: true, upsert: true }
+            { new: true }
         );
         orderData.orderNumber = `ORD-${dateStr}-${counter.seq}`;
 
