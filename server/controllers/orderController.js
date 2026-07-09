@@ -817,24 +817,6 @@ export const createOrder = async (req, res) => {
         const day = String(today.getDate()).padStart(2, "0");
         const dateStr = `${year}${month}${day}`;
         const prefix = `ORD-${dateStr}-`;
-        const lastOrder = await Order.findOne({ orderNumber: { $regex: `^${prefix}` } })
-            .sort({ orderNumber: -1 })
-            .select('orderNumber');
-        let nextSeq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
-
-        // Retry with incremented number if duplicate key error
-        let order;
-        for (let attempt = 0; attempt < 10; attempt++) {
-            try {
-                const num = nextSeq + attempt;
-                const orderDataCopy = { ...orderData, orderNumber: `${prefix}${num}` };
-                order = new Order(orderDataCopy);
-                await order.save();
-                break;
-            } catch (err) {
-                if (err.code !== 11000 || attempt === 9) throw err;
-            }
-        }
 
         // البحث عن فاتورة غير مدفوعة للطاولة أو إنشاء فاتورة جديدة
         let billToUse = bill;
@@ -908,7 +890,24 @@ export const createOrder = async (req, res) => {
             orderData.bill = billToUse;
         }
 
-        // order is already saved in the retry loop above
+        // Create order with retry on duplicate order number
+        const lastOrder = await Order.findOne({ orderNumber: { $regex: `^${prefix}` } })
+            .sort({ orderNumber: -1 })
+            .select('orderNumber');
+        let nextSeq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
+
+        let order;
+        for (let attempt = 0; attempt < 10; attempt++) {
+            try {
+                const num = nextSeq + attempt;
+                const orderDataCopy = { ...orderData, orderNumber: `${prefix}${num}` };
+                order = new Order(orderDataCopy);
+                await order.save();
+                break;
+            } catch (err) {
+                if (err.code !== 11000 || attempt === 9) throw err;
+            }
+        }
 
         // خصم المخزون فوراً عند إنشاء الطلب
         try {
