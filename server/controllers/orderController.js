@@ -899,18 +899,18 @@ export const createOrder = async (req, res) => {
             orderData.bill = billToUse;
         }
 
-        const order = new Order(orderData);
-
-        // Retry on duplicate orderNumber (E11000)
+        // Retry on duplicate orderNumber (E11000) with fresh instance each time
         const MAX_RETRIES = 3;
+        let order;
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
+                const num = attempt === 1 ? orderData.orderNumber : await generateOrderNumber();
+                order = new Order({ ...orderData, orderNumber: num });
                 await order.save();
                 break;
             } catch (saveErr) {
                 if (saveErr.code === 11000 && attempt < MAX_RETRIES) {
                     Logger.warn(`⚠️ Duplicate orderNumber, retrying (${attempt}/${MAX_RETRIES})`);
-                    order.orderNumber = await generateOrderNumber();
                 } else {
                     throw saveErr;
                 }
