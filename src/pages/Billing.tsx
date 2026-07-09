@@ -1663,9 +1663,10 @@ const Billing = () => {
       });
 
       if (result.success && result.data) {
+        // تحديث الفاتورة فوراً بنتيجة الدفع
         setSelectedBill(result.data);
 
-        // إغلاق نافذة التأكيد فوراً
+        // إغلاق نافذة التأكيد فقط، وإبقاء نافذة الدفع الجزئي مفتوحة
         setShowSessionPaymentConfirmModal(false);
         setSessionToPayData(null);
         setIsProcessingSessionPayment(false);
@@ -1674,15 +1675,24 @@ const Billing = () => {
         setSessionPaymentAmount('');
         setSelectedSession(null);
 
+        // جلب الفاتورة المحدثة كاملة في الخلفية
+        api.getBill(selectedBill.id || selectedBill._id).then(fullRes => {
+          if (fullRes?.success && fullRes?.data) {
+            setSelectedBill(fullRes.data);
+          }
+        }).catch(() => {});
+
         // إظهار رسالة نجاح فوراً
         showNotification(t('billing.notifications.sessionPaymentSuccess'), 'success');
       } else {
         showNotification(result.message || t('billing.notifications.sessionPaymentError'), 'error');
         setIsProcessingSessionPayment(false);
+        setShowSessionPaymentConfirmModal(false);
       }
     } catch (error) {
       showNotification(t('billing.notifications.sessionPaymentError'), 'error');
       setIsProcessingSessionPayment(false);
+      setShowSessionPaymentConfirmModal(false);
     }
   };
 
