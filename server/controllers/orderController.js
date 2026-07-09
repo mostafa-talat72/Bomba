@@ -810,33 +810,31 @@ export const createOrder = async (req, res) => {
         const totalCost = await calculateOrderTotalCost(processedItems);
         orderData.totalCost = totalCost;
 
-        // Generate order number atomically via counter (no race conditions)
+        // Generate order number and retry if duplicate
         const today = new Date();
         const year = today.getFullYear().toString().slice(-2);
         const month = String(today.getMonth() + 1).padStart(2, "0");
         const day = String(today.getDate()).padStart(2, "0");
         const dateStr = `${year}${month}${day}`;
-        const counterId = `order_${dateStr}`;
-        if (!mongoose.models.OrderCounter) {
-            const counterSchema = new mongoose.Schema({ _id: String, seq: { type: Number, default: 0 } });
-            mongoose.model('OrderCounter', counterSchema);
-        }
-        // Initialize counter with current max from existing orders (first run only)
-        const lastOrder = await Order.findOne({ orderNumber: { $regex: `^ORD-${dateStr}-` } })
+        const prefix = `ORD-${dateStr}-`;
+        const lastOrder = await Order.findOne({ orderNumber: { $regex: `^${prefix}` } })
             .sort({ orderNumber: -1 })
             .select('orderNumber');
-        const startSeq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) : 0;
-        await mongoose.models.OrderCounter.updateOne(
-            { _id: counterId },
-            { $setOnInsert: { seq: startSeq } },
-            { upsert: true }
-        );
-        const counter = await mongoose.models.OrderCounter.findByIdAndUpdate(
-            counterId,
-            { $inc: { seq: 1 } },
-            { new: true }
-        );
-        orderData.orderNumber = `ORD-${dateStr}-${counter.seq}`;
+        let nextSeq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
+
+        // Retry with incremented number if duplicate key error
+        let order;
+        for (let attempt = 0; attempt < 10; attempt++) {
+            try {
+                const num = nextSeq + attempt;
+                const orderDataCopy = { ...orderData, orderNumber: `${prefix}${num}` };
+                order = new Order(orderDataCopy);
+                await order.save();
+                break;
+            } catch (err) {
+                if (err.code !== 11000 || attempt === 9) throw err;
+            }
+        }
 
         // البحث عن فاتورة غير مدفوعة للطاولة أو إنشاء فاتورة جديدة
         let billToUse = bill;
