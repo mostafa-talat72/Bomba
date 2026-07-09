@@ -908,8 +908,7 @@ export const createOrder = async (req, res) => {
             orderData.bill = billToUse;
         }
 
-        const order = new Order(orderData);
-        await order.save();
+        // order is already saved in the retry loop above
 
         // خصم المخزون فوراً عند إنشاء الطلب
         try {
