@@ -823,56 +823,25 @@ export const createOrder = async (req, res) => {
         
         // إذا كان هناك table ولم يكن bill محدداً، ابحث عن فاتورة غير مدفوعة
         if (table && !billToUse) {
-            try {
-                // Get table info for logging
-                const tableDoc = await Table.findById(table);
-                const tableNumber = tableDoc ? tableDoc.number : table;
-                
-                // البحث عن فاتورة غير مدفوعة للطاولة (draft, partial, overdue)
-                // يشمل جميع أنواع الفواتير: playstation, computer, cafe
-                const existingBill = await Bill.findOne({
-                    table: table,
-                    organization: req.user.organization,
-                    status: { $in: ['draft', 'partial', 'overdue'] }
-                }).sort({ createdAt: -1 }); // أحدث فاتورة
+            // Get table info for logging
+            const tableDoc = await Table.findById(table);
+            const tableNumber = tableDoc ? tableDoc.number : table;
+            
+            // البحث عن فاتورة غير مدفوعة للطاولة (draft, partial, overdue)
+            const existingBill = await Bill.findOne({
+                table: table,
+                organization: req.user.organization,
+                status: { $in: ['draft', 'partial', 'overdue'] }
+            }).sort({ createdAt: -1 });
 
-                if (existingBill) {
-                    billToUse = existingBill._id;
-                    Logger.info(`✓ تم العثور على فاتورة موجودة للطاولة ${tableNumber}:`, {
-                        billId: existingBill._id,
-                        billNumber: existingBill.billNumber,
-                        billType: existingBill.billType,
-                        status: existingBill.status
-                    });
-                } else {
-                    // إنشاء فاتورة جديدة للطاولة
-                    const billData = {
-                        table: table,
-                        customerName: customerName || `طاولة ${tableNumber}`,
-                        customerPhone: customerPhone || null,
-                        orders: [],
-                        sessions: [],
-                        subtotal: 0,
-                        total: 0,
-                        discount: 0,
-                        tax: 0,
-                        paid: 0,
-                        remaining: 0,
-                        status: 'draft',
-                        paymentMethod: 'cash',
-                        billType: 'cafe',
-                        createdBy: req.user._id,
-                        organization: req.user.organization,
-                    };
-
-                    const newBill = await Bill.create(billData);
-                    billToUse = newBill._id;
-                    Logger.info(`✓ تم إنشاء فاتورة جديدة للطاولة ${tableNumber}:`, {
-                        billId: newBill._id,
-                        billNumber: newBill.billNumber,
-                        billType: newBill.billType
-                    });
-                }
+            if (existingBill) {
+                billToUse = existingBill._id;
+                Logger.info(`✓ تم العثور على فاتورة موجودة للطاولة ${tableNumber}:`, {
+                    billId: existingBill._id,
+                    billNumber: existingBill.billNumber,
+                    billType: existingBill.billType,
+                    status: existingBill.status
+                });
 
                 // Update table status to 'occupied'
                 if (tableDoc) {
@@ -880,8 +849,49 @@ export const createOrder = async (req, res) => {
                     await tableDoc.save();
                     Logger.info(`✓ تم تحديث حالة الطاولة ${tableNumber} إلى محجوزة`);
                 }
-            } catch (error) {
-                Logger.error('خطأ في البحث عن الفاتورة أو إنشائها:', error);
+            } else {
+                // إنشاء فاتورة جديدة للطاولة (مع إعادة المحاولة عند تكرار الرقم)
+                const billData = {
+                    table: table,
+                    customerName: customerName || `طاولة ${tableNumber}`,
+                    customerPhone: customerPhone || null,
+                    orders: [],
+                    sessions: [],
+                    subtotal: 0,
+                    total: 0,
+                    discount: 0,
+                    tax: 0,
+                    paid: 0,
+                    remaining: 0,
+                    status: 'draft',
+                    paymentMethod: 'cash',
+                    billType: 'cafe',
+                    createdBy: req.user._id,
+                    organization: req.user.organization,
+                };
+
+                let newBill;
+                for (let attempt = 0; attempt < 10; attempt++) {
+                    try {
+                        newBill = await Bill.create(billData);
+                        break;
+                    } catch (billErr) {
+                        if (billErr.code !== 11000 || attempt === 9) throw billErr;
+                    }
+                }
+                billToUse = newBill._id;
+                Logger.info(`✓ تم إنشاء فاتورة جديدة للطاولة ${tableNumber}:`, {
+                    billId: newBill._id,
+                    billNumber: newBill.billNumber,
+                    billType: newBill.billType
+                });
+
+                // Update table status to 'occupied'
+                if (tableDoc) {
+                    tableDoc.status = 'occupied';
+                    await tableDoc.save();
+                    Logger.info(`✓ تم تحديث حالة الطاولة ${tableNumber} إلى محجوزة`);
+                }
             }
         }
 
