@@ -85,9 +85,11 @@ async function fixOrphanOrders() {
             }
         }
 
+        // Recalculate subtotal/total from linked orders
+        await bill.calculateSubtotal();
         bill.markModified("orders");
         await bill.save();
-        console.log(`  💾 Saved bill ${bill.billNumber} with ${orders.length} orders`);
+        console.log(`  💾 Saved bill ${bill.billNumber} with ${orders.length} orders (total: ${bill.total})`);
 
         // Update table status to occupied
         await Table.findByIdAndUpdate(tableId, { status: "occupied" });
