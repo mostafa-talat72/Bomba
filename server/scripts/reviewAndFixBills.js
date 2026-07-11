@@ -4,7 +4,11 @@ import Order from "../models/Order.js";
 import Session from "../models/Session.js";
 
 async function scanBills() {
-    const bills = await Bill.find({}).sort({ createdAt: -1 });
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    const bills = await Bill.find({
+        createdAt: { $gte: twoMonthsAgo },
+    }).sort({ createdAt: -1 });
     const problems = [];
 
     for (const bill of bills) {
@@ -118,6 +122,7 @@ async function scanBills() {
             const paidFixed = expectedPaid > expectedTotal ? expectedTotal : expectedPaid;
             problems.push({
                 index: problems.length + 1,
+                createdAt: bill.createdAt,
                 _id: bill._id,
                 billNumber: bill.billNumber || "UNDEFINED",
                 customerName: bill.customerName || "(بدون اسم)",
@@ -148,7 +153,9 @@ async function scanBills() {
 function showProblems(problems) {
     console.log(`\n📋 تم العثور على ${problems.length} فاتورة بها مشاكل:\n`);
     for (const p of problems) {
-        console.log(`[${String(p.index).padStart(3)}] ${p.billNumber}`);
+        const d = p.createdAt;
+        const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}`;
+        console.log(`[${String(p.index).padStart(3)}] ${p.billNumber}  (${dateStr})`);
         console.log(`     العميل: ${p.customerName}`);
         console.log(`     الحالة: ${p.status}`);
         console.log(`     المشاكل: ${p.issues.join(" | ")}`);
