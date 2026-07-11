@@ -481,17 +481,14 @@ billSchema.pre("save", async function (next) {
             const day = String(now.getDate()).padStart(2, "0");
             const dateStr = `${year}${month}${day}`;
 
-            // Find the last bill number for today and increment
+            // Find the highest sequence number for today using numeric extraction
             const todayPrefix = `BILL-${dateStr}-`;
-            const lastBill = await this.constructor.findOne({ billNumber: { $regex: `^${todayPrefix}` } })
-                .sort({ billNumber: -1 })
-                .select('billNumber');
-            
-            let nextSeq = 1;
-            if (lastBill) {
-                const parts = lastBill.billNumber.split('-');
-                nextSeq = parseInt(parts[2]) + 1;
-            }
+            const result = await this.constructor.aggregate([
+                { $match: { billNumber: { $regex: `^${todayPrefix}` } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 2] } } } },
+                { $group: { _id: null, maxSeq: { $max: "$seq" } } }
+            ]);
+            let nextSeq = (result[0]?.maxSeq || 0) + 1;
 
             this.billNumber = `${todayPrefix}${nextSeq}`;
         } catch (error) {
