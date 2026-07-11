@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Bill from "../models/Bill.js";
 import Order from "../models/Order.js";
+import Session from "../models/Session.js";
 
 async function fixUnpaidBills() {
     const bills = await Bill.find({
@@ -15,41 +16,61 @@ async function fixUnpaidBills() {
     for (const bill of bills) {
         const report = { billNumber: bill.billNumber || "UNDEFINED", fixes: [] };
 
-        // 1. Verify linked orders match actual orders in DB
+        // 1. Fix orders array to match actual linked orders
         const actualOrders = await Order.find({ bill: bill._id });
-        const actualIds = actualOrders.map((o) => o._id.toString());
-        const currentIds = (bill.orders || []).map((o) =>
+        const actualOrderIds = actualOrders.map((o) => o._id.toString());
+        const currentOrderIds = (bill.orders || []).map((o) =>
             o.toString ? o.toString() : o
         );
-        const missingIds = actualIds.filter(
-            (id) => !currentIds.includes(id)
+        const missingIds = actualOrderIds.filter(
+            (id) => !currentOrderIds.includes(id)
         );
-        const extraIds = currentIds.filter(
-            (id) => !actualIds.includes(id)
+        const extraIds = currentOrderIds.filter(
+            (id) => !actualOrderIds.includes(id)
         );
 
-        if (missingIds.length > 0) {
-            bill.orders = actualIds;
+        if (missingIds.length > 0 || extraIds.length > 0) {
+            bill.orders = actualOrderIds;
             bill.markModified("orders");
             report.fixes.push(
-                `orders: added ${missingIds.length} missing order(s)`
-            );
-        }
-        if (extraIds.length > 0) {
-            bill.orders = actualIds;
-            bill.markModified("orders");
-            report.fixes.push(
-                `orders: removed ${extraIds.length} extra order(s) not linked to this bill`
+                `orders: ${missingIds.length} added, ${extraIds.length} removed`
             );
         }
 
-        // 2. Recalculate subtotal from linked orders
+        // 2. Fix sessions array to match actual linked sessions
+        const actualSessions = await Session.find({ bill: bill._id });
+        const actualSessionIds = actualSessions.map((s) => s._id.toString());
+        const currentSessionIds = (bill.sessions || []).map((s) =>
+            s.toString ? s.toString() : s
+        );
+        const missingSessionIds = actualSessionIds.filter(
+            (id) => !currentSessionIds.includes(id)
+        );
+        const extraSessionIds = currentSessionIds.filter(
+            (id) => !actualSessionIds.includes(id)
+        );
+
+        if (missingSessionIds.length > 0 || extraSessionIds.length > 0) {
+            bill.sessions = actualSessionIds;
+            bill.markModified("sessions");
+            report.fixes.push(
+                `sessions: ${missingSessionIds.length} added, ${extraSessionIds.length} removed`
+            );
+        }
+
+        // 3. Recalculate subtotal from orders AND sessions
         let calculatedSubtotal = 0;
+
         for (const order of actualOrders) {
             if (order.status !== "cancelled") {
                 calculatedSubtotal +=
                     order.finalAmount || order.totalAmount || 0;
             }
+        }
+
+        for (const session of actualSessions) {
+            calculatedSubtotal +=
+                session.finalCost || session.totalCost || 0;
         }
 
         if (Math.abs(bill.subtotal - calculatedSubtotal) > 0.01) {
@@ -59,7 +80,7 @@ async function fixUnpaidBills() {
             bill.subtotal = calculatedSubtotal;
         }
 
-        // 3. Recalculate total
+        // 4. Recalculate total
         let discountAmount = bill.discountPercentage
             ? Math.round((calculatedSubtotal * bill.discountPercentage) / 100)
             : bill.discount || 0;
@@ -69,22 +90,47 @@ async function fixUnpaidBills() {
         );
 
         if (Math.abs(bill.total - calculatedTotal) > 0.01) {
-            report.fixes.push(
-                `total: ${bill.total} -> ${calculatedTotal}`
-            );
+            report.fixes.push(`total: ${bill.total} -> ${calculatedTotal}`);
             bill.total = calculatedTotal;
             bill.discount = discountAmount;
         }
 
-        // 4. Fix paid / remaining if paid > total
-        if (bill.paid > bill.total) {
-            report.fixes.push(
-                `paid: ${bill.paid} -> ${bill.total} (exceeded total)`
-            );
-            bill.paid = bill.total;
+        // 5. Recalculate paid from itemPayments, sessionPayments, and payments
+        let calculatedPaid = 0;
+
+        // 5a. From itemPayments (الدفع على مستوى الأصناف)
+        if (bill.itemPayments && bill.itemPayments.length > 0) {
+            for (const ip of bill.itemPayments) {
+                calculatedPaid += ip.paidAmount || 0;
+            }
         }
 
-        // 5. Recalculate remaining
+        // 5b. From sessionPayments (الدفع على مستوى الجلسات)
+        if (bill.sessionPayments && bill.sessionPayments.length > 0) {
+            for (const sp of bill.sessionPayments) {
+                calculatedPaid += sp.paidAmount || 0;
+            }
+        }
+
+        // 5c. From full payments (only if no itemPayments/sessionPayments)
+        const hasItemPayments = bill.itemPayments && bill.itemPayments.length > 0;
+        const hasSessionPayments = bill.sessionPayments && bill.sessionPayments.length > 0;
+        if ((!hasItemPayments && !hasSessionPayments) && bill.payments && bill.payments.length > 0) {
+            for (const p of bill.payments) {
+                if (p.type === "credit-from-deleted-items" || p.type === "credit") {
+                    calculatedPaid += p.amount || 0;
+                } else {
+                    calculatedPaid += p.amount || 0;
+                }
+            }
+        }
+
+        if (Math.abs(bill.paid - calculatedPaid) > 0.01) {
+            report.fixes.push(`paid: ${bill.paid} -> ${calculatedPaid}`);
+            bill.paid = calculatedPaid;
+        }
+
+        // 6. Recalculate remaining
         let calculatedRemaining = Math.max(0, bill.total - bill.paid);
         if (Math.abs(bill.remaining - calculatedRemaining) > 0.01) {
             report.fixes.push(
@@ -93,35 +139,25 @@ async function fixUnpaidBills() {
             bill.remaining = calculatedRemaining;
         }
 
-        // 6. Fix status based on actual state
+        // 7. Fix status based on actual paid vs total
         let expectedStatus = bill.status;
-        if (bill.paid <= 0 && bill.total > 0) {
-            expectedStatus = "draft";
-        } else if (bill.paid > 0 && bill.paid < bill.total) {
-            expectedStatus = "partial";
-        } else if (bill.paid >= bill.total && bill.total > 0) {
-            expectedStatus = "paid";
-        }
+        if (bill.paid <= 0 && bill.total > 0) expectedStatus = "draft";
+        else if (bill.paid > 0 && bill.paid < bill.total) expectedStatus = "partial";
+        else if (bill.paid >= bill.total && bill.total > 0) expectedStatus = "paid";
+        else if (bill.total === 0) expectedStatus = "draft";
 
-        if (
-            bill.status !== "paid" &&
-            bill.status !== expectedStatus &&
-            expectedStatus !== bill.status
-        ) {
-            report.fixes.push(
-                `status: ${bill.status} -> ${expectedStatus}`
-            );
+        if (bill.status !== "paid" && bill.status !== expectedStatus) {
+            report.fixes.push(`status: ${bill.status} -> ${expectedStatus}`);
             bill.status = expectedStatus;
         }
 
-        // 7. Fix undefined billNumber
+        // 8. Fix undefined billNumber
         if (!bill.billNumber || bill.billNumber === "undefined") {
             const newNumber = `BILL-FIX-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
             report.fixes.push(`billNumber: undefined -> ${newNumber}`);
             bill.billNumber = newNumber;
         }
 
-        // Save if any fixes were made
         if (report.fixes.length > 0) {
             try {
                 await Bill.updateOne(
@@ -129,6 +165,7 @@ async function fixUnpaidBills() {
                     {
                         $set: {
                             orders: bill.orders,
+                            sessions: bill.sessions,
                             subtotal: bill.subtotal,
                             total: bill.total,
                             discount: bill.discount,
@@ -139,15 +176,11 @@ async function fixUnpaidBills() {
                         },
                     }
                 );
-                console.log(
-                    `✅ ${report.billNumber}: ${report.fixes.join(" | ")}`
-                );
+                console.log(`✅ ${report.billNumber}: ${report.fixes.join(" | ")}`);
                 fixed++;
             } catch (err) {
                 errors.push({ bill: report.billNumber, error: err.message });
-                console.error(
-                    `❌ ${report.billNumber}: save failed - ${err.message}`
-                );
+                console.error(`❌ ${report.billNumber}: save failed - ${err.message}`);
             }
         } else {
             console.log(`✓ ${report.billNumber}: no fixes needed`);
@@ -157,9 +190,7 @@ async function fixUnpaidBills() {
     console.log(`\n📊 Summary: ${fixed}/${bills.length} bills fixed`);
     if (errors.length > 0) {
         console.log(`⚠️  ${errors.length} errors:`);
-        for (const e of errors) {
-            console.log(`   ${e.bill}: ${e.error}`);
-        }
+        for (const e of errors) console.log(`   ${e.bill}: ${e.error}`);
     }
     console.log("✅ Done!");
 }
