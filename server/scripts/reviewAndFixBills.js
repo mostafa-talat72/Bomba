@@ -83,6 +83,29 @@ async function scanBills() {
             shouldFix = true;
         }
 
+        // Breakdown: orders subtotal vs sessions subtotal
+        let ordersSubtotal = 0;
+        for (const order of actualOrders) {
+            if (order.status !== "cancelled") ordersSubtotal += order.finalAmount || order.totalAmount || 0;
+        }
+        let sessionsSubtotal = 0;
+        for (const session of actualSessions) {
+            sessionsSubtotal += session.finalCost || session.totalCost || 0;
+        }
+
+        // Paid from items (itemPayments) vs sessions (sessionPayments)
+        let paidFromItems = 0;
+        if (bill.itemPayments && bill.itemPayments.length > 0) {
+            for (const ip of bill.itemPayments) paidFromItems += ip.paidAmount || 0;
+        }
+        let paidFromSessionsCalc = 0;
+        if (bill.sessionPayments && bill.sessionPayments.length > 0) {
+            for (const sp of bill.sessionPayments) paidFromSessionsCalc += sp.paidAmount || 0;
+        }
+
+        const remainingOrders = Math.max(0, ordersSubtotal - paidFromItems);
+        const remainingSessions = Math.max(0, sessionsSubtotal - paidFromSessionsCalc);
+
         // Remaining
         const expectedRemaining = Math.max(0, expectedTotal - expectedPaid);
         if (Math.abs(bill.remaining - expectedRemaining) > 0.01) {
@@ -128,6 +151,12 @@ async function scanBills() {
             expectedRemaining,
             ordersCount: actualOrders.length,
             sessionsCount: actualSessions.length,
+            ordersSubtotal,
+            sessionsSubtotal,
+            paidFromItems,
+            paidFromSessions: paidFromSessionsCalc,
+            remainingOrders,
+            remainingSessions,
             issues,
             shouldFix,
             fix: {
@@ -149,37 +178,34 @@ async function scanBills() {
     return results;
 }
 
-function showResults(results) {
+function showResults(results, showAll) {
     let withIssues = results.filter((r) => r.shouldFix);
     let ok = results.filter((r) => !r.shouldFix);
 
-    console.log(`\n📋 إجمالي الفواتير: ${results.length}`);
+    console.log(`\n📋 إجمالي الفواتير (آخر شهرين): ${results.length}`);
     console.log(`   ✅ سليمة: ${ok.length}`);
     console.log(`   ⚠️  بها مشاكل: ${withIssues.length}\n`);
 
-    if (withIssues.length > 0) {
-        console.log("─── فواتير بها مشاكل ───\n");
-        for (const r of withIssues) {
-            console.log(`[${String(r.index).padStart(3)}] ${r.billNumber}  (${r.dateStr})`);
-            console.log(`     العميل: ${r.customerName}`);
-            console.log(`     الحالة: ${r.status}`);
-            console.log(`     total: ${r.currentTotal} -> ${r.expectedTotal}`);
-            console.log(`     paid:  ${r.currentPaid} -> ${r.expectedPaid}  (من itemPayments: ${r.paidFromPayments})`);
-            console.log(`     باقي:  ${r.currentRemaining} -> ${r.expectedRemaining}`);
-            console.log(`     الأوردرات: ${r.ordersCount} | الجلسات: ${r.sessionsCount}`);
-            console.log(`     المشاكل: ${r.issues.join(" | ")}`);
-            console.log("");
-        }
+    if (withIssues.length === 0) {
+        console.log("🎉 جميع الفواتير سليمة، لا توجد مشاكل.\n");
+        return;
     }
 
-    if (ok.length > 0) {
-        console.log(`─── فواتير سليمة (${ok.length}) ───\n`);
-        for (const r of ok) {
-            console.log(`[${String(r.index).padStart(3)}] ${r.billNumber}  (${r.dateStr})`);
-            console.log(`     العميل: ${r.customerName}`);
-            console.log(`     الحالة: ${r.status} | total: ${r.currentTotal} | مدفوع: ${r.currentPaid} | باقي: ${r.currentRemaining}`);
-            console.log("");
-        }
+    console.log("─── فواتير بها مشاكل ───\n");
+    for (const r of withIssues) {
+        console.log(`[${String(r.index).padStart(3)}] ${r.billNumber}  (${r.dateStr})`);
+        console.log(`     العميل: ${r.customerName}`);
+        console.log(`     الحالة: ${r.status}`);
+        console.log(`     ────────── التفاصيل ──────────`);
+        console.log(`     الطلبات:      ${r.ordersSubtotal} ج.م  (مدفوع: ${r.paidFromItems} | باقي: ${r.remainingOrders})`);
+        console.log(`     الجلسات:     ${r.sessionsSubtotal} ج.م  (مدفوع: ${r.paidFromSessions} | باقي: ${r.remainingSessions})`);
+        console.log(`     ─────────────────────────────`);
+        console.log(`     الإجمالي:    ${r.expectedTotal} ج.م`);
+        console.log(`     المدفوع:    ${r.expectedPaid} ج.م`);
+        console.log(`     الباقي:     ${r.expectedRemaining} ج.م`);
+        console.log(`     ─────────────────────────────`);
+        console.log(`     المشاكل: ${r.issues.join(" | ")}`);
+        console.log("");
     }
 }
 
