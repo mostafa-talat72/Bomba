@@ -60,28 +60,17 @@ async function scanBills() {
         for (const session of actualSessions) {
             expectedSubtotal += session.finalCost || session.totalCost || 0;
         }
-        if (Math.abs(bill.subtotal - expectedSubtotal) > 0.01) {
-            issues.push(`subtotal: ${bill.subtotal} -> ${expectedSubtotal}`);
-            shouldFix = true;
-        }
 
         // Calculate total
         const discountAmount = bill.discountPercentage
             ? Math.round((expectedSubtotal * bill.discountPercentage) / 100)
             : bill.discount || 0;
         const expectedTotal = Math.max(0, expectedSubtotal + (bill.tax || 0) - discountAmount);
-        if (Math.abs(bill.total - expectedTotal) > 0.01) {
-            issues.push(`total: ${bill.total} -> ${expectedTotal}`);
-            shouldFix = true;
-        }
 
         // Paid from itemPayments / sessionPayments
         const paidFromPayments = calcPaidFromPayments(bill);
         const expectedPaid = paidFromPayments > expectedTotal ? expectedTotal : paidFromPayments;
-        if (Math.abs(bill.paid - expectedPaid) > 0.01) {
-            issues.push(`paid: ${bill.paid} -> ${expectedPaid}`);
-            shouldFix = true;
-        }
+        const expectedRemaining = Math.max(0, expectedTotal - expectedPaid);
 
         // Breakdown: orders subtotal vs sessions subtotal
         let ordersSubtotal = 0;
@@ -106,9 +95,27 @@ async function scanBills() {
         const remainingOrders = Math.max(0, ordersSubtotal - paidFromItems);
         const remainingSessions = Math.max(0, sessionsSubtotal - paidFromSessionsCalc);
 
-        // Remaining
-        const expectedRemaining = Math.max(0, expectedTotal - expectedPaid);
-        if (Math.abs(bill.remaining - expectedRemaining) > 0.01) {
+        // تجاهل الفروق البسيطة (أقل من 2 جنيه) طالما المدفوع >= الإجمالي
+        const TOLERANCE = 2;
+        const subtotalDiff = Math.abs(bill.subtotal - expectedSubtotal);
+        const totalDiff = Math.abs(bill.total - expectedTotal);
+        const paidDiff = Math.abs(bill.paid - expectedPaid);
+        const remainingDiff = Math.abs(bill.remaining - expectedRemaining);
+        const isEffectivelyPaid = expectedPaid >= expectedTotal && paidFromItems >= ordersSubtotal && paidFromSessionsCalc >= sessionsSubtotal;
+
+        if (subtotalDiff > TOLERANCE || (subtotalDiff > 0.01 && !isEffectivelyPaid)) {
+            issues.push(`subtotal: ${bill.subtotal} -> ${expectedSubtotal}`);
+            shouldFix = true;
+        }
+        if (totalDiff > TOLERANCE || (totalDiff > 0.01 && !isEffectivelyPaid)) {
+            issues.push(`total: ${bill.total} -> ${expectedTotal}`);
+            shouldFix = true;
+        }
+        if (paidDiff > TOLERANCE || (paidDiff > 0.01 && !isEffectivelyPaid)) {
+            issues.push(`paid: ${bill.paid} -> ${expectedPaid}`);
+            shouldFix = true;
+        }
+        if (remainingDiff > TOLERANCE || (remainingDiff > 0.01 && !isEffectivelyPaid)) {
             issues.push(`remaining: ${bill.remaining} -> ${expectedRemaining}`);
             shouldFix = true;
         }
