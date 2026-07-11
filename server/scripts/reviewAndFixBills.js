@@ -121,8 +121,8 @@ async function scanBills() {
         // Status
         let expectedStatus = bill.status;
         if (expectedPaid <= 0 && expectedTotal > 0) expectedStatus = "draft";
-        else if (expectedPaid > 0 && expectedPaid < expectedTotal) expectedStatus = "partial";
-        else if (expectedPaid >= expectedTotal && expectedTotal > 0) expectedStatus = "paid";
+        else if (expectedPaid > 0 && expectedPaid < expectedTotal && expectedRemaining > TOLERANCE) expectedStatus = "partial";
+        else if (expectedPaid >= expectedTotal || expectedRemaining <= TOLERANCE) expectedStatus = "paid";
         else if (expectedTotal === 0) expectedStatus = "draft";
         if (bill.status !== expectedStatus) {
             issues.push(`status: ${bill.status} -> ${expectedStatus}`);
