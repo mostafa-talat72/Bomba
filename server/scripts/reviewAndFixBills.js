@@ -101,21 +101,19 @@ async function scanBills() {
         const totalDiff = Math.abs(bill.total - expectedTotal);
         const paidDiff = Math.abs(bill.paid - expectedPaid);
         const remainingDiff = Math.abs(bill.remaining - expectedRemaining);
-        const isEffectivelyPaid = expectedPaid >= expectedTotal && paidFromItems >= ordersSubtotal && paidFromSessionsCalc >= sessionsSubtotal;
-
-        if (subtotalDiff > TOLERANCE || (subtotalDiff > 0.01 && !isEffectivelyPaid)) {
+        if (subtotalDiff > TOLERANCE) {
             issues.push(`subtotal: ${bill.subtotal} -> ${expectedSubtotal}`);
             shouldFix = true;
         }
-        if (totalDiff > TOLERANCE || (totalDiff > 0.01 && !isEffectivelyPaid)) {
+        if (totalDiff > TOLERANCE) {
             issues.push(`total: ${bill.total} -> ${expectedTotal}`);
             shouldFix = true;
         }
-        if (paidDiff > TOLERANCE || (paidDiff > 0.01 && !isEffectivelyPaid)) {
+        if (paidDiff > TOLERANCE) {
             issues.push(`paid: ${bill.paid} -> ${expectedPaid}`);
             shouldFix = true;
         }
-        if (remainingDiff > TOLERANCE || (remainingDiff > 0.01 && !isEffectivelyPaid)) {
+        if (remainingDiff > TOLERANCE) {
             issues.push(`remaining: ${bill.remaining} -> ${expectedRemaining}`);
             shouldFix = true;
         }
