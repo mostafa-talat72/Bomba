@@ -555,21 +555,29 @@ export const createBill = async (req, res) => {
             }
         }
 
-        const bill = await Bill.create({
-            customerName,
-            customerPhone,
-            tableNumber: tableNumber,
-            orders: orders || [],
-            sessions: sessions || [],
-            discount: discount || 0,
-            discountPercentage: discountPercentage || 0,
-            tax: tax || 0,
-            notes,
-            billType: billType || "cafe",
-            dueDate,
-            createdBy: req.user._id,
-            organization: req.user.organization,
-        });
+        let bill;
+        for (let attempt = 0; attempt < 10; attempt++) {
+            try {
+                bill = await Bill.create({
+                    customerName,
+                    customerPhone,
+                    tableNumber: tableNumber,
+                    orders: orders || [],
+                    sessions: sessions || [],
+                    discount: discount || 0,
+                    discountPercentage: discountPercentage || 0,
+                    tax: tax || 0,
+                    notes,
+                    billType: billType || "cafe",
+                    dueDate,
+                    createdBy: req.user._id,
+                    organization: req.user.organization,
+                });
+                break;
+            } catch (billErr) {
+                if (billErr.code !== 11000 || attempt === 9) throw billErr;
+            }
+        }
 
         // Calculate subtotal from orders and sessions (only if there are orders or sessions)
         if (

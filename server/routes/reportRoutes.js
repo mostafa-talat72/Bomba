@@ -15,6 +15,7 @@ import Session from "../models/Session.js";
 import Order from "../models/Order.js";
 import InventoryItem from "../models/InventoryItem.js";
 import Cost from "../models/Cost.js";
+import { getDateRange } from "../utils/helpers.js";
 
 const router = express.Router();
 
@@ -33,34 +34,6 @@ router.get("/recent-activity", getRecentActivity);
 // Export routes
 router.get("/export/excel", exportReportToExcel);
 router.get("/export/pdf", exportReportToPDF);
-
-// Helper function to get date range
-const getDateRange = (period) => {
-    const now = new Date();
-    const start = new Date();
-
-    switch (period) {
-        case "today":
-            start.setHours(0, 0, 0, 0);
-            break;
-        case "week":
-            start.setDate(now.getDate() - 7);
-            break;
-        case "month":
-            start.setMonth(now.getMonth() - 1);
-            break;
-        case "quarter":
-            start.setMonth(now.getMonth() - 3);
-            break;
-        case "year":
-            start.setFullYear(now.getFullYear() - 1);
-            break;
-        default:
-            start.setHours(0, 0, 0, 0);
-    }
-
-    return { start, end: now };
-};
 
 // @desc    Get sales report
 // @route   GET /api/reports/sales
@@ -87,37 +60,20 @@ router.get("/financial", getFinancialReport);
 // @access  Private (SoldItems permission)
 router.get("/sold-items", authorize("soldItems", "all"), async (req, res) => {
     try {
-        const { dateFilter, startDate, endDate } = req.query;
+        const { dateFilter, startDate: rawStart, endDate: rawEnd } = req.query;
         
-        // Build date filter
+        // Build date filter using shared getDateRange
         let dateQuery = {};
-        if (dateFilter === 'custom' && startDate && endDate) {
-            // Custom date range
+        if (dateFilter === 'custom' && rawStart && rawEnd) {
+            const { startDate, endDate } = getDateRange({ startDate: rawStart, endDate: rawEnd });
             dateQuery = {
-                createdAt: {
-                    $gte: new Date(startDate),
-                    $lte: new Date(endDate)
-                }
+                createdAt: { $gte: startDate, $lte: endDate }
             };
         } else if (dateFilter && dateFilter !== 'all') {
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            
-            switch (dateFilter) {
-                case 'today':
-                    dateQuery = { createdAt: { $gte: today } };
-                    break;
-                case 'week':
-                    const weekAgo = new Date(today);
-                    weekAgo.setDate(weekAgo.getDate() - 7);
-                    dateQuery = { createdAt: { $gte: weekAgo } };
-                    break;
-                case 'month':
-                    const monthAgo = new Date(today);
-                    monthAgo.setMonth(monthAgo.getMonth() - 1);
-                    dateQuery = { createdAt: { $gte: monthAgo } };
-                    break;
-            }
+            const { startDate, endDate } = getDateRange(dateFilter);
+            dateQuery = {
+                createdAt: { $gte: startDate, $lte: endDate }
+            };
         }
         
         // Get all orders (excluding cancelled) with populated data

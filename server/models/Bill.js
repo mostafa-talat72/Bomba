@@ -481,15 +481,19 @@ billSchema.pre("save", async function (next) {
             const day = String(now.getDate()).padStart(2, "0");
             const dateStr = `${year}${month}${day}`;
 
-            // Count bills created today for sequential numbering
-            const count = await this.constructor.countDocuments({
-                createdAt: {
-                    $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-                    $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-                }
-            });
+            // Find the last bill number for today and increment
+            const todayPrefix = `BILL-${dateStr}-`;
+            const lastBill = await this.constructor.findOne({ billNumber: { $regex: `^${todayPrefix}` } })
+                .sort({ billNumber: -1 })
+                .select('billNumber');
+            
+            let nextSeq = 1;
+            if (lastBill) {
+                const parts = lastBill.billNumber.split('-');
+                nextSeq = parseInt(parts[2]) + 1;
+            }
 
-            this.billNumber = `BILL-${dateStr}-${count + 1}`;
+            this.billNumber = `${todayPrefix}${nextSeq}`;
         } catch (error) {
             // Fallback bill number
             this.billNumber = `INV-${Date.now()}`;

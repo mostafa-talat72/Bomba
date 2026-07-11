@@ -109,6 +109,7 @@ interface SessionsData {
     }>;
     controllerDistribution: {
       single: number;
+      dual: number;
       triple: number;
       quad: number;
     };
@@ -355,11 +356,17 @@ const PlayStationSessionsReport = ({ data, t, i18n, formatCurrency }: { data: Se
             <Gamepad2 className="w-4 h-4 text-blue-500" />
             {t('reports.labels.controllerDistribution')}
           </h5>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div className="text-center p-3 bg-blue-50 dark:bg-gray-700 rounded-lg">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.controllers.single')}</p>
               <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
                 {formatDecimal(data.controllerDistribution.single, i18n.language)}
+              </p>
+            </div>
+            <div className="text-center p-3 bg-indigo-50 dark:bg-gray-700 rounded-lg">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('reports.controllers.dual')}</p>
+              <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                {formatDecimal(data.controllerDistribution.dual, i18n.language)}
               </p>
             </div>
             <div className="text-center p-3 bg-purple-50 dark:bg-gray-700 rounded-lg">

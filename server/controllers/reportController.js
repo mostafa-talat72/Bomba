@@ -65,6 +65,7 @@ export const getDashboardStats = async (req, res) => {
                 $match: {
                     endTime: { $gte: startDate, $lte: endDate },
                     status: "completed",
+                    totalCost: { $gt: 0 },
                     organization: req.user.organization,
                 },
             },
@@ -103,48 +104,6 @@ export const getDashboardStats = async (req, res) => {
             organization: req.user.organization,
         });
 
-        // تنظيف الطلبات القديمة (أكثر من 24 ساعة) وتحديث حالتها
-        const oneDayAgo = new Date();
-        oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-
-        const oldPendingOrders = await Order.find({
-            status: { $in: ["pending", "preparing", "ready"] },
-            createdAt: { $lt: oneDayAgo },
-            organization: req.user.organization,
-        });
-
-        if (oldPendingOrders.length > 0) {
-            // تحديث الطلبات القديمة إلى delivered
-            await Order.updateMany(
-                {
-                    status: { $in: ["pending", "preparing", "ready"] },
-                    createdAt: { $lt: oneDayAgo },
-                    organization: req.user.organization,
-                },
-                {
-                    $set: {
-                        status: "delivered",
-                        deliveredTime: new Date(),
-                    },
-                }
-            );
-        }
-
-        // إعادة حساب الطلبات المعلقة بعد التنظيف
-        const cleanPendingOrders = await Order.countDocuments({
-            status: { $in: ["pending", "preparing", "ready"] },
-            organization: req.user.organization,
-        });
-
-        // فحص تفصيلي للطلبات
-        const allOrders = await Order.find({}).select(
-            "_id orderNumber status customerName createdAt"
-        );
-        const ordersByStatus = allOrders.reduce((acc, order) => {
-            acc[order.status] = (acc[order.status] || 0) + 1;
-            return acc;
-        }, {});
-
         // Low stock items (real-time)
         const lowStockItems = await InventoryItem.countDocuments({
             isActive: true,
@@ -158,31 +117,11 @@ export const getDashboardStats = async (req, res) => {
             organization: req.user.organization,
         });
 
-        // Today's total revenue (including all bills)
-        const todayRevenue = await Bill.aggregate([
-            {
-                $match: {
-                    createdAt: { $gte: startDate, $lte: endDate },
-                    organization: req.user.organization,
-                },
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalRevenue: { $sum: "$paid" },
-                },
-            },
-        ]);
-
-        // تحليل مفصل للطلبات
-        const ordersByStatusAggregate = await Order.aggregate([
-            {
-                $group: {
-                    _id: "$status",
-                    count: { $sum: 1 },
-                },
-            },
-        ]);
+        // Active pending/preparing/ready orders count
+        const activePendingOrders = await Order.countDocuments({
+            status: { $in: ["pending", "preparing", "ready"] },
+            organization: req.user.organization,
+        });
 
         const result = {
             filter,
@@ -196,12 +135,12 @@ export const getDashboardStats = async (req, res) => {
             costs: costsData,
             realTime: {
                 activeSessions,
-                cleanPendingOrders,
+                activePendingOrders,
                 lowStockItems,
             },
             today: {
                 bills: todayBills,
-                revenue: todayRevenue[0]?.totalRevenue || 0,
+                revenue: revenueData[0]?.totalRevenue || 0,
             },
         };
 
@@ -561,118 +500,27 @@ export const getFinancialReport = async (req, res) => {
         // Get organization ID correctly
         const organizationId = req.user.organization._id || req.user.organization;
 
-        // Check total orders and sessions without date filter
-        const totalOrdersInDb = await Order.countDocuments({
-            organization: organizationId,
-        });
-        
-        const totalSessionsInDb = await Session.countDocuments({
-            organization: organizationId,
-        });
-
-        // Check orders by status
-        const ordersByStatus = await Order.aggregate([
-            {
-                $match: {
-                    organization: organizationId,
-                }
-            },
-            {
-                $group: {
-                    _id: "$status",
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
-        // Check date range of orders
-        const ordersDateRange = await Order.aggregate([
-            {
-                $match: {
-                    organization: organizationId,
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    minDate: { $min: "$createdAt" },
-                    maxDate: { $max: "$createdAt" },
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
-
-        // Check sessions by status
-        const sessionsByStatus = await Session.aggregate([
-            {
-                $match: {
-                    organization: organizationId,
-                }
-            },
-            {
-                $group: {
-                    _id: "$status",
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
-
-        // Check date range of sessions
-        const sessionsDateRange = await Session.aggregate([
-            {
-                $match: {
-                    organization: organizationId,
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    minDate: { $min: "$createdAt" },
-                    maxDate: { $max: "$createdAt" },
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
-        // Revenue from Orders (Cafe) - ALL orders except cancelled
-        const ordersRevenue = await Order.aggregate([
+        // Revenue from Bills (source of truth)
+        const billRevenue = await Bill.aggregate([
             {
                 $match: {
                     createdAt: { $gte: startDate, $lte: endDate },
-                    status: { $ne: "cancelled" }, // جميع الطلبات ما عدا الملغاة
+                    status: { $in: ["paid", "partial"] },
                     organization: organizationId,
                 },
             },
             {
                 $group: {
                     _id: null,
-                    totalRevenue: { $sum: "$finalAmount" },
-                    totalOrders: { $sum: 1 },
+                    totalRevenue: { $sum: "$total" },
+                    totalPaid: { $sum: "$paid" },
+                    totalBills: { $sum: 1 },
                 },
             },
         ]);
 
-        // Revenue from Sessions (PlayStation & Computer) - filter by endTime
-        const sessionsRevenue = await Session.aggregate([
-            {
-                $match: {
-                    endTime: { $gte: startDate, $lte: endDate },
-                    status: "completed",
-                    organization: organizationId,
-                },
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalRevenue: { $sum: "$finalCost" },
-                    totalSessions: { $sum: 1 },
-                },
-            },
-        ]);
-
-        // Calculate total revenue
-        const ordersTotal = ordersRevenue[0]?.totalRevenue || 0;
-        const sessionsTotal = sessionsRevenue[0]?.totalRevenue || 0;
-        const totalRevenue = ordersTotal + sessionsTotal;
-        const totalPaid = totalRevenue; // نفترض أن كل الإيرادات مدفوعة
+        const totalRevenue = billRevenue[0]?.totalRevenue || 0;
+        const totalPaid = billRevenue[0]?.totalPaid || 0;
 
         // Costs - إضافة جميع التكاليف المدفوعة والمعلقة
         const costs = await Cost.aggregate([
@@ -693,10 +541,6 @@ export const getFinancialReport = async (req, res) => {
             },
         ]);
 
-        // Check total costs in DB without date filter
-        const totalCostsInDb = await Cost.countDocuments({
-            organization: organizationId,
-        });
         // حساب التكاليف الإجمالية (المدفوعة فقط)
         const totalCostsAmount = costs.reduce(
             (sum, cost) => sum + cost.paidAmount,
@@ -712,63 +556,60 @@ export const getFinancialReport = async (req, res) => {
         const netProfit = totalPaid - totalCostsAmount;
         const profitMargin = totalPaid > 0 ? (netProfit / totalPaid) * 100 : 0;
 
-        // Previous period comparison
+        // Previous period comparison - clone dates to avoid mutating the filter
         const previousPeriod = getDateRange(filter);
-        previousPeriod.startDate.setMonth(
-            previousPeriod.startDate.getMonth() - 1
+        previousPeriod.startDate = new Date(
+            previousPeriod.startDate.getFullYear(),
+            previousPeriod.startDate.getMonth() - 1,
+            previousPeriod.startDate.getDate()
         );
-        previousPeriod.endDate.setMonth(previousPeriod.endDate.getMonth() - 1);
+        previousPeriod.endDate = new Date(
+            previousPeriod.endDate.getFullYear(),
+            previousPeriod.endDate.getMonth() - 1,
+            previousPeriod.endDate.getDate()
+        );
 
-        const previousOrdersRevenue = await Order.aggregate([
+        const previousBillRevenue = await Bill.aggregate([
             {
                 $match: {
                     createdAt: {
                         $gte: previousPeriod.startDate,
                         $lte: previousPeriod.endDate,
                     },
-                    status: { $ne: "cancelled" }, // جميع الطلبات ما عدا الملغاة
+                    status: { $in: ["paid", "partial"] },
                     organization: organizationId,
                 },
             },
             {
                 $group: {
                     _id: null,
-                    totalRevenue: { $sum: "$finalAmount" },
+                    totalRevenue: { $sum: "$total" },
+                    totalPaid: { $sum: "$paid" },
                 },
             },
         ]);
 
-        const previousSessionsRevenue = await Session.aggregate([
-            {
-                $match: {
-                    endTime: {
-                        $gte: previousPeriod.startDate,
-                        $lte: previousPeriod.endDate,
-                    },
-                    status: "completed",
-                    organization: organizationId,
-                },
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalRevenue: { $sum: "$finalCost" },
-                },
-            },
-        ]);
-
-        const previousTotal = 
-            (previousOrdersRevenue[0]?.totalRevenue || 0) + 
-            (previousSessionsRevenue[0]?.totalRevenue || 0);
+        const previousTotal = previousBillRevenue[0]?.totalPaid || 0;
 
         const revenueGrowth =
             previousTotal > 0
                 ? ((totalPaid - previousTotal) / previousTotal) * 100
                 : 0;
 
-        // حساب عدد المعاملات
-        const totalOrders = ordersRevenue[0]?.totalOrders || 0;
-        const totalSessions = sessionsRevenue[0]?.totalSessions || 0;
+        // Count orders and sessions without summing revenue (just for counts)
+        const totalOrders = await Order.countDocuments({
+            createdAt: { $gte: startDate, $lte: endDate },
+            status: { $ne: "cancelled" },
+            organization: organizationId,
+        });
+
+        const totalSessions = await Session.countDocuments({
+            endTime: { $gte: startDate, $lte: endDate },
+            status: "completed",
+            totalCost: { $gt: 0 },
+            organization: organizationId,
+        });
+
         const totalTransactions = totalOrders + totalSessions;
 
         const responseData = {
@@ -786,8 +627,6 @@ export const getFinancialReport = async (req, res) => {
             revenue: {
                 totalRevenue,
                 totalPaid,
-                ordersRevenue: ordersTotal,
-                sessionsRevenue: sessionsTotal,
                 totalOrders,
                 totalSessions,
             },
@@ -818,6 +657,11 @@ export const getSessionsReport = async (req, res) => {
     try {
         const { ...filter } = req.query;
         const { startDate, endDate } = getDateRange(filter);
+        
+        // Calculate previous period for comparison
+        const periodDuration = endDate - startDate;
+        const previousStartDate = new Date(startDate.getTime() - periodDuration);
+        const previousEndDate = startDate;
 
         // Separate PlayStation and Computer sessions
         const playstationData = await getSessionsDataByType(
@@ -834,19 +678,40 @@ export const getSessionsReport = async (req, res) => {
             'computer'
         );
 
+        // Previous period data for comparison
+        const prevPlaystationData = await getSessionsDataByType(
+            req.user.organization,
+            previousStartDate,
+            previousEndDate,
+            'playstation'
+        );
+
+        const prevComputerData = await getSessionsDataByType(
+            req.user.organization,
+            previousStartDate,
+            previousEndDate,
+            'computer'
+        );
+
+        const currentTotal = (playstationData.totalSessions || 0) + (computerData.totalSessions || 0);
+        const previousTotal = (prevPlaystationData.totalSessions || 0) + (prevComputerData.totalSessions || 0);
+
+        const change = currentTotal - previousTotal;
+        const changePercent = previousTotal > 0 ? parseFloat(((change / previousTotal) * 100).toFixed(2)) : (currentTotal > 0 ? 100 : 0);
+
         res.json({
             success: true,
             data: {
                 filter,
-                totalSessions: (playstationData.totalSessions || 0) + (computerData.totalSessions || 0),
+                totalSessions: currentTotal,
                 playstation: playstationData,
                 computer: computerData,
                 comparison: {
                     sessions: {
-                        current: (playstationData.totalSessions || 0) + (computerData.totalSessions || 0),
-                        previous: 0,
-                        change: 0,
-                        changePercent: 0
+                        current: currentTotal,
+                        previous: previousTotal,
+                        change,
+                        changePercent
                     }
                 }
             },
@@ -1322,6 +1187,7 @@ const getSalesReportData = async (organization, startDate, endDate) => {
     const sessions = await Session.find({
         endTime: { $gte: startDate, $lte: endDate },
         status: "completed",
+        totalCost: { $gt: 0 },
         organization: organizationId,
     }).lean();
 
@@ -1521,6 +1387,7 @@ const getSessionsReportData = async (organization, startDate, endDate) => {
     const sessions = await Session.find({
         endTime: { $gte: startDate, $lte: endDate },
         status: "completed",
+        totalCost: { $gt: 0 },
         organization: organizationId,
     });
 
@@ -1737,6 +1604,7 @@ const getSessionsDataByType = async (organization, startDate, endDate, deviceTyp
             endTime: { $gte: startDate, $lte: endDate },
             deviceType,
             status: 'completed',
+            totalCost: { $gt: 0 },
             organization: organizationId
         }).lean();
 
@@ -1809,7 +1677,8 @@ const getSessionsDataByType = async (organization, startDate, endDate, deviceTyp
         // Add controller distribution for PlayStation
         if (deviceType === 'playstation') {
             const controllerDistribution = {
-                single: sessions.filter(s => s.controllers <= 2).length,
+                single: sessions.filter(s => s.controllers === 1).length,
+                dual: sessions.filter(s => s.controllers === 2).length,
                 triple: sessions.filter(s => s.controllers === 3).length,
                 quad: sessions.filter(s => s.controllers === 4).length
             };
@@ -1844,6 +1713,7 @@ const getPeakHoursData = async (organization, startDate, endDate) => {
         const sessions = await Session.find({
             endTime: { $gte: startDate, $lte: endDate },
             status: 'completed',
+            totalCost: { $gt: 0 },
             organization: organizationId
         }).lean();
 
@@ -1908,6 +1778,7 @@ const getStaffPerformanceData = async (organization, startDate, endDate) => {
         const sessions = await Session.find({
             endTime: { $gte: startDate, $lte: endDate },
             status: 'completed',
+            totalCost: { $gt: 0 },
             organization: organizationId
         }).populate('createdBy', 'name').lean();
 

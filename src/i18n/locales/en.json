@@ -1349,9 +1349,10 @@
     "avgRevenue": "Average revenue",
     "sessionsByControllers": "Sessions are based on the number of sessions",
     "controllers": {
-      "single": "1-2 Daraat",
-      "triple": "3 Daraat",
-      "quad": "4 shields"
+      "single": "Single",
+      "dual": "Dual",
+      "triple": "Triple",
+      "quad": "Quad"
     },
     "sessionsCountLabel": "Number of sessions",
     "revenueLabel": "Revenue",

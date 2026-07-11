@@ -1342,7 +1342,8 @@
     "avgRevenue": "متوسط الإيرادات",
     "sessionsByControllers": "الجلسات حسب عدد الدراعات",
     "controllers": {
-      "single": "١-٢ دراعات",
+      "single": "دراع واحد",
+      "dual": "٢ دراعات",
       "triple": "٣ دراعات",
       "quad": "٤ دراعات"
     },

@@ -88,8 +88,31 @@ async function scanBills() {
             for (const ip of bill.itemPayments) paidFromItems += ip.paidAmount || 0;
         }
         let paidFromSessionsCalc = 0;
+        let sessionCostFixes = [];
         if (bill.sessionPayments && bill.sessionPayments.length > 0) {
-            for (const sp of bill.sessionPayments) paidFromSessionsCalc += sp.paidAmount || 0;
+            for (const sp of bill.sessionPayments) {
+                paidFromSessionsCalc += sp.paidAmount || 0;
+                if (sp.sessionId) {
+                    const actualSession = actualSessions.find(
+                        (s) => s._id.toString() === sp.sessionId.toString()
+                    );
+                    if (actualSession) {
+                        const actualFinalCost = actualSession.finalCost || actualSession.totalCost || 0;
+                        const diff = Math.abs((sp.sessionCost || 0) - actualFinalCost);
+                        if (diff > 0.01) {
+                            sessionCostFixes.push({
+                                sessionPaymentId: sp._id,
+                                correctCost: actualFinalCost,
+                                label: `جلسة ${sp.sessionId.toString().slice(-6)}: sessionCost=${sp.sessionCost} -> ${actualFinalCost}`,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        if (sessionCostFixes.length > 0) {
+            issues.push(`sessionCost غير مطابق: ${sessionCostFixes.map(f => f.label).join(" | ")}`);
+            shouldFix = true;
         }
 
         const remainingOrders = Math.max(0, ordersSubtotal - paidFromItems);
@@ -162,6 +185,7 @@ async function scanBills() {
             paidFromSessions: paidFromSessionsCalc,
             remainingOrders,
             remainingSessions,
+            sessionCostFixes,
             issues,
             shouldFix,
             fix: {
@@ -223,6 +247,37 @@ async function fixResults(results, selectedIndices) {
             continue;
         }
         try {
+            // تصليح sessionPayments (تحديث sessionCost الفعلي)
+            if (r.sessionCostFixes && r.sessionCostFixes.length > 0) {
+                const bill = await Bill.findById(r._id);
+                let changed = false;
+                for (const fix of r.sessionCostFixes) {
+                    const sp = bill.sessionPayments.id(fix.sessionPaymentId);
+                    if (sp) {
+                        sp.sessionCost = fix.correctCost;
+                        sp.remainingAmount = Math.max(0, fix.correctCost - (sp.paidAmount || 0));
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    bill.markModified("sessionPayments");
+                    // Apply main fixes too
+                    bill.orders = r.fix.orders;
+                    bill.sessions = r.fix.sessions;
+                    bill.subtotal = r.fix.subtotal;
+                    bill.total = r.fix.total;
+                    bill.discount = r.fix.discount;
+                    bill.paid = r.fix.paid;
+                    bill.remaining = r.fix.remaining;
+                    bill.status = r.fix.status;
+                    if (r.fix.billNumber) bill.billNumber = r.fix.billNumber;
+                    await bill.save();
+                    console.log(`  ✅ [${r.index}] ${r.billNumber} (${r.customerName}) — مع sessionPayments`);
+                    fixed++;
+                    continue;
+                }
+            }
+
             await Bill.updateOne(
                 { _id: r._id },
                 { $set: {
