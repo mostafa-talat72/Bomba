@@ -21,7 +21,7 @@ function calcPaidFromPayments(bill) {
 
 async function scanBills() {
     const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    twoMonthsAgo.setDate(twoMonthsAgo.getDate() - 40);
     const bills = await Bill.find({
         createdAt: { $gte: twoMonthsAgo },
     }).sort({ createdAt: -1 });
@@ -95,8 +95,8 @@ async function scanBills() {
         const remainingOrders = Math.max(0, ordersSubtotal - paidFromItems);
         const remainingSessions = Math.max(0, sessionsSubtotal - paidFromSessionsCalc);
 
-        // تجاهل الفروق البسيطة (أقل من 2 جنيه) طالما المدفوع >= الإجمالي
-        const TOLERANCE = 2;
+        // تجاهل الفروق البسيطة (أقل من أو يساوي 4 جنيه) طالما المدفوع >= الإجمالي
+        const TOLERANCE = 4;
         const subtotalDiff = Math.abs(bill.subtotal - expectedSubtotal);
         const totalDiff = Math.abs(bill.total - expectedTotal);
         const paidDiff = Math.abs(bill.paid - expectedPaid);
@@ -189,7 +189,7 @@ function showResults(results, showAll) {
     let withIssues = results.filter((r) => r.shouldFix);
     let ok = results.filter((r) => !r.shouldFix);
 
-    console.log(`\n📋 إجمالي الفواتير (آخر شهرين): ${results.length}`);
+    console.log(`\n📋 إجمالي الفواتير (آخر 40 يوم): ${results.length}`);
     console.log(`   ✅ سليمة: ${ok.length}`);
     console.log(`   ⚠️  بها مشاكل: ${withIssues.length}\n`);
 
@@ -251,7 +251,7 @@ async function fixResults(results, selectedIndices) {
 async function main() {
     const cmd = process.argv[2];
 
-    console.log("🔍 جاري فحص جميع الفواتير (آخر شهرين)...");
+    console.log("🔍 جاري فحص جميع الفواتير (آخر 40 يوم)...");
     const results = await scanBills();
 
     if (cmd === "show" || !cmd || cmd === "help") {
