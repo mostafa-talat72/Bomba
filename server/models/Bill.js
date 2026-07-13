@@ -469,21 +469,22 @@ billSchema.virtual('itemPayments.remainingQuantity').get(function() {
     return [];
 });
 
-// Depopulate sessionPayments[].payments[].paidBy before validation
-// This prevents populated objects (e.g. { _id, name }) from being saved as the paidBy value
+// Depopulate and fix sessionPayments[].payments[].paidBy before validation
+// Populated objects (e.g. { _id, name }) must be converted back to plain ObjectId
+// before Mongoose validation tries to cast them; otherwise validation fails with
+// "Path 'paidBy' is required" because the object can't be cast to ObjectId.
 billSchema.pre("validate", function (next) {
+    let changed = false;
     if (this.sessionPayments && this.sessionPayments.length > 0) {
         this.sessionPayments.forEach((sp, spIndex) => {
             if (sp.payments && sp.payments.length > 0) {
                 const cleaned = [];
-                let changed = false;
                 for (const p of sp.payments) {
-                    // If paidBy is a populated object (has _id property), extract the _id
+                    // If paidBy is a populated object, extract the _id
                     if (p.paidBy && typeof p.paidBy === 'object' && p.paidBy._id) {
                         p.paidBy = p.paidBy._id;
                         changed = true;
                     }
-                    // Remove entries with missing required fields
                     if (p.paidBy && p.amount && p.method) {
                         cleaned.push(p);
                     } else {
@@ -491,11 +492,15 @@ billSchema.pre("validate", function (next) {
                         changed = true;
                     }
                 }
-                if (changed) {
+                if (cleaned.length !== sp.payments.length) {
                     sp.payments = cleaned;
                 }
             }
         });
+    }
+    if (changed) {
+        // Force Mongoose to persist changes to nested subdocuments
+        this.markModified('sessionPayments');
     }
     next();
 });
