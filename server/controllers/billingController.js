@@ -437,6 +437,19 @@ export const getBill = async (req, res) => {
             
             // حفظ التحديثات إذا لزم الأمر
             if (needsUpdate) {
+                // Depopulate sessionPayments.payments.paidBy before saving
+                // to prevent populated objects from being persisted
+                if (bill.sessionPayments) {
+                    bill.sessionPayments.forEach(sp => {
+                        if (sp.payments) {
+                            sp.payments.forEach(p => {
+                                if (p.paidBy && typeof p.paidBy === 'object' && p.paidBy._id) {
+                                    p.paidBy = p.paidBy._id;
+                                }
+                            });
+                        }
+                    });
+                }
                 await bill.save();
                 Logger.info(`✓ تم تحديث sessionPayments للفاتورة ${bill.billNumber}`);
             }
