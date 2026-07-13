@@ -469,6 +469,23 @@ billSchema.virtual('itemPayments.remainingQuantity').get(function() {
     return [];
 });
 
+// Clean up invalid sessionPayments[].payments[] entries before validation
+billSchema.pre("validate", function (next) {
+    if (this.sessionPayments && this.sessionPayments.length > 0) {
+        this.sessionPayments.forEach((sp, spIndex) => {
+            if (sp.payments && sp.payments.length > 0) {
+                const valid = sp.payments.filter(p => p.paidBy && p.amount && p.method);
+                if (valid.length !== sp.payments.length) {
+                    const removed = sp.payments.length - valid.length;
+                    console.warn(`[Pre-validate] Bill ${this.billNumber || this._id}: Removed ${removed} invalid payment(s) from sessionPayments[${spIndex}].payments (missing required fields)`);
+                    sp.payments = valid;
+                }
+            }
+        });
+    }
+    next();
+});
+
 // Generate bill number with full timestamp
 billSchema.pre("save", async function (next) {
     if (this.isNew && !this.billNumber) {
