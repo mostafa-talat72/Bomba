@@ -15,6 +15,7 @@ import { requestLogger, errorLogger } from "./middleware/logger.js";
 import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
 import { performanceMonitor } from "./middleware/performanceMonitor.js";
 import { setupSocketIO } from "./socket/socketHandler.js";
+import { startAutoOrderCompleter } from "./services/autoOrderCompleter.js";
 import { initializeScheduler } from "./utils/scheduler.js";
 import Logger from "./middleware/logger.js";
 import Bill from "./models/Bill.js";
@@ -606,6 +607,9 @@ app.use((req, res, next) => {
     req.io = io;
     next();
 });
+
+// Auto-complete stale kitchen orders (runs even with the kitchen screen closed)
+startAutoOrderCompleter(io);
 
 // Root route
 app.get("/", (req, res) => {

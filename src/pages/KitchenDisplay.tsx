@@ -9,6 +9,11 @@ import { Clock, ChefHat, Bell, RefreshCw, AlertCircle, Layers, Check } from 'luc
 const SOUND_URL = '/sounds/new-order.mp3';
 const STATUS_COLUMNS = ['pending', 'preparing', 'ready'] as const;
 
+// الطلبات اللي ما اتمش تجهيزها أو توصيلها خلال 24 ساعة من إنشائها
+// بتتجهز وتتوصّل أوتوماتيكيًا (السيرفر بيعملها حتى لو الشاشة مقفولة).
+const AUTO_COMPLETE_MS = 24 * 60 * 60 * 1000;
+const AUTO_COMPLETE_CHECK_INTERVAL_MS = 30 * 1000;
+
 interface MenuSection {
   _id: string;
   name: string;
@@ -35,6 +40,9 @@ export function KitchenDisplay() {
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const socketRef = useRef<Socket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+  const autoCompletedRef = useRef<Set<string>>(new Set());
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -167,6 +175,68 @@ export function KitchenDisplay() {
       if (fetchRes.success && fetchRes.data) setOrders(fetchRes.data);
     } catch { }
   };
+
+  // تجهيز وتوصيل الطلبات المتأخرة تلقائيًا (أكثر من ساعتين بدون تجهيز/توصيل)
+  const autoCompleteStaleOrders = useCallback(async () => {
+    const now = Date.now();
+    const stale = ordersRef.current.filter(o =>
+      !autoCompletedRef.current.has(o._id) &&
+      now - new Date(o.createdAt).getTime() >= AUTO_COMPLETE_MS &&
+      o.items.some(item => (item.deliveredCount ?? 0) < (item.quantity ?? 1))
+    );
+    for (const order of stale) {
+      try {
+        const undelivered = order.items
+          .map((item, idx) => ({ item, idx }))
+          .filter(({ item }) => (item.deliveredCount ?? 0) < (item.quantity ?? 1));
+
+        // 1) تجهيز كل الأصناف الغير مسلمة (preparedCount = الكمية)
+        for (const { item, idx } of undelivered) {
+          if ((item.preparedCount ?? 0) < (item.quantity ?? 1)) {
+            await api.updateOrderItemPrepared(order._id, idx, { preparedCount: item.quantity ?? 1 });
+          }
+        }
+
+        // 2) توصيل أصناف كل قسم
+        const sectionIds = [...new Set(
+          undelivered.map(({ item }) => item.section).filter(Boolean)
+        )] as string[];
+        for (const sectionId of sectionIds) {
+          await api.deliverOrderSection(order._id, sectionId);
+        }
+
+        // 3) توصيل الأصناف اللي بدون قسم (deliver-item يجهّز ويسلّم معًا)
+        for (const { item, idx } of undelivered) {
+          if (!item.section && (item.preparedCount ?? 0) < (item.quantity ?? 1)) {
+            await api.deliverItem(order._id, idx).catch(() => {});
+          }
+        }
+
+        // 4) لو لسه مش delivered (أي حاجة غير متطابقة) نضبطه قسريًا
+        const latest = await api.getOrders({ status: 'pending,preparing,ready' });
+        const liveOrder = latest.success && latest.data
+          ? latest.data.find(o => o._id === order._id)
+          : null;
+        if (liveOrder && liveOrder.status !== 'delivered') {
+          await api.updateOrderStatus(order._id, 'delivered');
+        }
+
+        autoCompletedRef.current.add(order._id);
+        setOrders(prev => prev.filter(o => o._id !== order._id));
+      } catch {
+        // يفضل في القائمة ويتعاد المحاولة في الدورة الجاية
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const firstRun = setTimeout(() => { autoCompleteStaleOrders(); }, 3000);
+    const interval = setInterval(autoCompleteStaleOrders, AUTO_COMPLETE_CHECK_INTERVAL_MS);
+    return () => {
+      clearTimeout(firstRun);
+      clearInterval(interval);
+    };
+  }, [autoCompleteStaleOrders]);
 
   const getElapsed = (createdAt: Date) => {
     const diff = Date.now() - new Date(createdAt).getTime();

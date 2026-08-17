@@ -145,6 +145,61 @@ function copyShared() {
   );
 }
 
+const MONGO_ZIP = path.join(
+  desktopDir,
+  "build",
+  "mongo",
+  "mongodb-windows-x86_64-7.0.14.zip"
+);
+const MONGO_SHA = path.join(desktopDir, "build", "mongo", "mongodb-windows-x86_64-7.0.14.zip.sha256");
+const MONGO_EXTRACT = path.join(desktopDir, "build", "mongo", "extracted");
+
+// Copies a portable mongod into prepared/mongo/bin so the desktop app can
+// start MongoDB itself (no system installation needed on the target machine).
+function ensureBundledMongo() {
+  log("Bundling portable MongoDB ...");
+  if (!fs.existsSync(MONGO_ZIP)) {
+    log("WARNING: MongoDB zip missing - target machines will need MongoDB installed manually");
+    return;
+  }
+  if (fs.existsSync(MONGO_SHA)) {
+    const expected = fs.readFileSync(MONGO_SHA, "utf8").trim().toUpperCase();
+    const actual = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(MONGO_ZIP))
+      .digest("hex")
+      .toUpperCase();
+    if (expected !== actual) {
+      throw new Error(`MongoDB zip checksum mismatch (got ${actual})`);
+    }
+  }
+  if (!fs.existsSync(path.join(MONGO_EXTRACT, "bin", "mongod.exe"))) {
+    log("Extracting MongoDB (large archive, please wait)...");
+    fs.mkdirSync(MONGO_EXTRACT, { recursive: true });
+    execSync(`tar -xf "${MONGO_ZIP}" -C "${MONGO_EXTRACT}"`, { stdio: "inherit" });
+  }
+  const rootDir = fs
+    .readdirSync(MONGO_EXTRACT)
+    .find((d) => d.startsWith("mongodb-win32"));
+  if (!rootDir) {
+    throw new Error("MongoDB extraction produced no mongodb-win32* folder");
+  }
+  // Keep only what mongod needs at runtime (drop 1.5GB of .pdb debug symbols
+  // and the unused mongos binaries). mongod.exe is self-contained; the VC++
+  // redistributable ships as a fallback for machines without the runtime.
+  fs.cpSync(
+    path.join(MONGO_EXTRACT, rootDir, "bin"),
+    path.join(prepared, "mongo", "bin"),
+    {
+      recursive: true,
+      filter: (src) =>
+        !fs.statSync(src).isFile() ||
+        ["mongod.exe", "vc_redist.x64.exe"].includes(path.basename(src)),
+    }
+  );
+  log(`Bundled MongoDB -> ${path.join(prepared, "mongo", "bin")}`);
+}
+
 function main() {
   const t0 = Date.now();
   cleanPrepared();
@@ -154,6 +209,7 @@ function main() {
   copyShared();
   pruneServerDeps();
   writeEnv();
+  ensureBundledMongo();
   log(`Done in ${((Date.now() - t0) / 1000).toFixed(1)}s -> ${prepared}`);
 }
 
