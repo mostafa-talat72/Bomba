@@ -94,9 +94,7 @@ Thumbs.db
 uploads/
 
 # Desktop app
-desktop/node_modules/
-desktop/prepared/
-desktop/release/
+desktop/
 
 # PM2
 .pm2/
