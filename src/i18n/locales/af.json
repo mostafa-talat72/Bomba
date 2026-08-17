@@ -125,7 +125,7 @@
     "hidePassword": "Versteek wagwoord",
     "welcomeBack": "Welkom terug",
     "registerNewBusiness": "Registreer 'n nuwe fasiliteit",
-    "startYourJourney": "Begin jou reis met die Bomba-stelsel",
+    "startYourJourney": "Begin jou reis met die MTE Systems-stelsel",
     "ownerName": "Eienaar se naam",
     "ownerNamePlaceholder": "Voer die eienaar se naam in",
     "ownerNameRequired": "Eienaar se naam word vereis",
@@ -154,7 +154,7 @@
     "emailActionError": "'n Fout het voorgekom tydens die stuur van die skakel",
     "changeLanguage": "Verander taal",
     "registerTitle": "Registreer 'n nuwe fasiliteit",
-    "registerSubtitle": "Begin jou reis met die Bomba-stelsel",
+    "registerSubtitle": "Begin jou reis met die MTE Systems-stelsel",
     "nameRequired": "Eienaar se naam word vereis",
     "registrationSuccess": "Die aktiveringsskakel is na jou e-pos gestuur. Aktiveer asseblief jou rekening voordat jy aanmeld.",
     "registrationError": "'n Fout het tydens registrasie voorgekom.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Beheerpaneel",
-    "welcome": "Welkom by Bomba System",
+    "welcome": "Welkom by MTE Systems System",
     "subtitle": "'n Slim bestuursplatform vir kafees, restaurante en vermaak",
     "loading": "Laai tans data …",
     "activeSessions": "Aktiewe sessies",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Van {{start}} tot {{end}}",
       "printDate": "Druk geskiedenis",
-      "footer": "Hierdie verslag is gegenereer deur Bomba System - Alle regte voorbehou © {{year}}"
+      "footer": "Hierdie verslag is gegenereer deur MTE Systems System - Alle regte voorbehou © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Voer 'n kort beskrywing van die fasiliteit in",
       "generatedWebsite": {
         "title": "Outomaties gegenereerde fasiliteitsrekord",
-        "description": "'n Rekord word in Bomba geskep wat alle fasiliteitsdata bevat",
+        "description": "'n Rekord word in MTE Systems geskep wat alle fasiliteitsdata bevat",
         "viewButton": "Bekyk fasiliteit geskiedenis",
         "autoUpdate": "Die geskiedenis word outomaties opgedateer wanneer data gestoor word"
       },

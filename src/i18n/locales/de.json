@@ -125,7 +125,7 @@
     "hidePassword": "Passwort verbergen",
     "welcomeBack": "Willkommen zurück",
     "registerNewBusiness": "Registrieren Sie eine neue Einrichtung",
-    "startYourJourney": "Beginnen Sie Ihre Reise mit dem Bomba-System",
+    "startYourJourney": "Beginnen Sie Ihre Reise mit dem MTE Systems-System",
     "ownerName": "Name des Besitzers",
     "ownerNamePlaceholder": "Geben Sie den Namen des Eigentümers ein",
     "ownerNameRequired": "Der Name des Eigentümers ist erforderlich",
@@ -154,7 +154,7 @@
     "emailActionError": "Beim Senden des Links ist ein Fehler aufgetreten",
     "changeLanguage": "Sprache ändern",
     "registerTitle": "Registrieren Sie eine neue Einrichtung",
-    "registerSubtitle": "Beginnen Sie Ihre Reise mit dem Bomba-System",
+    "registerSubtitle": "Beginnen Sie Ihre Reise mit dem MTE Systems-System",
     "nameRequired": "Der Name des Eigentümers ist erforderlich",
     "registrationSuccess": "Der Aktivierungslink wurde an Ihre E-Mail-Adresse gesendet. Bitte aktivieren Sie Ihr Konto, bevor Sie sich anmelden.",
     "registrationError": "Bei der Registrierung ist ein Fehler aufgetreten.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Bedienfeld",
-    "welcome": "Willkommen im Bomba-System",
+    "welcome": "Willkommen im MTE Systems-System",
     "subtitle": "Eine intelligente Verwaltungsplattform für Cafés, Restaurants und Unterhaltung",
     "loading": "Daten werden geladen...",
     "activeSessions": "Aktive Sitzungen",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Von {{start}} bis {{end}}",
       "printDate": "Druckhistorie",
-      "footer": "Dieser Bericht wurde von Bomba System erstellt – Alle Rechte vorbehalten © {{year}}"
+      "footer": "Dieser Bericht wurde von MTE Systems System erstellt – Alle Rechte vorbehalten © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Geben Sie eine kurze Beschreibung der Einrichtung ein",
       "generatedWebsite": {
         "title": "Automatisch generierter Anlagendatensatz",
-        "description": "In Bomba wird ein Datensatz erstellt, der alle Anlagendaten enthält",
+        "description": "In MTE Systems wird ein Datensatz erstellt, der alle Anlagendaten enthält",
         "viewButton": "Sehen Sie sich den Anlagenverlauf an",
         "autoUpdate": "Der Verlauf wird beim Speichern der Daten automatisch aktualisiert"
       },

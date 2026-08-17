@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { api, Order } from '../services/api';
 import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
 import { Clock, ChefHat, Bell, RefreshCw, AlertCircle, Layers, Check } from 'lucide-react';
 
 const SOUND_URL = '/sounds/new-order.mp3';
@@ -57,7 +58,7 @@ export function KitchenDisplay() {
 
   useEffect(() => {
     if (socketRef.current) return;
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
     const socket = io(socketUrl, { transports: ['websocket', 'polling'], reconnection: true });
     socketRef.current = socket;

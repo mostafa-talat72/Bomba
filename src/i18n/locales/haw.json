@@ -125,7 +125,7 @@
     "hidePassword": "Hūnā ʻōlelo huna",
     "welcomeBack": "Welina hou",
     "registerNewBusiness": "E hoʻopaʻa inoa i kahi mea hou",
-    "startYourJourney": "E hoʻomaka i kāu huakaʻi me ka Pūnaehana Bomba",
+    "startYourJourney": "E hoʻomaka i kāu huakaʻi me ka Pūnaehana MTE Systems",
     "ownerName": "Ka inoa o ka mea nona",
     "ownerNamePlaceholder": "E hookomo i ka inoa o ka mea nana",
     "ownerNameRequired": "Pono ka inoa o ka mea nona",
@@ -154,7 +154,7 @@
     "emailActionError": "Ua hewa i ka hoʻouna ʻana i ka loulou",
     "changeLanguage": "Hoʻololi i ka ʻōlelo",
     "registerTitle": "E hoʻopaʻa inoa i kahi mea hou",
-    "registerSubtitle": "E hoʻomaka i kāu huakaʻi me ka Pūnaehana Bomba",
+    "registerSubtitle": "E hoʻomaka i kāu huakaʻi me ka Pūnaehana MTE Systems",
     "nameRequired": "Pono ka inoa o ka mea nona",
     "registrationSuccess": "Ua hoʻouna ʻia ka loulou hoʻāla i kāu leka uila. E ʻoluʻolu e hoʻāla i kāu moʻokāki ma mua o kou komo ʻana.",
     "registrationError": "Ua hewa i ka wā e hoʻopaʻa inoa ai.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Papa hoʻomalu",
-    "welcome": "Welina mai i ka Pūnaehana Bomba",
+    "welcome": "Welina mai i ka Pūnaehana MTE Systems",
     "subtitle": "He kahua hoʻokele akamai no nā cafe, hale ʻaina, a me nā ʻoliʻoli",
     "loading": "Ke hoʻouka nei i ka ʻikepili...",
     "activeSessions": "Nā kau hana",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Mai {{start}} a i {{end}}",
       "printDate": "Paʻi moʻolelo",
-      "footer": "Ua haku ʻia kēia hōʻike e Bomba System - Ua mālama ʻia nā kuleana āpau © {{makahiki}}"
+      "footer": "Ua haku ʻia kēia hōʻike e MTE Systems System - Ua mālama ʻia nā kuleana āpau © {{makahiki}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "E hoʻokomo i kahi wehewehe pōkole o ka hale hana",
       "generatedWebsite": {
         "title": "Hana ʻakomi ʻia ka moʻolelo o ka hale hana",
-        "description": "Hoʻokumu ʻia kahi moʻolelo ma Bomba me nā ʻikepili hale āpau",
+        "description": "Hoʻokumu ʻia kahi moʻolelo ma MTE Systems me nā ʻikepili hale āpau",
         "viewButton": "Nānā i ka mōʻaukala hale",
         "autoUpdate": "Hoʻopau aunoa ʻia ka mōʻaukala ke mālama ʻia ka ʻikepili"
       },

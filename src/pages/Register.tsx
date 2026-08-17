@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
 import { useLanguage } from '../context/LanguageContext';
 import { AUTH_ERROR_CODES, isValidErrorCode, getErrorMessageKey } from '../constants/errorCodes';
+import { API_BASE_URL } from '../utils/apiBase';
 
 interface FormData {
   name: string;
@@ -106,7 +107,7 @@ const Register: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const apiUrl = API_BASE_URL + '/api';
       const response = await fetch(`${apiUrl}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

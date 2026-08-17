@@ -1,4 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { API_BASE_URL as RESOLVED_API_BASE_URL, isDesktopApp } from '../utils/apiBase';
+
+// Desktop app: use the page origin (127.0.0.1) - Chromium cannot reach
+// 'localhost' (resolves to ::1) when the server binds 127.0.0.1
+const API_BASE_URL = RESOLVED_API_BASE_URL;
 
 // Health check URL (without /api prefix)
 export const HEALTH_CHECK_URL = API_BASE_URL;
@@ -1232,7 +1236,7 @@ class ApiClient {
   async getBillingItemByBarcode(barcode: string): Promise<ApiResponse<InventoryItem>> {
     try {
       const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const apiUrl = API_BASE_URL + '/api';
       const response = await fetch(`${apiUrl}/inventory/barcode/${barcode}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

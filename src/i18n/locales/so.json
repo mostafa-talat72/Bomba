@@ -125,7 +125,7 @@
     "hidePassword": "Qari erayga sirta ah",
     "welcomeBack": "Soo dhawoow dib",
     "registerNewBusiness": "Diiwaangeli xarun cusub",
-    "startYourJourney": "Ku bilow safarkaaga Nidaamka Bombaga",
+    "startYourJourney": "Ku bilow safarkaaga Nidaamka MTE Systemsga",
     "ownerName": "Magaca mulkiilaha",
     "ownerNamePlaceholder": "Geli magaca mulkiilaha",
     "ownerNameRequired": "Magaca mulkiilaha ayaa loo baahan yahay",
@@ -154,7 +154,7 @@
     "emailActionError": "Khalad ayaa dhacay markii la dirayay xiriiriyaha",
     "changeLanguage": "Beddel luqadda",
     "registerTitle": "Diiwaangeli xarun cusub",
-    "registerSubtitle": "Ku bilow safarkaaga Nidaamka Bombaga",
+    "registerSubtitle": "Ku bilow safarkaaga Nidaamka MTE Systemsga",
     "nameRequired": "Magaca mulkiilaha ayaa loo baahan yahay",
     "registrationSuccess": "Isku xirka hawlgelinta ayaa lagu soo diray iimaylkaagii. Fadlan dami akoonkaaga ka hor inta aanad galin",
     "registrationError": "Khalad ayaa dhacay intii lagu jiray diiwaangelinta",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Guddiga xakamaynta",
-    "welcome": "Ku Soo Dhawoow Nidaamka Bomba",
+    "welcome": "Ku Soo Dhawoow Nidaamka MTE Systems",
     "subtitle": "Meel maamul oo caqli badan oo kafateeriyada, makhaayadaha, iyo madadaalada",
     "loading": "Soodejinaya xogta...",
     "activeSessions": "Fadhiyo firfircoon",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Laga bilaabo {{bilaw}} ilaa {{dhamaadka}}",
       "printDate": "Taariikhda daabac",
-      "footer": "Warbixintan waxaa soo saaray Nidaamka Bomba - Xuquuqda oo dhan way xifdisan tahay © {{year}}"
+      "footer": "Warbixintan waxaa soo saaray Nidaamka MTE Systems - Xuquuqda oo dhan way xifdisan tahay © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Geli sharaxaad kooban oo ku saabsan xarunta",
       "generatedWebsite": {
         "title": "Diiwaanka xarunta si toos ah loo soo saaray",
-        "description": "Rikoor ayaa laga sameeyay Bomba oo ka kooban dhammaan xogta xarunta",
+        "description": "Rikoor ayaa laga sameeyay MTE Systems oo ka kooban dhammaan xogta xarunta",
         "viewButton": "Eeg taariikhda xarunta",
         "autoUpdate": "Taariikhda si toos ah ayaa loo cusboonaysiiyaa marka xogta la kaydiyo"
       },

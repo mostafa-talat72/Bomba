@@ -125,7 +125,7 @@
     "hidePassword": "Құпия сөзді жасыру",
     "welcomeBack": "Қайтадан қош келдіңіз",
     "registerNewBusiness": "Жаңа нысанды тіркеңіз",
-    "startYourJourney": "Саяхатыңызды Bomba жүйесімен бастаңыз",
+    "startYourJourney": "Саяхатыңызды MTE Systems жүйесімен бастаңыз",
     "ownerName": "Иесінің аты",
     "ownerNamePlaceholder": "Иесінің атын енгізіңіз",
     "ownerNameRequired": "Иесінің аты қажет",
@@ -154,7 +154,7 @@
     "emailActionError": "Сілтемені жіберу кезінде қате орын алды",
     "changeLanguage": "Тілді өзгерту",
     "registerTitle": "Жаңа нысанды тіркеңіз",
-    "registerSubtitle": "Саяхатыңызды Bomba жүйесімен бастаңыз",
+    "registerSubtitle": "Саяхатыңызды MTE Systems жүйесімен бастаңыз",
     "nameRequired": "Иесінің аты қажет",
     "registrationSuccess": "Белсендіру сілтемесі электрондық поштаңызға жіберілді. Жүйеге кірмес бұрын тіркелгіңізді белсендіріңіз.",
     "registrationError": "Тіркеу кезінде қате орын алды.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Басқару тақтасы",
-    "welcome": "Bomba жүйесіне қош келдіңіз",
+    "welcome": "MTE Systems жүйесіне қош келдіңіз",
     "subtitle": "Кафелер, мейрамханалар және ойын-сауық үшін ақылды басқару платформасы",
     "loading": "Деректер жүктелуде...",
     "activeSessions": "Белсенді сессиялар",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}} бастап {{end}} дейін",
       "printDate": "Басып шығару журналы",
-      "footer": "Бұл есеп Bomba жүйесімен жасалған - Барлық құқықтар қорғалған © {{ year}}"
+      "footer": "Бұл есеп MTE Systems жүйесімен жасалған - Барлық құқықтар қорғалған © {{ year}}"
     }
   },
   "settings": {

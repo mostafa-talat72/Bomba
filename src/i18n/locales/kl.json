@@ -125,7 +125,7 @@
     "hidePassword": "Isissummik toqqorsigit",
     "welcomeBack": "Tikilluaqqusaavutit",
     "registerNewBusiness": "Ingerlatsivik nutaaq nalunaarsorlugu",
-    "startYourJourney": "Bomba System atorlugu angalaneq aallartiguk",
+    "startYourJourney": "MTE Systems System atorlugu angalaneq aallartiguk",
     "ownerName": "Piginnittup aqqa",
     "ownerNamePlaceholder": "Piginnittup aqqa allaguk",
     "ownerNameRequired": "Piginnittup aqqa pisariaqarpoq",
@@ -154,7 +154,7 @@
     "emailActionError": "Linkip nassiunneqarnerani kukkusoqarpoq",
     "changeLanguage": "Oqaatsit allanngortikkit",
     "registerTitle": "Ingerlatsivik nutaaq nalunaarsorlugu",
-    "registerSubtitle": "Bomba System atorlugu angalaneq aallartiguk",
+    "registerSubtitle": "MTE Systems System atorlugu angalaneq aallartiguk",
     "nameRequired": "Piginnittup aqqa pisariaqarpoq",
     "registrationSuccess": "Aktiveringslinki emailimut nassiunneqarpoq. Konto-t isertinnagu atuutilersiguk.",
     "registrationError": "Allattorsimaffimmi kukkusoqarpoq.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Aqutsinermut paneli",
-    "welcome": "Bomba Systemimut tikilluaqqusaavutit",
+    "welcome": "MTE Systems Systemimut tikilluaqqusaavutit",
     "subtitle": "Cafénut, neriniartarfinnut, aammalu nuannaarniartarfinnut smart management platform",
     "loading": "Paasissutissat ikkussorneqarput...",
     "activeSessions": "Sessionit aktiiviusut",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{aallaqqaasiut}}-imiit {{naammassineq}}-mut",
       "printDate": "Oqaluttuassartaq anisiguk",
-      "footer": "Nalunaarusiaq una Bomba Systemimit suliarineqarpoq - Pisinnaatitaaffiit tamarmik pigineqarput © {{ukioq}}"
+      "footer": "Nalunaarusiaq una MTE Systems Systemimit suliarineqarpoq - Pisinnaatitaaffiit tamarmik pigineqarput © {{ukioq}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ingerlatsivik pillugu nassuiaat sivikitsumik allaguk",
       "generatedWebsite": {
         "title": "Atortorissaarutit allattorsimaffiat nammineerluni pilersinneqartoq",
-        "description": "Bombami allattorsimaffik pilersinneqarpoq, tassani inissiat paasissutissanik tamanik imaqarput",
+        "description": "MTE Systemsmi allattorsimaffik pilersinneqarpoq, tassani inissiat paasissutissanik tamanik imaqarput",
         "viewButton": "Ingerlatsiviup oqaluttuassartaa takuuk",
         "autoUpdate": "Oqaluttuaq nammineerluni nutarterneqartarpoq paasissutissat annaaneqarpata"
       },

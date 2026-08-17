@@ -125,7 +125,7 @@
     "hidePassword": "Skrij geslo",
     "welcomeBack": "dobrodošli nazaj",
     "registerNewBusiness": "Registrirajte nov objekt",
-    "startYourJourney": "Začnite svoje potovanje s sistemom Bomba",
+    "startYourJourney": "Začnite svoje potovanje s sistemom MTE Systems",
     "ownerName": "Ime lastnika",
     "ownerNamePlaceholder": "Vnesite ime lastnika",
     "ownerNameRequired": "Zahtevano je ime lastnika",
@@ -154,7 +154,7 @@
     "emailActionError": "Med pošiljanjem povezave je prišlo do napake",
     "changeLanguage": "Spremenite jezik",
     "registerTitle": "Registrirajte nov objekt",
-    "registerSubtitle": "Začnite svoje potovanje s sistemom Bomba",
+    "registerSubtitle": "Začnite svoje potovanje s sistemom MTE Systems",
     "nameRequired": "Zahtevano je ime lastnika",
     "registrationSuccess": "Aktivacijska povezava je bila poslana na vaš e-mail. Preden se prijavite, aktivirajte svoj račun.",
     "registrationError": "Med registracijo je prišlo do napake.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Nadzorna plošča",
-    "welcome": "Dobrodošli v sistemu Bomba",
+    "welcome": "Dobrodošli v sistemu MTE Systems",
     "subtitle": "Pametna platforma za upravljanje kavarn, restavracij in zabave",
     "loading": "Nalaganje podatkov ...",
     "activeSessions": "Aktivne seje",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Od {{start}} do {{end}}",
       "printDate": "Natisni zgodovino",
-      "footer": "To poročilo je ustvaril Bomba System – Vse pravice pridržane © {{leto}}"
+      "footer": "To poročilo je ustvaril MTE Systems System – Vse pravice pridržane © {{leto}}"
     }
   },
   "settings": {

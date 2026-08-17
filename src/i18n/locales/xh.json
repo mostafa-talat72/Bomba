@@ -125,7 +125,7 @@
     "hidePassword": "Fihla igama lokugqithisa",
     "welcomeBack": "Siyakwamkela emva",
     "registerNewBusiness": "Bhalisa isibonelelo esitsha",
-    "startYourJourney": "Qala uhambo lwakho ngeBomba System",
+    "startYourJourney": "Qala uhambo lwakho ngeMTE Systems System",
     "ownerName": "Igama lomnini",
     "ownerNamePlaceholder": "Faka igama lomnini",
     "ownerNameRequired": "Igama lomnini liyafuneka",
@@ -154,7 +154,7 @@
     "emailActionError": "Kwenzeke impazamo ngelixa kuthunyelwa ilinki",
     "changeLanguage": "Guqula ulwimi",
     "registerTitle": "Bhalisa isibonelelo esitsha",
-    "registerSubtitle": "Qala uhambo lwakho ngeBomba System",
+    "registerSubtitle": "Qala uhambo lwakho ngeMTE Systems System",
     "nameRequired": "Igama lomnini liyafuneka",
     "registrationSuccess": "Ikhonkco lokuvula lithunyelwe kwi-imeyile yakho. Nceda uvule iakhawunti yakho ngaphambi kokungena.",
     "registrationError": "Kwenzeke impazamo ngexesha lobhaliso.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Iphaneli yokulawula",
-    "welcome": "Wamkelekile kwiBomba System",
+    "welcome": "Wamkelekile kwiMTE Systems System",
     "subtitle": "Iqonga elinobulumko lokulawula iikhefi, iindawo zokutyela kunye nokuzonwabisa",
     "loading": "Ilayisha idatha...",
     "activeSessions": "Iiseshoni ezisebenzayo",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Ukusuka {{start}} ukuya {{end}}",
       "printDate": "Imbali yoshicilelo",
-      "footer": "Le ngxelo yenziwe yiBomba System - Onke amalungelo agciniwe © {{year}}"
+      "footer": "Le ngxelo yenziwe yiMTE Systems System - Onke amalungelo agciniwe © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ngenisa inkcazo emfutshane yesibonelelo",
       "generatedWebsite": {
         "title": "Irekhodi yoncedo eyenziwe ngokuzenzekelayo",
-        "description": "Irekhodi yenziwe kwiBomba equlethe yonke idatha yoncedo",
+        "description": "Irekhodi yenziwe kwiMTE Systems equlethe yonke idatha yoncedo",
         "viewButton": "Jonga imbali yoncedo",
         "autoUpdate": "Imbali ihlaziywa ngokuzenzekelayo xa idatha igcinwe"
       },

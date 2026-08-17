@@ -125,7 +125,7 @@
     "hidePassword": "Hisha ijambo ryibanga",
     "welcomeBack": "Murakaza neza",
     "registerNewBusiness": "Iyandikishe ikigo gishya",
-    "startYourJourney": "Tangira urugendo rwawe na Sisitemu ya Bomba",
+    "startYourJourney": "Tangira urugendo rwawe na Sisitemu ya MTE Systems",
     "ownerName": "Izina rya nyirubwite",
     "ownerNamePlaceholder": "Injiza izina rya nyirubwite",
     "ownerNameRequired": "Izina rya nyiraryo rirakenewe",
@@ -154,7 +154,7 @@
     "emailActionError": "Ikosa ryabaye mugihe wohereje umurongo",
     "changeLanguage": "Hindura imvugo",
     "registerTitle": "Iyandikishe ikigo gishya",
-    "registerSubtitle": "Tangira urugendo rwawe na Sisitemu ya Bomba",
+    "registerSubtitle": "Tangira urugendo rwawe na Sisitemu ya MTE Systems",
     "nameRequired": "Izina rya nyiraryo rirakenewe",
     "registrationSuccess": "Ihuza ryibikorwa ryoherejwe kuri imeri yawe. Nyamuneka fungura konti yawe mbere yo kwinjira.",
     "registrationError": "Ikosa ryabaye mugihe cyo kwiyandikisha.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Umwanya wo kugenzura",
-    "welcome": "Murakaza neza kuri Bomba Sisitemu",
+    "welcome": "Murakaza neza kuri MTE Systems Sisitemu",
     "subtitle": "Urubuga rwubwenge rwo kuyobora kafe, resitora, n imyidagaduro",
     "loading": "Gutanga amakuru ...",
     "activeSessions": "Imyitozo ifatika",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Kuva {{gutangira}} kugeza {{iherezo}}",
       "printDate": "Shira amateka",
-      "footer": "Iyi raporo yakozwe na Bomba Sisitemu - Uburenganzira bwose burasubitswe © {{umwaka}}"
+      "footer": "Iyi raporo yakozwe na MTE Systems Sisitemu - Uburenganzira bwose burasubitswe © {{umwaka}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Injira ibisobanuro bigufi byikigo",
       "generatedWebsite": {
         "title": "Byikora byikora byanditse",
-        "description": "Inyandiko ikorerwa muri Bomba ikubiyemo amakuru yose yikigo",
+        "description": "Inyandiko ikorerwa muri MTE Systems ikubiyemo amakuru yose yikigo",
         "viewButton": "Reba amateka yikigo",
         "autoUpdate": "Amateka avugururwa mu buryo bwikora iyo amakuru abitswe"
       },

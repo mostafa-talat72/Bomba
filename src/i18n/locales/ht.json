@@ -125,7 +125,7 @@
     "hidePassword": "Kache modpas",
     "welcomeBack": "Byenvini tounen",
     "registerNewBusiness": "Anrejistre yon nouvo etablisman",
-    "startYourJourney": "Kòmanse vwayaj ou ak Sistèm Bomba",
+    "startYourJourney": "Kòmanse vwayaj ou ak Sistèm MTE Systems",
     "ownerName": "Non pwopriyetè a",
     "ownerNamePlaceholder": "Antre non pwopriyetè a",
     "ownerNameRequired": "Non pwopriyetè a obligatwa",
@@ -154,7 +154,7 @@
     "emailActionError": "Yon erè te fèt pandan w ap voye lyen an",
     "changeLanguage": "Chanje lang",
     "registerTitle": "Anrejistre yon nouvo etablisman",
-    "registerSubtitle": "Kòmanse vwayaj ou ak Sistèm Bomba",
+    "registerSubtitle": "Kòmanse vwayaj ou ak Sistèm MTE Systems",
     "nameRequired": "Non pwopriyetè a obligatwa",
     "registrationSuccess": "Yo voye lyen deklanchman an nan imel ou a. Tanpri aktive kont ou anvan ou konekte.",
     "registrationError": "Yon erè ki te fèt pandan enskripsyon an.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panèl kontwòl",
-    "welcome": "Byenveni nan Bomba System",
+    "welcome": "Byenveni nan MTE Systems System",
     "subtitle": "Yon platfòm jesyon entelijan pou kafe, restoran, ak amizman",
     "loading": "Chaje done...",
     "activeSessions": "Sesyon aktif",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Soti nan {{kòmanse}} rive nan {{fen}}",
       "printDate": "Enprime istwa",
-      "footer": "Rapò sa a te pwodwi pa Bomba System - Tout dwa rezève © {{year}}"
+      "footer": "Rapò sa a te pwodwi pa MTE Systems System - Tout dwa rezève © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Antre yon deskripsyon tou kout sou etablisman an",
       "generatedWebsite": {
         "title": "Dosye etablisman ki te pwodwi otomatikman",
-        "description": "Yo kreye yon dosye nan Bomba ki gen tout done etablisman an",
+        "description": "Yo kreye yon dosye nan MTE Systems ki gen tout done etablisman an",
         "viewButton": "Gade istwa etablisman an",
         "autoUpdate": "Istwa a mete ajou otomatikman lè done yo sove"
       },

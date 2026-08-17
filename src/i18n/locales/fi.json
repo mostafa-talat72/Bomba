@@ -125,7 +125,7 @@
     "hidePassword": "Piilota salasana",
     "welcomeBack": "Tervetuloa takaisin",
     "registerNewBusiness": "Rekisteröi uusi laitos",
-    "startYourJourney": "Aloita matkasi Bomba-järjestelmällä",
+    "startYourJourney": "Aloita matkasi MTE Systems-järjestelmällä",
     "ownerName": "Omistajan nimi",
     "ownerNamePlaceholder": "Kirjoita omistajan nimi",
     "ownerNameRequired": "Omistajan nimi vaaditaan",
@@ -154,7 +154,7 @@
     "emailActionError": "Linkin lähettämisessä tapahtui virhe",
     "changeLanguage": "Vaihda kieli",
     "registerTitle": "Rekisteröi uusi laitos",
-    "registerSubtitle": "Aloita matkasi Bomba-järjestelmällä",
+    "registerSubtitle": "Aloita matkasi MTE Systems-järjestelmällä",
     "nameRequired": "Omistajan nimi vaaditaan",
     "registrationSuccess": "Aktivointilinkki on lähetetty sähköpostiisi. Aktivoi tilisi ennen kirjautumista.",
     "registrationError": "Rekisteröinnin aikana tapahtui virhe.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Ohjauspaneeli",
-    "welcome": "Tervetuloa Bomba Systemiin",
+    "welcome": "Tervetuloa MTE Systems Systemiin",
     "subtitle": "Älykäs hallintaalusta kahviloita, ravintoloita ja viihdettä varten",
     "loading": "Ladataan tietoja...",
     "activeSessions": "Aktiiviset istunnot",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Alkaen {{aloitus}} - {{end}}",
       "printDate": "Tulostushistoria",
-      "footer": "Tämän raportin on luonut Bomba System - Kaikki oikeudet pidätetään © {{year}}"
+      "footer": "Tämän raportin on luonut MTE Systems System - Kaikki oikeudet pidätetään © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Anna lyhyt kuvaus laitoksesta",
       "generatedWebsite": {
         "title": "Automaattisesti luotu laitostietue",
-        "description": "Bombassa luodaan tietue, joka sisältää kaikki laitostiedot",
+        "description": "MTE Systemsssa luodaan tietue, joka sisältää kaikki laitostiedot",
         "viewButton": "Näytä laitoshistoria",
         "autoUpdate": "Historia päivittyy automaattisesti, kun tiedot tallennetaan"
       },

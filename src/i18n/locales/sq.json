@@ -125,7 +125,7 @@
     "hidePassword": "Fshih fjalëkalimin",
     "welcomeBack": "Mirë se vini përsëri",
     "registerNewBusiness": "Regjistroni një objekt të ri",
-    "startYourJourney": "Filloni udhëtimin tuaj me sistemin Bomba",
+    "startYourJourney": "Filloni udhëtimin tuaj me sistemin MTE Systems",
     "ownerName": "Emri i pronarit",
     "ownerNamePlaceholder": "Shkruani emrin e pronarit",
     "ownerNameRequired": "Kërkohet emri i pronarit",
@@ -154,7 +154,7 @@
     "emailActionError": "Ndodhi një gabim gjatë dërgimit të lidhjes",
     "changeLanguage": "Ndrysho gjuhën",
     "registerTitle": "Regjistroni një objekt të ri",
-    "registerSubtitle": "Filloni udhëtimin tuaj me sistemin Bomba",
+    "registerSubtitle": "Filloni udhëtimin tuaj me sistemin MTE Systems",
     "nameRequired": "Kërkohet emri i pronarit",
     "registrationSuccess": "Lidhja e aktivizimit është dërguar në emailin tuaj. Ju lutemi aktivizoni llogarinë tuaj përpara se të identifikoheni.",
     "registrationError": "Ndodhi një gabim gjatë regjistrimit.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Paneli i kontrollit",
-    "welcome": "Mirë se vini në Bomba System",
+    "welcome": "Mirë se vini në MTE Systems System",
     "subtitle": "Një platformë e zgjuar menaxhimi për kafene, restorante dhe argëtim",
     "loading": "Të dhënat po ngarkohen...",
     "activeSessions": "Seancat aktive",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Nga {{fillimi}} deri në {{fund}}",
       "printDate": "Historia e printimit",
-      "footer": "Ky raport është krijuar nga Bomba System - Të gjitha të drejtat e rezervuara © {{year}}"
+      "footer": "Ky raport është krijuar nga MTE Systems System - Të gjitha të drejtat e rezervuara © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Shkruani një përshkrim të shkurtër të objektit",
       "generatedWebsite": {
         "title": "Regjistrimi i objektit të krijuar automatikisht",
-        "description": "Një rekord është krijuar në Bomba që përmban të gjitha të dhënat e objektit",
+        "description": "Një rekord është krijuar në MTE Systems që përmban të gjitha të dhënat e objektit",
         "viewButton": "Shikoni historinë e objektit",
         "autoUpdate": "Historia përditësohet automatikisht kur të dhënat ruhen"
       },

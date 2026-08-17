@@ -125,7 +125,7 @@
     "hidePassword": "Ɓoye kalmar sirri",
     "welcomeBack": "Barka da dawowa",
     "registerNewBusiness": "Yi rijistar sabon wurin aiki",
-    "startYourJourney": "Fara tafiya tare da tsarin Bomba",
+    "startYourJourney": "Fara tafiya tare da tsarin MTE Systems",
     "ownerName": "Sunan mai shi",
     "ownerNamePlaceholder": "Shigar da sunan mai shi",
     "ownerNameRequired": "Ana buƙatar sunan mai shi",
@@ -154,7 +154,7 @@
     "emailActionError": "An sami kuskure yayin aika mahaɗin",
     "changeLanguage": "Canja harshe",
     "registerTitle": "Yi rijistar sabon wurin aiki",
-    "registerSubtitle": "Fara tafiya tare da tsarin Bomba",
+    "registerSubtitle": "Fara tafiya tare da tsarin MTE Systems",
     "nameRequired": "Ana buƙatar sunan mai shi",
     "registrationSuccess": "An aika hanyar haɗin kunnawa zuwa imel ɗin ku. Da fatan za a kunna asusun ku kafin shiga.",
     "registrationError": "An sami kuskure yayin rajista.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kwamitin sarrafawa",
-    "welcome": "Barka da zuwa Tsarin Bomba",
+    "welcome": "Barka da zuwa Tsarin MTE Systems",
     "subtitle": "Dandalin gudanarwa mai wayo don cafes, gidajen abinci, da nishaɗi",
     "loading": "Ana loda bayanai...",
     "activeSessions": "Zaman aiki",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Daga {{farawa}} zuwa {{ƙarshen}}",
       "printDate": "Buga tarihin",
-      "footer": "Tsarin Bomba ne ya samar da wannan rahoto - Dukan haƙƙin mallaka © {{shekara}}"
+      "footer": "Tsarin MTE Systems ne ya samar da wannan rahoto - Dukan haƙƙin mallaka © {{shekara}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Shigar da taƙaitaccen bayanin makaman",
       "generatedWebsite": {
         "title": "Rikodin kayan aikin da aka samar ta atomatik",
-        "description": "An ƙirƙiri rikodin a cikin Bomba mai ɗauke da duk bayanan kayan aiki",
+        "description": "An ƙirƙiri rikodin a cikin MTE Systems mai ɗauke da duk bayanan kayan aiki",
         "viewButton": "Duba tarihin wurin aiki",
         "autoUpdate": "Ana sabunta tarihin ta atomatik lokacin da aka adana bayanai"
       },

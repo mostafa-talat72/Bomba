@@ -125,7 +125,7 @@
     "hidePassword": "Ocultar o contrasinal",
     "welcomeBack": "Benvido de novo",
     "registerNewBusiness": "Rexistrar unha nova instalación",
-    "startYourJourney": "Comeza a túa viaxe co sistema Bomba",
+    "startYourJourney": "Comeza a túa viaxe co sistema MTE Systems",
     "ownerName": "Nome do propietario",
     "ownerNamePlaceholder": "Introduza o nome do propietario",
     "ownerNameRequired": "O nome do propietario é necesario",
@@ -154,7 +154,7 @@
     "emailActionError": "Produciuse un erro ao enviar a ligazón",
     "changeLanguage": "Cambiar idioma",
     "registerTitle": "Rexistrar unha nova instalación",
-    "registerSubtitle": "Comeza a túa viaxe co sistema Bomba",
+    "registerSubtitle": "Comeza a túa viaxe co sistema MTE Systems",
     "nameRequired": "O nome do propietario é necesario",
     "registrationSuccess": "A ligazón de activación foi enviada ao teu correo electrónico. Activa a túa conta antes de iniciar sesión.",
     "registrationError": "Produciuse un erro durante o rexistro.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel de control",
-    "welcome": "Benvido ao Bomba System",
+    "welcome": "Benvido ao MTE Systems System",
     "subtitle": "Unha plataforma de xestión intelixente para cafés, restaurantes e entretemento",
     "loading": "Cargando datos...",
     "activeSessions": "Sesións activas",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "De {{inicio}} a {{fin}}",
       "printDate": "Historial de impresión",
-      "footer": "Este informe foi xerado por Bomba System - Todos os dereitos reservados © {{year}}"
+      "footer": "Este informe foi xerado por MTE Systems System - Todos os dereitos reservados © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Introduza unha breve descrición da instalación",
       "generatedWebsite": {
         "title": "Rexistro de instalación xerado automaticamente",
-        "description": "En Bomba créase un rexistro que contén todos os datos das instalacións",
+        "description": "En MTE Systems créase un rexistro que contén todos os datos das instalacións",
         "viewButton": "Ver o historial das instalacións",
         "autoUpdate": "O historial actualízase automaticamente cando se gardan os datos"
       },

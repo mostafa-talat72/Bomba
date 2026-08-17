@@ -125,7 +125,7 @@
     "hidePassword": "Kweka ekigambo ky’okuyingira",
     "welcomeBack": "Mwaniriziddwa okuddayo",
     "registerNewBusiness": "Wandiisa ekifo ekipya",
-    "startYourJourney": "Tandika olugendo lwo n'enkola ya Bomba System",
+    "startYourJourney": "Tandika olugendo lwo n'enkola ya MTE Systems System",
     "ownerName": "Erinnya lya nnannyini yo",
     "ownerNamePlaceholder": "Yingiza erinnya lya nnannyini yo",
     "ownerNameRequired": "Erinnya lya nnannyini lyetaagibwa",
@@ -154,7 +154,7 @@
     "emailActionError": "Ensobi ebaddewo nga osindika enkolagana",
     "changeLanguage": "Kyusa olulimi",
     "registerTitle": "Wandiisa ekifo ekipya",
-    "registerSubtitle": "Tandika olugendo lwo n'enkola ya Bomba System",
+    "registerSubtitle": "Tandika olugendo lwo n'enkola ya MTE Systems System",
     "nameRequired": "Erinnya lya nnannyini lyetaagibwa",
     "registrationSuccess": "Enkolagana y'okukola (activation link) esindikiddwa ku email yo. Nsaba okole akawunti yo nga tonnayingira.",
     "registrationError": "Ensobi ebaddewo nga beewandiisa.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Ekipande ekifuga",
-    "welcome": "Mwaniriziddwa ku Bomba System",
+    "welcome": "Mwaniriziddwa ku MTE Systems System",
     "subtitle": "Omukutu omugezi ogw’okuddukanya cafe, eby’okulya, n’eby’amasanyu",
     "loading": "Okutikka data...",
     "activeSessions": "Entuula ezikola",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Okuva ku {{start}} okutuuka ku {{end}}",
       "printDate": "Kuba ebyafaayo",
-      "footer": "Lipoota eno yakolebwa Bomba System - Eddembe lyonna liri mu buyinza bwa © {{year}}"
+      "footer": "Lipoota eno yakolebwa MTE Systems System - Eddembe lyonna liri mu buyinza bwa © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Yingiza mu bufunze okunnyonnyola ekifo ekyo",
       "generatedWebsite": {
         "title": "Likodi y’ekifo ekoleddwa mu ngeri ey’otoma",
-        "description": "Likodi ekolebwa mu Bomba nga erimu ebikwata ku kifo kyonna",
+        "description": "Likodi ekolebwa mu MTE Systems nga erimu ebikwata ku kifo kyonna",
         "viewButton": "Laba ebyafaayo by’ekifo",
         "autoUpdate": "Ebyafaayo bitereezebwa butereevu nga data eterekeddwa"
       },

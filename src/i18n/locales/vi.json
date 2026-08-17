@@ -125,7 +125,7 @@
     "hidePassword": "Ẩn mật khẩu",
     "welcomeBack": "Chào mừng trở lại",
     "registerNewBusiness": "Đăng ký cơ sở mới",
-    "startYourJourney": "Bắt đầu hành trình của bạn với hệ thống Bomba",
+    "startYourJourney": "Bắt đầu hành trình của bạn với hệ thống MTE Systems",
     "ownerName": "Tên chủ sở hữu",
     "ownerNamePlaceholder": "Nhập tên chủ sở hữu",
     "ownerNameRequired": "Tên chủ sở hữu là bắt buộc",
@@ -154,7 +154,7 @@
     "emailActionError": "Đã xảy ra lỗi khi gửi liên kết",
     "changeLanguage": "Thay đổi ngôn ngữ",
     "registerTitle": "Đăng ký cơ sở mới",
-    "registerSubtitle": "Bắt đầu hành trình của bạn với hệ thống Bomba",
+    "registerSubtitle": "Bắt đầu hành trình của bạn với hệ thống MTE Systems",
     "nameRequired": "Tên chủ sở hữu là bắt buộc",
     "registrationSuccess": "Liên kết kích hoạt đã được gửi đến email của bạn. Vui lòng kích hoạt tài khoản của bạn trước khi đăng nhập.",
     "registrationError": "Đã xảy ra lỗi trong quá trình đăng ký.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Bảng điều khiển",
-    "welcome": "Chào mừng đến với hệ thống Bomba",
+    "welcome": "Chào mừng đến với hệ thống MTE Systems",
     "subtitle": "Nền tảng quản lý thông minh cho quán cà phê, nhà hàng, giải trí",
     "loading": "Đang tải dữ liệu...",
     "activeSessions": "Phiên hoạt động",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Từ {{bắt đầu}} đến {{end}}",
       "printDate": "Lịch sử in",
-      "footer": "Báo cáo này được tạo bởi Hệ thống Bomba - Bảo lưu mọi quyền © {{year}}"
+      "footer": "Báo cáo này được tạo bởi Hệ thống MTE Systems - Bảo lưu mọi quyền © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Nhập mô tả ngắn gọn về cơ sở",
       "generatedWebsite": {
         "title": "Bản ghi cơ sở được tạo tự động",
-        "description": "Một bản ghi được tạo ở Bomba chứa tất cả dữ liệu cơ sở",
+        "description": "Một bản ghi được tạo ở MTE Systems chứa tất cả dữ liệu cơ sở",
         "viewButton": "Xem lịch sử cơ sở",
         "autoUpdate": "Lịch sử được cập nhật tự động khi dữ liệu được lưu"
       },

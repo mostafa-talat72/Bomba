@@ -10,7 +10,7 @@
     "updating": "Kosala mise à jour...",
     "deleting": "Kolongolama...",
     "saving": "Kobomba...",
-    "saveChanges": "Bomba mbongwana oyo esalemi",
+    "saveChanges": "MTE Systems mbongwana oyo esalemi",
     "cannotUndo": "Action oyo ekoki kozongisama sima te",
     "search": "bolukiluki",
     "filter": "kosala filtrage",
@@ -122,10 +122,10 @@
     "loginErrorGeneric": "Libunga esalemaki ntango ozali kokɔta na site.",
     "loginErrorRetry": "Libunga esalemaki ntango ozali kokɔta na site.Meka lisusu.",
     "showPassword": "Lakisa mot de passe",
-    "hidePassword": "Bomba mot de passe",
+    "hidePassword": "MTE Systems mot de passe",
     "welcomeBack": "Boyei malamu lisusu",
     "registerNewBusiness": "Komisa nkombo ya esika ya sika",
-    "startYourJourney": "Bandá mobembo na yo na Système Bomba",
+    "startYourJourney": "Bandá mobembo na yo na Système MTE Systems",
     "ownerName": "Kombo ya nkolo",
     "ownerNamePlaceholder": "Tyá nkombo ya nkolo",
     "ownerNameRequired": "Nkombo ya nkolo esengeli",
@@ -154,7 +154,7 @@
     "emailActionError": "Libunga esalemaki ntango bazalaki kotinda lien",
     "changeLanguage": "Bobongola monoko",
     "registerTitle": "Komisa nkombo ya esika ya sika",
-    "registerSubtitle": "Bandá mobembo na yo na Système Bomba",
+    "registerSubtitle": "Bandá mobembo na yo na Système MTE Systems",
     "nameRequired": "Nkombo ya nkolo esengeli",
     "registrationSuccess": "Lien ya activation etindami na email na yo. Svp activer compte na yo avant ya ko kota.",
     "registrationError": "Libunga esalemaki na ntango ya kokomisa nkombo.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panneau de contrôle",
-    "welcome": "Boyei malamu na Bomba System",
+    "welcome": "Boyei malamu na MTE Systems System",
     "subtitle": "Plateforme ya gestion ya mayele pona ba cafés, ba restaurants, na ba divertissements",
     "loading": "Ko charger ba données...",
     "activeSessions": "Ba sessions ya active",
@@ -362,7 +362,7 @@
     "notes": "ba commentaires",
     "addNote": "Bakisa mwa mokanda",
     "save": "kobikisa",
-    "saveAndPrint": "Bomba mpe imprimer",
+    "saveAndPrint": "MTE Systems mpe imprimer",
     "print": "konyata mikanda",
     "close": "kokanga",
     "edit": "mbongwana oyo esalemi",
@@ -476,7 +476,7 @@
       "cancel": "kolongolama ya mosala",
       "save": "kobikisa",
       "update": "mpo na kosala mise à jour",
-      "saveAndPrint": "Bomba mpe imprimer",
+      "saveAndPrint": "MTE Systems mpe imprimer",
       "updateAndPrint": "Mikolo oyo mpe imprimer",
       "saving": "Kobomba..."
     },
@@ -670,7 +670,7 @@
       "restaurantAndCafe": "Restaurant na café",
       "financial": "Mbongo",
       "saving": "Kobomba...",
-      "savePermissions": "Bomba ndingisa"
+      "savePermissions": "MTE Systems ndingisa"
     },
     "statusModal": {
       "title": "Bobongola ezalela ya mosaleli",
@@ -737,7 +737,7 @@
     "activeSession": "Session ya mosala",
     "completedSession": "Session esukaki",
     "showAmount": "Lakisa motuya ya mbongo",
-    "hideAmount": "Bomba motuya ya mbongo",
+    "hideAmount": "MTE Systems motuya ya mbongo",
     "searchDevice": "Boluka appareil moko...",
     "noSearchResults": "Ba résultats ya recherche na yo ezali te",
     "noActiveDevices": "Ezali na ba dispositifs {{deviceType}} oyo ezali kosala te",
@@ -1142,7 +1142,7 @@
     "day": "mokolo",
     "month": "sanza",
     "year": "mbula",
-    "hideAmount": "Bomba motuya ya mbongo",
+    "hideAmount": "MTE Systems motuya ya mbongo",
     "noFinancialData": "Ba données financières ezali te",
     "filterTypes": {
       "period": "Bileko ya ntango",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Kobanda na {{kobanda}} tii na {{suka}}",
       "printDate": "Imprimer histoire ya imprimer",
-      "footer": "Lapolo oyo esalemi na Bomba System - Makoki manso mazali ya yo © {{mbula}}"
+      "footer": "Lapolo oyo esalemi na MTE Systems System - Makoki manso mazali ya yo © {{mbula}}"
     }
   },
   "settings": {
@@ -1416,7 +1416,7 @@
       "showNotificationCountDesc": "Lakisa motango ya mayebisi oyo etangami te",
       "autoMarkAsRead": "Marquer lokola etangami automatiquement",
       "autoMarkAsReadDesc": "Marque automatiquement ba notifications ndenge etangami sima ya mua temps",
-      "saveSettings": "Bomba ba paramètres ya notification",
+      "saveSettings": "MTE Systems ba paramètres ya notification",
       "success": "Ba paramètres ya notification ebombami malamu",
       "errors": {
         "saveFailed": "Libunga esalemaki ntango ozali kobomba ba paramètres ya notification",
@@ -1493,7 +1493,7 @@
       "currencyUSD": "Dollar ya États-Unis (USD) .",
       "currencyEUR": "Euro (EUR) .",
       "currencyGBP": "Livre ya Angleterre (GBP) .",
-      "saveSettings": "Bomba ba paramètres généraux",
+      "saveSettings": "MTE Systems ba paramètres généraux",
       "success": "Ba paramètres généraux ebombami malamu",
       "errors": {
         "saveFailed": "Libunga esalemaki ntango bazalaki kobomba ba paramètres généraux",
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Tyá mwa ndimbola mokuse ya esika yango",
       "generatedWebsite": {
         "title": "Enregistrement ya installation oyo esalemi automatiquement",
-        "description": "Enregistrement esalemi na Bomba oyo ezali na ba données nionso ya installation",
+        "description": "Enregistrement esalemi na MTE Systems oyo ezali na ba données nionso ya installation",
         "viewButton": "Talá lisolo ya esika yango",
         "autoUpdate": "Histoire ezo mise à jour automatiquement tango ba données ebombami"
       },
@@ -1575,7 +1575,7 @@
         "selectManagers": "Pona bakambi oyo bapesameli ndingisa:",
         "managersSelected": "{{count}} bakambi baponamaki",
         "noManagers": "Bakonzi bazali te na esika yango",
-        "savePermissions": "Bomba ndingisa",
+        "savePermissions": "MTE Systems ndingisa",
         "success": "Ndingisa ya esika yango ebongwani malamu",
         "errors": {
           "updateFailed": "Libunga esalemaki tango ya kosala mise à jour ya ndingisa ya installation",
@@ -1597,7 +1597,7 @@
           "selectManagers": "Pona ba dirigeants oyo bakoki ko gérer payroll",
           "noManagers": "Ba dirigeants bazali te",
           "managersSelected": "{{count}} bakambi baponamaki",
-          "savePermissions": "Bomba ba pouvoirs ya payroll",
+          "savePermissions": "MTE Systems ba pouvoirs ya payroll",
           "success": "Ndingisa ya kofuta mbongo ebongwani malamu",
           "error": "Libunga esalemaki tango ya kosala mise à jour ya ba permissions ya payroll"
         },
@@ -1635,11 +1635,11 @@
         "authorizedManagersDesc": "Pona bakambi nini bakoki kobongola ba paramètres ya rapport",
         "sendNow": "Tinda rapport sikoyo",
         "sending": "Kotinda...",
-        "saveSettings": "Bomba ba paramètres ya rapport",
+        "saveSettings": "MTE Systems ba paramètres ya rapport",
         "noPermission": "Validité te",
         "noPermissionMessage": "Ozali na ndingisa te ya kotambwisa ba paramètres ya rapport. Tosɛngi bino bókutana na nkolo esika yango."
       },
-      "saveSettings": "Bomba ba paramètres",
+      "saveSettings": "MTE Systems ba paramètres",
       "saveAllSettings": "Ba paramètres nionso ebombami malamu",
       "success": "Ba données ya installation e mise à jour na succès",
       "loading": "Chargement ya ba données ya installation...",
@@ -1752,7 +1752,7 @@
     "cannotEditFutureTime": "Ntango ekoki te kobongisama na mikolo mizali koya to koleka ngonga 24 na kala",
     "startTimeUpdatedSuccess": "Ntango ya kobanda session ebongwani malamu",
     "startTimeUpdatedError": "Libunga esalemaki ntango bazalaki kobongola ngonga ya kobanda",
-    "saveChanges": "Bomba mbongwana oyo esalemi",
+    "saveChanges": "MTE Systems mbongwana oyo esalemi",
     "editPeriodTimeTitle": "Kobongola ngonga ya eleko ya ekzamɛ",
     "periodInfo": "Ba informations ya période",
     "controllersCount": "Motango ya nguba",
@@ -1853,7 +1853,7 @@
       "itemsSold": "Motango ya biloko oyo batɛkaki",
       "categoriesCount": "Motango ya biteni",
       "showAmount": "Lakisa motuya ya mbongo",
-      "hideAmount": "Bomba motuya ya mbongo"
+      "hideAmount": "MTE Systems motuya ya mbongo"
     },
     "table": {
       "itemName": "Nkombo ya eloko",
@@ -2226,7 +2226,7 @@
       "reason": "ntina na yango",
       "reasonPlaceholder": "Ntina ya mouvement",
       "date": "dati yango",
-      "update": "Bomba mbongwana oyo esalemi",
+      "update": "MTE Systems mbongwana oyo esalemi",
       "updating": "Kobomba...",
       "cancel": "kolongolama ya mosala",
       "required": "* ."
@@ -2412,7 +2412,7 @@
         "descriptionPlaceholder": "Boyebisi mokuse ya departema...",
         "sortOrder": "Lakisa molɔngɔ́",
         "sortOrderNote": "Biteni oyo ezali na molɔngɔ ya nse mingi ebimaka liboso",
-        "save": "Bomba eteni yango",
+        "save": "MTE Systems eteni yango",
         "saving": "Kobomba...",
         "cancel": "kolongolama ya mosala",
         "currentCategories": "Biteni ya ntango oyo",
@@ -2471,7 +2471,7 @@
         "notes": "📝 Maloba ya ntina",
         "notesOptional": "soki olingi",
         "notesPlaceholder": "Ba commentaires nionso ya kobakisa...",
-        "save": "Bomba mbongo",
+        "save": "MTE Systems mbongo",
         "update": "Mikolo oyo ba coûts",
         "saving": "Kobomba...",
         "cancel": "kolongolama ya mosala",
@@ -3113,7 +3113,7 @@
       "employeeData": "Ba données ya basali",
       "editData": "Bobongola ba données",
       "showFinancials": "Lakisa ba données financières",
-      "hideFinancials": "Bomba ba données financières",
+      "hideFinancials": "MTE Systems ba données financières",
       "name": "nkombo yango",
       "phone": "nimero ya telefone",
       "nationalId": "Motango ya ekolo",

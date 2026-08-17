@@ -1288,7 +1288,7 @@ const Reports = () => {
         reportType,
         data,
         dateRange,
-        organizationName: 'Bomba', // يمكنك تغيير هذا ليكون ديناميكي
+        organizationName: 'MTE Systems', // يمكنك تغيير هذا ليكون ديناميكي
         filename,
         language: i18n.language,
         translations: t,

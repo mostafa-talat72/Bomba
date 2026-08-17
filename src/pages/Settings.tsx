@@ -2025,6 +2025,21 @@ const Settings: FC = () => {
           </div>
         </div>
       )}
+    {/* Developer Fingerprint */}
+      <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800">
+        <div className="text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            تم تصميم وتطوير هذا النظام بواسطة المهندس مصطفى طلعت للحلول البرمجيه
+          </p>
+          <a
+            href="tel:01116626164"
+            className="mt-1 inline-block text-sm font-semibold text-orange-600 dark:text-orange-400 hover:underline"
+            dir="ltr"
+          >
+            01116626164
+          </a>
+        </div>
+      </div>
     </div>
   );
 };

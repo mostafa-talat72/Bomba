@@ -125,7 +125,7 @@
     "hidePassword": "Skjul adgangskode",
     "welcomeBack": "Velkommen tilbage",
     "registerNewBusiness": "Registrer en ny facilitet",
-    "startYourJourney": "Start din rejse med Bomba-systemet",
+    "startYourJourney": "Start din rejse med MTE Systems-systemet",
     "ownerName": "Ejerens navn",
     "ownerNamePlaceholder": "Indtast ejerens navn",
     "ownerNameRequired": "Ejerens navn er påkrævet",
@@ -154,7 +154,7 @@
     "emailActionError": "Der opstod en fejl under afsendelse af linket",
     "changeLanguage": "Skift sprog",
     "registerTitle": "Registrer en ny facilitet",
-    "registerSubtitle": "Start din rejse med Bomba-systemet",
+    "registerSubtitle": "Start din rejse med MTE Systems-systemet",
     "nameRequired": "Ejerens navn er påkrævet",
     "registrationSuccess": "Aktiveringslinket er blevet sendt til din e-mail. Aktiver venligst din konto før du logger ind.",
     "registrationError": "Der opstod en fejl under registreringen.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontrolpanel",
-    "welcome": "Velkommen til Bomba System",
+    "welcome": "Velkommen til MTE Systems System",
     "subtitle": "En smart administrationsplatform til caféer, restauranter og underholdning",
     "loading": "Indlæser data...",
     "activeSessions": "Aktive sessioner",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Fra {{start}} til {{end}}",
       "printDate": "Udskriftshistorik",
-      "footer": "Denne rapport er genereret af Bomba System - Alle rettigheder forbeholdes © {{year}}"
+      "footer": "Denne rapport er genereret af MTE Systems System - Alle rettigheder forbeholdes © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Indtast en kort beskrivelse af anlægget",
       "generatedWebsite": {
         "title": "Automatisk genereret facilitetsregistrering",
-        "description": "Der oprettes en post i Bomba, der indeholder alle facilitetsdata",
+        "description": "Der oprettes en post i MTE Systems, der indeholder alle facilitetsdata",
         "viewButton": "Se anlæggets historie",
         "autoUpdate": "Historikken opdateres automatisk, når data gemmes"
       },

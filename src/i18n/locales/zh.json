@@ -125,7 +125,7 @@
     "hidePassword": "隐藏密码",
     "welcomeBack": "欢迎回来",
     "registerNewBusiness": "注册新设施",
-    "startYourJourney": "使用 Bomba 系统开始您的旅程",
+    "startYourJourney": "使用 MTE Systems 系统开始您的旅程",
     "ownerName": "业主姓名",
     "ownerNamePlaceholder": "输入所有者姓名",
     "ownerNameRequired": "业主姓名为必填项",
@@ -154,7 +154,7 @@
     "emailActionError": "发送链接时出错",
     "changeLanguage": "更改语言",
     "registerTitle": "注册新设施",
-    "registerSubtitle": "使用 Bomba 系统开始您的旅程",
+    "registerSubtitle": "使用 MTE Systems 系统开始您的旅程",
     "nameRequired": "业主姓名为必填项",
     "registrationSuccess": "激活链接已发送至您的邮箱。请在登录前激活您的帐户。",
     "registrationError": "注册期间发生错误。",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "从 {{start}} 到 {{end}}",
       "printDate": "打印历史记录",
-      "footer": "本报告由 Bomba System 生成 - 保留所有权利 © {{year}}"
+      "footer": "本报告由 MTE Systems System 生成 - 保留所有权利 © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "输入设施的简短描述",
       "generatedWebsite": {
         "title": "自动生成设施记录",
-        "description": "在 Bomba 中创建包含所有设施数据的记录",
+        "description": "在 MTE Systems 中创建包含所有设施数据的记录",
         "viewButton": "查看设施历史记录",
         "autoUpdate": "保存数据时自动更新历史记录"
       },

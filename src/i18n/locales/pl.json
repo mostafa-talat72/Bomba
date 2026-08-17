@@ -125,7 +125,7 @@
     "hidePassword": "Ukryj hasło",
     "welcomeBack": "Witamy z powrotem",
     "registerNewBusiness": "Zarejestruj nowy obiekt",
-    "startYourJourney": "Rozpocznij swoją podróż z systemem Bomba",
+    "startYourJourney": "Rozpocznij swoją podróż z systemem MTE Systems",
     "ownerName": "Imię właściciela",
     "ownerNamePlaceholder": "Wpisz imię i nazwisko właściciela",
     "ownerNameRequired": "Wymagane jest imię i nazwisko właściciela",
@@ -154,7 +154,7 @@
     "emailActionError": "Wystąpił błąd podczas wysyłania linku",
     "changeLanguage": "Zmień język",
     "registerTitle": "Zarejestruj nowy obiekt",
-    "registerSubtitle": "Rozpocznij swoją podróż z systemem Bomba",
+    "registerSubtitle": "Rozpocznij swoją podróż z systemem MTE Systems",
     "nameRequired": "Wymagane jest imię i nazwisko właściciela",
     "registrationSuccess": "Link aktywacyjny został wysłany na Twój adres e-mail. Proszę aktywować swoje konto przed zalogowaniem.",
     "registrationError": "Wystąpił błąd podczas rejestracji.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel sterowania",
-    "welcome": "Witamy w systemie Bomba",
+    "welcome": "Witamy w systemie MTE Systems",
     "subtitle": "Inteligentna platforma do zarządzania kawiarniami, restauracjami i rozrywką",
     "loading": "Ładowanie danych...",
     "activeSessions": "Aktywne sesje",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Od {{start}} do {{end}}",
       "printDate": "Wydrukuj historię",
-      "footer": "Ten raport został wygenerowany przez Bomba System - Wszelkie prawa zastrzeżone © {{year}}"
+      "footer": "Ten raport został wygenerowany przez MTE Systems System - Wszelkie prawa zastrzeżone © {{year}}"
     }
   },
   "settings": {

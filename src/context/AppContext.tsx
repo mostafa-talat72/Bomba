@@ -5,6 +5,7 @@ import { useSmartPolling } from '../hooks/useSmartPolling';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { API_BASE_URL } from '../utils/apiBase';
 
 // ==================== دوال مساعدة للأرقام ====================
 
@@ -359,7 +360,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         setSubscriptionStatus('loading');
         const token = localStorage.getItem('token');
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/billing/subscription/status`, {
+        const res = await fetch(`${API_BASE_URL}/api/billing/subscription/status`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         

@@ -125,7 +125,7 @@
     "hidePassword": "Fihla iphasiwedi",
     "welcomeBack": "Siyakwamukela",
     "registerNewBusiness": "Bhalisa indawo entsha",
-    "startYourJourney": "Qala uhambo lwakho ngohlelo lweBomba",
+    "startYourJourney": "Qala uhambo lwakho ngohlelo lweMTE Systems",
     "ownerName": "Igama lomnikazi",
     "ownerNamePlaceholder": "Faka igama lomnikazi",
     "ownerNameRequired": "Igama lomnikazi liyadingeka",
@@ -154,7 +154,7 @@
     "emailActionError": "Kwenzeke iphutha ngenkathi kuthunyelwa isixhumanisi",
     "changeLanguage": "Shintsha ulimi",
     "registerTitle": "Bhalisa indawo entsha",
-    "registerSubtitle": "Qala uhambo lwakho ngohlelo lweBomba",
+    "registerSubtitle": "Qala uhambo lwakho ngohlelo lweMTE Systems",
     "nameRequired": "Igama lomnikazi liyadingeka",
     "registrationSuccess": "Isixhumanisi sokuvula sithunyelwe ku-imeyili yakho. Sicela uvule i-akhawunti yakho ngaphambi kokungena ngemvume.",
     "registrationError": "Kwenzeke iphutha ngesikhathi sokubhalisa.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Iphaneli yokulawula",
-    "welcome": "Siyakwamukela ku-Bomba System",
+    "welcome": "Siyakwamukela ku-MTE Systems System",
     "subtitle": "Inkundla yokuphatha ehlakaniphile yamakhefi, izindawo zokudlela, nokuzijabulisa",
     "loading": "Ilayisha idatha...",
     "activeSessions": "Amaseshini asebenzayo",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Kusukela {{start}} ukuya {{end}}",
       "printDate": "Umlando wokuphrinta",
-      "footer": "Lo mbiko ukhiqizwe i-Bomba System - Wonke amalungelo agodliwe © {{year}}"
+      "footer": "Lo mbiko ukhiqizwe i-MTE Systems System - Wonke amalungelo agodliwe © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Faka incazelo emfushane yesikhungo",
       "generatedWebsite": {
         "title": "Irekhodi lesikhungo elakhiwe ngokuzenzakalelayo",
-        "description": "Irekhodi lenziwa ku-Bomba eliqukethe yonke idatha yendawo",
+        "description": "Irekhodi lenziwa ku-MTE Systems eliqukethe yonke idatha yendawo",
         "viewButton": "Buka umlando wendawo",
         "autoUpdate": "Umlando ubuyekezwa ngokuzenzakalelayo lapho idatha igcinwa"
       },

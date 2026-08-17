@@ -1,0 +1,9 @@
+{
+  "port": 5000,
+  "databaseUri": "mongodb://localhost:27017/bomba?replicaSet=rs0",
+  "atlasUri": "",
+  "syncEnabled": false,
+  "bidirectionalSync": false,
+  "timezone": "Africa/Cairo",
+  "appUrl": ""
+}

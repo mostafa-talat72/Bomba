@@ -51,7 +51,7 @@ interface ReportPDFProps {
   translations?: any;
 }
 
-export const ReportPDF: React.FC<ReportPDFProps> = ({ reportType, data, dateRange, organizationName = 'Bomba', language = 'ar', translations = (key: string) => key }) => {
+export const ReportPDF: React.FC<ReportPDFProps> = ({ reportType, data, dateRange, organizationName = 'MTE Systems', language = 'ar', translations = (key: string) => key }) => {
   const isRTL = language === 'ar';
   const t = translations;
   

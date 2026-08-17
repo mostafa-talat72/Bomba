@@ -125,7 +125,7 @@
     "hidePassword": "Singidaken tembung sandhi",
     "welcomeBack": "Sugeng rawuh",
     "registerNewBusiness": "Ndhaptar fasilitas anyar",
-    "startYourJourney": "Miwiti lelungan nganggo Sistem Bomba",
+    "startYourJourney": "Miwiti lelungan nganggo Sistem MTE Systems",
     "ownerName": "Jeneng sing duwe",
     "ownerNamePlaceholder": "Ketik jeneng pemilik",
     "ownerNameRequired": "Jeneng pemilik dibutuhake",
@@ -154,7 +154,7 @@
     "emailActionError": "Ana kesalahan nalika ngirim link",
     "changeLanguage": "Ganti basa",
     "registerTitle": "Ndhaptar fasilitas anyar",
-    "registerSubtitle": "Miwiti lelungan nganggo Sistem Bomba",
+    "registerSubtitle": "Miwiti lelungan nganggo Sistem MTE Systems",
     "nameRequired": "Jeneng pemilik dibutuhake",
     "registrationSuccess": "Link aktivasi wis dikirim menyang email sampeyan. Mangga aktifake akun sadurunge mlebu.",
     "registrationError": "Ana kesalahan nalika registrasi.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel kontrol",
-    "welcome": "Sugeng rawuh ing Sistem Bomba",
+    "welcome": "Sugeng rawuh ing Sistem MTE Systems",
     "subtitle": "Platform manajemen cerdas kanggo kafe, restoran, lan hiburan",
     "loading": "Ngunggah data...",
     "activeSessions": "Sesi aktif",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Saka {{wiwitan}} nganti {{pungkas}}",
       "printDate": "Sajarah print",
-      "footer": "Laporan iki digawe dening Bomba System - Kabeh hak dilindhungi undhang-undhang © {{year}}"
+      "footer": "Laporan iki digawe dening MTE Systems System - Kabeh hak dilindhungi undhang-undhang © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ketik katrangan singkat babagan fasilitas kasebut",
       "generatedWebsite": {
         "title": "Rekaman fasilitas sing digawe kanthi otomatis",
-        "description": "Rekaman digawe ing Bomba sing ngemot kabeh data fasilitas",
+        "description": "Rekaman digawe ing MTE Systems sing ngemot kabeh data fasilitas",
         "viewButton": "Ndeleng riwayat fasilitas",
         "autoUpdate": "Sajarah dianyari kanthi otomatis nalika data disimpen"
       },

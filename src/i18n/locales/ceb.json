@@ -125,7 +125,7 @@
     "hidePassword": "Tagoa ang password",
     "welcomeBack": "Maayong pagbalik",
     "registerNewBusiness": "Pagrehistro og bag-ong pasilidad",
-    "startYourJourney": "Sugdi ang imong panaw sa Bomba System",
+    "startYourJourney": "Sugdi ang imong panaw sa MTE Systems System",
     "ownerName": "Ngalan sa tag-iya",
     "ownerNamePlaceholder": "Ibutang ang ngalan sa tag-iya",
     "ownerNameRequired": "Ang ngalan sa tag-iya gikinahanglan",
@@ -154,7 +154,7 @@
     "emailActionError": "Usa ka sayup ang nahitabo samtang gipadala ang link",
     "changeLanguage": "Usba ang pinulongan",
     "registerTitle": "Pagrehistro og bag-ong pasilidad",
-    "registerSubtitle": "Sugdi ang imong panaw sa Bomba System",
+    "registerSubtitle": "Sugdi ang imong panaw sa MTE Systems System",
     "nameRequired": "Ang ngalan sa tag-iya gikinahanglan",
     "registrationSuccess": "Ang link sa pagpaaktibo gipadala sa imong email. Palihug i-activate ang imong account sa dili pa mag-log in.",
     "registrationError": "Usa ka sayup ang nahitabo sa panahon sa pagparehistro.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Control panel",
-    "welcome": "Welcome sa Bomba System",
+    "welcome": "Welcome sa MTE Systems System",
     "subtitle": "Usa ka maalamon nga plataporma sa pagdumala alang sa mga cafe, restawran, ug kalingawan",
     "loading": "Nagkarga sa datos...",
     "activeSessions": "Aktibo nga mga sesyon",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Gikan sa {{start}} ngadto sa {{end}}",
       "printDate": "I-print ang kasaysayan",
-      "footer": "Kini nga taho gimugna sa Bomba System - All rights reserved © {{year}}"
+      "footer": "Kini nga taho gimugna sa MTE Systems System - All rights reserved © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Pagsulod ug mubo nga paghulagway sa pasilidad",
       "generatedWebsite": {
         "title": "Awtomatikong nahimo nga rekord sa pasilidad",
-        "description": "Ang usa ka rekord gihimo sa Bomba nga adunay tanan nga datos sa pasilidad",
+        "description": "Ang usa ka rekord gihimo sa MTE Systems nga adunay tanan nga datos sa pasilidad",
         "viewButton": "Tan-awa ang kasaysayan sa pasilidad",
         "autoUpdate": "Awtomatikong gi-update ang kasaysayan kung natipigan ang datos"
       },

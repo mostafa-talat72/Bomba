@@ -125,7 +125,7 @@
     "hidePassword": "Parolni yashirish",
     "welcomeBack": "qaytib kelganingizdan xursandmiz",
     "registerNewBusiness": "Yangi ob'ektni ro'yxatdan o'tkazing",
-    "startYourJourney": "Sayohatingizni Bomba tizimi bilan boshlang",
+    "startYourJourney": "Sayohatingizni MTE Systems tizimi bilan boshlang",
     "ownerName": "Egasining ismi",
     "ownerNamePlaceholder": "Egasining ismini kiriting",
     "ownerNameRequired": "Egasining ismi talab qilinadi",
@@ -154,7 +154,7 @@
     "emailActionError": "Havolani yuborishda xatolik yuz berdi",
     "changeLanguage": "Tilni o'zgartirish",
     "registerTitle": "Yangi ob'ektni ro'yxatdan o'tkazing",
-    "registerSubtitle": "Sayohatingizni Bomba tizimi bilan boshlang",
+    "registerSubtitle": "Sayohatingizni MTE Systems tizimi bilan boshlang",
     "nameRequired": "Egasining ismi talab qilinadi",
     "registrationSuccess": "Faollashtirish havolasi elektron pochtangizga yuborildi. Iltimos, tizimga kirishdan oldin hisobingizni faollashtiring.",
     "registrationError": "Ro'yxatdan o'tish paytida xatolik yuz berdi.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Boshqaruv paneli",
-    "welcome": "Bomba tizimiga xush kelibsiz",
+    "welcome": "MTE Systems tizimiga xush kelibsiz",
     "subtitle": "Kafelar, restoranlar va o'yin-kulgilar uchun aqlli boshqaruv platformasi",
     "loading": "Maʼlumotlar yuklanmoqda...",
     "activeSessions": "Faol seanslar",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}} dan {{end}} gacha",
       "printDate": "Chop etish tarixi",
-      "footer": "Bu hisobot Bomba tizimi tomonidan yaratilgan - Barcha huquqlar himoyalangan © {{year}}"
+      "footer": "Bu hisobot MTE Systems tizimi tomonidan yaratilgan - Barcha huquqlar himoyalangan © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ob'ektning qisqacha tavsifini kiriting",
       "generatedWebsite": {
         "title": "Avtomatik ravishda yaratilgan ob'ekt yozuvi",
-        "description": "Bomba-da barcha ob'ekt ma'lumotlarini o'z ichiga olgan yozuv yaratiladi",
+        "description": "MTE Systems-da barcha ob'ekt ma'lumotlarini o'z ichiga olgan yozuv yaratiladi",
         "viewButton": "Ob'ekt tarixini ko'rish",
         "autoUpdate": "Ma'lumotlar saqlanganida tarix avtomatik ravishda yangilanadi"
       },

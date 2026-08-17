@@ -125,7 +125,7 @@
     "hidePassword": "Fela lykilorð",
     "welcomeBack": "Velkominn aftur",
     "registerNewBusiness": "Skráðu nýja aðstöðu",
-    "startYourJourney": "Byrjaðu ferð þína með Bomba kerfinu",
+    "startYourJourney": "Byrjaðu ferð þína með MTE Systems kerfinu",
     "ownerName": "Nafn eiganda",
     "ownerNamePlaceholder": "Sláðu inn nafn eigandans",
     "ownerNameRequired": "Nafn eiganda er áskilið",
@@ -154,7 +154,7 @@
     "emailActionError": "Villa kom upp við að senda tengilinn",
     "changeLanguage": "Skiptu um tungumál",
     "registerTitle": "Skráðu nýja aðstöðu",
-    "registerSubtitle": "Byrjaðu ferð þína með Bomba kerfinu",
+    "registerSubtitle": "Byrjaðu ferð þína með MTE Systems kerfinu",
     "nameRequired": "Nafn eiganda er áskilið",
     "registrationSuccess": "Virkjunartengillinn hefur verið sendur á netfangið þitt. Vinsamlegast virkjaðu reikninginn þinn áður en þú skráir þig inn.",
     "registrationError": "Villa kom upp við skráningu.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Stjórnborð",
-    "welcome": "Velkomin í Bomba System",
+    "welcome": "Velkomin í MTE Systems System",
     "subtitle": "Snjall stjórnunarvettvangur fyrir kaffihús, veitingastaði og afþreyingu",
     "loading": "Hleður gögnum...",
     "activeSessions": "Virkir fundir",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Frá {{start}} til {{end}}",
       "printDate": "Prentsaga",
-      "footer": "Þessi skýrsla var búin til af Bomba System - Allur réttur áskilinn © {{year}}"
+      "footer": "Þessi skýrsla var búin til af MTE Systems System - Allur réttur áskilinn © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Sláðu inn stutta lýsingu á aðstöðunni",
       "generatedWebsite": {
         "title": "Sjálfkrafa mynduð aðstöðuskrá",
-        "description": "Skrá er búin til í Bomba sem inniheldur öll aðstöðu gögn",
+        "description": "Skrá er búin til í MTE Systems sem inniheldur öll aðstöðu gögn",
         "viewButton": "Skoða sögu aðstöðunnar",
         "autoUpdate": "Sagan er uppfærð sjálfkrafa þegar gögn eru vistuð"
       },

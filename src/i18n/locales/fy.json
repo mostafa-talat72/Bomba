@@ -125,7 +125,7 @@
     "hidePassword": "Ferbergje wachtwurd",
     "welcomeBack": "Opnij wolkom",
     "registerNewBusiness": "Registrearje in nije foarsjenning",
-    "startYourJourney": "Begjin jo reis mei it Bomba System",
+    "startYourJourney": "Begjin jo reis mei it MTE Systems System",
     "ownerName": "Namme fan eigner",
     "ownerNamePlaceholder": "Fier de namme fan de eigner yn",
     "ownerNameRequired": "De namme fan de eigner is ferplicht",
@@ -154,7 +154,7 @@
     "emailActionError": "Der barde in flater by it ferstjoeren fan de keppeling",
     "changeLanguage": "Feroarje taal",
     "registerTitle": "Registrearje in nije foarsjenning",
-    "registerSubtitle": "Begjin jo reis mei it Bomba-systeem",
+    "registerSubtitle": "Begjin jo reis mei it MTE Systems-systeem",
     "nameRequired": "De namme fan de eigner is ferplicht",
     "registrationSuccess": "De aktivearring keppeling is stjoerd nei jo e-mail. Aktivearje asjebleaft jo akkount foardat jo oanmelde.",
     "registrationError": "Der barde in flater by registraasje.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontrôlepaniel",
-    "welcome": "Wolkom by Bomba System",
+    "welcome": "Wolkom by MTE Systems System",
     "subtitle": "In tûk behearplatfoarm foar kafees, restaurants en ferdivedaasje",
     "loading": "Gegevens laden...",
     "activeSessions": "Aktive sesjes",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Fan {{start}} oant {{end}}",
       "printDate": "Print skiednis",
-      "footer": "Dit rapport is oanmakke troch Bomba System - Alle rjochten foarbehâlden © {{year}}"
+      "footer": "Dit rapport is oanmakke troch MTE Systems System - Alle rjochten foarbehâlden © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Fier in koarte beskriuwing fan de foarsjenning yn",
       "generatedWebsite": {
         "title": "Automatysk oanmakke foarsjenningsrekord",
-        "description": "In rekord wurdt makke yn Bomba mei alle foarsjenningsgegevens",
+        "description": "In rekord wurdt makke yn MTE Systems mei alle foarsjenningsgegevens",
         "viewButton": "View foarsjenning skiednis",
         "autoUpdate": "De skiednis wurdt automatysk bywurke as gegevens wurde opslein"
       },

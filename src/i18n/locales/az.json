@@ -125,7 +125,7 @@
     "hidePassword": "Parolu gizlədin",
     "welcomeBack": "Xoş gəldiniz",
     "registerNewBusiness": "Yeni obyekti qeydiyyatdan keçirin",
-    "startYourJourney": "Səyahətinizə Bomba sistemi ilə başlayın",
+    "startYourJourney": "Səyahətinizə MTE Systems sistemi ilə başlayın",
     "ownerName": "sahibinin adı",
     "ownerNamePlaceholder": "Sahibinin adını daxil edin",
     "ownerNameRequired": "Sahibinin adı tələb olunur",
@@ -154,7 +154,7 @@
     "emailActionError": "Link göndərilərkən xəta baş verdi",
     "changeLanguage": "Dili dəyişdirin",
     "registerTitle": "Yeni obyekti qeydiyyatdan keçirin",
-    "registerSubtitle": "Səyahətinizə Bomba sistemi ilə başlayın",
+    "registerSubtitle": "Səyahətinizə MTE Systems sistemi ilə başlayın",
     "nameRequired": "Sahibinin adı tələb olunur",
     "registrationSuccess": "Aktivləşdirmə linki e-poçt ünvanınıza göndərildi. Zəhmət olmasa, daxil olmamışdan əvvəl hesabınızı aktivləşdirin.",
     "registrationError": "Qeydiyyat zamanı xəta baş verdi.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "İdarəetmə paneli",
-    "welcome": "Bomba sisteminə xoş gəlmisiniz",
+    "welcome": "MTE Systems sisteminə xoş gəlmisiniz",
     "subtitle": "Kafelər, restoranlar və əyləncələr üçün ağıllı idarəetmə platforması",
     "loading": "Data yüklənir...",
     "activeSessions": "Aktiv seanslar",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}} - {{end}}",
       "printDate": "Çap tarixi",
-      "footer": "Bu hesabat Bomba Sistemi tərəfindən hazırlanmışdır - Bütün hüquqlar qorunur © {{year}}"
+      "footer": "Bu hesabat MTE Systems Sistemi tərəfindən hazırlanmışdır - Bütün hüquqlar qorunur © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Obyektin qısa təsvirini daxil edin",
       "generatedWebsite": {
         "title": "Avtomatik olaraq yaradılan obyekt qeydi",
-        "description": "Bomba-da bütün obyekt məlumatlarını ehtiva edən bir qeyd yaradılır",
+        "description": "MTE Systems-da bütün obyekt məlumatlarını ehtiva edən bir qeyd yaradılır",
         "viewButton": "Obyekt tarixçəsinə baxın",
         "autoUpdate": "Məlumat saxlandıqda tarix avtomatik olaraq yenilənir"
       },

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
 import { AUTH_ERROR_CODES, isValidErrorCode, getErrorMessageKey } from '../constants/errorCodes';
+import { API_BASE_URL } from '../utils/apiBase';
 
 const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -21,7 +22,7 @@ const VerifyEmail: React.FC = () => {
     }
     const verify = async () => {
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const apiUrl = API_BASE_URL + '/api';
         const res = await fetch(`${apiUrl}/auth/verify-email?token=${token}`);
         const data = await res.json();
         

@@ -10,6 +10,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { printBill } from '../utils/printBill';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
 import { aggregateItemsWithPayments, getItemIdsForAggregatedItem } from '../utils/billAggregation';
 import '../styles/billing-animations.css';
 import PartialPaymentModal from '../components/PartialPaymentModal';
@@ -469,7 +470,7 @@ const Billing = () => {
 
     // Initialize Socket.IO connection
     // Remove /api suffix from VITE_API_URL for Socket.IO connection
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
     
     const socket: Socket = io(socketUrl, {

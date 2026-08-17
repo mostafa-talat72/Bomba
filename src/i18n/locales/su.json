@@ -125,7 +125,7 @@
     "hidePassword": "Sumputkeun kecap akses",
     "welcomeBack": "Wilujeng sumping",
     "registerNewBusiness": "Ngadaptarkeun fasilitas anyar",
-    "startYourJourney": "Mimitian perjalanan anjeun sareng Sistem Bomba",
+    "startYourJourney": "Mimitian perjalanan anjeun sareng Sistem MTE Systems",
     "ownerName": "Ngaran juragan",
     "ownerNamePlaceholder": "Tuliskeun ngaran nu bogana",
     "ownerNameRequired": "Ngaran nu boga urang diperlukeun",
@@ -154,7 +154,7 @@
     "emailActionError": "Aya kasalahan nalika ngirim tautan",
     "changeLanguage": "Ganti basa",
     "registerTitle": "Ngadaptarkeun fasilitas anyar",
-    "registerSubtitle": "Mimitian perjalanan anjeun sareng Sistem Bomba",
+    "registerSubtitle": "Mimitian perjalanan anjeun sareng Sistem MTE Systems",
     "nameRequired": "Ngaran nu boga urang diperlukeun",
     "registrationSuccess": "Tautan aktivasina parantos dikirim ka email anjeun. Mangga aktipkeun akun anjeun sateuacan log in.",
     "registrationError": "Kasalahan lumangsung nalika pendaptaran.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panél kontrol",
-    "welcome": "Wilujeng sumping di Bomba System",
+    "welcome": "Wilujeng sumping di MTE Systems System",
     "subtitle": "Platform manajemén pinter pikeun kafe, réstoran, sareng hiburan",
     "loading": "Ngamuat data...",
     "activeSessions": "sési aktip",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Ti {{mimiti}} nepi ka {{tungtung}}",
       "printDate": "Nyitak sajarah",
-      "footer": "Laporan ieu dihasilkeun ku Bomba System - Sadaya hak ditangtayungan © {{year}}"
+      "footer": "Laporan ieu dihasilkeun ku MTE Systems System - Sadaya hak ditangtayungan © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Lebetkeun pedaran ringkes fasilitas",
       "generatedWebsite": {
         "title": "Dihasilkeun otomatis rékaman fasilitas",
-        "description": "Hiji catetan dijieun di Bomba ngandung sakabéh data fasilitas",
+        "description": "Hiji catetan dijieun di MTE Systems ngandung sakabéh data fasilitas",
         "viewButton": "Témbongkeun sajarah fasilitas",
         "autoUpdate": "Sajarah diropéa sacara otomatis nalika data disimpen"
       },

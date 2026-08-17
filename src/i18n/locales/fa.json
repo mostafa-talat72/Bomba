@@ -125,7 +125,7 @@
     "hidePassword": "پنهان کردن رمز عبور",
     "welcomeBack": "خوش آمدید",
     "registerNewBusiness": "یک تسهیلات جدید ثبت کنید",
-    "startYourJourney": "سفر خود را با سیستم Bomba شروع کنید",
+    "startYourJourney": "سفر خود را با سیستم MTE Systems شروع کنید",
     "ownerName": "نام مالک",
     "ownerNamePlaceholder": "نام مالک را وارد کنید",
     "ownerNameRequired": "نام مالک الزامی است",
@@ -154,7 +154,7 @@
     "emailActionError": "هنگام ارسال پیوند خطایی رخ داد",
     "changeLanguage": "تغییر زبان",
     "registerTitle": "یک تسهیلات جدید ثبت کنید",
-    "registerSubtitle": "سفر خود را با سیستم Bomba شروع کنید",
+    "registerSubtitle": "سفر خود را با سیستم MTE Systems شروع کنید",
     "nameRequired": "نام مالک الزامی است",
     "registrationSuccess": "لینک فعال سازی به ایمیل شما ارسال شد. لطفا قبل از ورود حساب کاربری خود را فعال کنید.",
     "registrationError": "هنگام ثبت نام خطایی رخ داد.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "کنترل پنل",
-    "welcome": "به سیستم Bomba خوش آمدید",
+    "welcome": "به سیستم MTE Systems خوش آمدید",
     "subtitle": "یک پلت فرم مدیریت هوشمند برای کافه ها، رستوران ها و سرگرمی ها",
     "loading": "در حال بارگیری داده ها...",
     "activeSessions": "جلسات فعال",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "از {{شروع}} تا {{پایان}}",
       "printDate": "تاریخچه چاپ",
-      "footer": "این گزارش توسط Bomba System ایجاد شده است - کلیه حقوق محفوظ است © {{year}}"
+      "footer": "این گزارش توسط MTE Systems System ایجاد شده است - کلیه حقوق محفوظ است © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "شرح مختصری از امکانات را وارد کنید",
       "generatedWebsite": {
         "title": "رکورد تاسیسات به صورت خودکار ایجاد می شود",
-        "description": "یک رکورد در Bomba ایجاد می شود که شامل تمام داده های تاسیسات است",
+        "description": "یک رکورد در MTE Systems ایجاد می شود که شامل تمام داده های تاسیسات است",
         "viewButton": "مشاهده تاریخچه تاسیسات",
         "autoUpdate": "با ذخیره داده ها، تاریخچه به طور خودکار به روز می شود"
       },

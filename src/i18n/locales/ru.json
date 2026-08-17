@@ -125,7 +125,7 @@
     "hidePassword": "Скрыть пароль",
     "welcomeBack": "Добро пожаловать",
     "registerNewBusiness": "Зарегистрируйте новый объект",
-    "startYourJourney": "Начните свое путешествие с системой Bomba",
+    "startYourJourney": "Начните свое путешествие с системой MTE Systems",
     "ownerName": "Имя владельца",
     "ownerNamePlaceholder": "Введите имя владельца",
     "ownerNameRequired": "Требуется имя владельца",
@@ -154,7 +154,7 @@
     "emailActionError": "Произошла ошибка при отправке ссылки",
     "changeLanguage": "Изменить язык",
     "registerTitle": "Зарегистрируйте новый объект",
-    "registerSubtitle": "Начните свое путешествие с системой Bomba",
+    "registerSubtitle": "Начните свое путешествие с системой MTE Systems",
     "nameRequired": "Требуется имя владельца",
     "registrationSuccess": "Ссылка для активации была отправлена ​​на вашу электронную почту. Пожалуйста, активируйте свою учетную запись перед входом в систему.",
     "registrationError": "Во время регистрации произошла ошибка.",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "От {{start}} до {{end}}",
       "printDate": "Распечатать историю",
-      "footer": "Этот отчет был создан Bomba System. Все права защищены © {{year}}."
+      "footer": "Этот отчет был создан MTE Systems System. Все права защищены © {{year}}."
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Введите краткое описание объекта",
       "generatedWebsite": {
         "title": "Автоматически созданная запись об объекте",
-        "description": "В Bomba создается запись, содержащая все данные объекта.",
+        "description": "В MTE Systems создается запись, содержащая все данные объекта.",
         "viewButton": "Посмотреть историю объекта",
         "autoUpdate": "История обновляется автоматически при сохранении данных"
       },

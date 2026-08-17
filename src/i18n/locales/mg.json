@@ -125,7 +125,7 @@
     "hidePassword": "Afeno ny tenimiafina",
     "welcomeBack": "Tongasoa indray",
     "registerNewBusiness": "Manorata trano vaovao",
-    "startYourJourney": "Atombohy amin'ny rafitra Bomba ny dianao",
+    "startYourJourney": "Atombohy amin'ny rafitra MTE Systems ny dianao",
     "ownerName": "Anaran'ny tompony",
     "ownerNamePlaceholder": "Ampidiro ny anaran'ny tompony",
     "ownerNameRequired": "Ilaina ny anaran'ny tompony",
@@ -154,7 +154,7 @@
     "emailActionError": "Nisy hadisoana nitranga teo am-pandefasana ny rohy",
     "changeLanguage": "Hanova fiteny",
     "registerTitle": "Manorata trano vaovao",
-    "registerSubtitle": "Atombohy amin'ny rafitra Bomba ny dianao",
+    "registerSubtitle": "Atombohy amin'ny rafitra MTE Systems ny dianao",
     "nameRequired": "Ilaina ny anaran'ny tompony",
     "registrationSuccess": "Nalefa tamin'ny mailakao ny rohy fampahavitrihana. Alefaso azafady ny kaontinao alohan'ny hidirana.",
     "registrationError": "Nisy hadisoana nitranga nandritra ny fisoratana anarana.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Takelaka fikirakirana",
-    "welcome": "Tongasoa eto amin'ny Bomba System",
+    "welcome": "Tongasoa eto amin'ny MTE Systems System",
     "subtitle": "Sehatra fitantanana marani-tsaina ho an'ny kafe, trano fisakafoanana ary fialamboly",
     "loading": "Mampiakatra angona...",
     "activeSessions": "Sessions mavitrika",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Manomboka amin'ny {{start}} ka hatramin'ny {{end}}",
       "printDate": "Tantara fanontana",
-      "footer": "Ity tatitra ity dia noforonin'ny Bomba System - All rights reserved © {{year}}"
+      "footer": "Ity tatitra ity dia noforonin'ny MTE Systems System - All rights reserved © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ampidiro famaritana fohy momba ny trano",
       "generatedWebsite": {
         "title": "Firaketana an-tranonkala namboarina ho azy",
-        "description": "Misy rakitsoratra noforonina ao Bomba ahitana angon-drakitra rehetra momba ny trano",
+        "description": "Misy rakitsoratra noforonina ao MTE Systems ahitana angon-drakitra rehetra momba ny trano",
         "viewButton": "Jereo ny tantaran'ny trano",
         "autoUpdate": "Havaozina ho azy ny tantara rehefa voatahiry ny angona"
       },

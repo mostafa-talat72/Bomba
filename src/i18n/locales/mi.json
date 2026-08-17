@@ -125,7 +125,7 @@
     "hidePassword": "Huna kupuhipa",
     "welcomeBack": "Nau mai hoki mai",
     "registerNewBusiness": "Rēhita he whare hou",
-    "startYourJourney": "Tīmatahia to haerenga me te Pūnaha Bomba",
+    "startYourJourney": "Tīmatahia to haerenga me te Pūnaha MTE Systems",
     "ownerName": "Te ingoa o te rangatira",
     "ownerNamePlaceholder": "Whakauruhia te ingoa o te rangatira",
     "ownerNameRequired": "Kei te hiahiatia te ingoa o te rangatira",
@@ -154,7 +154,7 @@
     "emailActionError": "I puta he hapa i te tuku hononga",
     "changeLanguage": "Hurihia te reo",
     "registerTitle": "Rēhita he whare hou",
-    "registerSubtitle": "Tīmatahia to haerenga me te Pūnaha Bomba",
+    "registerSubtitle": "Tīmatahia to haerenga me te Pūnaha MTE Systems",
     "nameRequired": "Kei te hiahiatia te ingoa o te rangatira",
     "registrationSuccess": "Kua tukuna te hono whakahohe ki to imeera. Whakahohehia to putea i mua i te takiuru.",
     "registrationError": "I puta he hapa i te rehitatanga.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Paewhiri mana",
-    "welcome": "Nau mai ki te Pūnaha Bomba",
+    "welcome": "Nau mai ki te Pūnaha MTE Systems",
     "subtitle": "He papa whakahaere atamai mo nga wharekai, wharekai me nga whakangahau",
     "loading": "Uta ana i nga raraunga...",
     "activeSessions": "Nga huihuinga kaha",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Mai i {{start}} ki {{end}}",
       "printDate": "Tuhinga o mua",
-      "footer": "Na Bomba System tenei purongo i hanga - Katoa nga mana © {{tau}}"
+      "footer": "Na MTE Systems System tenei purongo i hanga - Katoa nga mana © {{tau}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Whakauruhia he korero poto mo te whare",
       "generatedWebsite": {
         "title": "Rekoata whare hanga aunoa",
-        "description": "Ka hangaia he rekoata ki Bomba kei roto nga raraunga whakaurunga katoa",
+        "description": "Ka hangaia he rekoata ki MTE Systems kei roto nga raraunga whakaurunga katoa",
         "viewButton": "Tirohia te hitori o te whare",
         "autoUpdate": "Ka whakahoutia aunoatia te hitori ina tiakina nga raraunga"
       },

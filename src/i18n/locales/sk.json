@@ -125,7 +125,7 @@
     "hidePassword": "Skryť heslo",
     "welcomeBack": "Vitajte späť",
     "registerNewBusiness": "Zaregistrujte si nové zariadenie",
-    "startYourJourney": "Začnite svoju cestu so systémom Bomba",
+    "startYourJourney": "Začnite svoju cestu so systémom MTE Systems",
     "ownerName": "Meno majiteľa",
     "ownerNamePlaceholder": "Zadajte meno vlastníka",
     "ownerNameRequired": "Vyžaduje sa meno vlastníka",
@@ -154,7 +154,7 @@
     "emailActionError": "Pri odosielaní odkazu sa vyskytla chyba",
     "changeLanguage": "Zmeniť jazyk",
     "registerTitle": "Zaregistrujte si nové zariadenie",
-    "registerSubtitle": "Začnite svoju cestu so systémom Bomba",
+    "registerSubtitle": "Začnite svoju cestu so systémom MTE Systems",
     "nameRequired": "Vyžaduje sa meno vlastníka",
     "registrationSuccess": "Aktivačný odkaz bol odoslaný na váš e-mail. Pred prihlásením si prosím aktivujte svoj účet.",
     "registrationError": "Počas registrácie sa vyskytla chyba.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Ovládací panel",
-    "welcome": "Vitajte v systéme Bomba",
+    "welcome": "Vitajte v systéme MTE Systems",
     "subtitle": "Inteligentná platforma správy pre kaviarne, reštaurácie a zábavu",
     "loading": "Načítavajú sa údaje...",
     "activeSessions": "Aktívne sedenia",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Od {{start}} do {{end}}",
       "printDate": "História tlače",
-      "footer": "Túto správu vytvoril Bomba System - Všetky práva vyhradené © {{year}}"
+      "footer": "Túto správu vytvoril MTE Systems System - Všetky práva vyhradené © {{year}}"
     }
   },
   "settings": {

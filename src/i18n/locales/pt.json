@@ -125,7 +125,7 @@
     "hidePassword": "Ocultar senha",
     "welcomeBack": "bem vindo de volta",
     "registerNewBusiness": "Registrar uma nova instalação",
-    "startYourJourney": "Comece sua jornada com o sistema Bomba",
+    "startYourJourney": "Comece sua jornada com o sistema MTE Systems",
     "ownerName": "Nome do proprietário",
     "ownerNamePlaceholder": "Digite o nome do proprietário",
     "ownerNameRequired": "O nome do proprietário é obrigatório",
@@ -154,7 +154,7 @@
     "emailActionError": "Ocorreu um erro ao enviar o link",
     "changeLanguage": "Alterar idioma",
     "registerTitle": "Registrar uma nova instalação",
-    "registerSubtitle": "Comece sua jornada com o sistema Bomba",
+    "registerSubtitle": "Comece sua jornada com o sistema MTE Systems",
     "nameRequired": "O nome do proprietário é obrigatório",
     "registrationSuccess": "O link de ativação foi enviado para seu e-mail. Por favor, ative sua conta antes de fazer login.",
     "registrationError": "Ocorreu um erro durante o registro.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Painel de controle",
-    "welcome": "Bem-vindo ao Sistema Bomba",
+    "welcome": "Bem-vindo ao Sistema MTE Systems",
     "subtitle": "Uma plataforma de gerenciamento inteligente para cafés, restaurantes e entretenimento",
     "loading": "Carregando dados...",
     "activeSessions": "Sessões ativas",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "De {{início}} a {{fim}}",
       "printDate": "Imprimir histórico",
-      "footer": "Este relatório foi gerado pela Bomba System - Todos os direitos reservados © {{year}}"
+      "footer": "Este relatório foi gerado pela MTE Systems System - Todos os direitos reservados © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Insira uma breve descrição da instalação",
       "generatedWebsite": {
         "title": "Registro de instalação gerado automaticamente",
-        "description": "Um registro é criado no Bomba contendo todos os dados da instalação",
+        "description": "Um registro é criado no MTE Systems contendo todos os dados da instalação",
         "viewButton": "Ver histórico das instalações",
         "autoUpdate": "O histórico é atualizado automaticamente quando os dados são salvos"
       },

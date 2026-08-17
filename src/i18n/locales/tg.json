@@ -125,7 +125,7 @@
     "hidePassword": "Паролро пинҳон кунед",
     "welcomeBack": "бозгашт муборак",
     "registerNewBusiness": "Объекти навро ба қайд гиред",
-    "startYourJourney": "Сафари худро бо системаи Bomba оғоз кунед",
+    "startYourJourney": "Сафари худро бо системаи MTE Systems оғоз кунед",
     "ownerName": "номи соҳиби",
     "ownerNamePlaceholder": "Номи соҳибро ворид кунед",
     "ownerNameRequired": "Номи соҳиб талаб карда мешавад",
@@ -154,7 +154,7 @@
     "emailActionError": "Ҳангоми фиристодани истинод хатогӣ рӯй дод",
     "changeLanguage": "Забонро иваз кунед",
     "registerTitle": "Объекти навро ба қайд гиред",
-    "registerSubtitle": "Сафари худро бо системаи Bomba оғоз кунед",
+    "registerSubtitle": "Сафари худро бо системаи MTE Systems оғоз кунед",
     "nameRequired": "Номи соҳиб талаб карда мешавад",
     "registrationSuccess": "Истиноди фаъолсозӣ ба почтаи электронии шумо фиристода шуд. Лутфан пеш аз ворид шудан ҳисоби худро фаъол созед.",
     "registrationError": "Ҳангоми бақайдгирӣ хатогӣ рух дод.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Сафҳаи идоракунӣ",
-    "welcome": "Хуш омадед ба системаи Bomba",
+    "welcome": "Хуш омадед ба системаи MTE Systems",
     "subtitle": "Платформаи идоракунии оқилона барои қаҳвахонаҳо, тарабхонаҳо ва фароғат",
     "loading": "Боркунии маълумот...",
     "activeSessions": "Ҷаласаҳои фаъол",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Аз {{start}} то {{end}}",
       "printDate": "Таърихи чоп",
-      "footer": "Ин гузориш аз ҷониби Bomba System таҳия шудааст - Ҳама ҳуқуқҳо ҳифз шудаанд © {{year}}"
+      "footer": "Ин гузориш аз ҷониби MTE Systems System таҳия шудааст - Ҳама ҳуқуқҳо ҳифз шудаанд © {{year}}"
     }
   },
   "settings": {

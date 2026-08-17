@@ -125,7 +125,7 @@
     "hidePassword": "Skjul passord",
     "welcomeBack": "Velkommen tilbake",
     "registerNewBusiness": "Registrer et nytt anlegg",
-    "startYourJourney": "Start reisen med Bomba-systemet",
+    "startYourJourney": "Start reisen med MTE Systems-systemet",
     "ownerName": "Eierens navn",
     "ownerNamePlaceholder": "Skriv inn eierens navn",
     "ownerNameRequired": "Eierens navn er påkrevd",
@@ -154,7 +154,7 @@
     "emailActionError": "Det oppstod en feil under sending av koblingen",
     "changeLanguage": "Bytt språk",
     "registerTitle": "Registrer et nytt anlegg",
-    "registerSubtitle": "Start reisen med Bomba-systemet",
+    "registerSubtitle": "Start reisen med MTE Systems-systemet",
     "nameRequired": "Eierens navn er påkrevd",
     "registrationSuccess": "Aktiveringslenken er sendt til din e-post. Aktiver kontoen din før du logger på.",
     "registrationError": "Det oppsto en feil under registreringen.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontrollpanel",
-    "welcome": "Velkommen til Bomba System",
+    "welcome": "Velkommen til MTE Systems System",
     "subtitle": "En smart administrasjonsplattform for kafeer, restauranter og underholdning",
     "loading": "Laster inn data ...",
     "activeSessions": "Aktive økter",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Fra {{start}} til {{end}}",
       "printDate": "Skriv ut historikk",
-      "footer": "Denne rapporten ble generert av Bomba System - Alle rettigheter reservert © {{year}}"
+      "footer": "Denne rapporten ble generert av MTE Systems System - Alle rettigheter reservert © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Skriv inn en kort beskrivelse av anlegget",
       "generatedWebsite": {
         "title": "Automatisk generert anleggspost",
-        "description": "Det opprettes en post i Bomba som inneholder alle anleggsdata",
+        "description": "Det opprettes en post i MTE Systems som inneholder alle anleggsdata",
         "viewButton": "Se anleggets historie",
         "autoUpdate": "Historien oppdateres automatisk når data lagres"
       },

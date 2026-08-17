@@ -125,7 +125,7 @@
     "hidePassword": "Ficha nenosiri",
     "welcomeBack": "Karibu tena",
     "registerNewBusiness": "Sajili kituo kipya",
-    "startYourJourney": "Anza safari yako na mfumo wa Bomba",
+    "startYourJourney": "Anza safari yako na mfumo wa MTE Systems",
     "ownerName": "Jina la mmiliki",
     "ownerNamePlaceholder": "Ingiza jina la mmiliki",
     "ownerNameRequired": "Jina la mmiliki linahitajika",
@@ -154,7 +154,7 @@
     "emailActionError": "Hitilafu ilitokea wakati wa kutuma kiungo",
     "changeLanguage": "Badilisha lugha",
     "registerTitle": "Sajili kituo kipya",
-    "registerSubtitle": "Anza safari yako na mfumo wa Bomba",
+    "registerSubtitle": "Anza safari yako na mfumo wa MTE Systems",
     "nameRequired": "Jina la mmiliki linahitajika",
     "registrationSuccess": "Kiungo cha kuwezesha kimetumwa kwa barua pepe yako. Tafadhali washa akaunti yako kabla ya kuingia.",
     "registrationError": "Hitilafu ilitokea wakati wa usajili.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Jopo la kudhibiti",
-    "welcome": "Karibu Bomba System",
+    "welcome": "Karibu MTE Systems System",
     "subtitle": "Mfumo mahiri wa usimamizi wa mikahawa, mikahawa na burudani",
     "loading": "Inapakia data...",
     "activeSessions": "Vipindi vilivyo hai",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Kuanzia {{start}} hadi {{end}}",
       "printDate": "Chapisha historia",
-      "footer": "Ripoti hii ilitolewa na Bomba System - Haki zote zimehifadhiwa © {{year}}"
+      "footer": "Ripoti hii ilitolewa na MTE Systems System - Haki zote zimehifadhiwa © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ingiza maelezo mafupi ya kituo",
       "generatedWebsite": {
         "title": "Rekodi ya kituo iliyotengenezwa kiotomatiki",
-        "description": "Rekodi inaundwa katika Bomba iliyo na data yote ya kituo",
+        "description": "Rekodi inaundwa katika MTE Systems iliyo na data yote ya kituo",
         "viewButton": "Tazama historia ya kituo",
         "autoUpdate": "Historia inasasishwa kiotomatiki data inapohifadhiwa"
       },

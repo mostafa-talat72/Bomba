@@ -125,7 +125,7 @@
     "hidePassword": "Nascondi la password",
     "welcomeBack": "Bentornato",
     "registerNewBusiness": "Registra una nuova struttura",
-    "startYourJourney": "Inizia il tuo viaggio con il sistema Bomba",
+    "startYourJourney": "Inizia il tuo viaggio con il sistema MTE Systems",
     "ownerName": "Nome del proprietario",
     "ownerNamePlaceholder": "Inserisci il nome del proprietario",
     "ownerNameRequired": "Il nome del proprietario è obbligatorio",
@@ -154,7 +154,7 @@
     "emailActionError": "Si è verificato un errore durante l'invio del collegamento",
     "changeLanguage": "Cambia lingua",
     "registerTitle": "Registra una nuova struttura",
-    "registerSubtitle": "Inizia il tuo viaggio con il sistema Bomba",
+    "registerSubtitle": "Inizia il tuo viaggio con il sistema MTE Systems",
     "nameRequired": "Il nome del proprietario è obbligatorio",
     "registrationSuccess": "Il link di attivazione è stato inviato alla tua email. Attiva il tuo account prima di accedere.",
     "registrationError": "Si è verificato un errore durante la registrazione.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Pannello di controllo",
-    "welcome": "Benvenuti nel sistema Bomba",
+    "welcome": "Benvenuti nel sistema MTE Systems",
     "subtitle": "Una piattaforma di gestione intelligente per bar, ristoranti e luoghi di intrattenimento",
     "loading": "Caricamento dati...",
     "activeSessions": "Sessioni attive",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Dal {{inizio}} al {{fine}}",
       "printDate": "Stampa la cronologia",
-      "footer": "Questo report è stato generato da Bomba System - Tutti i diritti riservati © {{year}}"
+      "footer": "Questo report è stato generato da MTE Systems System - Tutti i diritti riservati © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Inserisci una breve descrizione della struttura",
       "generatedWebsite": {
         "title": "Registro della struttura generato automaticamente",
-        "description": "Viene creato un record in Bomba contenente tutti i dati della struttura",
+        "description": "Viene creato un record in MTE Systems contenente tutti i dati della struttura",
         "viewButton": "Visualizza la cronologia della struttura",
         "autoUpdate": "La cronologia viene aggiornata automaticamente quando i dati vengono salvati"
       },

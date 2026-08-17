@@ -125,7 +125,7 @@
     "hidePassword": "Wachtwoord verbergen",
     "welcomeBack": "Welkom terug",
     "registerNewBusiness": "Registreer een nieuwe faciliteit",
-    "startYourJourney": "Begin uw reis met het Bomba-systeem",
+    "startYourJourney": "Begin uw reis met het MTE Systems-systeem",
     "ownerName": "Naam van de eigenaar",
     "ownerNamePlaceholder": "Voer de naam van de eigenaar in",
     "ownerNameRequired": "De naam van de eigenaar is vereist",
@@ -154,7 +154,7 @@
     "emailActionError": "Er is een fout opgetreden tijdens het verzenden van de link",
     "changeLanguage": "Taal wijzigen",
     "registerTitle": "Registreer een nieuwe faciliteit",
-    "registerSubtitle": "Begin uw reis met het Bomba-systeem",
+    "registerSubtitle": "Begin uw reis met het MTE Systems-systeem",
     "nameRequired": "De naam van de eigenaar is vereist",
     "registrationSuccess": "De activatielink is naar uw e-mailadres verzonden. Activeer uw account voordat u inlogt.",
     "registrationError": "Er is een fout opgetreden tijdens de registratie.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Bedieningspaneel",
-    "welcome": "Welkom bij Bomba-systeem",
+    "welcome": "Welkom bij MTE Systems-systeem",
     "subtitle": "Een slim beheerplatform voor cafés, restaurants en entertainment",
     "loading": "Gegevens laden...",
     "activeSessions": "Actieve sessies",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Van {{start}} tot {{end}}",
       "printDate": "Geschiedenis afdrukken",
-      "footer": "Dit rapport is gegenereerd door Bomba System - Alle rechten voorbehouden © {{year}}"
+      "footer": "Dit rapport is gegenereerd door MTE Systems System - Alle rechten voorbehouden © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Voer een korte beschrijving van de faciliteit in",
       "generatedWebsite": {
         "title": "Automatisch gegenereerd faciliteitsrecord",
-        "description": "In Bomba wordt een record aangemaakt met daarin alle faciliteitsgegevens",
+        "description": "In MTE Systems wordt een record aangemaakt met daarin alle faciliteitsgegevens",
         "viewButton": "Bekijk de geschiedenis van de faciliteit",
         "autoUpdate": "De geschiedenis wordt automatisch bijgewerkt wanneer gegevens worden opgeslagen"
       },

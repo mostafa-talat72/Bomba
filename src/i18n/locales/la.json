@@ -125,7 +125,7 @@
     "hidePassword": "Celare password",
     "welcomeBack": "Receperint retro",
     "registerNewBusiness": "Novam facilitas subcriptio",
-    "startYourJourney": "Committitur iter cum Bomba System",
+    "startYourJourney": "Committitur iter cum MTE Systems System",
     "ownerName": "Nomen domini",
     "ownerNamePlaceholder": "Intra domini nomen",
     "ownerNameRequired": "Nomen domini requiratur",
@@ -154,7 +154,7 @@
     "emailActionError": "Error occurrit mittens nexum",
     "changeLanguage": "Mutare linguam",
     "registerTitle": "Novam facilitas subcriptio",
-    "registerSubtitle": "Committitur iter cum Bomba System",
+    "registerSubtitle": "Committitur iter cum MTE Systems System",
     "nameRequired": "Nomen domini requiratur",
     "registrationSuccess": "Quod activation nexus missum est inscriptionem tuum. Quaeso rationem excitant ante colligationem in.",
     "registrationError": "Error occurrit adnotatione.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Imperium panel",
-    "welcome": "Welcome to Bomba System",
+    "welcome": "Welcome to MTE Systems System",
     "subtitle": "Dolor sit amet diam in casu, popinae et entertainment",
     "loading": "Loading data...",
     "activeSessions": "Active sessiones",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Ab {{incipere}} ad {{end}}",
       "printDate": "Print history",
-      "footer": "Haec relatio a Bomba System - Omnia iura reservata © {{annus}}"
+      "footer": "Haec relatio a MTE Systems System - Omnia iura reservata © {{annus}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ingrediatur breviter facilitatem",
       "generatedWebsite": {
         "title": "Automatice generatae facilitas recordum",
-        "description": "Commentarius creatus est in Bomba continens omnem facilitatem datam",
+        "description": "Commentarius creatus est in MTE Systems continens omnem facilitatem datam",
         "viewButton": "Visum facilitas historia",
         "autoUpdate": "Historia automatice updated cum notitia salvatur"
       },

@@ -125,7 +125,7 @@
     "hidePassword": "Sakrij lozinku",
     "welcomeBack": "Dobro došao nazad",
     "registerNewBusiness": "Registrirajte novi objekt",
-    "startYourJourney": "Započnite svoje putovanje sa sustavom Bomba",
+    "startYourJourney": "Započnite svoje putovanje sa sustavom MTE Systems",
     "ownerName": "Ime vlasnika",
     "ownerNamePlaceholder": "Unesite ime vlasnika",
     "ownerNameRequired": "Potrebno je ime vlasnika",
@@ -154,7 +154,7 @@
     "emailActionError": "Došlo je do pogreške prilikom slanja veze",
     "changeLanguage": "Promjena jezika",
     "registerTitle": "Registrirajte novi objekt",
-    "registerSubtitle": "Započnite svoje putovanje sa sustavom Bomba",
+    "registerSubtitle": "Započnite svoje putovanje sa sustavom MTE Systems",
     "nameRequired": "Potrebno je ime vlasnika",
     "registrationSuccess": "Aktivacijski link je poslan na vaš email. Prije prijave aktivirajte svoj račun.",
     "registrationError": "Došlo je do pogreške tijekom registracije.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Upravljačka ploča",
-    "welcome": "Dobrodošli u Bomba System",
+    "welcome": "Dobrodošli u MTE Systems System",
     "subtitle": "Pametna platforma za upravljanje kafićima, restoranima i zabavom",
     "loading": "Učitavanje podataka...",
     "activeSessions": "Aktivne sesije",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Od {{start}} do {{end}}",
       "printDate": "Ispis povijesti",
-      "footer": "Ovo izvješće generirao je Bomba System - Sva prava pridržana © {{godina}}"
+      "footer": "Ovo izvješće generirao je MTE Systems System - Sva prava pridržana © {{godina}}"
     }
   },
   "settings": {

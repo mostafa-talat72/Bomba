@@ -717,7 +717,27 @@ export const printBill = async (
     </html>
   `;
 
-  // Create a hidden iframe for printing
+  // A real popup window is preferred for printing: in Electron, printing an
+  // iframe can print the dark parent page instead of the receipt (all black).
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.open();
+    printWindow.document.write(receiptHTML);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => {
+          if (!printWindow.closed) {
+            printWindow.close();
+          }
+        }, 100);
+      }, 50);
+    };
+    return;
+  }
+
+  // Fallback: hidden iframe (when pop-ups are blocked)
   const printFrame = document.createElement('iframe');
   printFrame.style.position = 'absolute';
   printFrame.style.top = '-1000px';
@@ -746,53 +766,25 @@ export const printBill = async (
         }, 100);
       } catch (error) {
         console.error('Print error:', error);
-        // Fallback to opening in new window if iframe printing fails
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.open();
-          printWindow.document.write(receiptHTML);
-          printWindow.document.close();
-          printWindow.onload = () => {
-            setTimeout(() => {
-              printWindow.print();
-              setTimeout(() => {
-                if (!printWindow.closed) {
-                  printWindow.close();
-                }
-              }, 100);
-            }, 50);
-          };
-        }
         // Clean up iframe
         document.body.removeChild(printFrame);
+        const alertMsg = language === 'ar' 
+          ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
+          : language === 'fr'
+          ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
+          : 'Please allow pop-ups to print the bill';
+        alert(alertMsg);
       }
     }, 50);
   } else {
-    // Fallback to original method if iframe fails
+    // Clean up iframe
     document.body.removeChild(printFrame);
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(receiptHTML);
-      printWindow.document.close();
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-          setTimeout(() => {
-            if (!printWindow.closed) {
-              printWindow.close();
-            }
-          }, 100);
-        }, 50);
-      };
-    } else {
-      const alertMsg = language === 'ar' 
-        ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
-        : language === 'fr'
-        ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
-        : 'Please allow pop-ups to print the bill';
-      alert(alertMsg);
-    }
+    const alertMsg = language === 'ar' 
+      ? 'الرجاء السماح بالنوافذ المنبثقة لطباعة الفاتورة'
+      : language === 'fr'
+      ? 'Veuillez autoriser les fenêtres contextuelles pour imprimer la facture'
+      : 'Please allow pop-ups to print the bill';
+    alert(alertMsg);
   }
 };
 

@@ -34,7 +34,11 @@
     "migrate:tables": "cd server && node scripts/migrateTableReferences.js",
     "check:replica": "node server/scripts/checkReplicaSet.js",
     "init:replica": "node server/scripts/initializeReplicaSet.js",
-    "sync:initial": "node server/scripts/initialSync.js"
+    "sync:initial": "node server/scripts/initialSync.js",
+    "desktop:dev": "npm --prefix desktop run dev",
+    "desktop:start": "npm --prefix desktop run start",
+    "desktop:pack": "npm --prefix desktop run pack",
+    "desktop:dist": "npm --prefix desktop run dist"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

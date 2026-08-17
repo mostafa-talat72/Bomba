@@ -125,7 +125,7 @@
     "hidePassword": "Passwuert verstoppen",
     "welcomeBack": "Wëllkomm zréck",
     "registerNewBusiness": "Aschreiwen eng nei Ariichtung",
-    "startYourJourney": "Start Är Rees mam Bomba System",
+    "startYourJourney": "Start Är Rees mam MTE Systems System",
     "ownerName": "Numm vum Besëtzer",
     "ownerNamePlaceholder": "Gitt den Numm vum Besëtzer un",
     "ownerNameRequired": "Den Numm vum Besëtzer ass erfuerderlech",
@@ -154,7 +154,7 @@
     "emailActionError": "E Feeler ass geschitt beim Schécken vum Link",
     "changeLanguage": "Sprooch änneren",
     "registerTitle": "Aschreiwen eng nei Ariichtung",
-    "registerSubtitle": "Start Är Rees mam Bomba System",
+    "registerSubtitle": "Start Är Rees mam MTE Systems System",
     "nameRequired": "Den Numm vum Besëtzer ass erfuerderlech",
     "registrationSuccess": "Den Aktivéierungslink gouf op Är E-Mail geschéckt. Aktivéiert w.e.g. Äre Kont ier Dir Iech aloggen.",
     "registrationError": "E Feeler ass während der Aschreiwung geschitt.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontroll Panel",
-    "welcome": "Wëllkomm zu Bomba System",
+    "welcome": "Wëllkomm zu MTE Systems System",
     "subtitle": "Eng intelligent Gestiounsplattform fir Caféen, Restauranten an Ënnerhalung",
     "loading": "Lueden Daten ...",
     "activeSessions": "Aktiv Sessiounen",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Vun {{Start}} bis {{end}}",
       "printDate": "Drécken Geschicht",
-      "footer": "Dëse Bericht gouf vum Bomba System generéiert - All Rechter reservéiert © {{year}}"
+      "footer": "Dëse Bericht gouf vum MTE Systems System generéiert - All Rechter reservéiert © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Gitt eng kuerz Beschreiwung vun der Ariichtung",
       "generatedWebsite": {
         "title": "Automatesch generéiert Ariichtungsrekord",
-        "description": "E Rekord gëtt a Bomba erstallt mat all Ariichtungsdaten",
+        "description": "E Rekord gëtt a MTE Systems erstallt mat all Ariichtungsdaten",
         "viewButton": "View Ariichtung Geschicht",
         "autoUpdate": "D'Geschicht gëtt automatesch aktualiséiert wann d'Donnéeën gespäichert ginn"
       },

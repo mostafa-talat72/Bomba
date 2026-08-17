@@ -1349,7 +1349,7 @@
       },
       "dateRange": "מ-{{start}} עד {{end}}",
       "printDate": "היסטוריית הדפסה",
-      "footer": "דוח זה נוצר על ידי Bomba System - כל הזכויות שמורות © {{year}}"
+      "footer": "דוח זה נוצר על ידי MTE Systems System - כל הזכויות שמורות © {{year}}"
     }
   },
   "settings": {

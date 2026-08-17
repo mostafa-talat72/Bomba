@@ -125,7 +125,7 @@
     "hidePassword": "Folaigh pasfhocal",
     "welcomeBack": "Fáilte ar ais",
     "registerNewBusiness": "Cláraigh áis nua",
-    "startYourJourney": "Tosaigh do thuras leis an gcóras Bomba",
+    "startYourJourney": "Tosaigh do thuras leis an gcóras MTE Systems",
     "ownerName": "Ainm an úinéara",
     "ownerNamePlaceholder": "Cuir isteach ainm an úinéara",
     "ownerNameRequired": "Tá ainm an úinéara ag teastáil",
@@ -154,7 +154,7 @@
     "emailActionError": "Tharla earráid agus an nasc á sheoladh",
     "changeLanguage": "Athraigh teanga",
     "registerTitle": "Cláraigh áis nua",
-    "registerSubtitle": "Tosaigh do thuras leis an gcóras Bomba",
+    "registerSubtitle": "Tosaigh do thuras leis an gcóras MTE Systems",
     "nameRequired": "Tá ainm an úinéara ag teastáil",
     "registrationSuccess": "Tá an nasc gníomhachtaithe seolta chuig do ríomhphost. Gníomhachtaigh do chuntas roimh logáil isteach.",
     "registrationError": "Tharla earráid le linn clárúcháin.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Painéal rialaithe",
-    "welcome": "Fáilte go Córas Bomba",
+    "welcome": "Fáilte go Córas MTE Systems",
     "subtitle": "Ardán bainistíochta cliste le haghaidh caiféanna, bialanna agus siamsaíocht",
     "loading": "Sonraí á lódáil...",
     "activeSessions": "Seisiúin ghníomhacha",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Ó {{start}} go {{deireadh}}",
       "printDate": "Stair priontála",
-      "footer": "Bomba System a ghin an tuarascáil seo - Gach ceart ar cosaint © {{year}}"
+      "footer": "MTE Systems System a ghin an tuarascáil seo - Gach ceart ar cosaint © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Cuir isteach cur síos gairid ar an áis",
       "generatedWebsite": {
         "title": "Taifead saoráide a ghintear go huathoibríoch",
-        "description": "Cruthaítear taifead i Bomba ina bhfuil na sonraí saoráide go léir",
+        "description": "Cruthaítear taifead i MTE Systems ina bhfuil na sonraí saoráide go léir",
         "viewButton": "Féach ar stair na saoráide",
         "autoUpdate": "Déantar an stair a nuashonrú go huathoibríoch nuair a shábháiltear sonraí"
       },

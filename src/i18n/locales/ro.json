@@ -125,7 +125,7 @@
     "hidePassword": "Ascunde parola",
     "welcomeBack": "Bine ai revenit",
     "registerNewBusiness": "Înregistrați o nouă unitate",
-    "startYourJourney": "Începeți-vă călătoria cu sistemul Bomba",
+    "startYourJourney": "Începeți-vă călătoria cu sistemul MTE Systems",
     "ownerName": "Numele proprietarului",
     "ownerNamePlaceholder": "Introduceți numele proprietarului",
     "ownerNameRequired": "Numele proprietarului este obligatoriu",
@@ -154,7 +154,7 @@
     "emailActionError": "A apărut o eroare la trimiterea linkului",
     "changeLanguage": "Schimbați limba",
     "registerTitle": "Înregistrați o nouă unitate",
-    "registerSubtitle": "Începeți-vă călătoria cu sistemul Bomba",
+    "registerSubtitle": "Începeți-vă călătoria cu sistemul MTE Systems",
     "nameRequired": "Numele proprietarului este obligatoriu",
     "registrationSuccess": "Linkul de activare a fost trimis pe adresa ta de e-mail. Vă rugăm să vă activați contul înainte de a vă autentifica.",
     "registrationError": "A apărut o eroare în timpul înregistrării.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panou de control",
-    "welcome": "Bine ați venit la Bomba System",
+    "welcome": "Bine ați venit la MTE Systems System",
     "subtitle": "O platformă inteligentă de management pentru cafenele, restaurante și divertisment",
     "loading": "Se încarcă datele...",
     "activeSessions": "Sesiuni active",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "De la {{start}} la {{end}}",
       "printDate": "Istoricul tipăririi",
-      "footer": "Acest raport a fost generat de Bomba System - Toate drepturile rezervate © {{year}}"
+      "footer": "Acest raport a fost generat de MTE Systems System - Toate drepturile rezervate © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Introduceți o scurtă descriere a unității",
       "generatedWebsite": {
         "title": "Înregistrarea instalației generată automat",
-        "description": "În Bomba este creată o înregistrare care conține toate datele instalației",
+        "description": "În MTE Systems este creată o înregistrare care conține toate datele instalației",
         "viewButton": "Vedeți istoricul unității",
         "autoUpdate": "Istoricul este actualizat automat când datele sunt salvate"
       },

@@ -7,7 +7,7 @@ import Logger from "../middleware/logger.js";
 const execAsync = promisify(exec);
 
 // Backup configuration
-const BACKUP_DIR = path.join(process.cwd(), 'backups');
+const BACKUP_DIR = process.env.DESKTOP_BACKUP_DIR || path.join(process.cwd(), 'backups');
 const MAX_BACKUPS = 10; // Keep only the last 10 backups
 
 // Ensure backup directory exists

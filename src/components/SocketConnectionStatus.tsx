@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Wifi, WifiOff } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
 
 let socket: Socket | null = null;
 
@@ -11,7 +12,7 @@ export const SocketConnectionStatus: React.FC = () => {
   useEffect(() => {
     // إنشاء اتصال Socket.IO
     if (!socket) {
-      socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+      socket = io(API_BASE_URL, {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,

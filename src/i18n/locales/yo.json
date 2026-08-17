@@ -125,7 +125,7 @@
     "hidePassword": "Tọju ọrọ igbaniwọle",
     "welcomeBack": "ku aabọ pada",
     "registerNewBusiness": "Forukọsilẹ titun kan apo",
-    "startYourJourney": "Bẹrẹ irin-ajo rẹ pẹlu Eto Bomba",
+    "startYourJourney": "Bẹrẹ irin-ajo rẹ pẹlu Eto MTE Systems",
     "ownerName": "Orukọ eni",
     "ownerNamePlaceholder": "Tẹ orukọ eni",
     "ownerNameRequired": "A nilo orukọ eni",
@@ -154,7 +154,7 @@
     "emailActionError": "Aṣiṣe waye lakoko fifiranṣẹ ọna asopọ",
     "changeLanguage": "Yi ede pada",
     "registerTitle": "Forukọsilẹ titun kan apo",
-    "registerSubtitle": "Bẹrẹ irin-ajo rẹ pẹlu Eto Bomba",
+    "registerSubtitle": "Bẹrẹ irin-ajo rẹ pẹlu Eto MTE Systems",
     "nameRequired": "A nilo orukọ eni",
     "registrationSuccess": "Ọna asopọ imuṣiṣẹ ti firanṣẹ si imeeli rẹ. Jọwọ mu akọọlẹ rẹ ṣiṣẹ ṣaaju ki o to wọle.",
     "registrationError": "Aṣiṣe waye lakoko iforukọsilẹ.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Ibi iwaju alabujuto",
-    "welcome": "Kaabo si Bomba System",
+    "welcome": "Kaabo si MTE Systems System",
     "subtitle": "Syeed iṣakoso ọlọgbọn fun awọn kafe, awọn ile ounjẹ, ati ere idaraya",
     "loading": "Nkojọpọ data...",
     "activeSessions": "Awọn akoko ti nṣiṣe lọwọ",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Lati {{bẹrẹ}} si {{pari}}",
       "printDate": "Itan titẹ sita",
-      "footer": "Ijabọ yii jẹ ipilẹṣẹ nipasẹ Eto Bomba - Gbogbo ẹtọ wa ni ipamọ © {{odun}}"
+      "footer": "Ijabọ yii jẹ ipilẹṣẹ nipasẹ Eto MTE Systems - Gbogbo ẹtọ wa ni ipamọ © {{odun}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Tẹ apejuwe kukuru ti ohun elo naa sii",
       "generatedWebsite": {
         "title": "Igbasilẹ ohun elo ti ipilẹṣẹ laifọwọyi",
-        "description": "A ṣẹda igbasilẹ ni Bomba ti o ni gbogbo data ohun elo ninu",
+        "description": "A ṣẹda igbasilẹ ni MTE Systems ti o ni gbogbo data ohun elo ninu",
         "viewButton": "Wo itan ile-iṣẹ",
         "autoUpdate": "Itan naa ti ni imudojuiwọn laifọwọyi nigbati data ba wa ni ipamọ"
       },

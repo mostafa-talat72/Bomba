@@ -11,6 +11,7 @@ import UserDeleteModal from '../components/UserDeleteModal';
 import PermissionsManagerModal from '../components/PermissionsManagerModal';
 import UserStatusModal from '../components/UserStatusModal';
 import { formatDecimal } from '../utils/formatters';
+import { API_BASE_URL } from '../utils/apiBase';
 import '../styles/users-enhancements.css';
 
 const Users = () => {
@@ -461,7 +462,7 @@ const Users = () => {
 
   const updateUserPermissions = async (userId: string, permissions: string[]) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}/permissions`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/permissions`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -486,7 +487,7 @@ const Users = () => {
 
   const updateUserStatus = async (userId: string, status: string) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/${userId}/status`, {
+      const response = await fetch(`${API_BASE_URL}/users/${userId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -527,7 +528,7 @@ const Users = () => {
       setDeleteLoading(true);
       setDeleteError('');
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-password`, {
+        const res = await fetch(`${API_BASE_URL}/auth/verify-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: user?.email, password: deletePassword })

@@ -12,6 +12,7 @@ import { canAddOrder, canEditOrder, canDeleteOrder } from '../utils/permissionHe
 import PermissionDenied from '../components/PermissionDenied';
 import api from '../services/api';
 import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
 
 // Helper function to display table number/name correctly
 const getTableDisplay = (tableNumberOrName: string | number | undefined | null, language: string = 'ar'): string => {
@@ -403,7 +404,7 @@ const Cafe: React.FC = () => {
 
     // Initialize Socket.IO connection
     // Remove /api suffix from VITE_API_URL for Socket.IO connection
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
     
     const socket = io(socketUrl, {

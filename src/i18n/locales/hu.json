@@ -125,7 +125,7 @@
     "hidePassword": "Jelszó elrejtése",
     "welcomeBack": "Isten hozott újra",
     "registerNewBusiness": "Regisztráljon egy új létesítményt",
-    "startYourJourney": "Kezdje utazását a Bomba rendszerrel",
+    "startYourJourney": "Kezdje utazását a MTE Systems rendszerrel",
     "ownerName": "Tulajdonos neve",
     "ownerNamePlaceholder": "Írja be a tulajdonos nevét",
     "ownerNameRequired": "A tulajdonos neve kötelező",
@@ -154,7 +154,7 @@
     "emailActionError": "Hiba történt a link küldése közben",
     "changeLanguage": "Nyelv módosítása",
     "registerTitle": "Regisztráljon egy új létesítményt",
-    "registerSubtitle": "Kezdje utazását a Bomba rendszerrel",
+    "registerSubtitle": "Kezdje utazását a MTE Systems rendszerrel",
     "nameRequired": "A tulajdonos neve kötelező",
     "registrationSuccess": "Az aktiváló linket elküldtük az e-mail címére. Kérjük, bejelentkezés előtt aktiválja fiókját.",
     "registrationError": "Hiba történt a regisztráció során.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Vezérlőpult",
-    "welcome": "Üdvözöljük a Bomba Systemben",
+    "welcome": "Üdvözöljük a MTE Systems Systemben",
     "subtitle": "Intelligens menedzsment platform kávézók, éttermek és szórakoztatás számára",
     "loading": "Adatok betöltése...",
     "activeSessions": "Aktív foglalkozások",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}}-tól {{end}}-ig",
       "printDate": "Nyomtatási előzmények",
-      "footer": "Ezt a jelentést a Bomba System készítette - Minden jog fenntartva © {{év}}"
+      "footer": "Ezt a jelentést a MTE Systems System készítette - Minden jog fenntartva © {{év}}"
     }
   },
   "settings": {

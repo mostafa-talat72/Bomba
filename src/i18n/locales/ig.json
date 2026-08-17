@@ -125,7 +125,7 @@
     "hidePassword": "Zoo okwuntughe",
     "welcomeBack": "nnọọ",
     "registerNewBusiness": "Debanye aha ụlọ ọrụ ọhụrụ",
-    "startYourJourney": "Jiri usoro Bomba malite njem gị",
+    "startYourJourney": "Jiri usoro MTE Systems malite njem gị",
     "ownerName": "Aha onye nwe ya",
     "ownerNamePlaceholder": "Tinye aha onye nwe ya",
     "ownerNameRequired": "Achọrọ aha onye nwe ya",
@@ -154,7 +154,7 @@
     "emailActionError": "Enwere mperi mgbe ị na-eziga njikọ ahụ",
     "changeLanguage": "Gbanwee asụsụ",
     "registerTitle": "Debanye aha ụlọ ọrụ ọhụrụ",
-    "registerSubtitle": "Jiri usoro Bomba malite njem gị",
+    "registerSubtitle": "Jiri usoro MTE Systems malite njem gị",
     "nameRequired": "Achọrọ aha onye nwe ya",
     "registrationSuccess": "ezipula njikọ nbanye na email gị. Biko rụọ ọrụ akaụntụ gị tupu ịbanye.",
     "registrationError": "Enwere mperi n'oge ndebanye aha.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Ogwe njikwa",
-    "welcome": "Nnọọ na Sistemụ Bomba",
+    "welcome": "Nnọọ na Sistemụ MTE Systems",
     "subtitle": "Ngwa njikwa smart maka cafes, ụlọ oriri na ọṅụṅụ, na ntụrụndụ",
     "loading": "Na-ebu data...",
     "activeSessions": "Oge nnọkọ",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Site na {{start}} ruo {{njedebe}}",
       "printDate": "Bipụta akụkọ ihe mere eme",
-      "footer": "Sistemu Bomba weputara akụkọ a - Edebere ikike niile © {{year}}"
+      "footer": "Sistemu MTE Systems weputara akụkọ a - Edebere ikike niile © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Tinye nkowa nkenke nke akụrụngwa",
       "generatedWebsite": {
         "title": "Ndekọ akụrụngwa ewepụtara na-akpaghị aka",
-        "description": "Emepụtara ndekọ na Bomba nwere data akụrụngwa niile",
+        "description": "Emepụtara ndekọ na MTE Systems nwere data akụrụngwa niile",
         "viewButton": "Lelee akụkọ ihe owuwu",
         "autoUpdate": "A na-emelite akụkọ ihe mere eme na-akpaghị aka mgbe echekwara data"
       },

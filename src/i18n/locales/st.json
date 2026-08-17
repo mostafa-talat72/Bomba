@@ -125,7 +125,7 @@
     "hidePassword": "Pata password",
     "welcomeBack": "rea u amohela hape",
     "registerNewBusiness": "Ngolisa setsi se secha",
-    "startYourJourney": "Qala leeto la hau ka Bomba System",
+    "startYourJourney": "Qala leeto la hau ka MTE Systems System",
     "ownerName": "Lebitso la monga lona",
     "ownerNamePlaceholder": "Kenya lebitso la mong'a lona",
     "ownerNameRequired": "Ho hlokahala lebitso la mong'a lona",
@@ -154,7 +154,7 @@
     "emailActionError": "Phoso e etsahetse nakong eo re romellang sehokelo",
     "changeLanguage": "Fetola puo",
     "registerTitle": "Ngolisa setsi se secha",
-    "registerSubtitle": "Qala leeto la hau ka Bomba System",
+    "registerSubtitle": "Qala leeto la hau ka MTE Systems System",
     "nameRequired": "Ho hlokahala lebitso la mong'a lona",
     "registrationSuccess": "Sehokelo sa ho kenya tshebetsong se rometswe ho lengolo-tsoibila la hao. Ka kopo kenya akhaonto ea hau pele u kena.",
     "registrationError": "Phoso e etsahetse nakong ea ngoliso.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Lekhotla la taolo",
-    "welcome": "Rea u amohela ho Bomba System",
+    "welcome": "Rea u amohela ho MTE Systems System",
     "subtitle": "Sethala sa taolo se bohlale bakeng sa li-cafe, lireschorente le boithabiso",
     "loading": "E kenya data...",
     "activeSessions": "Likopano tse sebetsang",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Ho tloha {{start}} ho isa {{end}}",
       "printDate": "Nalane ea khatiso",
-      "footer": "Tlaleho ena e entsoe ke Bomba System - Litokelo tsohle li sirelelitsoe © {{year}}"
+      "footer": "Tlaleho ena e entsoe ke MTE Systems System - Litokelo tsohle li sirelelitsoe © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Kenya tlhaloso e khutšoanyane ea setsi",
       "generatedWebsite": {
         "title": "Rekoto ea setsi e entsoeng ka boiketsetso",
-        "description": "Rekoto e etsoa Bomba e nang le lintlha tsohle tsa setsi",
+        "description": "Rekoto e etsoa MTE Systems e nang le lintlha tsohle tsa setsi",
         "viewButton": "Sheba nalane ea setsi",
         "autoUpdate": "Nalane e nchafatsoa ka bo eona ha data e bolokoa"
       },

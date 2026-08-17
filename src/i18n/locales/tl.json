@@ -125,7 +125,7 @@
     "hidePassword": "Itago ang password",
     "welcomeBack": "Maligayang pagbabalik",
     "registerNewBusiness": "Magrehistro ng bagong pasilidad",
-    "startYourJourney": "Simulan ang iyong paglalakbay gamit ang Bomba system",
+    "startYourJourney": "Simulan ang iyong paglalakbay gamit ang MTE Systems system",
     "ownerName": "Pangalan ng may-ari",
     "ownerNamePlaceholder": "Ilagay ang pangalan ng may-ari",
     "ownerNameRequired": "Kinakailangan ang pangalan ng may-ari",
@@ -154,7 +154,7 @@
     "emailActionError": "Nagkaroon ng error habang ipinapadala ang link",
     "changeLanguage": "Baguhin ang wika",
     "registerTitle": "Magrehistro ng bagong pasilidad",
-    "registerSubtitle": "Simulan ang iyong paglalakbay gamit ang Bomba system",
+    "registerSubtitle": "Simulan ang iyong paglalakbay gamit ang MTE Systems system",
     "nameRequired": "Kinakailangan ang pangalan ng may-ari",
     "registrationSuccess": "Ang activation link ay naipadala na sa iyong email. Mangyaring i-activate ang iyong account bago mag-log in.",
     "registrationError": "Nagkaroon ng error sa panahon ng pagpaparehistro.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Control panel",
-    "welcome": "Maligayang pagdating sa Bomba System",
+    "welcome": "Maligayang pagdating sa MTE Systems System",
     "subtitle": "Isang matalinong platform sa pamamahala para sa mga cafe, restaurant, at entertainment",
     "loading": "Nilo-load ang data...",
     "activeSessions": "Mga aktibong session",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Mula {{start}} hanggang {{end}}",
       "printDate": "I-print ang kasaysayan",
-      "footer": "Ang ulat na ito ay nabuo ng Bomba System - All rights reserved © {{year}}"
+      "footer": "Ang ulat na ito ay nabuo ng MTE Systems System - All rights reserved © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Maglagay ng maikling paglalarawan ng pasilidad",
       "generatedWebsite": {
         "title": "Awtomatikong nabuong talaan ng pasilidad",
-        "description": "Ang isang talaan ay ginawa sa Bomba na naglalaman ng lahat ng data ng pasilidad",
+        "description": "Ang isang talaan ay ginawa sa MTE Systems na naglalaman ng lahat ng data ng pasilidad",
         "viewButton": "Tingnan ang kasaysayan ng pasilidad",
         "autoUpdate": "Awtomatikong ina-update ang kasaysayan kapag nai-save ang data"
       },

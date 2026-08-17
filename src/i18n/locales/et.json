@@ -125,7 +125,7 @@
     "hidePassword": "Peida parool",
     "welcomeBack": "Tere tulemast tagasi",
     "registerNewBusiness": "Registreerige uus rajatis",
-    "startYourJourney": "Alustage oma reisi Bomba süsteemiga",
+    "startYourJourney": "Alustage oma reisi MTE Systems süsteemiga",
     "ownerName": "Omaniku nimi",
     "ownerNamePlaceholder": "Sisestage omaniku nimi",
     "ownerNameRequired": "Omaniku nimi on kohustuslik",
@@ -154,7 +154,7 @@
     "emailActionError": "Lingi saatmisel ilmnes viga",
     "changeLanguage": "Muuda keelt",
     "registerTitle": "Registreerige uus rajatis",
-    "registerSubtitle": "Alustage oma reisi Bomba süsteemiga",
+    "registerSubtitle": "Alustage oma reisi MTE Systems süsteemiga",
     "nameRequired": "Omaniku nimi on kohustuslik",
     "registrationSuccess": "Aktiveerimislink on saadetud teie meilile. Palun aktiveeri oma konto enne sisselogimist.",
     "registrationError": "Registreerimisel ilmnes viga.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Juhtpaneel",
-    "welcome": "Tere tulemast Bomba süsteemi",
+    "welcome": "Tere tulemast MTE Systems süsteemi",
     "subtitle": "Nutikas haldusplatvorm kohvikutele, restoranidele ja meelelahutusele",
     "loading": "Andmete laadimine...",
     "activeSessions": "Aktiivsed seansid",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Alates {{start}} kuni {{end}}",
       "printDate": "Trüki ajalugu",
-      "footer": "Selle aruande koostas Bomba System – kõik õigused kaitstud © {{year}}"
+      "footer": "Selle aruande koostas MTE Systems System – kõik õigused kaitstud © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Sisestage rajatise lühikirjeldus",
       "generatedWebsite": {
         "title": "Automaatselt genereeritud rajatise kirje",
-        "description": "Bombas luuakse kirje, mis sisaldab kõiki rajatise andmeid",
+        "description": "MTE Systemss luuakse kirje, mis sisaldab kõiki rajatise andmeid",
         "viewButton": "Vaadake rajatise ajalugu",
         "autoUpdate": "Ajalugu uuendatakse andmete salvestamisel automaatselt"
       },

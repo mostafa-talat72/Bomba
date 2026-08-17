@@ -125,7 +125,7 @@
     "hidePassword": "Skrýt heslo",
     "welcomeBack": "Vítejte zpět",
     "registerNewBusiness": "Zaregistrujte nové zařízení",
-    "startYourJourney": "Začněte svou cestu se systémem Bomba",
+    "startYourJourney": "Začněte svou cestu se systémem MTE Systems",
     "ownerName": "Jméno majitele",
     "ownerNamePlaceholder": "Zadejte jméno vlastníka",
     "ownerNameRequired": "Jméno vlastníka je povinné",
@@ -154,7 +154,7 @@
     "emailActionError": "Při odesílání odkazu došlo k chybě",
     "changeLanguage": "Změnit jazyk",
     "registerTitle": "Zaregistrujte nové zařízení",
-    "registerSubtitle": "Začněte svou cestu se systémem Bomba",
+    "registerSubtitle": "Začněte svou cestu se systémem MTE Systems",
     "nameRequired": "Jméno vlastníka je povinné",
     "registrationSuccess": "Aktivační odkaz byl odeslán na váš e-mail. Před přihlášením prosím aktivujte svůj účet.",
     "registrationError": "Při registraci došlo k chybě.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Ovládací panel",
-    "welcome": "Vítejte v Bomba System",
+    "welcome": "Vítejte v MTE Systems System",
     "subtitle": "Inteligentní platforma pro správu kaváren, restaurací a zábavy",
     "loading": "Načítání dat...",
     "activeSessions": "Aktivní relace",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Od {{start}} do {{end}}",
       "printDate": "Historie tisku",
-      "footer": "Tato zpráva byla vytvořena systémem Bomba System - Všechna práva vyhrazena © {{year}}"
+      "footer": "Tato zpráva byla vytvořena systémem MTE Systems System - Všechna práva vyhrazena © {{year}}"
     }
   },
   "settings": {

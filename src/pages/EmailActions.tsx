@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import LanguageSwitcherAuth from '../components/LanguageSwitcherAuth';
+import { API_BASE_URL } from '../utils/apiBase';
 
 interface FormErrors {
   email?: string;
@@ -74,7 +75,7 @@ const EmailActions: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const apiUrl = API_BASE_URL + '/api';
       const response = await fetch(`${apiUrl}/auth/resend-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,7 +109,7 @@ const EmailActions: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const apiUrl = API_BASE_URL + '/api';
       const response = await fetch(`${apiUrl}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

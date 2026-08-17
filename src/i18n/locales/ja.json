@@ -125,7 +125,7 @@
     "hidePassword": "パスワードを隠す",
     "welcomeBack": "おかえり",
     "registerNewBusiness": "新規施設を登録する",
-    "startYourJourney": "Bomba システムで旅を始めましょう",
+    "startYourJourney": "MTE Systems システムで旅を始めましょう",
     "ownerName": "所有者の名前",
     "ownerNamePlaceholder": "所有者の名前を入力してください",
     "ownerNameRequired": "所有者の名前は必須です",
@@ -154,7 +154,7 @@
     "emailActionError": "リンクの送信中にエラーが発生しました",
     "changeLanguage": "言語を変更する",
     "registerTitle": "新規施設を登録する",
-    "registerSubtitle": "Bomba システムで旅を始めましょう",
+    "registerSubtitle": "MTE Systems システムで旅を始めましょう",
     "nameRequired": "所有者の名前は必須です",
     "registrationSuccess": "アクティベーションリンクがメールに送信されました。ログインする前にアカウントを有効にしてください。",
     "registrationError": "登録中にエラーが発生しました。",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}}から{{end}}まで",
       "printDate": "印刷履歴",
-      "footer": "このレポートは Bomba System によって生成されました - 無断複写・転載を禁じます © {{year}}"
+      "footer": "このレポートは MTE Systems System によって生成されました - 無断複写・転載を禁じます © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "施設の簡単な説明を入力します",
       "generatedWebsite": {
         "title": "自動生成される施設レコード",
-        "description": "すべての施設データを含むレコードが Bomba に作成されます",
+        "description": "すべての施設データを含むレコードが MTE Systems に作成されます",
         "viewButton": "施設履歴を見る",
         "autoUpdate": "データ保存時に履歴も自動更新される"
       },

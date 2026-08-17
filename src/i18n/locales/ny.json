@@ -125,7 +125,7 @@
     "hidePassword": "Bisani mawu achinsinsi",
     "welcomeBack": "takulandilaninso",
     "registerNewBusiness": "Lembani malo atsopano",
-    "startYourJourney": "Yambani ulendo wanu ndi Bomba System",
+    "startYourJourney": "Yambani ulendo wanu ndi MTE Systems System",
     "ownerName": "Dzina la mwini",
     "ownerNamePlaceholder": "Lowetsani dzina la eni ake",
     "ownerNameRequired": "Dzina lamwini likufunika",
@@ -154,7 +154,7 @@
     "emailActionError": "Panali vuto potumiza ulalo",
     "changeLanguage": "Sinthani chinenero",
     "registerTitle": "Lembani malo atsopano",
-    "registerSubtitle": "Yambani ulendo wanu ndi Bomba System",
+    "registerSubtitle": "Yambani ulendo wanu ndi MTE Systems System",
     "nameRequired": "Dzina lamwini likufunika",
     "registrationSuccess": "Ulalo wotsegulira watumizidwa ku imelo yanu. Chonde tsegulani akaunti yanu musanalowe.",
     "registrationError": "Panali cholakwika polembetsa.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Gawo lowongolera",
-    "welcome": "Takulandilani ku Bomba System",
+    "welcome": "Takulandilani ku MTE Systems System",
     "subtitle": "Pulatifomu yanzeru yoyendetsera malo odyera, malo odyera, ndi zosangalatsa",
     "loading": "Kutsegula data...",
     "activeSessions": "Magawo achangu",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Kuyambira {{start}} mpaka {{end}}",
       "printDate": "Sindikizani mbiri",
-      "footer": "Lipotili lapangidwa ndi Bomba System - Ufulu wonse ndi wotetezedwa © {{year}}"
+      "footer": "Lipotili lapangidwa ndi MTE Systems System - Ufulu wonse ndi wotetezedwa © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Lowetsani kufotokozera mwachidule za malowa",
       "generatedWebsite": {
         "title": "Zolemba zodzipangira zokha",
-        "description": "Mbiri imapangidwa ku Bomba yokhala ndi data yonse",
+        "description": "Mbiri imapangidwa ku MTE Systems yokhala ndi data yonse",
         "viewButton": "Onani mbiri yamalo",
         "autoUpdate": "Mbiriyo imasinthidwa zokha data ikasungidwa"
       },

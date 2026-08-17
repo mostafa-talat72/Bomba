@@ -125,7 +125,7 @@
     "hidePassword": "Kaŝi pasvorton",
     "welcomeBack": "Bonvenon reen",
     "registerNewBusiness": "Registri novan instalaĵon",
-    "startYourJourney": "Komencu vian vojaĝon per la Bomba Sistemo",
+    "startYourJourney": "Komencu vian vojaĝon per la MTE Systems Sistemo",
     "ownerName": "Nomo de posedanto",
     "ownerNamePlaceholder": "Enigu la nomon de la posedanto",
     "ownerNameRequired": "La nomo de posedanto estas postulata",
@@ -154,7 +154,7 @@
     "emailActionError": "Okazis eraro dum sendado de la ligilo",
     "changeLanguage": "Ŝanĝi lingvon",
     "registerTitle": "Registri novan instalaĵon",
-    "registerSubtitle": "Komencu vian vojaĝon per la Bomba Sistemo",
+    "registerSubtitle": "Komencu vian vojaĝon per la MTE Systems Sistemo",
     "nameRequired": "La nomo de posedanto estas postulata",
     "registrationSuccess": "La aktiviga ligilo estis sendita al via retpoŝto. Bonvolu aktivigi vian konton antaŭ ensaluti.",
     "registrationError": "Eraro okazis dum registrado.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontrolpanelo",
-    "welcome": "Bonvenon al Bomba System",
+    "welcome": "Bonvenon al MTE Systems System",
     "subtitle": "Saĝa administra platformo por kafejoj, restoracioj kaj distro",
     "loading": "Ŝarĝante datumojn...",
     "activeSessions": "Aktivaj kunsidoj",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "De {{komenco}} ĝis {{fino}}",
       "printDate": "Presa historio",
-      "footer": "Ĉi tiu raporto estis kreita de Bomba System - Ĉiuj rajtoj rezervitaj © {{ jaro}}"
+      "footer": "Ĉi tiu raporto estis kreita de MTE Systems System - Ĉiuj rajtoj rezervitaj © {{ jaro}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Enigu mallongan priskribon de la instalaĵo",
       "generatedWebsite": {
         "title": "Aŭtomate generita instalaĵo-rekordo",
-        "description": "Rekordo estas kreita en Bomba enhavanta ĉiujn instalaĵdatenojn",
+        "description": "Rekordo estas kreita en MTE Systems enhavanta ĉiujn instalaĵdatenojn",
         "viewButton": "Rigardu la historion de instalaĵo",
         "autoUpdate": "La historio estas ĝisdatigita aŭtomate kiam datumoj estas konservitaj"
       },

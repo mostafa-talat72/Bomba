@@ -9,6 +9,7 @@ import { aggregateItemsWithPayments } from '../utils/billAggregation';
 import { printBill } from '../utils/printBill';
 import { useApp } from '../context/AppContext';
 import { io } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
 import LanguageSwitcherBillView from '../components/LanguageSwitcherBillView';
 import { getDeviceTypeText, getSessionStatusText, getPaymentMethodText, formatDuration } from '../utils/billViewHelpers';
 
@@ -314,7 +315,7 @@ const BillView = () => {
 		}
 
 		// Initialize Socket.IO connection
-		const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+		const apiUrl = API_BASE_URL;
 		const socketUrl = apiUrl.replace(/\/api\/?$/, '');
 		
 		const socket = io(socketUrl, {

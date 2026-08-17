@@ -109,7 +109,7 @@ export const sendEmail = async (options) => {
         }
 
         const mailOptions = {
-            from: `"Bomba System" <${process.env.EMAIL_USER}>`,
+            from: `"MTE Systems" <${process.env.EMAIL_USER}>`,
             to: options.to,
             subject: options.subject,
             text: options.text,
@@ -854,7 +854,7 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                 }
 
                 const mailOptions = {
-                    from: `"Bomba System" <${process.env.EMAIL_USER}>`,
+                    from: `"MTE Systems" <${process.env.EMAIL_USER}>`,
                     to: email,
                     subject: emailTemplate.subject,
                     html: emailTemplate.html,

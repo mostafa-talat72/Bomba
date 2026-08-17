@@ -125,7 +125,7 @@
     "hidePassword": "Viga password",
     "welcomeBack": "Madzokoyi",
     "registerNewBusiness": "Nyoresa nzvimbo itsva",
-    "startYourJourney": "Tanga rwendo rwako neBomba System",
+    "startYourJourney": "Tanga rwendo rwako neMTE Systems System",
     "ownerName": "Zita remuridzi",
     "ownerNamePlaceholder": "Isa zita remuridzi",
     "ownerNameRequired": "Zita remuridzi rinodiwa",
@@ -154,7 +154,7 @@
     "emailActionError": "Paita chikanganiso pakutumira chinongedzo",
     "changeLanguage": "Chinja mutauro",
     "registerTitle": "Nyoresa nzvimbo itsva",
-    "registerSubtitle": "Tanga rwendo rwako neBomba System",
+    "registerSubtitle": "Tanga rwendo rwako neMTE Systems System",
     "nameRequired": "Zita remuridzi rinodiwa",
     "registrationSuccess": "Iyo activation link yatumirwa kune yako email. Ndokumbira uvhure account yako usati wapinda.",
     "registrationError": "Pane chikanganiso chakaitika panguva yekunyoresa.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Control panel",
-    "welcome": "Kugamuchirwa kuBomba System",
+    "welcome": "Kugamuchirwa kuMTE Systems System",
     "subtitle": "Iyo smart manejimendi chikuva chekofi, maresitorendi, uye varaidzo",
     "loading": "Tirikurodha data...",
     "activeSessions": "Active sessions",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Kubva {{kutanga}} kusvika {{end}}",
       "printDate": "Prinda nhoroondo",
-      "footer": "Chirevo ichi chakagadzirwa neBomba System - All rights reserved © {{year}}"
+      "footer": "Chirevo ichi chakagadzirwa neMTE Systems System - All rights reserved © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Pinda tsananguro pfupi yenzvimbo",
       "generatedWebsite": {
         "title": "Yakagadzirwa otomatiki nzvimbo rekodhi",
-        "description": "Rekodhi inogadzirwa muBomba ine ese data data",
+        "description": "Rekodhi inogadzirwa muMTE Systems ine ese data data",
         "viewButton": "Ona nhoroondo yenzvimbo",
         "autoUpdate": "Iyo nhoroondo inovandudzwa otomatiki kana data yachengetwa"
       },

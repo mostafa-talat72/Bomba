@@ -125,7 +125,7 @@
     "hidePassword": "Cuddio cyfrinair",
     "welcomeBack": "Croeso yn ôl",
     "registerNewBusiness": "Cofrestru cyfleuster newydd",
-    "startYourJourney": "Dechreuwch eich taith gyda'r System Bomba",
+    "startYourJourney": "Dechreuwch eich taith gyda'r System MTE Systems",
     "ownerName": "Enw'r perchennog",
     "ownerNamePlaceholder": "Rhowch enw'r perchennog",
     "ownerNameRequired": "Mae angen enw'r perchennog",
@@ -154,7 +154,7 @@
     "emailActionError": "Digwyddodd gwall wrth anfon y ddolen",
     "changeLanguage": "Newid iaith",
     "registerTitle": "Cofrestru cyfleuster newydd",
-    "registerSubtitle": "Dechreuwch eich taith gyda'r System Bomba",
+    "registerSubtitle": "Dechreuwch eich taith gyda'r System MTE Systems",
     "nameRequired": "Mae angen enw'r perchennog",
     "registrationSuccess": "Mae'r ddolen actifadu wedi'i hanfon i'ch e-bost. Gweithredwch eich cyfrif cyn mewngofnodi.",
     "registrationError": "Digwyddodd gwall wrth gofrestru.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel rheoli",
-    "welcome": "Croeso i System Bomba",
+    "welcome": "Croeso i System MTE Systems",
     "subtitle": "Llwyfan rheoli craff ar gyfer caffis, bwytai ac adloniant",
     "loading": "Wrthi'n llwytho data...",
     "activeSessions": "Sesiynau egnïol",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "O {{start}} i {{end}}",
       "printDate": "Hanes argraffu",
-      "footer": "Cynhyrchwyd yr adroddiad hwn gan Bomba System - Cedwir pob hawl © {{ year}}"
+      "footer": "Cynhyrchwyd yr adroddiad hwn gan MTE Systems System - Cedwir pob hawl © {{ year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Rhowch ddisgrifiad byr o'r cyfleuster",
       "generatedWebsite": {
         "title": "Cofnod cyfleuster a gynhyrchir yn awtomatig",
-        "description": "Crëir cofnod yn Bomba sy'n cynnwys yr holl ddata cyfleuster",
+        "description": "Crëir cofnod yn MTE Systems sy'n cynnwys yr holl ddata cyfleuster",
         "viewButton": "Gweld hanes cyfleuster",
         "autoUpdate": "Mae'r hanes yn cael ei ddiweddaru'n awtomatig pan fydd data'n cael ei gadw"
       },

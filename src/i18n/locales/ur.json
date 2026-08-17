@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}} سے {{end}} تک",
       "printDate": "تاریخ پرنٹ کریں۔",
-      "footer": "یہ رپورٹ Bomba System کے ذریعہ تیار کی گئی تھی - جملہ حقوق محفوظ ہیں © {{year}}"
+      "footer": "یہ رپورٹ MTE Systems System کے ذریعہ تیار کی گئی تھی - جملہ حقوق محفوظ ہیں © {{year}}"
     }
   },
   "settings": {

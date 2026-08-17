@@ -125,7 +125,7 @@
     "hidePassword": "Aħbi l-password",
     "welcomeBack": "Merħba lura",
     "registerNewBusiness": "Irreġistra faċilità ġdida",
-    "startYourJourney": "Ibda l-vjaġġ tiegħek bis-Sistema Bomba",
+    "startYourJourney": "Ibda l-vjaġġ tiegħek bis-Sistema MTE Systems",
     "ownerName": "Isem is-sid",
     "ownerNamePlaceholder": "Daħħal l-isem tas-sid",
     "ownerNameRequired": "Isem is-sid huwa meħtieġ",
@@ -154,7 +154,7 @@
     "emailActionError": "Sar żball waqt li ntbagħat il-link",
     "changeLanguage": "Ibdel il-lingwa",
     "registerTitle": "Irreġistra faċilità ġdida",
-    "registerSubtitle": "Ibda l-vjaġġ tiegħek bis-Sistema Bomba",
+    "registerSubtitle": "Ibda l-vjaġġ tiegħek bis-Sistema MTE Systems",
     "nameRequired": "Isem is-sid huwa meħtieġ",
     "registrationSuccess": "Il-link tal-attivazzjoni ntbagħtet lill-email tiegħek. Jekk jogħġbok attiva l-kont tiegħek qabel ma tidħol.",
     "registrationError": "Sar żball waqt ir-reġistrazzjoni.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel tal-kontroll",
-    "welcome": "Merħba għal Bomba System",
+    "welcome": "Merħba għal MTE Systems System",
     "subtitle": "Pjattaforma ta' ġestjoni intelliġenti għal kafetteriji, ristoranti u divertiment",
     "loading": "Tagħbija tad-dejta...",
     "activeSessions": "Sessjonijiet attivi",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Minn {{bidu}} sa {{tmiem}}",
       "printDate": "L-istorja tal-istampar",
-      "footer": "Dan ir-rapport ġie ġġenerat minn Bomba System - Id-drittijiet kollha riżervati © {{sena}}"
+      "footer": "Dan ir-rapport ġie ġġenerat minn MTE Systems System - Id-drittijiet kollha riżervati © {{sena}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Daħħal deskrizzjoni qasira tal-faċilità",
       "generatedWebsite": {
         "title": "Rekord tal-faċilità ġġenerat awtomatikament",
-        "description": "Jinħoloq rekord f'Bomba li fih id-dejta kollha tal-faċilità",
+        "description": "Jinħoloq rekord f'MTE Systems li fih id-dejta kollha tal-faċilità",
         "viewButton": "Ara l-istorja tal-faċilità",
         "autoUpdate": "L-istorja tiġi aġġornata awtomatikament meta tiġi salvata d-dejta"
       },

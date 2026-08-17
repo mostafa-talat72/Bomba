@@ -125,7 +125,7 @@
     "hidePassword": "Falaich am facal-faire",
     "welcomeBack": "Fàilte air ais",
     "registerNewBusiness": "Clàraich goireas ùr",
-    "startYourJourney": "Tòisich do thuras leis an t-siostam Bomba",
+    "startYourJourney": "Tòisich do thuras leis an t-siostam MTE Systems",
     "ownerName": "Ainm an neach-seilbh",
     "ownerNamePlaceholder": "Cuir a-steach ainm an neach-seilbh",
     "ownerNameRequired": "Tha feum air ainm an neach-seilbh",
@@ -154,7 +154,7 @@
     "emailActionError": "Thachair mearachd fhad 's a bha sinn a' cur a' cheangail",
     "changeLanguage": "Atharraich cànan",
     "registerTitle": "Clàraich goireas ùr",
-    "registerSubtitle": "Tòisich do thuras leis an t-siostam Bomba",
+    "registerSubtitle": "Tòisich do thuras leis an t-siostam MTE Systems",
     "nameRequired": "Tha feum air ainm an neach-seilbh",
     "registrationSuccess": "Chaidh an ceangal gnìomhachaidh a chuir chun phost-d agad. Feuch an cuir thu do chunntas an gnìomh mus log thu a-steach.",
     "registrationError": "Thachair mearachd rè clàradh.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Pannal smachd",
-    "welcome": "Fàilte gu Bomba System",
+    "welcome": "Fàilte gu MTE Systems System",
     "subtitle": "Àrd-ùrlar riaghlaidh snasail airson cafaidhean, taighean-bìdh is dibhearsain",
     "loading": "A’ luchdachadh dàta...",
     "activeSessions": "Seiseanan gnìomhach",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "O {{start}} gu {{end}}",
       "printDate": "Eachdraidh clò-bhualaidh",
-      "footer": "Chaidh an aithisg seo a chruthachadh le Bomba System - Gach còir glèidhte © {{year}}"
+      "footer": "Chaidh an aithisg seo a chruthachadh le MTE Systems System - Gach còir glèidhte © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Cuir a-steach tuairisgeul goirid air an goireas",
       "generatedWebsite": {
         "title": "Clàr goireas air a chruthachadh gu fèin-ghluasadach",
-        "description": "Tha clàr air a chruthachadh ann am Bomba anns a bheil a h-uile dàta goireas",
+        "description": "Tha clàr air a chruthachadh ann am MTE Systems anns a bheil a h-uile dàta goireas",
         "viewButton": "Thoir sùil air eachdraidh goireas",
         "autoUpdate": "Thèid an eachdraidh ùrachadh gu fèin-ghluasadach nuair a thèid dàta a shàbhaladh"
       },

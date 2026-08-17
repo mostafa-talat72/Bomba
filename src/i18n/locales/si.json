@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}} සිට {{end}} දක්වා",
       "printDate": "මුද්‍රණ ඉතිහාසය",
-      "footer": "මෙම වාර්තාව Bomba System විසින් ජනනය කරන ලදී - සියලුම හිමිකම් ඇවිරිණි © {{year}}"
+      "footer": "මෙම වාර්තාව MTE Systems System විසින් ජනනය කරන ලදී - සියලුම හිමිකම් ඇවිරිණි © {{year}}"
     }
   },
   "settings": {

@@ -125,7 +125,7 @@
     "hidePassword": "Ezkutatu pasahitza",
     "welcomeBack": "Ongi etorri berriro",
     "registerNewBusiness": "Erregistratu instalazio berri bat",
-    "startYourJourney": "Hasi zure bidaia Bomba sistemarekin",
+    "startYourJourney": "Hasi zure bidaia MTE Systems sistemarekin",
     "ownerName": "Jabearen izena",
     "ownerNamePlaceholder": "Sartu jabearen izena",
     "ownerNameRequired": "Beharrezkoa da jabearen izena",
@@ -154,7 +154,7 @@
     "emailActionError": "Errore bat gertatu da esteka bidaltzean",
     "changeLanguage": "Hizkuntza aldatu",
     "registerTitle": "Erregistratu instalazio berri bat",
-    "registerSubtitle": "Hasi zure bidaia Bomba sistemarekin",
+    "registerSubtitle": "Hasi zure bidaia MTE Systems sistemarekin",
     "nameRequired": "Beharrezkoa da jabearen izena",
     "registrationSuccess": "Aktibatzeko esteka zure posta elektronikora bidali da. Mesedez, aktibatu zure kontua saioa hasi aurretik.",
     "registrationError": "Errore bat gertatu da erregistratzean.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontrol panela",
-    "welcome": "Ongi etorri Bomba System-era",
+    "welcome": "Ongi etorri MTE Systems System-era",
     "subtitle": "Kafetegi, jatetxe eta aisialdirako kudeaketa-plataforma adimenduna",
     "loading": "Datuak kargatzen...",
     "activeSessions": "Saio aktiboak",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{hasiera}}tik {{amaiera}} arte",
       "printDate": "Inprimatu historia",
-      "footer": "Txosten hau Bomba System-ek sortu du - Eskubide guztiak erreserbatuta © {{year}}"
+      "footer": "Txosten hau MTE Systems System-ek sortu du - Eskubide guztiak erreserbatuta © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Sartu instalazioaren deskribapen laburra",
       "generatedWebsite": {
         "title": "Automatikoki sortutako instalazioen erregistroa",
-        "description": "Erregistro bat sortzen da Bomban, instalazioen datu guztiak dituena",
+        "description": "Erregistro bat sortzen da MTE Systemsn, instalazioen datu guztiak dituena",
         "viewButton": "Ikusi instalazioen historia",
         "autoUpdate": "Historia automatikoki eguneratzen da datuak gordetzen direnean"
       },

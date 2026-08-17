@@ -125,7 +125,7 @@
     "hidePassword": "Şîfreyê veşêre",
     "welcomeBack": "Duabre bixêr bên",
     "registerNewBusiness": "Navendek nû tomar bikin",
-    "startYourJourney": "Rêwîtiya xwe bi pergala Bomba dest pê bikin",
+    "startYourJourney": "Rêwîtiya xwe bi pergala MTE Systems dest pê bikin",
     "ownerName": "Navê xwedan",
     "ownerNamePlaceholder": "Navê xwediyê xwe binivîse",
     "ownerNameRequired": "Navê xwedan pêdivî ye",
@@ -154,7 +154,7 @@
     "emailActionError": "Di dema şandina lînkê de xeletiyek derket",
     "changeLanguage": "Ziman biguherînin",
     "registerTitle": "Navendek nû tomar bikin",
-    "registerSubtitle": "Rêwîtiya xwe bi pergala Bomba dest pê bikin",
+    "registerSubtitle": "Rêwîtiya xwe bi pergala MTE Systems dest pê bikin",
     "nameRequired": "Navê xwedan pêdivî ye",
     "registrationSuccess": "Girêdana çalakkirinê ji e-nameya we re hat şandin. Ji kerema xwe berî têketinê hesabê xwe çalak bikin.",
     "registrationError": "Di dema qeydkirinê de xeletiyek derket.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panela kontrolê",
-    "welcome": "Hûn bi xêr hatin Sîstema Bomba",
+    "welcome": "Hûn bi xêr hatin Sîstema MTE Systems",
     "subtitle": "Ji bo qehwexane, xwaringeh û şahiyê platformek rêveberiya hişmend",
     "loading": "Daneyên barkirin...",
     "activeSessions": "danişînên çalak",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Ji {{destpêk}} heta {{dawî}}",
       "printDate": "Dîroka çapkirinê",
-      "footer": "Ev rapor ji hêla Bomba System ve hatî çêkirin - Hemû maf parastî ne © {{sal}}"
+      "footer": "Ev rapor ji hêla MTE Systems System ve hatî çêkirin - Hemû maf parastî ne © {{sal}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Danasînek kurt a sazgehê binivîse",
       "generatedWebsite": {
         "title": "Tomara saziyê ku bixweber hatî çêkirin",
-        "description": "Di Bomba de tomarek ku hemî daneyên sazgehê vedihewîne tê afirandin",
+        "description": "Di MTE Systems de tomarek ku hemî daneyên sazgehê vedihewîne tê afirandin",
         "viewButton": "Dîroka sazgehê bibînin",
         "autoUpdate": "Dema ku dane têne tomar kirin dîrok bixweber tê nûve kirin"
       },

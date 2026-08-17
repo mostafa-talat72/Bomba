@@ -125,7 +125,7 @@
     "hidePassword": "Paroly gizläň",
     "welcomeBack": "Gaýtadan hoş geldiňiz",
     "registerNewBusiness": "Täze desgany hasaba alyň",
-    "startYourJourney": "Bomba ulgamy bilen syýahatyňyzy başlaň",
+    "startYourJourney": "MTE Systems ulgamy bilen syýahatyňyzy başlaň",
     "ownerName": "Eýesiniň ady",
     "ownerNamePlaceholder": "Eýesiniň adyny giriziň",
     "ownerNameRequired": "Eýesiniň ady talap edilýär",
@@ -154,7 +154,7 @@
     "emailActionError": "Salgy iberilende säwlik ýüze çykdy",
     "changeLanguage": "Dil üýtgetmek",
     "registerTitle": "Täze desgany hasaba alyň",
-    "registerSubtitle": "Bomba ulgamy bilen syýahatyňyzy başlaň",
+    "registerSubtitle": "MTE Systems ulgamy bilen syýahatyňyzy başlaň",
     "nameRequired": "Eýesiniň ady talap edilýär",
     "registrationSuccess": "Işjeňleşdirme baglanyşygy e-poçtaňyza iberildi. Hasabyňyza girmezden ozal işjeňleşdiriň.",
     "registrationError": "Hasaba alyş wagtynda ýalňyşlyk ýüze çykdy.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Dolandyryş paneli",
-    "welcome": "Bomba ulgamyna hoş geldiňiz",
+    "welcome": "MTE Systems ulgamyna hoş geldiňiz",
     "subtitle": "Kafe, restoran we güýmenje üçin akylly dolandyryş platformasy",
     "loading": "Maglumat ýüklenýär ...",
     "activeSessions": "Işjeň sessiýalar",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{Başlangyç}} dan {{end}} çenli",
       "printDate": "Taryhy çap et",
-      "footer": "Bu hasabat Bomba ulgamy tarapyndan döredildi - rightshli hukuklar goralandyr © {{ýyl}}"
+      "footer": "Bu hasabat MTE Systems ulgamy tarapyndan döredildi - rightshli hukuklar goralandyr © {{ýyl}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Desganyň gysgaça beýanyny giriziň",
       "generatedWebsite": {
         "title": "Awtomatiki usulda döredilen desga ýazgysy",
-        "description": "Bomba şäherinde ähli desga maglumatlary öz içine alýan ýazgy döredilýär",
+        "description": "MTE Systems şäherinde ähli desga maglumatlary öz içine alýan ýazgy döredilýär",
         "viewButton": "Desganyň taryhyny görüň",
         "autoUpdate": "Maglumatlar ýatda saklananda taryh awtomatiki täzelenýär"
       },

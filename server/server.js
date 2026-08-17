@@ -498,7 +498,8 @@ const corsOptions = {
             "http://localhost:5173",
             "https://bomba-iota.vercel.app",
             /^\.*\.vercel\.app$/, // يسمح بجميع النطاقات الفرعية من vercel.app
-        ];
+            process.env.FRONTEND_URL, // desktop mode (127.0.0.1)
+        ].filter(Boolean);
 
         // السماح بطلبات بدون origin (مثل الطلبات من تطبيقات الجوال)
         if (!origin) return callback(null, true);
@@ -544,14 +545,20 @@ app.use(compression({
 }));
 
 // Security middleware
+const desktopMode = !!process.env.DESKTOP_DIST_PATH;
 app.use(
     helmet({
         crossOriginEmbedderPolicy: false,
         contentSecurityPolicy: {
             directives: {
                 defaultSrc: ["'self'"],
-                styleSrc: ["'self'", "'unsafe-inline'"],
-                scriptSrc: ["'self'"],
+                styleSrc: [
+                    "'self'",
+                    "'unsafe-inline'",
+                    ...(desktopMode ? ["https://fonts.googleapis.com", "https://fonts.gstatic.com"] : []),
+                ],
+                // Desktop serves a local SPA with an inline bootstrap script
+                scriptSrc: ["'self'", ...(desktopMode ? ["'unsafe-inline'"] : [])],
                 imgSrc: ["'self'", "data:", "https:"],
             },
         },
@@ -602,6 +609,10 @@ app.use((req, res, next) => {
 
 // Root route
 app.get("/", (req, res) => {
+    if (process.env.DESKTOP_DIST_PATH) {
+        // Desktop mode: redirect to the SPA (served by the static block below)
+        return res.redirect("/login");
+    }
     res.status(200).json({
         message: "Bomba API is running",
         status: "success",
@@ -633,6 +644,38 @@ app.use("/api/organization", organizationRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/warehouse", warehouseRoutes);
 app.use("/public", publicRoutes);
+
+// Desktop app static serving (enabled only when DESKTOP_DIST_PATH is set)
+if (process.env.DESKTOP_DIST_PATH) {
+    const pathModule = await import("path");
+    const fsModule = await import("fs");
+    const distDir = pathModule.resolve(process.env.DESKTOP_DIST_PATH);
+
+    if (fsModule.existsSync(distDir)) {
+        app.use(express.static(distDir));
+
+        // SPA fallback - exclude API and socket paths
+        app.get("*", (req, res, next) => {
+            if (
+                req.path.startsWith("/api") ||
+                req.path.startsWith("/socket.io") ||
+                req.path.startsWith("/uploads") ||
+                req.path.startsWith("/temp") ||
+                req.path.startsWith("/public") ||
+                req.path.startsWith("/health")
+            ) {
+                return next();
+            }
+            res.sendFile(pathModule.join(distDir, "index.html"));
+        });
+
+        Logger.info(`🖥️ Desktop mode: serving frontend from ${distDir}`);
+    } else {
+        Logger.warn(
+            `⚠️ Desktop mode enabled but dist path not found: ${distDir}`
+        );
+    }
+}
 
 // REMOVED: Public bill viewing route for security reasons
 // Bills should only be accessible through authenticated routes

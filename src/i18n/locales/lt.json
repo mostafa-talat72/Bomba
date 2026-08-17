@@ -125,7 +125,7 @@
     "hidePassword": "Slėpti slaptažodį",
     "welcomeBack": "Sveiki sugrįžę",
     "registerNewBusiness": "Užregistruokite naują objektą",
-    "startYourJourney": "Pradėkite savo kelionę su Bomba System",
+    "startYourJourney": "Pradėkite savo kelionę su MTE Systems System",
     "ownerName": "Savininko vardas",
     "ownerNamePlaceholder": "Įveskite savininko vardą",
     "ownerNameRequired": "Būtina nurodyti savininko vardą",
@@ -154,7 +154,7 @@
     "emailActionError": "Siunčiant nuorodą įvyko klaida",
     "changeLanguage": "Keisti kalbą",
     "registerTitle": "Užregistruokite naują objektą",
-    "registerSubtitle": "Pradėkite savo kelionę su Bomba System",
+    "registerSubtitle": "Pradėkite savo kelionę su MTE Systems System",
     "nameRequired": "Būtina nurodyti savininko vardą",
     "registrationSuccess": "Aktyvinimo nuoroda išsiųsta jūsų el. Prieš prisijungdami suaktyvinkite savo paskyrą.",
     "registrationError": "Registruojantis įvyko klaida.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Valdymo skydelis",
-    "welcome": "Sveiki atvykę į Bomba System",
+    "welcome": "Sveiki atvykę į MTE Systems System",
     "subtitle": "Išmani kavinių, restoranų ir pramogų valdymo platforma",
     "loading": "Įkeliami duomenys...",
     "activeSessions": "Aktyvūs užsiėmimai",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Nuo {{start}} iki {{end}}",
       "printDate": "Spausdinimo istorija",
-      "footer": "Šią ataskaitą sukūrė Bomba System – Visos teisės saugomos © {{year}}"
+      "footer": "Šią ataskaitą sukūrė MTE Systems System – Visos teisės saugomos © {{year}}"
     }
   },
   "settings": {

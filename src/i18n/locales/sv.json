@@ -125,7 +125,7 @@
     "hidePassword": "Dölj lösenord",
     "welcomeBack": "Välkommen tillbaka",
     "registerNewBusiness": "Registrera en ny anläggning",
-    "startYourJourney": "Börja din resa med Bomba-systemet",
+    "startYourJourney": "Börja din resa med MTE Systems-systemet",
     "ownerName": "Ägarens namn",
     "ownerNamePlaceholder": "Ange ägarens namn",
     "ownerNameRequired": "Ägarens namn krävs",
@@ -154,7 +154,7 @@
     "emailActionError": "Ett fel uppstod när länken skickades",
     "changeLanguage": "Byt språk",
     "registerTitle": "Registrera en ny anläggning",
-    "registerSubtitle": "Börja din resa med Bomba-systemet",
+    "registerSubtitle": "Börja din resa med MTE Systems-systemet",
     "nameRequired": "Ägarens namn krävs",
     "registrationSuccess": "Aktiveringslänken har skickats till din e-post. Vänligen aktivera ditt konto innan du loggar in.",
     "registrationError": "Ett fel uppstod under registreringen.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontrollpanel",
-    "welcome": "Välkommen till Bomba System",
+    "welcome": "Välkommen till MTE Systems System",
     "subtitle": "En smart hanteringsplattform för kaféer, restauranger och underhållning",
     "loading": "Laddar data...",
     "activeSessions": "Aktiva sessioner",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Från {{start}} till {{end}}",
       "printDate": "Utskriftshistorik",
-      "footer": "Den här rapporten har skapats av Bomba System - Alla rättigheter reserverade © {{year}}"
+      "footer": "Den här rapporten har skapats av MTE Systems System - Alla rättigheter reserverade © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Ange en kort beskrivning av anläggningen",
       "generatedWebsite": {
         "title": "Automatiskt genererad anläggningspost",
-        "description": "En post skapas i Bomba som innehåller all anläggningsdata",
+        "description": "En post skapas i MTE Systems som innehåller all anläggningsdata",
         "viewButton": "Se anläggningens historia",
         "autoUpdate": "Historiken uppdateras automatiskt när data sparas"
       },

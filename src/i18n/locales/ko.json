@@ -125,7 +125,7 @@
     "hidePassword": "비밀번호 숨기기",
     "welcomeBack": "돌아온 것을 환영합니다",
     "registerNewBusiness": "신규 시설 등록",
-    "startYourJourney": "Bomba 시스템으로 여행을 시작하세요",
+    "startYourJourney": "MTE Systems 시스템으로 여행을 시작하세요",
     "ownerName": "소유자 이름",
     "ownerNamePlaceholder": "소유자의 이름을 입력하세요.",
     "ownerNameRequired": "소유자 이름이 필요합니다.",
@@ -154,7 +154,7 @@
     "emailActionError": "링크를 보내는 중에 오류가 발생했습니다.",
     "changeLanguage": "언어 변경",
     "registerTitle": "신규 시설 등록",
-    "registerSubtitle": "Bomba 시스템으로 여행을 시작하세요",
+    "registerSubtitle": "MTE Systems 시스템으로 여행을 시작하세요",
     "nameRequired": "소유자 이름이 필요합니다.",
     "registrationSuccess": "활성화 링크가 귀하의 이메일로 전송되었습니다. 로그인하기 전에 계정을 활성화하십시오.",
     "registrationError": "등록 중 오류가 발생했습니다.",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}}부터 {{end}}까지",
       "printDate": "인쇄 기록",
-      "footer": "이 보고서는 Bomba System에 의해 생성되었습니다. - 판권 소유 © {{year}}"
+      "footer": "이 보고서는 MTE Systems System에 의해 생성되었습니다. - 판권 소유 © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "시설에 대한 간략한 설명을 입력하세요.",
       "generatedWebsite": {
         "title": "자동 생성된 시설 기록",
-        "description": "모든 시설 데이터를 포함하는 기록이 Bomba에 생성됩니다.",
+        "description": "모든 시설 데이터를 포함하는 기록이 MTE Systems에 생성됩니다.",
         "viewButton": "시설이력 보기",
         "autoUpdate": "데이터가 저장되면 기록이 자동으로 업데이트됩니다."
       },

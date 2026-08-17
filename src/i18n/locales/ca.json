@@ -125,7 +125,7 @@
     "hidePassword": "Amaga la contrasenya",
     "welcomeBack": "Benvingut de nou",
     "registerNewBusiness": "Registre una nova instal·lació",
-    "startYourJourney": "Comença el teu viatge amb el sistema Bomba",
+    "startYourJourney": "Comença el teu viatge amb el sistema MTE Systems",
     "ownerName": "Nom del propietari",
     "ownerNamePlaceholder": "Introduïu el nom del propietari",
     "ownerNameRequired": "El nom del propietari és obligatori",
@@ -154,7 +154,7 @@
     "emailActionError": "S'ha produït un error en enviar l'enllaç",
     "changeLanguage": "Canvia l'idioma",
     "registerTitle": "Registre una nova instal·lació",
-    "registerSubtitle": "Comença el teu viatge amb el sistema Bomba",
+    "registerSubtitle": "Comença el teu viatge amb el sistema MTE Systems",
     "nameRequired": "El nom del propietari és obligatori",
     "registrationSuccess": "L'enllaç d'activació s'ha enviat al vostre correu electrònic. Si us plau, activeu el vostre compte abans d'iniciar sessió.",
     "registrationError": "S'ha produït un error durant el registre.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panell de control",
-    "welcome": "Benvingut a Bomba System",
+    "welcome": "Benvingut a MTE Systems System",
     "subtitle": "Una plataforma de gestió intel·ligent per a cafeteries, restaurants i entreteniment",
     "loading": "S'estan carregant dades...",
     "activeSessions": "Sessions actives",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "De {{inici}} a {{final}}",
       "printDate": "Historial d'impressió",
-      "footer": "Aquest informe ha estat generat per Bomba System - Tots els drets reservats © {{year}}"
+      "footer": "Aquest informe ha estat generat per MTE Systems System - Tots els drets reservats © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Introduïu una breu descripció de la instal·lació",
       "generatedWebsite": {
         "title": "Registre d'instal·lacions generat automàticament",
-        "description": "Es crea un registre a Bomba que conté totes les dades de la instal·lació",
+        "description": "Es crea un registre a MTE Systems que conté totes les dades de la instal·lació",
         "viewButton": "Veure l'historial de les instal·lacions",
         "autoUpdate": "L'historial s'actualitza automàticament quan es guarden les dades"
       },

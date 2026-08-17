@@ -125,7 +125,7 @@
     "hidePassword": "Oculta a password",
     "welcomeBack": "Benvenuta di ritornu",
     "registerNewBusiness": "Registrate una nova facilità",
-    "startYourJourney": "Cuminciate u vostru viaghju cù u Sistema Bomba",
+    "startYourJourney": "Cuminciate u vostru viaghju cù u Sistema MTE Systems",
     "ownerName": "U nome di u pruprietariu",
     "ownerNamePlaceholder": "Inserite u nome di u pruprietariu",
     "ownerNameRequired": "U nome di u pruprietariu hè necessariu",
@@ -154,7 +154,7 @@
     "emailActionError": "Un errore hè accadutu durante u mandatu di u ligame",
     "changeLanguage": "Cambia lingua",
     "registerTitle": "Registrate una nova facilità",
-    "registerSubtitle": "Cuminciate u vostru viaghju cù u Sistema Bomba",
+    "registerSubtitle": "Cuminciate u vostru viaghju cù u Sistema MTE Systems",
     "nameRequired": "U nome di u pruprietariu hè necessariu",
     "registrationSuccess": "U ligame di attivazione hè statu mandatu à u vostru email. Per piacè attivà u vostru contu prima di login.",
     "registrationError": "Un errore hè accadutu durante a registrazione.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel di cuntrollu",
-    "welcome": "Benvenuti à Bomba System",
+    "welcome": "Benvenuti à MTE Systems System",
     "subtitle": "Una piattaforma di gestione intelligente per caffè, ristoranti è divertimentu",
     "loading": "Caricamentu di dati...",
     "activeSessions": "Sessioni attive",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Da {{startu}} à {{fine}}",
       "printDate": "A storia di stampa",
-      "footer": "Stu rapportu hè statu generatu da Bomba System - Tutti i diritti riservati © {{year}}"
+      "footer": "Stu rapportu hè statu generatu da MTE Systems System - Tutti i diritti riservati © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Inserite una breve descrizzione di a facilità",
       "generatedWebsite": {
         "title": "Ricordu di facilità generatu automaticamente",
-        "description": "Un registru hè creatu in Bomba chì cuntene tutti i dati di facilità",
+        "description": "Un registru hè creatu in MTE Systems chì cuntene tutti i dati di facilità",
         "viewButton": "Vede a storia di a facilità",
         "autoUpdate": "A storia hè aghjurnata automaticamente quandu i dati sò salvati"
       },

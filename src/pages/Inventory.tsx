@@ -8,6 +8,7 @@ import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDecimal, formatQuantity } from '../utils/formatters';
 import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useOrganization } from '../context/OrganizationContext';
@@ -282,7 +283,7 @@ const Inventory = () => {
     }
 
     // Initialize Socket.IO connection
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
     
     const socket = io(socketUrl, {

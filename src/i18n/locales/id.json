@@ -125,7 +125,7 @@
     "hidePassword": "Sembunyikan kata sandi",
     "welcomeBack": "Selamat Datang kembali",
     "registerNewBusiness": "Daftarkan fasilitas baru",
-    "startYourJourney": "Mulailah perjalanan Anda dengan sistem Bomba",
+    "startYourJourney": "Mulailah perjalanan Anda dengan sistem MTE Systems",
     "ownerName": "Nama pemilik",
     "ownerNamePlaceholder": "Masukkan nama pemiliknya",
     "ownerNameRequired": "Nama pemilik wajib diisi",
@@ -154,7 +154,7 @@
     "emailActionError": "Terjadi kesalahan saat mengirim tautan",
     "changeLanguage": "Ubah bahasa",
     "registerTitle": "Daftarkan fasilitas baru",
-    "registerSubtitle": "Mulailah perjalanan Anda dengan sistem Bomba",
+    "registerSubtitle": "Mulailah perjalanan Anda dengan sistem MTE Systems",
     "nameRequired": "Nama pemilik wajib diisi",
     "registrationSuccess": "Tautan aktivasi telah dikirim ke email Anda. Silakan aktifkan akun Anda sebelum login.",
     "registrationError": "Terjadi kesalahan saat pendaftaran.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel kontrol",
-    "welcome": "Selamat datang di Sistem Bomba",
+    "welcome": "Selamat datang di Sistem MTE Systems",
     "subtitle": "Platform manajemen cerdas untuk kafe, restoran, dan hiburan",
     "loading": "Memuat data...",
     "activeSessions": "Sesi aktif",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Dari {{start}} hingga {{end}}",
       "printDate": "Cetak sejarah",
-      "footer": "Laporan ini dibuat oleh Bomba System - Hak cipta dilindungi undang-undang © {{tahun}}"
+      "footer": "Laporan ini dibuat oleh MTE Systems System - Hak cipta dilindungi undang-undang © {{tahun}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Masukkan deskripsi singkat tentang fasilitas tersebut",
       "generatedWebsite": {
         "title": "Catatan fasilitas yang dihasilkan secara otomatis",
-        "description": "Sebuah catatan dibuat di Bomba yang berisi semua data fasilitas",
+        "description": "Sebuah catatan dibuat di MTE Systems yang berisi semua data fasilitas",
         "viewButton": "Lihat riwayat fasilitas",
         "autoUpdate": "Riwayat diperbarui secara otomatis ketika data disimpan"
       },

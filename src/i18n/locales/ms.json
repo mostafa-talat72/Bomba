@@ -125,7 +125,7 @@
     "hidePassword": "Sembunyikan kata laluan",
     "welcomeBack": "Selamat kembali",
     "registerNewBusiness": "Daftar kemudahan baru",
-    "startYourJourney": "Mulakan perjalanan anda dengan sistem Bomba",
+    "startYourJourney": "Mulakan perjalanan anda dengan sistem MTE Systems",
     "ownerName": "Nama pemilik",
     "ownerNamePlaceholder": "Masukkan nama pemilik",
     "ownerNameRequired": "Nama pemilik diperlukan",
@@ -154,7 +154,7 @@
     "emailActionError": "Ralat berlaku semasa menghantar pautan",
     "changeLanguage": "Tukar bahasa",
     "registerTitle": "Daftar kemudahan baru",
-    "registerSubtitle": "Mulakan perjalanan anda dengan sistem Bomba",
+    "registerSubtitle": "Mulakan perjalanan anda dengan sistem MTE Systems",
     "nameRequired": "Nama pemilik diperlukan",
     "registrationSuccess": "Pautan pengaktifan telah dihantar ke e-mel anda. Sila aktifkan akaun anda sebelum log masuk.",
     "registrationError": "Ralat berlaku semasa pendaftaran.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Panel kawalan",
-    "welcome": "Selamat datang ke Sistem Bomba",
+    "welcome": "Selamat datang ke Sistem MTE Systems",
     "subtitle": "Platform pengurusan pintar untuk kafe, restoran dan hiburan",
     "loading": "Memuatkan data...",
     "activeSessions": "Sesi aktif",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "Dari {{start}} hingga {{end}}",
       "printDate": "Cetak sejarah",
-      "footer": "Laporan ini dijana oleh Sistem Bomba - Hak cipta terpelihara © {{year}}"
+      "footer": "Laporan ini dijana oleh Sistem MTE Systems - Hak cipta terpelihara © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Masukkan penerangan ringkas tentang kemudahan tersebut",
       "generatedWebsite": {
         "title": "Rekod kemudahan yang dijana secara automatik",
-        "description": "Rekod dibuat dalam Bomba yang mengandungi semua data kemudahan",
+        "description": "Rekod dibuat dalam MTE Systems yang mengandungi semua data kemudahan",
         "viewButton": "Lihat sejarah kemudahan",
         "autoUpdate": "Sejarah dikemas kini secara automatik apabila data disimpan"
       },

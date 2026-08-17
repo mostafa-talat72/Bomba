@@ -125,7 +125,7 @@
     "hidePassword": "Slēpt paroli",
     "welcomeBack": "Laipni lūdzam atpakaļ",
     "registerNewBusiness": "Reģistrējiet jaunu objektu",
-    "startYourJourney": "Sāciet savu ceļojumu ar Bomba sistēmu",
+    "startYourJourney": "Sāciet savu ceļojumu ar MTE Systems sistēmu",
     "ownerName": "Īpašnieka vārds",
     "ownerNamePlaceholder": "Ievadiet īpašnieka vārdu",
     "ownerNameRequired": "Jānorāda īpašnieka vārds",
@@ -154,7 +154,7 @@
     "emailActionError": "Sūtot saiti, radās kļūda",
     "changeLanguage": "Mainīt valodu",
     "registerTitle": "Reģistrējiet jaunu objektu",
-    "registerSubtitle": "Sāciet savu ceļojumu ar Bomba sistēmu",
+    "registerSubtitle": "Sāciet savu ceļojumu ar MTE Systems sistēmu",
     "nameRequired": "Jānorāda īpašnieka vārds",
     "registrationSuccess": "Aktivizācijas saite ir nosūtīta uz jūsu e-pastu. Lūdzu, aktivizējiet savu kontu pirms pieteikšanās.",
     "registrationError": "Reģistrācijas laikā radās kļūda.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Vadības panelis",
-    "welcome": "Laipni lūdzam Bomba sistēmā",
+    "welcome": "Laipni lūdzam MTE Systems sistēmā",
     "subtitle": "Gudra pārvaldības platforma kafejnīcām, restorāniem un izklaidei",
     "loading": "Notiek datu ielāde...",
     "activeSessions": "Aktīvās sesijas",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "No {{sākt}} līdz {{end}}",
       "printDate": "Drukas vēsture",
-      "footer": "Šo ziņojumu izveidoja Bomba System — visas tiesības aizsargātas © {{year}}"
+      "footer": "Šo ziņojumu izveidoja MTE Systems System — visas tiesības aizsargātas © {{year}}"
     }
   },
   "settings": {

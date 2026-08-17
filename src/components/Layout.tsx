@@ -31,6 +31,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { API_BASE_URL } from '../utils/apiBase';
 import { useOrganization } from '../context/OrganizationContext';
 import NotificationCenter from './NotificationCenter';
 import PermissionGuard from './PermissionGuard';
@@ -85,7 +86,7 @@ const Layout = () => {
   useEffect(() => {
     const fetchSubscription = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/billing/subscription/status`, {
+        const response = await fetch(`${API_BASE_URL}/api/billing/subscription/status`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`
           }
@@ -229,7 +230,7 @@ const Layout = () => {
         <div className="flex items-center justify-between h-16 px-4 sm:px-6 bg-orange-600 dark:bg-orange-700 text-white flex-shrink-0">
           <div className="flex items-center min-w-0">
             <ShoppingCart className={`h-6 w-6 sm:h-8 sm:w-8 ${isRTL ? 'mr-2 sm:mr-3' : 'ml-2 sm:ml-3'} flex-shrink-0`} />
-            <h1 className="text-lg sm:text-xl font-bold truncate">Bomba</h1>
+            <h1 className="text-lg sm:text-xl font-bold truncate">MTE Systems</h1>
           </div>
           <button
             onClick={() => setSidebarOpen(false)}

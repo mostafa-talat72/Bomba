@@ -125,7 +125,7 @@
     "hidePassword": "Şifreyi gizle",
     "welcomeBack": "tekrar hoşgeldiniz",
     "registerNewBusiness": "Yeni bir tesis kaydedin",
-    "startYourJourney": "Yolculuğunuza Bomba sistemiyle başlayın",
+    "startYourJourney": "Yolculuğunuza MTE Systems sistemiyle başlayın",
     "ownerName": "Sahibinin adı",
     "ownerNamePlaceholder": "Sahibin adını girin",
     "ownerNameRequired": "Sahibinin adı gerekli",
@@ -154,7 +154,7 @@
     "emailActionError": "Bağlantı gönderilirken bir hata oluştu",
     "changeLanguage": "Dili değiştir",
     "registerTitle": "Yeni bir tesis kaydedin",
-    "registerSubtitle": "Yolculuğunuza Bomba sistemiyle başlayın",
+    "registerSubtitle": "Yolculuğunuza MTE Systems sistemiyle başlayın",
     "nameRequired": "Sahibinin adı gerekli",
     "registrationSuccess": "Aktivasyon linki e-posta adresinize gönderildi. Lütfen giriş yapmadan önce hesabınızı etkinleştirin.",
     "registrationError": "Kayıt sırasında bir hata oluştu.",
@@ -249,7 +249,7 @@
   },
   "dashboard": {
     "title": "Kontrol Paneli",
-    "welcome": "Bomba Sistemine Hoş Geldiniz",
+    "welcome": "MTE Systems Sistemine Hoş Geldiniz",
     "subtitle": "Kafeler, restoranlar ve eğlence için akıllı bir yönetim platformu",
     "loading": "Veri yükleniyor...",
     "activeSessions": "Aktif oturumlar",
@@ -1349,7 +1349,7 @@
       },
       "dateRange": "{{start}}'tan {{end}}'a",
       "printDate": "Yazdırma geçmişi",
-      "footer": "Bu rapor Bomba System tarafından oluşturulmuştur - Tüm hakları saklıdır © {{year}}"
+      "footer": "Bu rapor MTE Systems System tarafından oluşturulmuştur - Tüm hakları saklıdır © {{year}}"
     }
   },
   "settings": {
@@ -1519,7 +1519,7 @@
       "descriptionPlaceholder": "Tesisin kısa bir açıklamasını girin",
       "generatedWebsite": {
         "title": "Otomatik olarak oluşturulan tesis kaydı",
-        "description": "Bomba'da tüm tesis verilerini içeren bir kayıt oluşturulur",
+        "description": "MTE Systems'da tüm tesis verilerini içeren bir kayıt oluşturulur",
         "viewButton": "Tesis geçmişini görüntüle",
         "autoUpdate": "Veriler kaydedildiğinde geçmiş otomatik olarak güncellenir"
       },
