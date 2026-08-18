@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory, TableSection, Table, Order } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import { printOrder } from '../utils/printOrder';
+import { printOrder, buildOrderPrintHTML } from '../utils/printOrder';
 import { canAddOrder, canEditOrder, canDeleteOrder } from '../utils/permissionHelper';
 import PermissionDenied from '../components/PermissionDenied';
 import api from '../services/api';
@@ -969,7 +969,10 @@ const Cafe: React.FC = () => {
             };
             
             const establishmentName = user?.organizationName || (order.organization as any)?.name || t('orderPrint.defaultEstablishment');
-            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
+            if ((window as any).bombaDesktop?.isDesktop) {
+                        const html = await buildOrderPrintHTML(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
+                        (window as any).bombaDesktop.openPrintPreview(html, i18n.language);
+                    } else { await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t); }
           }, 0);
         }
         
@@ -1225,7 +1228,10 @@ const Cafe: React.FC = () => {
             };
             
             const establishmentName = user?.organizationName || (updatedOrder.organization as any)?.name || t('orderPrint.defaultEstablishment');
-            await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
+            if ((window as any).bombaDesktop?.isDesktop) {
+                        const html = await buildOrderPrintHTML(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
+                        (window as any).bombaDesktop.openPrintPreview(html, i18n.language);
+                    } else { await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t); }
           }, 0);
         }
         
@@ -1294,7 +1300,10 @@ const Cafe: React.FC = () => {
     // Get establishment name from user (already populated from backend)
     const establishmentName = user?.organizationName || (order.organization as any)?.name || t('orderPrint.defaultEstablishment');
     
-    await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
+    if ((window as any).bombaDesktop?.isDesktop) {
+                        const html = await buildOrderPrintHTML(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t);
+                        (window as any).bombaDesktop.openPrintPreview(html, i18n.language);
+                    } else { await printOrder(printableOrder, menuSections, menuItemsMap, establishmentName, i18n.language, t); }
   };
 
   // Show confirm modal

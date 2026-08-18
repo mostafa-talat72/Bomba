@@ -7,7 +7,7 @@ import { formatTime } from '../utils/dateHelpers';
 import { canPartialPayment, canPayFullBill, canDeleteBill, canEditSessionTime, canEditPartialPayment } from '../utils/permissionHelper';
 import PermissionDenied from '../components/PermissionDenied';
 import ConfirmModal from '../components/ConfirmModal';
-import { printBill } from '../utils/printBill';
+import { printBill, buildBillPrintHTML } from '../utils/printBill';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
@@ -2755,7 +2755,12 @@ const Billing = () => {
                             // جلب بيانات الفاتورة الكاملة قبل الطباعة
                             const response = await api.getBill(bill.id || bill._id);
                             if (response.success && response.data) {
-                              await printBill(response.data, user?.organizationName, i18n.language, t);
+                              if ((window as any).bombaDesktop?.isDesktop) {
+                const html = await buildBillPrintHTML(response.data, user?.organizationName, i18n.language, t);
+                (window as any).bombaDesktop.openPrintPreview(html, i18n.language);
+              } else {
+                await printBill(response.data, user?.organizationName, i18n.language, t);
+              }
                             } else {
                               showNotification(t('billing.notifications.fetchBillForPrintError'), 'error');
                             }
@@ -3423,7 +3428,16 @@ const Billing = () => {
                             {t('billing.downloadQR')}
                           </button>
                           <button
-                            onClick={() => selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error)}
+                            onClick={async () => {
+              if ((window as any).bombaDesktop?.isDesktop) {
+                if (selectedBill) {
+                  const html = await buildBillPrintHTML(selectedBill, user?.organizationName, i18n.language, t);
+                  (window as any).bombaDesktop.openPrintPreview(html, i18n.language);
+                }
+              } else {
+                selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error);
+              }
+            }}
                             className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors duration-200 flex items-center"
                           >
                             <Printer className="h-4 w-4 ml-1 inline" />

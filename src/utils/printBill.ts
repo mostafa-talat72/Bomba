@@ -71,12 +71,12 @@ const generateQRCode = async (text: string): Promise<string> => {
   }
 };
 
-export const printBill = async (
+export const buildBillPrintHTML = async (
   bill: Bill, 
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction
-) => {
+): Promise<string> => {
   // Get establishment name from bill data or use fallback
   let organizationName = fallbackOrganizationName || t('billPrint.defaultEstablishment') || 'Cafe Management System';
   let organizationData: any = null;
@@ -716,6 +716,17 @@ export const printBill = async (
     </body>
     </html>
   `;
+
+  return receiptHTML;
+};
+
+export const printBill = async (
+  bill: Bill, 
+  fallbackOrganizationName?: string,
+  language: string = 'ar',
+  t: TFunction = ((key: string) => key) as TFunction
+) => {
+  const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t);
 
   // A real popup window is preferred for printing: in Electron, printing an
   // iframe can print the dark parent page instead of the receipt (all black).

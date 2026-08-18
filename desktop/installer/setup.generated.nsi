@@ -10,7 +10,7 @@ Unicode true
 !define MUI_UNICON "H:/My Work/Naruto/New folder (2)/project/desktop/build/icon.ico"
 
 Name "MTE Systems"
-OutFile "H:\My Work\Naruto\New folder (2)\project\desktop\release\MTE-Systems-Setup-6.exe"
+OutFile "H:\My Work\Naruto\New folder (2)\project\desktop\release\MTE-Systems-Setup-14.exe"
 InstallDir "$LOCALAPPDATA\Programs\MTE Systems"
 InstallDirRegKey HKCU "Software\MTE Systems" "InstallDir"
 RequestExecutionLevel user
@@ -26,12 +26,12 @@ VIAddVersionKey "FileVersion" "1.0.0"
 ; ---- password table (obfuscated: one char per define, scattered order) ----
 !define PWD_LEN 7
 !define PWD1 "3"
-!define PWD4 "9"
-!define PWD0 "6"
 !define PWD5 "1"
 !define PWD3 "4"
-!define PWD2 "2"
 !define PWD6 "9"
+!define PWD4 "9"
+!define PWD2 "2"
+!define PWD0 "6"
 
 Var PwdEdit
 Var PwdIn

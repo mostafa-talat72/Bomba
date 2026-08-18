@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, dialog } = require("electron");
+﻿const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -345,7 +345,124 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     mainWindow = null;
     if (!isDev) app.quit();
   });
+
+  // ---- IPC handlers for printing ----
+  // The renderer performs the actual printing via its own utilities
+  // (printBill / printOrder); these handlers only acknowledge the events.
+  ipcMain.on('print-bill', (event, data) => {
+    event.returnValue = true;
+  });
+
+  ipcMain.on('print-kitchen-order', (event, orderData) => {
+    event.returnValue = true;
+  });
+
+  ipcMain.on('print-order', (event, orderData) => {
+    event.returnValue = true;
+  });
+
+  ipcMain.on('print-preview', (event) => {
+    // Show the native Electron print preview (not a browser popup)
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.print({ preview: true });
+    }
+  });
 }
+
+// ---- In-app print preview window ----
+// The renderer builds the print HTML and sends it here. We show it in a
+// dedicated BrowserWindow (like the invoice windows) with a control bar
+// (printer / copies / orientation / paper / page range) - all inside the
+// system, no OS print dialog. Actual printing runs on a hidden window so
+// the receipt's own print CSS applies exactly as on the web version.
+let printPreviewWindow = null;
+let printJobHtml = "";
+let printPreviewLang = "ar";
+let printJobWindow = null;
+
+function openPrintPreviewWindow() {
+  if (printPreviewWindow && !printPreviewWindow.isDestroyed()) {
+    printPreviewWindow.focus();
+    return;
+  }
+  printPreviewWindow = new BrowserWindow({
+    width: 1060,
+    height: 780,
+    minWidth: 760,
+    minHeight: 520,
+    title: "معاينة الطباعة",
+    backgroundColor: "#e9edf2",
+    webPreferences: {
+      preload: path.join(__dirname, "previewPreload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  printPreviewWindow.loadFile(path.join(__dirname, "previewWindow.html"));
+  printPreviewWindow.on("closed", () => {
+    printPreviewWindow = null;
+  });
+}
+
+async function runPrintJob(settings) {
+  if (printJobWindow && !printJobWindow.isDestroyed()) {
+    try { printJobWindow.close(); } catch (err) {}
+  }
+  const w = new BrowserWindow({ show: false, backgroundColor: "#ffffff" });
+  printJobWindow = w;
+  try {
+    await w.loadURL(
+      "data:text/html;charset=utf-8," + encodeURIComponent(printJobHtml)
+    );
+    const opts = { silent: true, printBackground: true };
+    if (settings) {
+      for (const key of Object.keys(settings)) {
+        const v = settings[key];
+        if (v !== undefined && v !== null && v !== "") opts[key] = v;
+      }
+    }
+    await w.webContents.print(opts);
+  } catch (err) {
+    console.error("Print job failed:", err.message);
+  } finally {
+    try { w.close(); } catch (err) {}
+    printJobWindow = null;
+  }
+}
+
+ipcMain.handle("print-preview-open", (event, { html, lang }) => {
+  printJobHtml = String(html || "");
+  printPreviewLang = ["ar", "en", "fr"].indexOf(lang) >= 0 ? lang : "ar";
+  openPrintPreviewWindow();
+  return { ok: true };
+});
+
+ipcMain.handle("print-preview-get-html", () => ({
+  html: printJobHtml,
+  lang: printPreviewLang,
+}));
+
+ipcMain.handle("print-preview-get-printers", async () => {
+  if (printPreviewWindow && !printPreviewWindow.isDestroyed()) {
+    try {
+      return await printPreviewWindow.webContents.getPrintersAsync();
+    } catch (err) {
+      return [];
+    }
+  }
+  return [];
+});
+
+ipcMain.handle("print-preview-do-print", async (event, settings) => {
+  await runPrintJob(settings);
+  return { ok: true };
+});
+
+ipcMain.on("print-preview-close", () => {
+  if (printPreviewWindow && !printPreviewWindow.isDestroyed()) {
+    printPreviewWindow.close();
+  }
+});
 
 // ---- App lifecycle ----
 

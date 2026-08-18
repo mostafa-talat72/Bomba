@@ -51,14 +51,14 @@ interface MenuSection {
   name: string;
 }
 
-export const printOrder = async (
+export const buildOrderPrintHTML = async (
   order: Order, 
   menuSections: MenuSection[] = [],
   menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }> = new Map(),
   fallbackOrganizationName?: string,
   language: string = 'ar',
   t: TFunction = ((key: string) => key) as TFunction
-) => {
+): Promise<string> => {
   // Get establishment name from order data or use fallback
   let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
   
@@ -192,7 +192,7 @@ export const printOrder = async (
   });
 
   // Print all sections on one page using iframe
-  printAllSectionsInOnePage(order, sectionsArray, establishmentName, language, t);
+  return printAllSectionsInOnePage(order, sectionsArray, establishmentName, language, t);
 };
 
 // Function to print all sections on one page using iframe
@@ -506,6 +506,18 @@ body {
 </html>
 `;
 
+  return printContent;
+};
+
+export const printOrder = async (
+  order: Order,
+  menuSections: MenuSection[] = [],
+  menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }> = new Map(),
+  fallbackOrganizationName?: string,
+  language: string = 'ar',
+  t: TFunction = ((key: string) => key) as TFunction
+) => {
+  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t);
 
   // Create a hidden iframe for printing
   const printFrame = document.createElement('iframe');
