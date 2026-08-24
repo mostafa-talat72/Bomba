@@ -3690,6 +3690,7 @@ interface OrderModalProps {
   loading: boolean; isEdit: boolean;
 }
 
+
 const OrderModal: React.FC<OrderModalProps> = ({
   table, orderItems, orderNotes, setOrderNotes, menuSections, menuCategories, menuItems,
   expandedSections, expandedCategories, toggleSection, toggleCategory, getCategoriesForSection,
@@ -3700,230 +3701,310 @@ const OrderModal: React.FC<OrderModalProps> = ({
   const { isRTL } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const cur = localStorage.getItem('organizationCurrency') || 'EGP';
+  const fmt = (n: number) => formatCurrencyUtil(n, i18n.language, cur);
 
-  // ── scroll + flash on item add ───────────────────────────────────────────
+  const activeSections = useMemo(() =>
+    menuSections.filter(s => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
+  [menuSections]);
+
+  const [activeSectionId, setActiveSectionId] = useState<string>(() =>
+    menuSections.find(s => s.isActive)?._id || menuSections.find(s => s.isActive)?.id || ''
+  );
+  const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
+  useEffect(() => { setActiveCategoryId('all'); }, [activeSectionId]);
+
+  const activeSectionCategories = useMemo(() => {
+    if (!activeSectionId) return [];
+    return getCategoriesForSection(activeSectionId);
+  }, [activeSectionId, menuCategories]);
+
+  const displayedItems = useMemo(() => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return menuItems.filter(i => i.isAvailable && i.name.toLowerCase().includes(q));
+    }
+    if (!activeSectionId) return [];
+    const cats = activeCategoryId === 'all'
+      ? getCategoriesForSection(activeSectionId)
+      : getCategoriesForSection(activeSectionId).filter(c => c._id === activeCategoryId || c.id === activeCategoryId);
+    return cats.flatMap(cat => getItemsForCategory(cat.id));
+  }, [searchQuery, activeSectionId, activeCategoryId, menuItems, menuCategories, menuSections]);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const itemRefsMap = useRef<Record<string, HTMLDivElement | null>>({});
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
 
-  // عند تغيير عدد العناصر (إضافة) — نسكرول للعنصر الجديد ونوميضه
   const prevLengthRef = useRef(orderItems.length);
   useEffect(() => {
     if (orderItems.length > prevLengthRef.current) {
-      // عنصر جديد أُضيف — آخر عنصر هو المضاف
-      const lastItem = orderItems[orderItems.length - 1];
-      if (lastItem) {
-        setFlashId(lastItem.menuItem);
+      const last = orderItems[orderItems.length - 1];
+      if (last) {
+        setFlashId(last.menuItem);
         setTimeout(() => setFlashId(null), 900);
-        setTimeout(() => {
-          const el = itemRefsMap.current[lastItem.menuItem];
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 50);
+        setTimeout(() => { itemRefsMap.current[last.menuItem]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
       }
-    } else if (orderItems.length === prevLengthRef.current) {
-      // نفس العدد — زيادة كمية عنصر موجود، نوميضه
-      // نحتاج نعرف أي عنصر تغيرت كميته — نستخدم آخر عنصر يُضغط عليه
-      // (بيتحدد من الخارج عبر lastTouchedId)
     }
     prevLengthRef.current = orderItems.length;
   }, [orderItems.length]);
 
-  // وميض عند زيادة الكمية لعنصر موجود
   const handleAddWithFlash = (menuItem: MenuItem) => {
     addItemToOrder(menuItem);
-    // ابحث عن العنصر الموجود
     const existing = orderItems.find(i => i.menuItem === menuItem.id);
     if (existing) {
       setFlashId(menuItem.id);
       setTimeout(() => setFlashId(null), 900);
-      setTimeout(() => {
-        const el = itemRefsMap.current[menuItem.id];
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 50);
+      setTimeout(() => { itemRefsMap.current[menuItem.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
     }
-    // لو عنصر جديد، الـ useEffect أعلاه بيتكفل به
   };
 
   useEffect(() => {
-    setSearchQuery('');
     const focus = () => searchInputRef.current?.focus();
-    focus();
-    const t1 = setTimeout(focus, 50);
-    const t2 = setTimeout(focus, 150);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    focus(); setTimeout(focus, 50); setTimeout(focus, 150);
   }, []);
 
-  const filteredMenuItems = useMemo(() => {
-    if (!searchQuery.trim()) return menuItems;
-    const q = searchQuery.toLowerCase();
-    return menuItems.filter(i => i.name.toLowerCase().includes(q));
-  }, [menuItems, searchQuery]);
-
-  const getFilteredItems = (categoryId: string) => {
-    const items = getItemsForCategory(categoryId);
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(i => i.name.toLowerCase().includes(q));
-  };
-
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4 md:p-6" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-7xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
-        {/* Header */}
-        <div className="relative p-4 sm:p-6 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex-shrink-0">
-          <div className="relative flex items-center justify-between z-10">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/30">
-                <ShoppingCart className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow-lg">{isEdit ? t('cafe.orderModal.editOrderTitle') : t('cafe.orderModal.newOrderTitle')}</h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
-                    <p className="text-xs sm:text-sm text-white font-medium">{t('cafe.orderModal.table', { number: getTableDisplay(table.number, i18n.language) })}</p>
-                  </div>
-                </div>
-              </div>
+    <div className="fixed inset-0 z-40 flex bg-black/60 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white dark:bg-gray-900 w-full flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+
+        {/* HEADER */}
+        <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
+              <ShoppingCart className="h-4 w-4 text-white" />
             </div>
-            <button onClick={onClose} className="p-2 sm:p-2.5 hover:bg-white/20 backdrop-blur-sm rounded-xl transition-all border border-white/30 hover:scale-110">
-              <X className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-white truncate">{isEdit ? t('cafe.orderModal.editOrderTitle') : t('cafe.orderModal.newOrderTitle')}</h2>
+              <p className="text-xs text-orange-100 flex items-center gap-1">
+                <TableIcon className="h-3 w-3 flex-shrink-0" />
+                {t('cafe.orderModal.table', { number: getTableDisplay(table.number, i18n.language) })}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="relative hidden sm:block">
+              <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/60 pointer-events-none`} />
+              <input ref={searchInputRef} type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="بحث سريع..."
+                className={`${isRTL ? 'pr-8 pl-8' : 'pl-8 pr-8'} py-1.5 text-xs rounded-lg bg-white/15 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:bg-white/25 w-44 transition-all`} />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className={`absolute ${isRTL ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 text-white/60 hover:text-white`}>
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {orderItems.length > 0 && (
+              <div className="bg-white/15 rounded-xl px-3 py-1.5 ring-1 ring-white/25 text-center">
+                <p className="text-xs text-orange-100 leading-none">الإجمالي</p>
+                <p className="text-sm font-bold text-white">{fmt(calculateTotal())}</p>
+              </div>
+            )}
+            <button onClick={onClose} className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center text-white ring-1 ring-white/25 transition-all">
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
-        {/* Content */}
-        <div className="flex-1 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 overflow-hidden min-h-0">
-          {/* Left: Menu */}
-          <div className="flex flex-col space-y-4 h-full min-h-0">
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full"></div>{t('cafe.orderModal.menu')}
-            </h3>
-            <div className="relative flex-shrink-0">
-              <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none`} />
-              <input ref={searchInputRef} type="text" placeholder={t('cafe.orderModal.searchPlaceholder')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoFocus
-                className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500`} />
-              {searchQuery && <button onClick={() => setSearchQuery('')} className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600`}><X className="h-4 w-4" /></button>}
-            </div>
-            <div className={`flex-1 space-y-3 ${isRTL ? 'pr-2' : 'pl-2'} menu-scroll-container`} style={{ overflowY: 'scroll' }}>
-              {searchQuery.trim() ? (
-                <div className="space-y-2">
-                  {filteredMenuItems.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">{t('cafe.orderModal.noResults')}</div>
-                  ) : filteredMenuItems.map(item => (
-                    <button key={item.id} onClick={() => handleAddWithFlash(item)}
-                      className="w-full flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                      <span className="text-gray-700 dark:text-gray-300 font-medium">{item.name}</span>
-                      <span className="font-semibold text-orange-600 dark:text-orange-400">{formatCurrencyUtil(item.price, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</span>
+
+        {/* Search mobile */}
+        <div className="sm:hidden px-3 py-2 bg-gray-100 dark:bg-gray-800 flex-shrink-0">
+          <div className="relative">
+            <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none`} />
+            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder={t('cafe.orderModal.searchPlaceholder')}
+              className={`w-full ${isRTL ? 'pr-8 pl-7' : 'pl-8 pr-7'} py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 outline-none`} />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className={`absolute ${isRTL ? 'left-2.5' : 'right-2.5'} top-1/2 -translate-y-1/2 text-gray-400`}>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* BODY */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+
+          {/* Col 1: Sections */}
+          {!searchQuery.trim() && (
+            <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 text-center">الأقسام</p>
+              </div>
+              <div className="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-1">
+                {activeSections.map(sec => {
+                  const hasCats = getCategoriesForSection(sec.id).length > 0;
+                  if (!hasCats) return null;
+                  const isAct = activeSectionId === sec.id;
+                  return (
+                    <button key={sec.id} onClick={() => setActiveSectionId(sec.id)}
+                      className={`w-full px-2 py-2 rounded-lg text-xs font-medium transition-all text-right leading-snug ${isAct ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                      {sec.name}
                     </button>
-                  ))}
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Col 2: Categories */}
+          {!searchQuery.trim() && activeSectionCategories.length > 1 && (
+            <div className="w-24 sm:w-28 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+              <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 text-center">الفئات</p>
+              </div>
+              <div className="flex-1 overflow-y-auto py-1.5 px-1.5 space-y-1">
+                <button onClick={() => setActiveCategoryId('all')}
+                  className={`w-full px-2 py-2 rounded-lg text-xs font-medium transition-all text-right ${activeCategoryId === 'all' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                  الكل
+                </button>
+                {activeSectionCategories.map(cat => {
+                  const catId = cat._id || cat.id;
+                  const isAct = activeCategoryId === catId;
+                  const count = getItemsForCategory(cat.id).length;
+                  if (count === 0) return null;
+                  return (
+                    <button key={catId} onClick={() => setActiveCategoryId(catId)}
+                      className={`w-full px-2 py-2 rounded-lg text-xs font-medium transition-all text-right leading-snug ${isAct ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                      <span className="block">{cat.name}</span>
+                      <span className={`text-xs ${isAct ? 'text-white/70 dark:text-gray-700' : 'text-gray-400'}`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Col 3: Items */}
+          <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900">
+            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500">
+                {searchQuery
+                  ? 'نتائج البحث'
+                  : (activeSectionCategories.find(c => (c._id || c.id) === activeCategoryId)?.name
+                    || activeSections.find(s => s.id === activeSectionId)?.name
+                    || 'الأصناف')}
+              </p>
+              {displayedItems.length > 0 && <span className="text-xs text-gray-400">{displayedItems.length}</span>}
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 min-h-0">
+              {displayedItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600 select-none">
+                  <Search className="h-10 w-10 mb-2 opacity-30" />
+                  <p className="text-xs">{searchQuery ? t('cafe.orderModal.noResults') : 'اختر قسماً'}</p>
                 </div>
               ) : (
-                menuSections.filter(s => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder).map(section => {
-                  const cats = getCategoriesForSection(section.id);
-                  if (cats.length === 0) return null;
-                  return (
-                    <div key={section.id} className="border border-gray-200 dark:border-gray-700 rounded-lg">
-                      <button onClick={() => toggleSection(section.id)} className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">{section.name}</span>
-                        {expandedSections[section.id] ? <MinusCircle className="h-5 w-5 text-gray-500" /> : <PlusCircle className="h-5 w-5 text-gray-500" />}
-                      </button>
-                      {expandedSections[section.id] && (
-                        <div className="p-3 space-y-2">
-                          {cats.map(cat => {
-                            const items = getFilteredItems(cat.id);
-                            if (items.length === 0) return null;
-                            return (
-                              <div key={cat.id}>
-                                <button onClick={() => toggleCategory(cat.id)} className="w-full flex items-center justify-between p-2 text-sm bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded">
-                                  <span className="font-medium text-gray-800 dark:text-gray-200">{cat.name}</span>
-                                  {expandedCategories[cat.id] ? <MinusCircle className="h-4 w-4 text-gray-500" /> : <PlusCircle className="h-4 w-4 text-gray-500" />}
-                                </button>
-                                {expandedCategories[cat.id] && (
-                                  <div className="mt-2 space-y-1 pr-4">
-                                    {items.map(item => (
-                                      <button key={item.id} onClick={() => handleAddWithFlash(item)} className="w-full flex items-center justify-between p-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors">
-                                        <span className="text-gray-700 dark:text-gray-300">{item.name}</span>
-                                        <span className="font-semibold text-orange-600 dark:text-orange-400">{formatCurrencyUtil(item.price, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1.5">
+                  {displayedItems.map(item => {
+                    const qty = orderItems.find(i => i.menuItem === item.id)?.quantity || 0;
+                    const inOrder = qty > 0;
+                    return (
+                      <button key={item.id} onClick={() => handleAddWithFlash(item)}
+                        className={`relative group flex flex-col text-right rounded-lg border transition-all duration-150 overflow-hidden active:scale-95 ${inOrder ? 'border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-orange-200 hover:shadow-sm'}`}>
+                        {inOrder && (
+                          <span className="absolute top-1 left-1 min-w-[18px] h-[18px] bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1 leading-none shadow-sm">{qty}</span>
+                        )}
+                        <div className="p-2 flex-1">
+                          <p className="font-medium text-gray-900 dark:text-gray-100 text-xs leading-snug line-clamp-2 mb-1">{item.name}</p>
+                          <p className={`text-xs font-bold ${inOrder ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>{fmt(item.price)}</p>
                         </div>
-                      )}
-                    </div>
-                  );
-                })
+                        <div className={`flex items-center justify-center gap-1 py-1 border-t text-xs font-medium transition-all ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
+                          <Plus className="h-2.5 w-2.5" /><span>{inOrder ? 'إضافة' : 'أضف'}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
-          {/* Right: Order items */}
-          <div className="flex flex-col space-y-4 h-full min-h-0">
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 flex-shrink-0">
-              <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full"></div>{t('cafe.orderModal.orders')}
-              {orderItems.length > 0 && <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs font-bold rounded-full">{formatDecimal(orderItems.length, i18n.language)}</span>}
-            </h3>
-            <div ref={scrollContainerRef} className={`flex-1 space-y-3 ${isRTL ? 'pr-2' : 'pl-2'} order-scroll-container`} style={{ overflowY: 'scroll' }}>
+
+          {/* Col 4: Order */}
+          <div className="w-52 sm:w-60 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1 h-4 bg-gradient-to-b from-green-400 to-emerald-500 rounded-full"></div>
+                <span className="font-bold text-gray-800 dark:text-gray-100 text-xs">{t('cafe.orderModal.orders')}</span>
+                {orderItems.length > 0 && (
+                  <span className="min-w-[18px] h-[18px] px-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs font-bold rounded-full flex items-center justify-center leading-none">{orderItems.length}</span>
+                )}
+              </div>
+              <span className="text-xs font-bold text-orange-600 dark:text-orange-400">{fmt(calculateTotal())}</span>
+            </div>
+
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 min-h-0">
               {orderItems.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">{t('cafe.orderModal.noItems')}</div>
+                <div className="flex flex-col items-center justify-center h-full select-none">
+                  <ShoppingCart className="h-8 w-8 text-gray-200 dark:text-gray-700 mb-1" />
+                  <p className="text-xs text-gray-300 dark:text-gray-600">{t('cafe.orderModal.noItems')}</p>
+                </div>
               ) : orderItems.map(item => (
-                <div
-                  key={item.menuItem}
-                  ref={el => { itemRefsMap.current[item.menuItem] = el; }}
-                  className={`border rounded-lg p-3 transition-all duration-300 ${
-                    flashId === item.menuItem
-                      ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/30 shadow-lg shadow-orange-200 dark:shadow-orange-900/40 scale-[1.02]'
-                      : 'border-gray-200 dark:border-gray-700'
-                  }`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex-1">
-                      <div className="font-semibold text-gray-900 dark:text-gray-100">{item.name}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">{formatCurrencyUtil(item.price, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')} × {formatDecimal(item.quantity, i18n.language)} = {formatCurrencyUtil(item.price * item.quantity, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</div>
+                <div key={item.menuItem} ref={el => { itemRefsMap.current[item.menuItem] = el; }}
+                  className={`rounded-lg border overflow-hidden transition-all duration-300 ${flashId === item.menuItem ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/30 ring-1 ring-orange-300 scale-[1.02]' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
+                  <div className="flex items-center gap-1.5 px-2 py-1.5">
+                    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded overflow-hidden flex-shrink-0">
+                      <button onClick={() => updateItemQuantity(item.menuItem, -1)}
+                        className="w-5 h-5 flex items-center justify-center text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors font-bold text-sm">−</button>
+                      <span className="w-5 text-center font-bold text-xs text-gray-900 dark:text-gray-100 select-none">{item.quantity}</span>
+                      <button onClick={() => updateItemQuantity(item.menuItem, 1)}
+                        className="w-5 h-5 flex items-center justify-center text-green-500 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors font-bold text-sm">+</button>
                     </div>
-                    <button onClick={() => removeItemFromOrder(item.menuItem)} className="text-red-600 hover:text-red-700 p-1"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                  <div className="flex items-center space-x-2 space-x-reverse mb-2">
-                    <button onClick={() => updateItemQuantity(item.menuItem, -1)} className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg p-2 shadow-md hover:shadow-lg transition-all hover:scale-105"><MinusCircle className="h-4 w-4" /></button>
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 border-2 border-blue-200 dark:border-gray-500 rounded-lg px-3 py-2 min-w-[3rem] shadow-sm">
-                      <span className="font-bold text-lg text-blue-800 dark:text-white text-center block">{formatDecimal(item.quantity, i18n.language)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 dark:text-gray-100 text-xs truncate leading-tight">{item.name}</p>
+                      <p className="text-xs text-gray-400 leading-tight">{fmt(item.price * item.quantity)}</p>
                     </div>
-                    <button onClick={() => updateItemQuantity(item.menuItem, 1)} className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg p-2 shadow-md hover:shadow-lg transition-all hover:scale-105"><PlusCircle className="h-4 w-4" /></button>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <button onClick={() => setExpandedNotes(p => ({ ...p, [item.menuItem]: !p[item.menuItem] }))}
+                        className={`w-5 h-5 rounded flex items-center justify-center transition-all ${item.notes || expandedNotes[item.menuItem] ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'text-gray-300 hover:text-gray-500'}`}>
+                        <Save className="h-2.5 w-2.5" />
+                      </button>
+                      <button onClick={() => removeItemFromOrder(item.menuItem)}
+                        className="w-5 h-5 rounded flex items-center justify-center text-gray-300 hover:text-red-500 transition-all">
+                        <Trash2 className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
                   </div>
-                  <input type="text" value={item.notes || ''} onChange={e => updateItemNotes(item.menuItem, e.target.value)} placeholder={t('cafe.orderModal.itemNotesPlaceholder')}
-                    className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                  {(expandedNotes[item.menuItem] || item.notes) && (
+                    <div className="px-2 pb-1.5">
+                      <input type="text" value={item.notes || ''} onChange={e => updateItemNotes(item.menuItem, e.target.value)}
+                        placeholder={t('cafe.orderModal.itemNotesPlaceholder')} autoFocus
+                        className="w-full text-xs border border-blue-200 dark:border-blue-700 rounded px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-400 outline-none" />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('cafe.orderModal.total')}</span>
-                <span className="text-xl font-bold text-orange-600 dark:text-orange-400">{formatCurrencyUtil(calculateTotal(), i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}</span>
+
+            <div className="px-2 pt-2 pb-1 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
+              <textarea value={orderNotes} onChange={e => setOrderNotes(e.target.value)}
+                placeholder={t('cafe.orderModal.orderNotesPlaceholder')} rows={2}
+                className="w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 resize-none focus:ring-1 focus:ring-orange-400 outline-none" />
+            </div>
+
+            <div className="px-2 pb-3 flex-shrink-0 space-y-1.5">
+              <button onClick={onSaveAndSend} disabled={loading || orderItems.length === 0}
+                className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
+                {loading
+                  ? <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>{t('cafe.orderModal.saving')}</>
+                  : <><ChefHat className="h-3.5 w-3.5" />{t('cafe.orderModal.saveAndSend')}</>}
+              </button>
+              <div className="flex gap-1.5">
+                <button onClick={onSave} disabled={loading || orderItems.length === 0}
+                  className="flex-1 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 text-gray-600 dark:text-gray-300 font-medium text-xs rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
+                  <CheckCircle className="h-3 w-3 text-green-500" />{t('cafe.orderModal.save')}
+                </button>
+                <button onClick={onSaveAndPrint} disabled={loading || orderItems.length === 0}
+                  className="flex-1 py-2 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-600 dark:text-blue-400 font-medium text-xs rounded-lg flex items-center justify-center gap-1 transition-all disabled:opacity-50">
+                  <Printer className="h-3 w-3" />{t('cafe.orderModal.saveAndPrint')}
+                </button>
               </div>
-              <textarea value={orderNotes} onChange={e => setOrderNotes(e.target.value)} placeholder={t('cafe.orderModal.orderNotesPlaceholder')} rows={3}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
             </div>
           </div>
-        </div>
-        {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 space-x-reverse p-6 border-t border-gray-200 dark:border-gray-700">
-          <button onClick={onClose} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">{t('cafe.orderModal.cancel')}</button>
-          <button onClick={onSave} disabled={loading || orderItems.length === 0} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-            <CheckCircle className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />{loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.save')}
-          </button>
-          <button onClick={onSaveAndSend} disabled={loading || orderItems.length === 0} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-            <ChefHat className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />{loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.saveAndSend')}
-          </button>
-          <button onClick={onSaveAndPrint} disabled={loading || orderItems.length === 0} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-            <Printer className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />{loading ? t('cafe.orderModal.saving') : t('cafe.orderModal.saveAndPrint')}
-          </button>
         </div>
       </div>
     </div>
   );
 };
+
 
 // ─── ManagementModal ──────────────────────────────────────────────────────────
 
