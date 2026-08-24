@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+﻿const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -34,11 +34,36 @@ function ensureDirs() {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
+// ---- Secret helpers (Windows DPAPI via Electron safeStorage) ----
+// Secrets are stored ENCRYPTED in secrets.json. Plain text is only kept as
+// a last resort when safeStorage is unavailable (rare) and is logged.
+
+function encryptSecret(value) {
+  if (safeStorage.isEncryptionAvailable()) {
+    return { enc: safeStorage.encryptString(String(value)).toString("base64") };
+  }
+  console.warn("[secrets] safeStorage unavailable - storing plain text");
+  return { plain: String(value) };
+}
+
+function decryptSecret(entry) {
+  if (!entry) return "";
+  if (typeof entry === "string") return entry; // legacy plain value
+  if (entry.enc && safeStorage.isEncryptionAvailable()) {
+    try {
+      return safeStorage.decryptString(Buffer.from(entry.enc, "base64"));
+    } catch (err) {
+      console.error("Failed to decrypt secret:", err.message);
+      return "";
+    }
+  }
+  return entry.plain || "";
+}
+
 function loadOrCreateConfig() {
   const defaults = {
     port: 5000,
     databaseUri: "mongodb://localhost:27017/bomba?replicaSet=rs0",
-    atlasUri: "mongodb+srv://Bomba:t1fp995Bde03vPQY@cluster0.yl9w7jv.mongodb.net/bomba1?retryWrites=true&w=majority&appName=Cluster0&serverSelectionTimeoutMS=60000&socketTimeoutMS=120000&connectTimeoutMS=60000&maxPoolSize=10&minPoolSize=2&maxIdleTimeMS=60000&heartbeatFrequencyMS=10000",
     syncEnabled: true,
     bidirectionalSync: true,
     timezone: "Africa/Cairo",
@@ -46,7 +71,6 @@ function loadOrCreateConfig() {
     emailHost: "smtp.gmail.com",
     emailPort: 587,
     emailUser: "mr.robot192002@gmail.com",
-    emailPass: "hzbadiidcvogmvhr",
   };
 
   let config = {};
@@ -61,34 +85,94 @@ function loadOrCreateConfig() {
 
   const full = { ...defaults, ...config };
 
-  // Persistent JWT secrets (generated once, survive app updates)
+  // ---- Secrets: encrypted store ----
   const secretsPath = path.join(userDataDir, "secrets.json");
-  let secrets = {};
+  let store = {};
   if (fs.existsSync(secretsPath)) {
     try {
-      secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
+      store = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
     } catch (err) {
       console.error("Failed to read secrets.json:", err.message);
     }
   }
-  if (!secrets.jwtSecret || !secrets.jwtRefreshSecret) {
-    secrets.jwtSecret = crypto.randomBytes(32).toString("hex");
-    secrets.jwtRefreshSecret = crypto.randomBytes(32).toString("hex");
-    fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), "utf8");
+
+  let secretsChanged = false;
+
+  // Migrate plain-text legacy values (old config.json fields) into the
+  // encrypted store, then strip them from config.json.
+  const migrateToEncrypted = (key, plainValue) => {
+    if (plainValue && !store[key]) {
+      store[key] = encryptSecret(plainValue);
+      secretsChanged = true;
+    }
+  };
+  migrateToEncrypted("atlasUri", config.atlasUri);
+  migrateToEncrypted("emailPass", config.emailPass);
+  delete full.atlasUri;
+  delete full.emailPass;
+
+  // JWT secrets (generated once, survive app updates) - encrypt too.
+  if (!store.jwtSecret) {
+    store.jwtSecret = encryptSecret(crypto.randomBytes(32).toString("hex"));
+    secretsChanged = true;
+  } else if (typeof store.jwtSecret === "string") {
+    store.jwtSecret = encryptSecret(store.jwtSecret);
+    secretsChanged = true;
+  }
+  if (!store.jwtRefreshSecret) {
+    store.jwtRefreshSecret = encryptSecret(crypto.randomBytes(32).toString("hex"));
+    secretsChanged = true;
+  } else if (typeof store.jwtRefreshSecret === "string") {
+    store.jwtRefreshSecret = encryptSecret(store.jwtRefreshSecret);
+    secretsChanged = true;
   }
 
-  // Persist config back (so file exists for user edits)
+  // Atlas URI import channel: the user drops a plain text file
+  // (atlas-import.txt) into the userData folder with the new link; we
+  // encrypt it and delete the file so no plain text stays on disk.
+  const importPath = path.join(userDataDir, "atlas-import.txt");
+  if (fs.existsSync(importPath)) {
+    try {
+      const raw = fs.readFileSync(importPath, "utf8").trim();
+      if (raw) {
+        store.atlasUri = encryptSecret(raw);
+        secretsChanged = true;
+        console.log("[secrets] Atlas URI updated from atlas-import.txt");
+      }
+      fs.unlinkSync(importPath);
+    } catch (err) {
+      console.error("Failed to process atlas-import.txt:", err.message);
+    }
+  }
+
+  if (secretsChanged) {
+    try {
+      fs.writeFileSync(secretsPath, JSON.stringify(store, null, 2), "utf8");
+    } catch (err) {
+      console.error("Failed to write secrets.json:", err.message);
+    }
+  }
+
+  // Persist config back (public settings only - no secrets).
   try {
     fs.writeFileSync(configPath, JSON.stringify(full, null, 2), "utf8");
   } catch (err) {
     console.error("Failed to write config.json:", err.message);
   }
 
+  // Decrypt for in-memory use by the server env.
+  const secrets = {
+    jwtSecret: decryptSecret(store.jwtSecret),
+    jwtRefreshSecret: decryptSecret(store.jwtRefreshSecret),
+    atlasUri: decryptSecret(store.atlasUri),
+    emailPass: decryptSecret(store.emailPass),
+  };
+
   return { config: full, secrets };
 }
 
 function buildServerEnv(config, secrets, distDir) {
-  const syncEnabled = config.syncEnabled === true && config.atlasUri;
+  const syncEnabled = config.syncEnabled === true && secrets.atlasUri;
 
   return {
     ...process.env,
@@ -96,7 +180,7 @@ function buildServerEnv(config, secrets, distDir) {
     PORT: String(config.port || 5000),
     MONGODB_LOCAL_URI: config.databaseUri,
     MONGODB_URI: config.databaseUri,
-    MONGODB_ATLAS_URI: config.atlasUri || "",
+    MONGODB_ATLAS_URI: secrets.atlasUri || "",
     SYNC_ENABLED: syncEnabled ? "true" : "false",
     BIDIRECTIONAL_SYNC_ENABLED:
       config.bidirectionalSync === true && syncEnabled ? "true" : "false",
@@ -109,7 +193,7 @@ function buildServerEnv(config, secrets, distDir) {
     EMAIL_HOST: config.emailHost || "smtp.gmail.com",
     EMAIL_PORT: String(config.emailPort || 587),
     EMAIL_USER: config.emailUser || "",
-    EMAIL_PASS: config.emailPass || "",
+    EMAIL_PASS: secrets.emailPass || "",
     DESKTOP_DATA_DIR: dataDir,
     DESKTOP_BACKUP_DIR: path.join(dataDir, "backups"),
     DESKTOP_DIST_PATH: distDir,
@@ -368,101 +452,6 @@ mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     }
   });
 }
-
-// ---- In-app print preview window ----
-// The renderer builds the print HTML and sends it here. We show it in a
-// dedicated BrowserWindow (like the invoice windows) with a control bar
-// (printer / copies / orientation / paper / page range) - all inside the
-// system, no OS print dialog. Actual printing runs on a hidden window so
-// the receipt's own print CSS applies exactly as on the web version.
-let printPreviewWindow = null;
-let printJobHtml = "";
-let printPreviewLang = "ar";
-let printJobWindow = null;
-
-function openPrintPreviewWindow() {
-  if (printPreviewWindow && !printPreviewWindow.isDestroyed()) {
-    printPreviewWindow.focus();
-    return;
-  }
-  printPreviewWindow = new BrowserWindow({
-    width: 1060,
-    height: 780,
-    minWidth: 760,
-    minHeight: 520,
-    title: "معاينة الطباعة",
-    backgroundColor: "#e9edf2",
-    webPreferences: {
-      preload: path.join(__dirname, "previewPreload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  printPreviewWindow.loadFile(path.join(__dirname, "previewWindow.html"));
-  printPreviewWindow.on("closed", () => {
-    printPreviewWindow = null;
-  });
-}
-
-async function runPrintJob(settings) {
-  if (printJobWindow && !printJobWindow.isDestroyed()) {
-    try { printJobWindow.close(); } catch (err) {}
-  }
-  const w = new BrowserWindow({ show: false, backgroundColor: "#ffffff" });
-  printJobWindow = w;
-  try {
-    await w.loadURL(
-      "data:text/html;charset=utf-8," + encodeURIComponent(printJobHtml)
-    );
-    const opts = { silent: true, printBackground: true };
-    if (settings) {
-      for (const key of Object.keys(settings)) {
-        const v = settings[key];
-        if (v !== undefined && v !== null && v !== "") opts[key] = v;
-      }
-    }
-    await w.webContents.print(opts);
-  } catch (err) {
-    console.error("Print job failed:", err.message);
-  } finally {
-    try { w.close(); } catch (err) {}
-    printJobWindow = null;
-  }
-}
-
-ipcMain.handle("print-preview-open", (event, { html, lang }) => {
-  printJobHtml = String(html || "");
-  printPreviewLang = ["ar", "en", "fr"].indexOf(lang) >= 0 ? lang : "ar";
-  openPrintPreviewWindow();
-  return { ok: true };
-});
-
-ipcMain.handle("print-preview-get-html", () => ({
-  html: printJobHtml,
-  lang: printPreviewLang,
-}));
-
-ipcMain.handle("print-preview-get-printers", async () => {
-  if (printPreviewWindow && !printPreviewWindow.isDestroyed()) {
-    try {
-      return await printPreviewWindow.webContents.getPrintersAsync();
-    } catch (err) {
-      return [];
-    }
-  }
-  return [];
-});
-
-ipcMain.handle("print-preview-do-print", async (event, settings) => {
-  await runPrintJob(settings);
-  return { ok: true };
-});
-
-ipcMain.on("print-preview-close", () => {
-  if (printPreviewWindow && !printPreviewWindow.isDestroyed()) {
-    printPreviewWindow.close();
-  }
-});
 
 // ---- App lifecycle ----
 

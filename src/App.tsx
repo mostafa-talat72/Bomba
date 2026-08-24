@@ -23,6 +23,7 @@ import Computer from './pages/Computer';
 import Cafe from './pages/Cafe';
 import Menu from './pages/Menu';
 import Billing from './pages/Billing';
+import Tables from './pages/Tables';
 import BillView from './pages/BillView';
 import Reports from './pages/Reports';
 import Inventory from './pages/Inventory';
@@ -68,6 +69,7 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
         { path: '/playstation', permission: 'playstation' },
         { path: '/computer', permission: 'computer' },
         { path: '/cafe', permission: 'cafe' },
+        { path: '/tables', permission: 'cafe' },
         { path: '/menu', permission: 'menu' },
         { path: '/billing', permission: 'billing' },
         { path: '/reports', permission: 'reports' },
@@ -190,6 +192,11 @@ const RouteHandler = () => {
           <Route path="cafe" element={
             <ProtectedRoute requiredPermissions={['cafe']}>
               <Cafe />
+            </ProtectedRoute>
+          } />
+          <Route path="tables" element={
+            <ProtectedRoute requiredPermissions={['cafe', 'billing']}>
+              <Tables />
             </ProtectedRoute>
           } />
           <Route path="menu" element={

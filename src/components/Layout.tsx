@@ -26,7 +26,8 @@ import {
   DollarSign,
   ShoppingBag,
   ChefHat,
-  Warehouse as WarehouseIcon
+  Warehouse as WarehouseIcon,
+  Table as TableIcon
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -152,6 +153,7 @@ const Layout = () => {
   const navigation = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: Home, permissions: ['dashboard'] },
     { name: t('nav.orders'), href: '/cafe', icon: ShoppingCart, permissions: ['cafe'], badgePreparing: preparingOrders, badgeReady: readyOrders },
+    { name: t('nav.tables', 'الطاولات'), href: '/tables', icon: TableIcon, permissions: ['cafe', 'billing'], badgePreparing: preparingOrders, badgeReady: readyOrders },
     { name: t('nav.billing'), href: '/billing', icon: Receipt, permissions: ['billing'] },
     {
       name: t('nav.devices'),

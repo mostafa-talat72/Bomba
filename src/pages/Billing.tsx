@@ -7,7 +7,7 @@ import { formatTime } from '../utils/dateHelpers';
 import { canPartialPayment, canPayFullBill, canDeleteBill, canEditSessionTime, canEditPartialPayment } from '../utils/permissionHelper';
 import PermissionDenied from '../components/PermissionDenied';
 import ConfirmModal from '../components/ConfirmModal';
-import { printBill, buildBillPrintHTML } from '../utils/printBill';
+import { printBill } from '../utils/printBill';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
@@ -345,6 +345,7 @@ const Billing = () => {
   const [showTableBillsModal, setShowTableBillsModal] = useState(false);
   const [tableBillsFilter, setTableBillsFilter] = useState('unpaid'); // الافتراضي: غير مدفوع
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Bill[] | null>(null);
   const [billTypeFilter, setBillTypeFilter] = useState<'all' | 'cafe' | 'playstation' | 'computer'>('all');
   const [playstationSearchQuery, setPlaystationSearchQuery] = useState('');
   const [gamingDeviceTypeFilter, setGamingDeviceTypeFilter] = useState<'all' | 'playstation' | 'computer'>('all'); // فلتر نوع الجهاز
@@ -410,6 +411,27 @@ const Billing = () => {
       refetchAggregatedItems();
     }
   }, [selectedBill?.id, selectedBill?._id, selectedBill?.paid, selectedBill?.remaining]);
+
+  // بحث السيرفر: الفواتير القديمة المدفوعة بالكامل (أقدم من 4 شهور)
+  // لا تظهر في الجلب الافتراضي - يتم جلبها هنا عند البحث برقم الفاتورة أو المعرف
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const tableId = selectedTable?._id || selectedTable?.id;
+        const response = await api.getBills({ q: query, table: tableId });
+        setSearchResults(response.success ? (response.data || []) : null);
+      } catch (error) {
+        console.error('Error searching bills:', error);
+        setSearchResults(null);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedTable]);
 
   useEffect(() => {
     // تحميل البيانات الأولية
@@ -2703,7 +2725,11 @@ const Billing = () => {
             {/* Bills List */}
             <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
               {(() => {
-                const tableBills = tableBillsMap[selectedTable.number]?.bills || [];
+                // عند البحث: استخدام نتائج السيرفر (تشمل الفواتير القديمة المدفوعة)
+                // وإلا: فواتير الطاولة المحملة افتراضياً
+                const tableBills = searchResults !== null
+                  ? searchResults
+                  : (tableBillsMap[selectedTable.number]?.bills || []);
                 let filteredTableBills = tableBills.filter((bill: Bill) => {
                   if (tableBillsFilter === 'all') return true;
                   if (tableBillsFilter === 'unpaid') {
@@ -2711,15 +2737,6 @@ const Billing = () => {
                   }
                   return bill.status === tableBillsFilter;
                 });
-                
-                // Apply search filter if searchQuery exists
-                if (searchQuery) {
-                  filteredTableBills = filteredTableBills.filter((bill: Bill) => 
-                    bill.billNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    bill.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    bill._id?.toLowerCase().includes(searchQuery.toLowerCase())
-                  );
-                }
 
                 if (filteredTableBills.length === 0) {
                   return (
@@ -2755,12 +2772,7 @@ const Billing = () => {
                             // جلب بيانات الفاتورة الكاملة قبل الطباعة
                             const response = await api.getBill(bill.id || bill._id);
                             if (response.success && response.data) {
-                              if ((window as any).bombaDesktop?.isDesktop) {
-                const html = await buildBillPrintHTML(response.data, user?.organizationName, i18n.language, t);
-                (window as any).bombaDesktop.openPrintPreview(html, i18n.language);
-              } else {
-                await printBill(response.data, user?.organizationName, i18n.language, t);
-              }
+                              await printBill(response.data, user?.organizationName, i18n.language, t);
                             } else {
                               showNotification(t('billing.notifications.fetchBillForPrintError'), 'error');
                             }
@@ -3429,15 +3441,8 @@ const Billing = () => {
                           </button>
                           <button
                             onClick={async () => {
-              if ((window as any).bombaDesktop?.isDesktop) {
-                if (selectedBill) {
-                  const html = await buildBillPrintHTML(selectedBill, user?.organizationName, i18n.language, t);
-                  (window as any).bombaDesktop.openPrintPreview(html, i18n.language);
-                }
-              } else {
-                selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error);
-              }
-            }}
+                              selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error);
+                            }}
                             className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors duration-200 flex items-center"
                           >
                             <Printer className="h-4 w-4 ml-1 inline" />

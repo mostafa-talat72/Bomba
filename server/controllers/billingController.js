@@ -90,6 +90,7 @@ export const getBills = async (req, res) => {
             startDate,  // IGNORED - Date filtering removed per requirements
             endDate,    // IGNORED - Date filtering removed per requirements
             customerName,
+            q,  // Search by bill number or ID - bypasses the default visibility filter
         } = req.query;
 
         const query = {};
@@ -121,10 +122,30 @@ export const getBills = async (req, res) => {
             query.customerName = { $regex: customerName, $options: "i" };
         }
         
-        // Date range filtering COMPLETELY REMOVED per requirements 1.1, 1.2, 1.3
-        // System now returns ALL bills regardless of creation date
-        // startDate and endDate parameters are ignored
-        
+        // Default visibility filter: unpaid bills (draft/partial/overdue) or
+        // bills younger than 120 days (4 months) are always returned.
+        // Fully-paid bills older than 4 months are hidden from the default
+        // list and only retrievable through search (q) by bill number or ID.
+        // An explicit status filter takes priority over the default filter.
+        const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
+
+        if (q && q.trim()) {
+            const qOr = [{ billNumber: { $regex: q.trim(), $options: "i" } }];
+            if (mongoose.Types.ObjectId.isValid(q.trim())) {
+                qOr.push({ _id: q.trim() });
+            }
+            query.$or = qOr;
+        } else if (!status) {
+            query.$and = [
+                {
+                    $or: [
+                        { status: { $in: ["draft", "partial", "overdue"] } },
+                        { createdAt: { $gte: fourMonthsAgo } },
+                    ],
+                },
+            ];
+        }
+
         query.organization = req.user.organization;
 
         // إزالة الحد - جلب جميع الفواتير بدون pagination

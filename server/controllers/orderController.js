@@ -496,6 +496,23 @@ export const getOrders = async (req, res) => {
             }
         }
 
+        // Default visibility: orders linked to bills that are either unpaid
+        // (draft/partial/overdue) or younger than 120 days (4 months).
+        // Orders linked to fully-paid bills older than 4 months are hidden
+        // from the default list. An explicit status filter (e.g. kitchen
+        // display pending/preparing/ready) takes priority over the default.
+        if (!status) {
+            const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
+            const visibleBillIds = await Bill.distinct("_id", {
+                organization: req.user.organization,
+                $or: [
+                    { status: { $in: ["draft", "partial", "overdue"] } },
+                    { createdAt: { $gte: fourMonthsAgo } },
+                ],
+            });
+            query.bill = { $in: visibleBillIds };
+        }
+
         // إزالة الحد - جلب جميع الطلبات بدون pagination
         // تم إزالة effectiveLimit لعرض جميع الطلبات القديمة والجديدة
 
@@ -2870,3 +2887,4 @@ export const deliverOrderSection = async (req, res) => {
         });
     }
 };
+

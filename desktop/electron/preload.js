@@ -22,9 +22,4 @@ contextBridge.exposeInMainWorld("bombaDesktop", {
     const { ipcRenderer } = require("electron");
     ipcRenderer.send('print-preview');
   },
-  // Opens the in-app print preview window (desktop only)
-  openPrintPreview: (html, lang) => {
-    const { ipcRenderer } = require("electron");
-    return ipcRenderer.invoke('print-preview-open', { html, lang });
-  }
 });

@@ -6,7 +6,7 @@ import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { api } from '../services/api';
 import { formatCurrency as formatCurrencyUtil, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
-import { printBill, buildBillPrintHTML } from '../utils/printBill';
+import { printBill } from '../utils/printBill';
 import { useApp } from '../context/AppContext';
 import { io } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
@@ -475,14 +475,7 @@ const BillView = () => {
 									className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs flex items-center gap-1 transition-colors"
 									onClick={async () => {
 										const billViewLang = localStorage.getItem('billViewLanguage') || 'ar';
-										// على سطح المكتب (Electron): معاينة داخل التطبيق مع التحكم في الطباعة من النظام
-										// على الويب: النافذة المنبثقة القديمة كما هي
-										if ((window as any).bombaDesktop?.isDesktop) {
-											const html = await buildBillPrintHTML(bill as any, user?.organizationName, billViewLang, t);
-											(window as any).bombaDesktop.openPrintPreview(html, billViewLang);
-										} else {
-											printBill(bill as any, user?.organizationName, billViewLang, t).catch(console.error);
-										}
+										printBill(bill as any, user?.organizationName, billViewLang, t).catch(console.error);
 									}}
 									title={t('billView.print')}
 								>
