@@ -3768,7 +3768,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
     <div className="fixed inset-0 z-40 flex bg-black/60 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white dark:bg-gray-900 w-full flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
-        {/* HEADER */}
+        {/* HEADER — بدون بحث */}
         <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center ring-1 ring-white/25 flex-shrink-0">
@@ -3783,17 +3783,6 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="relative hidden sm:block">
-              <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/60 pointer-events-none`} />
-              <input ref={searchInputRef} type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="بحث سريع..."
-                className={`${isRTL ? 'pr-8 pl-8' : 'pl-8 pr-8'} py-1.5 text-xs rounded-lg bg-white/15 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:bg-white/25 w-44 transition-all`} />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className={`absolute ${isRTL ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 text-white/60 hover:text-white`}>
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
             {orderItems.length > 0 && (
               <div className="bg-white/15 rounded-xl px-3 py-1.5 ring-1 ring-white/25 text-center">
                 <p className="text-xs text-orange-100 leading-none">الإجمالي</p>
@@ -3803,21 +3792,6 @@ const OrderModal: React.FC<OrderModalProps> = ({
             <button onClick={onClose} className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center text-white ring-1 ring-white/25 transition-all">
               <X className="h-4 w-4" />
             </button>
-          </div>
-        </div>
-
-        {/* Search mobile */}
-        <div className="sm:hidden px-3 py-2 bg-gray-100 dark:bg-gray-800 flex-shrink-0">
-          <div className="relative">
-            <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none`} />
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder={t('cafe.orderModal.searchPlaceholder')}
-              className={`w-full ${isRTL ? 'pr-8 pl-7' : 'pl-8 pr-7'} py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 outline-none`} />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className={`absolute ${isRTL ? 'left-2.5' : 'right-2.5'} top-1/2 -translate-y-1/2 text-gray-400`}>
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
         </div>
 
@@ -3876,7 +3850,28 @@ const OrderModal: React.FC<OrderModalProps> = ({
 
           {/* Col 3: Items */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900">
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
+
+            {/* البحث داخل الأصناف */}
+            <div className="px-2 pt-2 pb-1.5 flex-shrink-0">
+              <div className="relative">
+                <Search className={`absolute ${isRTL ? 'right-2.5' : 'left-2.5'} top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none`} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder={t('cafe.orderModal.searchPlaceholder')}
+                  className={`w-full ${isRTL ? 'pr-8 pl-7' : 'pl-8 pr-7'} py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-orange-400 focus:border-orange-400 outline-none transition-all`}
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className={`absolute ${isRTL ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600`}>
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="px-2 py-1 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
               <p className="text-xs font-semibold text-gray-400 dark:text-gray-500">
                 {searchQuery
                   ? 'نتائج البحث'
@@ -3886,28 +3881,28 @@ const OrderModal: React.FC<OrderModalProps> = ({
               </p>
               {displayedItems.length > 0 && <span className="text-xs text-gray-400">{displayedItems.length}</span>}
             </div>
-            <div className="flex-1 overflow-y-auto p-2 min-h-0">
+            <div className="flex-1 overflow-y-auto p-1.5 min-h-0">
               {displayedItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600 select-none">
-                  <Search className="h-10 w-10 mb-2 opacity-30" />
+                  <Search className="h-8 w-8 mb-2 opacity-30" />
                   <p className="text-xs">{searchQuery ? t('cafe.orderModal.noResults') : 'اختر قسماً'}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-1">
                   {displayedItems.map(item => {
                     const qty = orderItems.find(i => i.menuItem === item.id)?.quantity || 0;
                     const inOrder = qty > 0;
                     return (
                       <button key={item.id} onClick={() => handleAddWithFlash(item)}
-                        className={`relative group flex flex-col text-right rounded-lg border transition-all duration-150 overflow-hidden active:scale-95 ${inOrder ? 'border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-orange-200 hover:shadow-sm'}`}>
+                        className={`relative group flex flex-col items-center rounded-lg border transition-all duration-150 overflow-hidden active:scale-95 ${inOrder ? 'border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-orange-200 hover:shadow-sm'}`}>
                         {inOrder && (
-                          <span className="absolute top-1 left-1 min-w-[18px] h-[18px] bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1 leading-none shadow-sm">{qty}</span>
+                          <span className="absolute top-1 left-1 min-w-[16px] h-[16px] bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-0.5 leading-none shadow-sm">{qty}</span>
                         )}
-                        <div className="p-2 flex-1">
-                          <p className="font-medium text-gray-900 dark:text-gray-100 text-xs leading-snug line-clamp-2 mb-1">{item.name}</p>
-                          <p className={`text-xs font-bold ${inOrder ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>{fmt(item.price)}</p>
+                        <div className="px-1.5 pt-2 pb-1 flex-1 flex flex-col items-center justify-center w-full">
+                          <p className="font-medium text-gray-900 dark:text-gray-100 text-xs leading-snug line-clamp-2 text-center mb-1">{item.name}</p>
+                          <p className={`text-xs font-bold text-center ${inOrder ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>{fmt(item.price)}</p>
                         </div>
-                        <div className={`flex items-center justify-center gap-1 py-1 border-t text-xs font-medium transition-all ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
+                        <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-xs font-medium transition-all ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
                           <Plus className="h-2.5 w-2.5" /><span>{inOrder ? 'إضافة' : 'أضف'}</span>
                         </div>
                       </button>
@@ -3918,8 +3913,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
           </div>
 
-          {/* Col 4: Order */}
-          <div className="w-52 sm:w-60 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          {/* Col 4: Order — أوسع */}
+          <div className="w-64 sm:w-72 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
             <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <div className="w-1 h-4 bg-gradient-to-b from-green-400 to-emerald-500 rounded-full"></div>
@@ -3940,26 +3935,47 @@ const OrderModal: React.FC<OrderModalProps> = ({
               ) : orderItems.map(item => (
                 <div key={item.menuItem} ref={el => { itemRefsMap.current[item.menuItem] = el; }}
                   className={`rounded-lg border overflow-hidden transition-all duration-300 ${flashId === item.menuItem ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/30 ring-1 ring-orange-300 scale-[1.02]' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
-                  <div className="flex items-center gap-1.5 px-2 py-1.5">
-                    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded overflow-hidden flex-shrink-0">
-                      <button onClick={() => updateItemQuantity(item.menuItem, -1)}
-                        className="w-5 h-5 flex items-center justify-center text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors font-bold text-sm">−</button>
-                      <span className="w-5 text-center font-bold text-xs text-gray-900 dark:text-gray-100 select-none">{item.quantity}</span>
-                      <button onClick={() => updateItemQuantity(item.menuItem, 1)}
-                        className="w-5 h-5 flex items-center justify-center text-green-500 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors font-bold text-sm">+</button>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 dark:text-gray-100 text-xs truncate leading-tight">{item.name}</p>
-                      <p className="text-xs text-gray-400 leading-tight">{fmt(item.price * item.quantity)}</p>
-                    </div>
-                    <div className="flex items-center gap-0.5 flex-shrink-0">
-                      <button onClick={() => setExpandedNotes(p => ({ ...p, [item.menuItem]: !p[item.menuItem] }))}
-                        className={`w-5 h-5 rounded flex items-center justify-center transition-all ${item.notes || expandedNotes[item.menuItem] ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'text-gray-300 hover:text-gray-500'}`}>
-                        <Save className="h-2.5 w-2.5" />
+                  <div className="flex items-center gap-2 px-2 py-2">
+                    {/* أزرار الكمية */}
+                    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+                      <button
+                        onClick={() => updateItemQuantity(item.menuItem, -1)}
+                        title="تقليل الكمية"
+                        className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all font-bold text-base">
+                        −
                       </button>
-                      <button onClick={() => removeItemFromOrder(item.menuItem)}
-                        className="w-5 h-5 rounded flex items-center justify-center text-gray-300 hover:text-red-500 transition-all">
-                        <Trash2 className="h-2.5 w-2.5" />
+                      <span className="w-7 text-center font-bold text-sm text-gray-900 dark:text-gray-100 select-none border-x border-gray-200 dark:border-gray-700">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={() => updateItemQuantity(item.menuItem, 1)}
+                        title="زيادة الكمية"
+                        className="w-7 h-7 flex items-center justify-center text-green-500 hover:bg-green-500 hover:text-white transition-all font-bold text-base">
+                        +
+                      </button>
+                    </div>
+                    {/* الاسم والسعر */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-xs leading-snug">{item.name}</p>
+                      <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold leading-tight">{fmt(item.price * item.quantity)}</p>
+                    </div>
+                    {/* أزرار الملاحظة والحذف */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => setExpandedNotes(p => ({ ...p, [item.menuItem]: !p[item.menuItem] }))}
+                        title={item.notes ? 'عرض/تعديل الملاحظة' : 'إضافة ملاحظة'}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+                          item.notes || expandedNotes[item.menuItem]
+                            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-blue-50 hover:text-blue-500'
+                        }`}>
+                        <Save className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => removeItemFromOrder(item.menuItem)}
+                        title="حذف الصنف"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 transition-all">
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
