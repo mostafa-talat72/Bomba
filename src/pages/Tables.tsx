@@ -398,9 +398,7 @@ const Tables: React.FC = () => {
   const [currentOrderItems, setCurrentOrderItems] = useState<LocalOrderItem[]>([]);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [orderNotes, setOrderNotes] = useState('');
-  const [tableStatuses, setTableStatuses] = useState<Record<string | number, { hasUnpaid: boolean; orders: Order[] }>>({});
-  const [showManagementModal, setShowManagementModal] = useState(false);
+  const [orderNotes, setOrderNotes] = useState('');  const [showManagementModal, setShowManagementModal] = useState(false);
   const [showSectionModal, setShowSectionModal] = useState(false);
   const [showTableModal, setShowTableModal] = useState(false);
   const [editingSection, setEditingSection] = useState<TableSection | null>(null);
@@ -480,7 +478,7 @@ const Tables: React.FC = () => {
   const [editPeriodStartTime, setEditPeriodStartTime] = useState('');
   const [editPeriodEndTime, setEditPeriodEndTime] = useState('');
   const [isEditingPeriod, setIsEditingPeriod] = useState(false);
-  const [tableBillsMap, setTableBillsMap] = useState<Record<number, { hasUnpaid: boolean; bills: Bill[] }>>({});
+  // tableBillsMap و tableStatuses أصبحا مشتقّين من tableDataMap useMemo
 
   // ── New Enhancement State ─────────────────────────────────────────────────
   // #2 - Global search bar
@@ -525,20 +523,23 @@ const Tables: React.FC = () => {
   useEffect(() => { selectedTableRef.current = selectedTable; }, [selectedTable]);
   useEffect(() => { tablesRef.current = tables; }, [tables]);
 
-  // ── Modal scroll lock ────────────────────────────────────────────────────
-  const anyModalOpen = showOrderModal || showEditOrderModal || showManagementModal ||
+  // ── Modal scroll lock — useMemo لتجنب إعادة حساب في كل render ──────────
+  const anyModalOpen = useMemo(() =>
+    showOrderModal || showEditOrderModal || showManagementModal ||
     showSectionModal || showTableModal || showConfirmModal || showUnifiedTableModal ||
     showPaymentModal || showPartialPaymentModal || showSessionPaymentModal ||
-    showQuickAddModal || showDailyReportModal;
+    showQuickAddModal || showDailyReportModal,
+  [showOrderModal, showEditOrderModal, showManagementModal, showSectionModal, showTableModal,
+   showConfirmModal, showUnifiedTableModal, showPaymentModal, showPartialPaymentModal,
+   showSessionPaymentModal, showQuickAddModal, showDailyReportModal]);
   useBodyScrollLock(anyModalOpen);
 
-  // ── Permission check ─────────────────────────────────────────────────────
-  const checkUserRole = () => {
+  // ── Permission check — useMemo لتجنب إعادة حساب في كل render ───────────
+  const isManagerOrOwner = useMemo(() => {
     if (user?.role === 'admin') return true;
     if (user?.permissions?.includes('view_all_bills') || user?.permissions?.includes('admin') || user?.permissions?.includes('all')) return true;
     return false;
-  };
-  const isManagerOrOwner = checkUserRole();
+  }, [user?.role, user?.permissions]);
 
   // ── Load initial data ────────────────────────────────────────────────────
   const loadInitialData = async () => {
@@ -564,47 +565,40 @@ const Tables: React.FC = () => {
     return () => { hasLoadedDataRef.current = false; };
   }, []);
 
-  // ── Table statuses ───────────────────────────────────────────────────────
-  const fetchAllTableStatuses = useCallback(() => {
-    const statuses: Record<number, { hasUnpaid: boolean; orders: Order[] }> = {};
-    const unpaidBills = bills.filter((b: any) => b.status !== 'paid' && b.status !== 'cancelled');
-    const tableBillsMapLocal = new Map<string, any[]>();
-    unpaidBills.forEach((bill: any) => {
-      if (bill.table) {
-        const tid = (bill.table._id || bill.table.id || bill.table).toString();
-        if (!tableBillsMapLocal.has(tid)) tableBillsMapLocal.set(tid, []);
-        tableBillsMapLocal.get(tid)!.push(bill);
-      }
+  // ── Table statuses + billsMap — دمج العمليتين في useMemo واحد بدلاً من useEffect مزدوج ──
+  // يمنع double-scan و double-render عند كل تغيير في bills أو tables
+  const tableDataMap = useMemo(() => {
+    const statusMap: Record<string | number, { hasUnpaid: boolean; orders: Order[] }> = {};
+    const billsMap: Record<string | number, { hasUnpaid: boolean; bills: Bill[] }> = {};
+
+    if (tables.length === 0) return { statusMap, billsMap };
+
+    // بناء index واحد: tableId -> bills (مرة واحدة فقط)
+    const tidToBills = new Map<string, Bill[]>();
+    bills.forEach((b: Bill) => {
+      if (!b.table) return;
+      const tid = ((b.table as any)._id || (b.table as any).id || b.table).toString();
+      if (!tidToBills.has(tid)) tidToBills.set(tid, []);
+      tidToBills.get(tid)!.push(b);
     });
-    for (const table of tables) {
-      const tid = (table._id || table.id).toString();
-      statuses[table.number] = { hasUnpaid: (tableBillsMapLocal.get(tid) || []).length > 0, orders: [] };
-    }
-    setTableStatuses(statuses);
+
+    tables.forEach((table: Table) => {
+      const tid = (table._id || (table as any).id).toString();
+      const tBills = tidToBills.get(tid) || [];
+      const hasUnpaid = tBills.some(b => !['paid', 'cancelled'].includes(b.status));
+      statusMap[table.number] = { hasUnpaid, orders: [] };
+      billsMap[table.number] = { hasUnpaid, bills: tBills };
+    });
+
+    return { statusMap, billsMap };
   }, [bills, tables]);
 
-  useEffect(() => {
-    if (tables.length > 0) fetchAllTableStatuses();
-  }, [tables, bills, fetchAllTableStatuses]);
+  // نشر النتائج — فقط مرة واحدة لكل تغيير
+  const tableStatuses = tableDataMap.statusMap;
+  const tableBillsMap  = tableDataMap.billsMap;
 
-  // tableBillsMap for billing tab
-  useEffect(() => {
-    if (tables.length > 0) {
-      const map: Record<string | number, { hasUnpaid: boolean; bills: Bill[] }> = {};
-      tables.forEach((table: Table) => {
-        const tableIdStr = table._id.toString();
-        const tableBills = bills.filter((bill: Bill) => {
-          if (!bill.table) return false;
-          return ((bill.table as any)._id || bill.table).toString() === tableIdStr;
-        });
-        map[table.number] = {
-          hasUnpaid: tableBills.some((b: Bill) => ['draft', 'partial', 'overdue'].includes(b.status)),
-          bills: tableBills,
-        };
-      });
-      setTableBillsMap(map);
-    }
-  }, [bills, tables]);
+  // للتوافق مع الكود القديم الذي يستدعي fetchAllTableStatuses
+  const fetchAllTableStatuses = useCallback(() => { /* no-op — tableDataMap يتحدث تلقائياً */ }, []);
 
   // ── Search bills ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -635,7 +629,10 @@ const Tables: React.FC = () => {
   useEffect(() => {
     if (selectedBill && bills.length > 0 && !showPaymentModal && !showPartialPaymentModal && !showSessionPaymentModal) {
       const updated = bills.find((b: Bill) => b.id === selectedBill.id || b._id === selectedBill._id);
-      if (updated && JSON.stringify(updated) !== JSON.stringify(selectedBill)) setSelectedBill(updated);
+      // مقارنة بالـ paid/remaining بدل JSON.stringify الثقيل
+      if (updated && (updated.paid !== selectedBill.paid || updated.remaining !== selectedBill.remaining || updated.status !== selectedBill.status)) {
+        setSelectedBill(updated);
+      }
     }
   }, [bills, selectedBill, showPaymentModal, showPartialPaymentModal, showSessionPaymentModal]);
 
@@ -650,17 +647,43 @@ const Tables: React.FC = () => {
     if (selectedBill && (selectedBill.id || selectedBill._id)) refetchAggregatedItems();
   }, [selectedBill?.id, selectedBill?._id, selectedBill?.paid, selectedBill?.remaining]);
 
-  // ── Auto-refresh active sessions ─────────────────────────────────────────
+  // ── Active sessions state مستقر للـ interval ────────────────────────────
+  // معرّفة قبل أول استخدام (كانت تحت تسبب ReferenceError قبل التهيئة)
+  const hasActiveSession = useCallback((bill: Bill) =>
+    bill.sessions?.some((s: any) => (typeof s === 'object' ? s.status : null) === 'active') || false,
+  []);
+
+  const hasAnyActiveSession = useMemo(() =>
+    bills.some(b => hasActiveSession(b)), [bills]);
+
+  const activeSessionBillIds = useMemo(() => {
+    if (!hasAnyActiveSession) return '';
+    return bills
+      .filter(b => hasActiveSession(b))
+      .map(b => b._id || b.id)
+      .sort()
+      .join(',');
+  }, [hasAnyActiveSession, bills]);
+
+  // ── Auto-refresh active sessions — interval مستقر بـ refs ────────────────
+  const billsRef = useRef(bills);
+  const selectedBillRef2 = useRef(selectedBill);
+  const showPaymentModalRef = useRef(showPaymentModal);
+  useEffect(() => { billsRef.current = bills; }, [bills]);
+  useEffect(() => { selectedBillRef2.current = selectedBill; }, [selectedBill]);
+  useEffect(() => { showPaymentModalRef.current = showPaymentModal; }, [showPaymentModal]);
+
   useEffect(() => {
-    let interval: Interval | null = null;
+    if (!hasAnyActiveSession) return;
     const updateActiveSessions = async () => {
-      const activeSessionBills = bills.filter(b => hasActiveSession(b));
+      const currentBills = billsRef.current;
+      const activeSessionBills = currentBills.filter(b => hasActiveSession(b));
       if (activeSessionBills.length === 0) return;
       await Promise.all(activeSessionBills.flatMap(bill =>
-        bill.sessions.filter(s => s.status === 'active').map(async s => {
+        (bill.sessions || []).filter((s: any) => s.status === 'active').map(async (s: any) => {
           await api.updateSessionCost(s._id || s.id);
-          if (selectedBill && (selectedBill._id === bill._id || selectedBill.id === bill.id)
-            && !showPaymentModal && !showPartialPaymentModal && !showSessionPaymentModal) {
+          const curBill = selectedBillRef2.current;
+          if (curBill && (curBill._id === bill._id || curBill.id === bill.id) && !showPaymentModalRef.current) {
             const r = await api.getBill(bill._id || bill.id);
             if (r.success && r.data) setSelectedBill(r.data);
           }
@@ -668,10 +691,9 @@ const Tables: React.FC = () => {
       ));
       await fetchBills();
     };
-    if (bills.some(b => hasActiveSession(b))) interval = setInterval(updateActiveSessions, 5000);
-    return () => { if (interval) clearInterval(interval); };
-  }, [bills.length, bills.map(b => (b.sessions || []).map(s => s.status).join(',')).join(','),
-    showPaymentModal, showPartialPaymentModal, showSessionPaymentModal, selectedBill?._id]);
+    const interval = setInterval(updateActiveSessions, 5000);
+    return () => clearInterval(interval);
+  }, [hasAnyActiveSession, activeSessionBillIds]); // deps مستقرة — لا تنشئ string جديد في كل render
 
   // ── Socket.IO ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -727,20 +749,8 @@ const Tables: React.FC = () => {
             setOriginalAmount(data.bill.remaining.toString());
           }
         }
-        // تحديث table status فوراً من الـ data
-        if (data.bill.table) {
-          const tbl = tablesRef.current.find(tb => {
-            const btid = data.bill.table?._id || data.bill.table;
-            return tb._id === btid || (tb as any).id === btid;
-          });
-          if (tbl) {
-            const isUnpaid = !['paid', 'cancelled'].includes(data.bill.status);
-            setTableStatuses(prev => ({
-              ...prev,
-              [tbl.number]: { ...prev[tbl.number], hasUnpaid: isUnpaid },
-            }));
-          }
-        }
+        // تحديث table status — tableStatuses الآن useMemo يتحدث تلقائياً
+        // لا حاجة لاستدعاء setTableStatuses يدوياً
       }
       // جلب في الخلفية للتأكيد
       Promise.all([fetchBills(), fetchTables()]).then(() => fetchAllTableStatuses()).catch(() => {});
@@ -783,15 +793,9 @@ const Tables: React.FC = () => {
       }
     });
 
-    // ── حالة الطاولة ─────────────────────────────────────────────────────
-    socket.on('table-status-update', (data: { tableId: string; status: string }) => {
-      const table = tablesRef.current.find(tb => tb._id === data.tableId || (tb as any).id === data.tableId);
-      if (table) {
-        setTableStatuses(prev => ({
-          ...prev,
-          [table.number]: { ...prev[table.number], hasUnpaid: data.status === 'occupied' },
-        }));
-      }
+    // ── حالة الطاولة — tableStatuses useMemo يتحدث تلقائياً عند fetchBills ──
+    socket.on('table-status-update', (_data: { tableId: string; status: string }) => {
+      // لا حاجة لـ setTableStatuses يدوياً — يتحدث مع bills
     });
 
     // ── تحديث المخزون ────────────────────────────────────────────────────
@@ -847,10 +851,11 @@ const Tables: React.FC = () => {
   }, [activeTableSections, activeSectionFilter]);
 
   const tableStats = useMemo(() => {
-    const empty = activeTables.filter(t => !tableStatuses[t.number]?.hasUnpaid).length;
-    const occupied = activeTables.filter(t => tableStatuses[t.number]?.hasUnpaid).length;
+    const statusMap = tableDataMap.statusMap;
+    const empty = activeTables.filter(t => !statusMap[t.number]?.hasUnpaid).length;
+    const occupied = activeTables.filter(t => statusMap[t.number]?.hasUnpaid).length;
     return { totalSections: activeTableSections.length, totalTables: activeTables.length, emptyTables: empty, occupiedTables: occupied };
-  }, [activeTables, activeTableSections, tableStatuses]);
+  }, [activeTables, activeTableSections, tableDataMap]);
 
   const getTablesBySection = useMemo(() => {
     const map: Record<string, Table[]> = {};
@@ -895,7 +900,7 @@ const Tables: React.FC = () => {
       else if (statusFilter !== 'all' && bill.status !== statusFilter) return false;
       return true;
     });
-  }, [bills, selectedTable, billTypeFilter, statusFilter]);
+  }, [bills, selectedTable?._id, billTypeFilter, statusFilter]);
 
   const billStats = useMemo(() => filteredBills.reduce((acc, bill) => ({
     totalBills: acc.totalBills + 1,
@@ -906,10 +911,77 @@ const Tables: React.FC = () => {
   }), { totalBills: 0, totalPaid: 0, totalRemaining: 0, partialBills: 0, totalAmount: 0 }), [filteredBills]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
-  const formatCurrency = (amount: number) => formatCurrencyUtil(amount, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP');
+  const formatCurrency = useCallback((amount: number) =>
+    formatCurrencyUtil(amount, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP'),
+  [i18n.language]);
 
-  const hasActiveSession = (bill: Bill) =>
-    bill.sessions?.some((s: any) => (typeof s === 'object' ? s.status : null) === 'active') || false;
+  // ── tableCardData — بيانات كل طاولة محسوبة مرة واحدة بدلاً من O(N×M) في كل render ──
+  const tableCardData = useMemo(() => {
+    const result = new Map<string, {
+      tBills: Bill[];
+      tOrdersCount: number;
+      activeSessionType: 'playstation' | 'computer' | 'both' | null;
+    }>();
+
+    // index: tableId -> bills (مرة واحدة)
+    const tidToBills = new Map<string, Bill[]>();
+    bills.forEach((b: Bill) => {
+      if (!b.table) return;
+      const tid = ((b.table as any)._id || (b.table as any).id || b.table).toString();
+      if (!tidToBills.has(tid)) tidToBills.set(tid, []);
+      tidToBills.get(tid)!.push(b);
+    });
+
+    // index: tableId -> active orders count (مرة واحدة)
+    const tidToOrderCount = new Map<string, number>();
+    orders.forEach((o: any) => {
+      const oid = (o.table?._id || o.table?.id || o.table)?.toString();
+      if (!oid) return;
+      if (['paid', 'cancelled'].includes((o.bill as any)?.status)) return;
+      tidToOrderCount.set(oid, (tidToOrderCount.get(oid) || 0) + 1);
+    });
+
+    activeTables.forEach((table: Table) => {
+      const tid = (table._id || (table as any).id).toString();
+      const tBills = tidToBills.get(tid) || [];
+
+      // active sessions
+      const activeSessions = tBills.flatMap(b =>
+        ((b as any).sessions || []).filter((s: any) => typeof s === 'object' && s?.status === 'active')
+      );
+      const hasPS = activeSessions.some((s: any) => (s.deviceType || '').includes('playstation'));
+      const hasPC = activeSessions.some((s: any) => (s.deviceType || '').includes('computer'));
+      const activeSessionType: 'playstation' | 'computer' | 'both' | null =
+        hasPS && hasPC ? 'both' : hasPS ? 'playstation' : hasPC ? 'computer' : null;
+
+      result.set(tid, {
+        tBills,
+        tOrdersCount: tidToOrderCount.get(tid) || 0,
+        activeSessionType,
+      });
+    });
+    return result;
+  }, [bills, orders, activeTables]);
+
+  // ── gamingDeviceData — بيانات الأجهزة محسوبة خارج JSX ──────────────────
+  const gamingDeviceData = useMemo(() => {
+    const allGamingBills = bills.filter((bill: Bill) =>
+      !bill.table && (bill.billType === 'playstation' || bill.billType === 'computer' ||
+        (bill.sessions && bill.sessions.some((s: any) => s.deviceType === 'playstation' || s.deviceType === 'computer')))
+    );
+    const deviceMap = new Map<string, { deviceName: string; deviceType: 'playstation' | 'computer'; hasActiveSession: boolean; bills: Bill[] }>();
+    allGamingBills.forEach((bill: Bill) => {
+      const gamingSessions = (bill.sessions || []).filter((s: any) => s.deviceType === 'playstation' || s.deviceType === 'computer');
+      gamingSessions.forEach((session: any) => {
+        const key = session.deviceName || `جهاز ${session.deviceNumber}`;
+        if (!deviceMap.has(key)) deviceMap.set(key, { deviceName: key, deviceType: session.deviceType, hasActiveSession: false, bills: [] });
+        const d = deviceMap.get(key)!;
+        if (session.status === 'active') d.hasActiveSession = true;
+        if (!d.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) d.bills.push(bill);
+      });
+    });
+    return deviceMap;
+  }, [bills]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1017,12 +1089,14 @@ const Tables: React.FC = () => {
   }, [bills, orders]);
 
   // تحديث تلقائي للسجل عند تغيير bills أو orders والطاولة مفتوحة
+  // السجل يتحدث فقط عند فتح مودال الطاولة أو عند تغيير الطاولة المحددة
+  // لا يُعاد عند كل تغيير في bills/orders لتجنب الـ re-render المستمر
   useEffect(() => {
     if (selectedTable && showUnifiedTableModal) {
       const tableId = selectedTable._id || (selectedTable as any).id;
       buildActivityLog(tableId);
     }
-  }, [bills, orders, selectedTable, showUnifiedTableModal, buildActivityLog]);
+  }, [selectedTable?._id, showUnifiedTableModal]);
 
   // #1 Quick order from table card
   const handleQuickOrder = (table: Table, e: React.MouseEvent) => {
@@ -1288,7 +1362,7 @@ const Tables: React.FC = () => {
             await printOrder({ ...order, items: order.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t);
           }, 0);
         }
-        setTableStatuses(p => ({ ...p, [selectedTable.number]: { hasUnpaid: true, orders: [...(p[selectedTable.number]?.orders || []), order] } }));
+        // tableStatuses يتحدث تلقائياً من useMemo عند fetchBills
         setTableOrders(p => [...p, order]);
         setTimeout(() => { fetchOrders(); fetchBills(); }, 100);
       }
@@ -2081,43 +2155,17 @@ const Tables: React.FC = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3">
                       {sectionTables.map(table => {
                         const tableIdStr = (table._id || (table as any).id).toString();
-                        const tBills = bills.filter((b: Bill) => {
-                          const btid = (b.table as any)?._id || b.table;
-                          return btid && btid.toString() === tableIdStr;
-                        });
-                        const tOrdersCount = orders.filter((o: any) => {
-                          const oid = o.table?._id || o.table?.id || o.table;
-                          return oid && oid.toString() === tableIdStr && !['paid','cancelled'].includes((o.bill as any)?.status);
-                        }).length;
-
-                        // حساب نوع الجلسات النشطة — نبحث في كل الفواتير المرتبطة بالطاولة
-                        // الجلسات قد تكون في فواتير billType='playstation'|'computer' مرتبطة بطاولة
-                        const allTableBills = bills.filter((b: Bill) => {
-                          const btid = (b.table as any)?._id || (b.table as any)?.id || b.table;
-                          return btid && btid.toString() === tableIdStr;
-                        });
-                        const activeSessions = allTableBills.flatMap((b: Bill) =>
-                          ((b as any).sessions || []).filter((s: any) =>
-                            typeof s === 'object' && s !== null && s.status === 'active'
-                          )
-                        );
-                        const hasPS = activeSessions.some((s: any) =>
-                          (s.deviceType || '').toLowerCase().includes('playstation')
-                        );
-                        const hasPC = activeSessions.some((s: any) =>
-                          (s.deviceType || '').toLowerCase().includes('computer')
-                        );
-                        const activeSessionType: 'playstation' | 'computer' | 'both' | null =
-                          hasPS && hasPC ? 'both' : hasPS ? 'playstation' : hasPC ? 'computer' : null;
+                        // استخدام tableCardData المحسوبة مسبقاً بدلاً من O(N×M) في الـ render
+                        const cardData = tableCardData.get(tableIdStr);
                         return (
                           <TableButton
                             key={table.id}
                             table={table}
                             isSelected={selectedTable?.id === table.id && showUnifiedTableModal}
                             isOccupied={tableStatuses[table.number]?.hasUnpaid || false}
-                            tableBills={tBills}
-                            tableOrdersCount={tOrdersCount}
-                            activeSessionType={activeSessionType}
+                            tableBills={cardData?.tBills || []}
+                            tableOrdersCount={cardData?.tOrdersCount || 0}
+                            activeSessionType={cardData?.activeSessionType || null}
                             onClick={handleTableClick}
                             onQuickOrder={handleQuickOrder}
                             onQuickBilling={handleQuickBilling}
@@ -2173,19 +2221,8 @@ const Tables: React.FC = () => {
             )}
           </div>
           {!isPlaystationSectionCollapsed && (() => {
-            const allGamingBills = bills.filter((bill: Bill) => !bill.table && (bill.billType === 'playstation' || bill.billType === 'computer' || (bill.sessions && bill.sessions.some((s: any) => s.deviceType === 'playstation' || s.deviceType === 'computer'))));
-            const deviceMap = new Map<string, { deviceName: string; deviceType: 'playstation' | 'computer'; hasActiveSession: boolean; bills: Bill[] }>();
-            allGamingBills.forEach((bill: Bill) => {
-              const gamingSessions = bill.sessions?.filter((s: any) => s.deviceType === 'playstation' || s.deviceType === 'computer') || [];
-              gamingSessions.forEach((session: any) => {
-                const key = session.deviceName || `${t('billing.device')} ${session.deviceNumber}`;
-                if (!deviceMap.has(key)) deviceMap.set(key, { deviceName: key, deviceType: session.deviceType, hasActiveSession: false, bills: [] });
-                const d = deviceMap.get(key)!;
-                if (session.status === 'active') d.hasActiveSession = true;
-                if (!d.bills.find(b => (b.id || b._id) === (bill.id || bill._id))) d.bills.push(bill);
-              });
-            });
-            const visibleDevices = Array.from(deviceMap.values()).map(d => {
+            // استخدام gamingDeviceData المحسوبة في useMemo بدلاً من الحسابات المضمّنة
+            const visibleDevices = Array.from(gamingDeviceData.values()).map(d => {
               let fb = d.bills;
               if (playstationStatusFilter === 'unpaid') fb = d.bills.filter(b => ['draft', 'partial', 'overdue'].includes(b.status));
               else if (playstationStatusFilter === 'paid') fb = d.bills.filter(b => b.status === 'paid');
