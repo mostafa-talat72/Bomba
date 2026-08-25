@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  ShoppingCart, Plus, Edit, Trash2, X, PlusCircle, MinusCircle, Printer,
-  Settings, AlertTriangle, Search, CheckCircle, DollarSign, CreditCard,
+  ShoppingCart, Plus, Edit, Trash2, X, Printer,
+  Settings, AlertTriangle, Search, CheckCircle, DollarSign,
   Calendar, User, Receipt, QrCode, Table as TableIcon, Eye, EyeOff,
-  Gamepad2, ChevronDown, ChevronUp, Save, ChefHat, Maximize2, Minimize2,
+  Gamepad2, ChevronDown, ChevronUp, ChefHat, Maximize2, Minimize2,
   Clock, History, FileText, Zap, Layers
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -31,333 +31,16 @@ import PartialPaymentModal from '../components/PartialPaymentModal';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 import '../styles/billing-animations.css';
+import TableButton from '../components/tables/TableButton';
+import PlaystationBillItem from '../components/tables/PlaystationBillItem';
+import { ItemCard, OrderItemRow } from '../components/tables/OrderItems';
+import { getTableDisplay, getAgeLabel, getTableAgeColor, formatCurrencyArabic } from '../components/tables/tableHelpers';
+import type { LocalOrderItem } from '../components/tables/tableHelpers';
+import ModalPortal from '../components/ModalPortal';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-const getTableDisplay = (v: string | number | undefined | null, lang = 'ar'): string => {
-  if (v === undefined || v === null) return '';
-  const n = Number(v);
-  if (!isNaN(n) && v.toString().trim() !== '') return formatDecimal(n, lang);
-  return v.toString();
-};
-
-const toArabicNumbers = (str: string | number) =>
-  str.toString().replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[+d]);
-
-const formatCurrencyArabic = (amount: number) => toArabicNumbers(formatCurrencyUtil(amount));
-
-type Interval = ReturnType<typeof setInterval>;
-
-// ── Table age color helper ──────────────────────────────────────────────────
-
-/** Returns elapsed milliseconds since the oldest unpaid bill on this table */
-const getTableAgeMs = (bills: Bill[]): number | null => {
-  if (!bills || bills.length === 0) return null;
-  const unpaid = bills.filter(b => ['draft', 'partial', 'overdue'].includes(b.status));
-  if (unpaid.length === 0) return null;
-  const earliest = unpaid.reduce((min, b) => {
-    const d = new Date(b.createdAt).getTime();
-    return d < min ? d : min;
-  }, Infinity);
-  return Date.now() - earliest;
-};
-
-const getTableAgeColor = (bills: Bill[]): 'green' | 'yellow' | 'orange' | 'red' | null => {
-  const ms = getTableAgeMs(bills);
-  if (ms === null) return null;
-  const minutes = ms / 60000;
-  if (minutes < 30)  return 'green';   // < 30 min
-  if (minutes < 60)  return 'yellow';  // 30 min – 1 hr
-  if (minutes < 120) return 'orange';  // 1 – 2 hrs
-  return 'red';                        // > 2 hrs (includes days / months)
-};
-
-const getAgeLabel = (bills: Bill[]): string => {
-  const ms = getTableAgeMs(bills);
-  if (ms === null) return '';
-
-  const totalSeconds  = Math.floor(ms / 1000);
-  const totalMinutes  = Math.floor(totalSeconds / 60);
-  const totalHours    = Math.floor(totalMinutes / 60);
-  const totalDays     = Math.floor(totalHours   / 24);
-  const totalWeeks    = Math.floor(totalDays    / 7);
-  const totalMonths   = Math.floor(totalDays    / 30);
-
-  // < 1 minute
-  if (totalMinutes < 1)  return `${totalSeconds}ث`;
-
-  // < 1 hour  → show minutes (+ remaining seconds if < 10 min)
-  if (totalHours < 1) {
-    const secs = totalSeconds % 60;
-    if (totalMinutes < 10 && secs > 0) return `${totalMinutes}د ${secs}ث`;
-    return `${totalMinutes}د`;
-  }
-
-  // < 24 hours → show hours + remaining minutes
-  if (totalDays < 1) {
-    const mins = totalMinutes % 60;
-    return mins > 0 ? `${totalHours}س ${mins}د` : `${totalHours}س`;
-  }
-
-  // < 7 days → show days + remaining hours
-  if (totalWeeks < 1) {
-    const hrs = totalHours % 24;
-    return hrs > 0 ? `${totalDays}ي ${hrs}س` : `${totalDays}ي`;
-  }
-
-  // < 4 weeks → show weeks + remaining days
-  if (totalMonths < 1) {
-    const days = totalDays % 7;
-    return days > 0 ? `${totalWeeks}أ ${days}ي` : `${totalWeeks}أ`;
-  }
-
-  // ≥ 1 month → show months + remaining days
-  const remainingDays = totalDays % 30;
-  return remainingDays > 0 ? `${totalMonths}ش ${remainingDays}ي` : `${totalMonths}ش`;
-};
-
-interface LocalOrderItem {
-  menuItem: string;
-  name: string;
-  price: number;
-  quantity: number;
-  notes?: string;
-}
-
-// ─── Memoized sub-components ────────────────────────────────────────────────
-
-interface TableButtonProps {
-  table: Table;
-  isSelected: boolean;
-  isOccupied: boolean;
-  tableBills: Bill[];
-  tableOrdersCount: number;
-  activeSessionType: 'playstation' | 'computer' | 'both' | null;
-  onClick: (table: Table) => void;
-  onQuickOrder: (table: Table, e: React.MouseEvent) => void;
-  onQuickBilling: (table: Table, e: React.MouseEvent) => void;
-}
-
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, onClick, onQuickOrder, onQuickBilling }) => {
-  const { t, i18n } = useTranslation();
-  const [showTooltip, setShowTooltip] = useState(false);
-
-  const ageLabel = isOccupied ? getAgeLabel(tableBills) : '';
-  const ageColor = isOccupied ? getTableAgeColor(tableBills) : null;
-  const totalRemaining = tableBills
-    .filter(b => ['draft', 'partial', 'overdue'].includes(b.status))
-    .reduce((s, b) => s + (b.remaining || 0), 0);
-
-  // ── ثلاث حالات فقط ──────────────────────────────────────────────────────
-  // 1. فارغة  → رمادي
-  // 2. مشغولة → أحمر موحد (badge الوقت هو المؤشر الوحيد)
-  // 3. محددة  → برتقالي
-
-  const styles = isSelected
-    ? {
-        card:   'border-orange-400 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/40 dark:to-orange-800/30 shadow-lg ring-2 ring-orange-300 dark:ring-orange-700',
-        icon:   'bg-orange-500',
-        text:   'text-orange-700 dark:text-orange-300',
-        sub:    'text-orange-500 dark:text-orange-400',
-        hover:  'bg-orange-400/10',
-        badge:  'bg-orange-500',
-      }
-    : isOccupied
-    ? {
-        card:   'border-red-400 bg-gradient-to-br from-red-50 to-rose-100 dark:from-red-900/40 dark:to-red-800/30 hover:border-red-500 hover:shadow-lg hover:shadow-red-100 dark:hover:shadow-red-900/30',
-        icon:   'bg-red-500',
-        text:   'text-red-700 dark:text-red-300',
-        sub:    'text-red-500 dark:text-red-400',
-        hover:  'bg-red-400/10',
-        badge:  ageColor === 'red'    ? 'bg-red-600'
-               : ageColor === 'orange' ? 'bg-orange-500'
-               : ageColor === 'yellow' ? 'bg-yellow-500'
-               : 'bg-blue-500',
-      }
-    : {
-        card:   'border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 hover:border-gray-300 hover:shadow-lg hover:shadow-gray-100 dark:hover:shadow-gray-900/30',
-        icon:   'bg-gray-400 dark:bg-gray-500',
-        text:   'text-gray-600 dark:text-gray-300',
-        sub:    'text-gray-400 dark:text-gray-500',
-        hover:  'bg-gray-400/10',
-        badge:  'bg-gray-400',
-      };
-
-  return (
-    <div
-      className="relative"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-    >
-      <button
-        onClick={() => onClick(table)}
-        className={`group relative w-full rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 sm:hover:scale-110 hover:-translate-y-1 ${styles.card}`}
-      >
-        {/* ── وقت / حالة badge ── */}
-        <div className="absolute -top-2 -right-2 z-10">
-          {isSelected ? (
-            <span className="flex items-center justify-center px-2 h-6 bg-orange-500 text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800">
-              {t('cafe.selected')}
-            </span>
-          ) : isOccupied ? (
-            <span className={`flex items-center justify-center px-2 h-6 ${styles.badge} text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800 ${ageColor === 'red' ? 'animate-pulse' : ''}`}>
-              {ageLabel || t('cafe.occupied')}
-            </span>
-          ) : (
-            <span className="flex items-center justify-center px-2 h-6 bg-gray-400 dark:bg-gray-500 text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800">
-              {t('cafe.empty')}
-            </span>
-          )}
-        </div>
-
-        {/* ── orders count badge ── */}
-        {isOccupied && tableOrdersCount > 0 && (
-          <div className="absolute -top-2 -left-2 z-10 w-6 h-6 bg-blue-600 text-white text-xs font-bold rounded-full flex items-center justify-center shadow border border-white dark:border-gray-800">
-            {tableOrdersCount}
-          </div>
-        )}
-
-        {/* ── جسم الكارت ── */}
-        <div className="flex flex-col items-center justify-center px-2 pt-4 pb-7 sm:pt-5 sm:pb-8">
-          {/* أيقونة الطاولة / الجلسة النشطة */}
-          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center mb-2 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
-            {isOccupied && activeSessionType ? (
-              <span className="text-2xl sm:text-3xl leading-none select-none animate-pulse">
-                {activeSessionType === 'playstation' ? '🎮' :
-                 activeSessionType === 'computer'    ? '💻' : '🎮💻'}
-              </span>
-            ) : (
-              <TableIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-            )}
-          </div>
-
-          {/* رقم الطاولة */}
-          <span className={`text-lg sm:text-xl font-extrabold leading-none ${styles.text}`}>
-            {getTableDisplay(table.number, i18n.language)}
-          </span>
-
-          {/* المبلغ المتبقي */}
-          {isOccupied && totalRemaining > 0 && (
-            <span className={`text-xs font-semibold mt-1 hidden sm:block ${styles.sub}`}>
-              {formatCurrencyUtil(totalRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
-            </span>
-          )}
-        </div>
-
-        {/* hover glow */}
-        <div className={`absolute inset-0 rounded-xl sm:rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${styles.hover}`} />
-
-        {/* ── Quick action buttons ── */}
-        {isOccupied && !isSelected && (
-          <div className="absolute bottom-1.5 left-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-10">
-            <button
-              onClick={(e) => onQuickOrder(table, e)}
-              className="flex-1 py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-red-600 dark:text-red-400 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-red-200 dark:border-red-800 transition-all"
-              title={t('cafe.tableOrdersModal.newOrder')}>
-              <ShoppingCart className="h-3 w-3" />
-              <span className="hidden sm:inline">طلب</span>
-            </button>
-            <button
-              onClick={(e) => onQuickBilling(table, e)}
-              className="flex-1 py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-blue-600 dark:text-blue-400 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-blue-200 dark:border-blue-800 transition-all"
-              title={t('billing.paymentManagement')}>
-              <DollarSign className="h-3 w-3" />
-              <span className="hidden sm:inline">دفع</span>
-            </button>
-          </div>
-        )}
-        {!isOccupied && (
-          <div className="absolute bottom-1.5 left-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-10">
-            <button
-              onClick={(e) => onQuickOrder(table, e)}
-              className="flex-1 py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-gray-200 dark:border-gray-600 transition-all"
-              title={t('cafe.tableOrdersModal.newOrder')}>
-              <Plus className="h-3 w-3" />
-              <span className="hidden sm:inline">طلب جديد</span>
-            </button>
-          </div>
-        )}
-      </button>
-
-      {/* ── Tooltip ── */}
-      {showTooltip && isOccupied && tableBills.length > 0 && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-gray-900 dark:bg-gray-700 text-white rounded-xl shadow-2xl p-3 text-xs pointer-events-none">
-          <div className="font-bold text-sm mb-2 text-red-300 flex items-center gap-1.5">
-            <TableIcon className="h-3.5 w-3.5" />
-            {t('cafe.table')} {getTableDisplay(table.number, i18n.language)}
-          </div>
-          {tableBills.filter(b => ['draft','partial','overdue'].includes(b.status)).slice(0, 3).map((b, i) => (
-            <div key={i} className="flex justify-between items-center py-1 border-b border-gray-700 dark:border-gray-600 last:border-0">
-              <span className="text-gray-300">#{b.billNumber?.slice(-6) || b.id?.slice(-6)}</span>
-              <span className="font-semibold text-red-300">
-                {formatCurrencyUtil(b.remaining || 0, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
-              </span>
-            </div>
-          ))}
-          {tableOrdersCount > 0 && (
-            <div className="mt-2 text-blue-300 flex items-center gap-1.5">
-              <ShoppingCart className="h-3 w-3" />
-              <span>{tableOrdersCount} {t('nav.orders', 'طلبات')}</span>
-            </div>
-          )}
-          {ageLabel && (
-            <div className="mt-1 flex items-center gap-1.5 text-yellow-300">
-              <Clock className="h-3 w-3" />
-              <span>{ageLabel}</span>
-            </div>
-          )}
-          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-900 dark:bg-gray-700 rotate-45" />
-        </div>
-      )}
-    </div>
-  );
-});
-TableButton.displayName = 'TableButton';
-
-// Memoized PlayStation Bill Item
-const PlaystationBillItem = memo(({ bill, onPaymentClick, onChangeTableClick, getStatusColor, getStatusText, formatCurrency }: {
-  bill: Bill; onPaymentClick: (bill: Bill) => void; onChangeTableClick?: (bill: Bill) => void;
-  getStatusColor: (s: string) => string; getStatusText: (s: string) => string; formatCurrency: (a: number) => string;
-}) => {
-  const { t, i18n } = useTranslation();
-  const isUnpaid = ['draft', 'partial', 'overdue'].includes(bill.status);
-  return (
-    <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 rounded-lg transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg border-2 gap-3 sm:gap-0
-      ${isUnpaid ? 'bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-300 dark:border-orange-700' : 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-300 dark:border-green-700'}`}>
-      <div className="flex-1 cursor-pointer w-full sm:w-auto" onClick={() => onPaymentClick(bill)}>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100">#{bill.billNumber || bill.id || bill._id}</span>
-          <span className={`px-2 sm:px-3 py-1 text-xs font-bold rounded-full shadow-sm ${getStatusColor(bill.status)}`}>{getStatusText(bill.status)}</span>
-        </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-          {bill.table?.number ? (
-            <span className="flex items-center text-blue-600 dark:text-blue-400 font-medium">🪑 {t('billing.tableWithNumber', { number: getTableDisplay(bill.table.number, i18n.language) })}</span>
-          ) : (
-            <span className="flex items-center text-gray-500">⚠️ {t('billing.notLinkedToTable')}</span>
-          )}
-          <span className="font-medium">{formatCurrency(bill.total || 0)}</span>
-        </div>
-      </div>
-      <div className="flex flex-row items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
-        <div className="text-center bg-white dark:bg-gray-800 px-2 sm:px-3 py-2 rounded-lg shadow-sm">
-          <div className={`text-sm sm:text-base font-bold ${isUnpaid ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>{formatCurrency(bill.remaining || 0)}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">{t('billing.remainingAmount')}</div>
-        </div>
-        {onChangeTableClick && (
-          <button onClick={(e) => { e.stopPropagation(); onChangeTableClick(bill); }}
-            className="px-2 sm:px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm rounded-lg transition-all flex items-center gap-1 shadow-md">
-            <TableIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span className="hidden sm:inline">{t('billing.change')}</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-});
-
+// ─── Memoized sub-components مستخرجة إلى src/components/tables/ ─────────────
 
 // ─── Main Component ─────────────────────────────────────────────────────────
-
 const Tables: React.FC = () => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
@@ -665,13 +348,31 @@ const Tables: React.FC = () => {
       .join(',');
   }, [hasAnyActiveSession, bills]);
 
-  // ── Auto-refresh active sessions — interval مستقر بـ refs ────────────────
+    // ── Auto-refresh active sessions — interval مستقر بـ refs ────────────────
   const billsRef = useRef(bills);
   const selectedBillRef2 = useRef(selectedBill);
   const showPaymentModalRef = useRef(showPaymentModal);
   useEffect(() => { billsRef.current = bills; }, [bills]);
   useEffect(() => { selectedBillRef2.current = selectedBill; }, [selectedBill]);
   useEffect(() => { showPaymentModalRef.current = showPaymentModal; }, [showPaymentModal]);
+
+  // ── تحديث تلقائي للفواتير والطلبات كل 10 ثوانٍ ──────────────────────────
+  // يتوقف مؤقتاً أثناء فتح نافذة الدفع (حتى لا تتغير الأرقام أمام المستخدم)
+  // ولا يعمل والتبويب مخفي لتوفير الموارد
+  const fetchersRef = useRef({ fetchBills, fetchOrders });
+  useEffect(() => { fetchersRef.current = { fetchBills, fetchOrders }; });
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (showPaymentModalRef.current || document.hidden) return;
+      Promise.all([
+        fetchersRef.current.fetchBills(),
+        fetchersRef.current.fetchOrders(),
+      ]).catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   useEffect(() => {
     if (!hasAnyActiveSession) return;
@@ -1848,6 +1549,7 @@ const Tables: React.FC = () => {
 
       {/* ── Payment Success Animation (#3) ── */}
       {showPaymentSuccessAnim && (
+        <ModalPortal>
         <div className="fixed inset-0 z-[200] pointer-events-none flex items-center justify-center">
           <div className="animate-ping-once flex flex-col items-center justify-center">
             <div className="w-32 h-32 bg-green-500 rounded-full flex items-center justify-center shadow-2xl animate-bounce-once">
@@ -1867,6 +1569,7 @@ const Tables: React.FC = () => {
               }} />
           ))}
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Header ── */}
@@ -2285,7 +1988,8 @@ const Tables: React.FC = () => {
           UNIFIED TABLE MODAL
       ══════════════════════════════════════════════════════════════════ */}
       {showUnifiedTableModal && selectedTable && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-30 p-2 sm:p-4 md:p-6"
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-2 sm:p-4 md:p-6"
           onClick={() => { setShowUnifiedTableModal(false); setSelectedTable(null); setTableBillsFilter('unpaid'); setSearchQuery(''); setSearchResults(null); }}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-5xl max-h-[95vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700"
             onClick={e => e.stopPropagation()}>
@@ -2618,12 +2322,14 @@ const Tables: React.FC = () => {
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
 
       {/* ── Payment Modal — نفس شكل صفحة الفواتير ── */}
       {showPaymentModal && selectedBill && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50 animate-fade-in">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[300] animate-fade-in">
           <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-blue-200 dark:border-blue-800 animate-bounce-in mx-2 sm:mx-0">
 
             {/* Header */}
@@ -3028,6 +2734,7 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Partial Payment Modal ── */}
@@ -3062,7 +2769,8 @@ const Tables: React.FC = () => {
 
       {/* ── Session End Modal ── */}
       {showSessionEndModal && sessionToEnd && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[300]">
           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto p-3 sm:p-6 mx-2 sm:mx-0">
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.confirmModals.endSessionTitle')}</h3>
             {!selectedBill?.table && (
@@ -3086,11 +2794,13 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Session Payment Modal ── */}
       {showSessionPaymentModal && selectedBill && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[300]">
           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mx-2 sm:mx-0">
             <div className="p-3 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <div>
@@ -3174,11 +2884,13 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Change Table Modal ── */}
       {showChangeTableModal && selectedBill && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[300]">
           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-3 sm:p-6 mx-2 sm:mx-0">
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.changeTableTitle')}</h3>
             <div className="mb-4">
@@ -3212,11 +2924,13 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Edit Session Time Modal ── */}
       {showEditSessionTimeModal && sessionToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[300] p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Calendar className="h-6 w-6 text-purple-600" />{t('billing.editSessionTime')}</h3>
@@ -3243,11 +2957,13 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Edit Controllers Period Modal ── */}
       {showEditControllersPeriodModal && sessionToEdit && periodToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[300] p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Gamepad2 className="h-6 w-6 text-purple-600" />{t('billing.editPeriodTime')}</h3>
@@ -3277,11 +2993,13 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Edit Session Payment Modal ── */}
       {showEditPaymentModal && paymentToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[300] p-4 overflow-y-auto">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full my-8">
             <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-6 rounded-t-xl flex items-center justify-between">
               <h3 className="text-xl font-bold text-white flex items-center gap-2"><DollarSign className="h-6 w-6" />{t('billing.editPayment.title')}</h3>
@@ -3320,11 +3038,13 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Edit Item Payment Modal ── */}
       {showEditItemPaymentModal && itemPaymentToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[300] p-4 overflow-y-auto">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full my-8">
             <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 rounded-t-xl flex items-center justify-between">
               <h3 className="text-xl font-bold text-white flex items-center gap-2"><Receipt className="h-6 w-6" />{t('billing.editPayment.title')}</h3>
@@ -3358,6 +3078,7 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Order Add/Edit Modals ── */}
@@ -3408,7 +3129,8 @@ const Tables: React.FC = () => {
 
       {/* ── Confirm Modal ── */}
       {showConfirmModal && confirmModalData && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3 sm:p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="relative p-4 sm:p-5 bg-gradient-to-br from-yellow-500 to-orange-600">
               <div className="relative flex items-center justify-between z-10">
@@ -3435,6 +3157,7 @@ const Tables: React.FC = () => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── #4 Quick Add Modal ── */}
@@ -3510,7 +3233,8 @@ const QuickAddModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-3" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalPortal>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
         {/* Header */}
         <div className="p-4 bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-between flex-shrink-0">
@@ -3587,6 +3311,7 @@ const QuickAddModal: React.FC<{
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 
@@ -3608,7 +3333,8 @@ const DailyReportModal: React.FC<{
   const totalRemaining = unpaid.reduce((s, b) => s + (b.remaining || 0), 0);
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-3" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalPortal>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="p-4 bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -3702,85 +3428,13 @@ const DailyReportModal: React.FC<{
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 
 
 // ─── OrderModal ──────────────────────────────────────────────────────────────
 
-// بطاقة الصنف — memoized لتجنب إعادة render غير ضرورية
-const ItemCard = React.memo(({ item, qty, onAdd, fmt }: {
-  item: MenuItem;
-  qty: number;
-  onAdd: (item: MenuItem) => void;
-  fmt: (n: number) => string;
-}) => {
-  const inOrder = qty > 0;
-  return (
-    <button onClick={() => onAdd(item)}
-      className={`relative group flex flex-col items-center rounded-lg border transition-colors duration-100 overflow-hidden active:scale-95 ${inOrder ? 'border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-orange-200 hover:shadow-sm'}`}>
-      {inOrder && (
-        <span className="absolute top-1 left-1 min-w-[16px] h-[16px] bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-0.5 leading-none">{qty}</span>
-      )}
-      <div className="px-1.5 pt-2 pb-1 flex-1 flex flex-col items-center justify-center w-full">
-        <p className="font-medium text-gray-900 dark:text-gray-100 text-xs leading-snug line-clamp-2 text-center mb-1">{item.name}</p>
-        <p className={`text-xs font-bold text-center ${inOrder ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>{fmt(item.price)}</p>
-      </div>
-      <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-xs font-medium transition-colors duration-100 ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
-        <Plus className="h-2.5 w-2.5" /><span>{inOrder ? 'إضافة' : 'أضف'}</span>
-      </div>
-    </button>
-  );
-}, (prev, next) => prev.qty === next.qty && prev.item.id === next.item.id);
-ItemCard.displayName = 'ItemCard';
-
-// صف الصنف في قائمة الطلب — memoized
-const OrderItemRow = React.memo(({ item, isFlash, isExpanded, onMinus, onPlus, onRemove, onToggleNote, onNoteChange, notePlaceholder, fmt }: {
-  item: LocalOrderItem;
-  isFlash: boolean;
-  isExpanded: boolean;
-  onMinus: () => void;
-  onPlus: () => void;
-  onRemove: () => void;
-  onToggleNote: () => void;
-  onNoteChange: (v: string) => void;
-  notePlaceholder: string;
-  fmt: (n: number) => string;
-}) => (
-  <div className={`rounded-lg border overflow-hidden transition-colors duration-150 ${isFlash ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/30 ring-1 ring-orange-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
-    <div className="flex items-center gap-2 px-2 py-2">
-      <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
-        <button onClick={onMinus} title="تقليل الكمية"
-          className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-colors font-bold text-base">−</button>
-        <span className="w-7 text-center font-bold text-sm text-gray-900 dark:text-gray-100 select-none border-x border-gray-200 dark:border-gray-700">{item.quantity}</span>
-        <button onClick={onPlus} title="زيادة الكمية"
-          className="w-7 h-7 flex items-center justify-center text-green-500 hover:bg-green-500 hover:text-white transition-colors font-bold text-base">+</button>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900 dark:text-gray-100 text-xs leading-snug">{item.name}</p>
-        <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold">{fmt(item.price * item.quantity)}</p>
-      </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <button onClick={onToggleNote} title={item.notes ? 'عرض/تعديل الملاحظة' : 'إضافة ملاحظة'}
-          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${item.notes || isExpanded ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-blue-50 hover:text-blue-500'}`}>
-          <Save className="h-3.5 w-3.5" />
-        </button>
-        <button onClick={onRemove} title="حذف الصنف"
-          className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-    {(isExpanded || item.notes) && (
-      <div className="px-2 pb-2">
-        <input type="text" value={item.notes || ''} onChange={e => onNoteChange(e.target.value)}
-          placeholder={notePlaceholder} autoFocus
-          className="w-full text-xs border border-blue-200 dark:border-blue-700 rounded-lg px-2 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-400 outline-none" />
-      </div>
-    )}
-  </div>
-));
-OrderItemRow.displayName = 'OrderItemRow';
 
 interface OrderModalProps {
   table: { _id: string; number: string | number; name?: string };
@@ -3888,7 +3542,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
 
   return (
-    <div className="fixed inset-0 z-40 flex bg-black/50" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalPortal>
+    <div className="fixed inset-0 z-[300] flex bg-black/50" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white dark:bg-gray-900 w-full flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
         {/* HEADER — بدون بحث */}
@@ -4091,6 +3746,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 
@@ -4155,7 +3811,8 @@ const ManagementModal: React.FC<{
     });
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4 md:p-6">
+    <ModalPortal>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3 sm:p-4 md:p-6">
       <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl max-w-sm sm:max-w-2xl md:max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
         <div className="relative p-4 sm:p-5 md:p-6 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex-shrink-0">
           <div className="relative flex items-center justify-between z-10">
@@ -4257,6 +3914,7 @@ const ManagementModal: React.FC<{
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 
@@ -4271,7 +3929,8 @@ const SectionModal: React.FC<{
   const nameRef = useRef<HTMLInputElement>(null);
   useEffect(() => { const timer = setTimeout(() => nameRef.current?.focus(), 100); return () => clearTimeout(timer); }, []);
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3 sm:p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="relative p-4 sm:p-5 bg-gradient-to-br from-blue-500 to-indigo-600">
           <div className="relative flex items-center justify-between z-10">
@@ -4308,6 +3967,7 @@ const SectionModal: React.FC<{
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 
@@ -4322,7 +3982,8 @@ const TableModalComp: React.FC<{
   const numRef = useRef<HTMLInputElement>(null);
   useEffect(() => { const timer = setTimeout(() => numRef.current?.focus(), 100); return () => clearTimeout(timer); }, []);
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40 p-3 sm:p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-3 sm:p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm sm:max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="relative p-4 sm:p-5 bg-gradient-to-br from-green-500 to-emerald-600">
           <div className="relative flex items-center justify-between z-10">
@@ -4357,5 +4018,6 @@ const TableModalComp: React.FC<{
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };

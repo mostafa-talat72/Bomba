@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import Modal from './Modal';
 import { useTranslation } from 'react-i18next';
 
@@ -25,7 +25,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   cancelText = 'إلغاء',
   confirmColor = 'bg-red-600 hover:bg-red-700',
   loading = false,
-  zIndex = 'z-[60]'
+  zIndex = 'z-[350]'
 }) => {
   const { t } = useTranslation();
   
@@ -62,3 +62,4 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 };
 
 export default ConfirmModal;
+

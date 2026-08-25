@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { X, Receipt, CheckCircle, Plus, Minus } from 'lucide-react';
 import { Bill, Order, OrderItem } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
+import ModalPortal from './ModalPortal';
 import ConfirmModal from './ConfirmModal';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
@@ -123,7 +124,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   const hasSelectedItems = Object.values(selectedItems).some(qty => qty > 0);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50 animate-fade-in">
+    <ModalPortal>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[300] animate-fade-in">
       <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-green-200 dark:border-green-800 animate-bounce-in mx-2 sm:mx-0">
         
         {/* Header */}
@@ -391,6 +393,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
         loading={isProcessing}
       />
     </div>
+    </ModalPortal>
   );
 };
 
