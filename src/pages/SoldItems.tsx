@@ -201,12 +201,7 @@ const SoldItems: React.FC = () => {
         endDate = end.toISOString();
         filterParam = 'custom';
         
-        console.log('📅 Fetching sold items with custom date range:', {
-          startDate,
-          endDate,
-          startFormatted: start.format('YYYY-MM-DD HH:mm:ss'),
-          endFormatted: end.format('YYYY-MM-DD HH:mm:ss')
-        });
+
       }
       
       const response = await api.getSoldItems(filterParam, startDate, endDate);
@@ -483,7 +478,7 @@ const SoldItems: React.FC = () => {
                             customDateRange[1]
                           ]);
                           
-                          console.log('📅 Start date changed:', startOfDay.format('YYYY-MM-DD HH:mm:ss'));
+
                         }
                       }}
                       format="YYYY-MM-DD"
@@ -513,7 +508,7 @@ const SoldItems: React.FC = () => {
                             endOfDay
                           ]);
                           
-                          console.log('📅 End date changed:', endOfDay.format('YYYY-MM-DD HH:mm:ss'));
+
                         }
                       }}
                       format="YYYY-MM-DD"

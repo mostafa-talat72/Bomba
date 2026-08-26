@@ -652,7 +652,7 @@ const sessionController = {
                 let tableNumber = null;
                 if (table) {
                     // Get table info for logging and customer name
-                    const tableDoc = await Table.findById(table);
+                    const tableDoc = await Table.findOne({ _id: table, organization: req.user.organization });
                     tableNumber = tableDoc ? tableDoc.number : table;
                     
                     // إذا كانت الجلسة مرتبطة بطاولة، اسم العميل يكون اسم الطاولة
@@ -774,7 +774,7 @@ const sessionController = {
 
             // Update device status to active
             await Device.findOneAndUpdate(
-                { _id: deviceId },
+                { _id: deviceId, organization: req.user.organization, status: { $ne: "active" } },
                 { status: "active" }
             );
 
@@ -1320,6 +1320,81 @@ const sessionController = {
         }
     },
 
+    // تحديث تكلفة عدة جلسات دفعة واحدة — مرور واحد، بدون تعارضات حفظ
+    // يستخدم تحديثاً ذرياً (updateOne) بدل جلب-تعديل-حفظ لكل جلسة
+    updateSessionCostsBatch: async (req, res) => {
+        try {
+            const { ids } = req.body;
+            if (!Array.isArray(ids) || ids.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب توفير مصفوفة معرفات الجلسات",
+                });
+            }
+
+            const cappedIds = ids.slice(0, 100); // حد أقصى للأمان
+            const sessions = await Session.find({
+                _id: { $in: cappedIds },
+                organization: req.user.organization,
+                status: "active",
+            }).populate("bill", "_id");
+
+            let updated = 0;
+            const billIdSet = new Set();
+
+            await Promise.all(sessions.map(async (session) => {
+                try {
+                    const currentCost = await session.calculateCurrentCost();
+                    await Session.updateOne(
+                        { _id: session._id },
+                        { $set: { totalCost: currentCost, finalCost: currentCost - (session.discount || 0) } }
+                    );
+                    if (session.bill) {
+                        billIdSet.add(String(session.bill._id || session.bill));
+                    }
+                    updated++;
+                } catch (e) {
+                    Logger.error("❌ batch cost update failed for session:", session._id?.toString(), e?.message);
+                }
+            }));
+
+            // إعادة حساب كل فاتورة متأثرة مرة واحدة فقط مع retry
+            for (const bid of billIdSet) {
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        const bill = await Bill.findById(bid);
+                        if (!bill) break;
+                        await bill.calculateSubtotal();
+                        break;
+                    } catch (e) {
+                        if (attempt === 2) {
+                            Logger.error("❌ batch bill recalc failed:", bid, e?.message);
+                        } else {
+                            await new Promise(r => setTimeout(r, 150 * (attempt + 1)));
+                        }
+                    }
+                }
+            }
+
+            res.json({
+                success: true,
+                message: "تم تحديث تكاليف الجلسات بنجاح",
+                data: {
+                    requested: cappedIds.length,
+                    updated,
+                    billsRecalculated: billIdSet.size,
+                },
+            });
+        } catch (err) {
+            Logger.error("❌ updateSessionCostsBatch error:", err);
+            res.status(500).json({
+                success: false,
+                message: "خطأ في التحديث المجمّع لتكاليف الجلسات",
+                error: err.message,
+            });
+        }
+    },
+
     // End session
     endSession: async (req, res) => {
         try {
@@ -1632,7 +1707,7 @@ const sessionController = {
             }
 
             // Check if bill exists and is not paid/cancelled
-            const bill = await Bill.findById(billId);
+            const bill = await Bill.findOne({ _id: billId, organization: req.user.organization });
             if (!bill) {
                 return res.status(404).json({
                     success: false,

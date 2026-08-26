@@ -993,6 +993,13 @@ class ApiClient {
     });
   }
 
+  async updateSessionCostsBatch(ids: string[]): Promise<ApiResponse<{ requested: number; updated: number; billsRecalculated: number }>> {
+    return this.request(`/sessions/update-costs-batch`, {
+      method: 'PUT',
+      body: JSON.stringify({ ids })
+    });
+  }
+
   async updateSessionStartTime(sessionId: string, data: { startTime: string }): Promise<ApiResponse<Session>> {
     return this.request<Session>(`/sessions/${sessionId}/start-time`, {
       method: 'PUT',
@@ -2577,6 +2584,24 @@ class ApiClient {
 
   async getAvailableBillsForSession(type: 'playstation' | 'computer'): Promise<ApiResponse<Bill[]>> {
     return this.request<Bill[]>(`/bills/available-for-session?type=${type}`);
+  }
+
+  // Invite endpoints
+  async createInvite(data: { email?: string; role?: string; expiresInDays?: number }): Promise<ApiResponse<any>> {
+    return this.request('/invites', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getInvites(): Promise<ApiResponse<any[]>> {
+    return this.request('/invites');
+  }
+
+  async deleteInvite(id: string): Promise<ApiResponse> {
+    return this.request(`/invites/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // Generic HTTP methods

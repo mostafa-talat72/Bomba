@@ -137,11 +137,11 @@ const billSchema = new mongoose.Schema(
                     required: true,
                     min: 0,
                 },
-                method: {
-                    type: String,
-                    enum: ["cash", "card", "transfer"],
-                    required: true,
-                },
+                        method: {
+                            type: String,
+                            enum: ["cash", "card", "transfer", "adjustment"],
+                            required: true,
+                        },
                 reference: {
                     type: String,
                     default: null,
@@ -712,10 +712,10 @@ billSchema.pre("save", async function (next) {
                             quantity: quantityToAdd,
                             amount: amountToAdd,
                             paidAt: new Date(),
-                            method: 'smart_redistribution',
-                            note: `Smart redistribution from deleted item: ${deletedItemSample.itemName}`,
-                            originalItemKey: itemKey,
-                            redistributionMethod: deletedItemSample.menuItemId ? 'menuItemId' : 'name_price'
+                        method: 'adjustment',
+                        note: `Smart redistribution from deleted item: ${deletedItemSample.itemName}`,
+                        originalItemKey: itemKey,
+                        redistributionMethod: deletedItemSample.menuItemId ? 'menuItemId' : 'name_price'
                         });
                         
                         remainingQuantityToDistribute -= quantityToAdd;
@@ -1712,124 +1712,122 @@ billSchema.methods.paySessionPartial = function (
 
 // Calculate subtotal from orders and sessions
 billSchema.methods.calculateSubtotal = async function () {
+    // Try to populate, but don't fail if models aren't available
     try {
-        // Try to populate, but don't fail if models aren't available
-        try {
-            await this.populate(["orders", "sessions"]);
-        } catch (populateError) {}
+        await this.populate(["orders", "sessions"]);
+    } catch (populateError) {}
 
-        let subtotal = 0;
+    let subtotal = 0;
 
-        // Add orders total
-        if (this.orders && this.orders.length > 0) {
-            subtotal += this.orders
-                .filter((order) => order.status !== "cancelled")
-                .reduce((sum, order) => {
-                    const orderAmount =
-                        order.finalAmount || order.totalAmount || 0;
-                    return sum + orderAmount;
-                }, 0);
-        }
-
-        // Add sessions total (استخدم breakdown الفعلي)
-        if (this.sessions && this.sessions.length > 0) {
-            for (const session of this.sessions) {
-                let sessionCost = 0;
-                if (typeof session.getCostBreakdownAsync === "function") {
-                    const { totalCost } = await session.getCostBreakdownAsync();
-                    sessionCost = totalCost;
-                } else {
-                    sessionCost = session.finalCost || session.totalCost || 0;
-                }
-                subtotal += sessionCost;
-                
-                // Update sessionPayments if session cost changed
-                if (this.sessionPayments && this.sessionPayments.length > 0) {
-                    const sessionPayment = this.sessionPayments.find(
-                        sp => sp.sessionId.toString() === session._id.toString()
-                    );
-                    
-                    if (sessionPayment && sessionPayment.sessionCost !== sessionCost) {
-                        // Session cost changed - update sessionPayment
-                        const oldCost = sessionPayment.sessionCost;
-                        sessionPayment.sessionCost = sessionCost;
-                        
-                        // Recalculate remaining amount
-                        // If paid amount exceeds new cost, adjust it
-                        if (sessionPayment.paidAmount > sessionCost) {
-                            sessionPayment.paidAmount = sessionCost;
-                        }
-                        sessionPayment.remainingAmount = sessionCost - sessionPayment.paidAmount;
-                        
-                    }
-                }
-            }
-        }
-
-        this.subtotal = subtotal;
-
-        // Calculate discount amount based on percentage if provided
-        let discountAmount = 0;
-        if (this.discountPercentage && this.discountPercentage > 0) {
-            // Only calculate discount if percentage is provided and greater than 0
-            discountAmount = Math.round(
-                (this.subtotal * this.discountPercentage) / 100
-            );
-            this.discount = discountAmount; // Store the calculated discount amount
-        } else {
-            // If no discount percentage, use the direct discount amount if provided
-            discountAmount = this.discount || 0;
-        }
-
-        // Calculate total after discount and tax (ensure it doesn't go below 0)
-        this.total = Math.max(
-            0,
-            this.subtotal + (this.tax || 0) - discountAmount
-        );
-
-        // If this is a new bill or being recalculated, set paid to 0 if not set
-        if (this.isNew && this.paid === undefined) {
-            this.paid = 0;
-        }
-
-        // إعادة حساب المبلغ المدفوع من itemPayments و sessionPayments و payments
-        // لكن فقط إذا لم يتم تعديله يدوياً (للحفاظ على التعديلات اليدوية أثناء نقل الدفعات)
-        if (!this.isNew && !this._skipPaidRecalculation) {
-            // استخدام calculateRemainingAmount للحساب الموحد
-            this.calculateRemainingAmount();
-        } else {
-            // Calculate remaining amount (can't be negative)
-            this.remaining = Math.max(0, this.total - (this.paid || 0));
-        }
-
-        // Update status based on payment, but only if this is not a new bill
-        if (!this.isNew) {
-            // Check if all items are paid (for partial payment system)
-            const allItemsPaid = this.itemPayments && this.itemPayments.length > 0
-                ? this.itemPayments.every(item => item.isPaid)
-                : true; // If no itemPayments, consider items as paid
-            
-            // Check if all sessions are paid (for partial payment system)
-            const allSessionsPaid = this.sessionPayments && this.sessionPayments.length > 0
-                ? this.sessionPayments.every(session => session.remainingAmount === 0)
-                : true; // If no sessionPayments, consider sessions as paid
-            
-            if (this.paid >= this.total && allItemsPaid && allSessionsPaid) {
-                this.status = "paid";
-                this.remaining = 0; // Ensure remaining is 0 if fully paid
-            } else if (this.paid > 0) {
-                this.status = "partial";
-            } else {
-                this.status = this.status || "draft";
-            }
-        }
-
-        return this.save();
-    } catch (error) {
-        // Set default values if calculation fails
-        this.subtotal = this.subtotal || 0;
-        this.total = this.total || 0;
+    // Add orders total
+    if (this.orders && this.orders.length > 0) {
+        subtotal += this.orders
+            .filter((order) => order.status !== "cancelled")
+            .reduce((sum, order) => {
+                const orderAmount =
+                    order.finalAmount || order.totalAmount || 0;
+                return sum + orderAmount;
+            }, 0);
     }
+
+    // Add sessions total (استخدم breakdown الفعلي)
+    if (this.sessions && this.sessions.length > 0) {
+        for (const session of this.sessions) {
+            let sessionCost = 0;
+            if (typeof session.getCostBreakdownAsync === "function") {
+                const { totalCost } = await session.getCostBreakdownAsync();
+                sessionCost = totalCost;
+            } else {
+                sessionCost = session.finalCost || session.totalCost || 0;
+            }
+            subtotal += sessionCost;
+            
+            // Update sessionPayments if session cost changed
+            if (this.sessionPayments && this.sessionPayments.length > 0) {
+                const sessionPayment = this.sessionPayments.find(
+                    sp => sp.sessionId.toString() === session._id.toString()
+                );
+                
+                if (sessionPayment && sessionPayment.sessionCost !== sessionCost) {
+                    sessionPayment.sessionCost = sessionCost;
+                    
+                    if (sessionPayment.paidAmount > sessionCost) {
+                        sessionPayment.paidAmount = sessionCost;
+                    }
+                    sessionPayment.remainingAmount = sessionCost - sessionPayment.paidAmount;
+                }
+            }
+        }
+    }
+
+    this.subtotal = subtotal;
+
+    // Calculate discount amount based on percentage if provided
+    let discountAmount = 0;
+    if (this.discountPercentage && this.discountPercentage > 0) {
+        discountAmount = Math.round(
+            (this.subtotal * this.discountPercentage) / 100
+        );
+        this.discount = discountAmount;
+    } else {
+        discountAmount = this.discount || 0;
+    }
+
+    // Calculate total after discount and tax (ensure it doesn't go below 0)
+    this.total = Math.max(
+        0,
+        this.subtotal + (this.tax || 0) - discountAmount
+    );
+
+    // If this is a new bill or being recalculated, set paid to 0 if not set
+    if (this.isNew && this.paid === undefined) {
+        this.paid = 0;
+    }
+
+    // إعادة حساب المبلغ المدفوع من itemPayments و sessionPayments و payments
+    // لكن فقط إذا لم يتم تعديله يدوياً (للحفاظ على التعديلات اليدوية أثناء نقل الدفعات)
+    if (!this.isNew && !this._skipPaidRecalculation) {
+        this.calculateRemainingAmount();
+    } else {
+        this.remaining = Math.max(0, this.total - (this.paid || 0));
+    }
+
+    // Update status based on payment, but only if this is not a new bill
+    if (!this.isNew) {
+        const allItemsPaid = this.itemPayments && this.itemPayments.length > 0
+            ? this.itemPayments.every(item => item.isPaid)
+            : true;
+        
+        const allSessionsPaid = this.sessionPayments && this.sessionPayments.length > 0
+            ? this.sessionPayments.every(session => session.remainingAmount === 0)
+            : true;
+        
+        if (this.paid >= this.total && allItemsPaid && allSessionsPaid) {
+            this.status = "paid";
+            this.remaining = 0;
+        } else if (this.paid > 0) {
+            this.status = "partial";
+        } else {
+            this.status = this.status || "draft";
+        }
+    }
+
+    // Use updateOne to persist without triggering pre-save hooks again
+    await this.constructor.updateOne(
+        { _id: this._id },
+        {
+            $set: {
+                subtotal: this.subtotal,
+                total: this.total,
+                discount: this.discount,
+                paid: this.paid,
+                remaining: this.remaining,
+                status: this.status,
+                sessionPayments: this.sessionPayments,
+            }
+        },
+        { runValidators: false }
+    );
 };
 
 // Indexes for better query performance
@@ -1847,29 +1845,23 @@ billSchema.index({ status: 1, createdAt: -1 }); // Index for status-based querie
 // Text index for customer name search
 billSchema.index({ customerName: "text" });
 
-// Pre-remove hook to delete associated orders when bill is deleted
-billSchema.pre("remove", async function (next) {
-    try {
-        // Import Order model dynamically to avoid circular dependency
-        const Order = mongoose.model("Order");
+// Shared helper: delete orders and sessions when a bill is deleted
+async function deleteBillAssociatedData(billId) {
+    const Order = mongoose.model("Order");
+    const Session = mongoose.model("Session");
+    await Promise.all([
+        Order.deleteMany({ bill: billId }),
+        Session.updateMany({ bill: billId }, { $unset: { bill: "" } }),
+    ]);
+}
 
-        // Delete all orders associated with this bill
-        await Order.deleteMany({ bill: this._id });
-
-        next();
-    } catch (error) {
-        next(error);
-    }
-});
-
-// Pre-deleteOne hook
+// Pre-deleteOne hook (covers both document.deleteOne() and Model.deleteOne())
 billSchema.pre(
     "deleteOne",
-    { document: true, query: false },
+    { document: true },
     async function (next) {
         try {
-            const Order = mongoose.model("Order");
-            await Order.deleteMany({ bill: this._id });
+            await deleteBillAssociatedData(this._id);
             next();
         } catch (error) {
             next(error);
@@ -1877,13 +1869,12 @@ billSchema.pre(
     }
 );
 
-// Pre-findOneAndDelete hook
+// Pre-findOneAndDelete hook (covers Model.findOneAndDelete())
 billSchema.pre("findOneAndDelete", async function (next) {
     try {
-        const Order = mongoose.model("Order");
         const bill = await this.model.findOne(this.getQuery());
         if (bill) {
-            await Order.deleteMany({ bill: bill._id });
+            await deleteBillAssociatedData(bill._id);
         }
         next();
     } catch (error) {

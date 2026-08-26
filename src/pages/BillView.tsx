@@ -261,24 +261,7 @@ const BillView = () => {
 
 	useEffect(() => {
 		fetchBill(true);
-
-		let interval: number;
-		function setupInterval() {
-			// إذا كان هناك جلسة نشطة، حدث كل ثانية، وإلا كل 5 ثوانٍ للتحديث السريع
-			if (bill && bill.sessions && bill.sessions.some(session => session.status === 'active')) {
-				interval = window.setInterval(() => fetchBill(false), 1000); // كل ثانية
-			} else {
-				interval = window.setInterval(() => fetchBill(false), 5000); // كل 5 ثوانٍ
-			}
-		}
-
-		setupInterval();
-
-		return () => {
-			if (interval) window.clearInterval(interval);
-		};
-		// نراقب bill.sessions حتى إذا تغيرت حالة الجلسة يعاد ضبط الـ interval
-	}, [bill && bill.sessions && bill.sessions.some(session => session.status === 'active')]);
+	}, [billId]);
 
 	// تحديث لحظي للتكلفة كل ثانية للجلسات النشطة
 	useEffect(() => {
@@ -346,14 +329,32 @@ const BillView = () => {
 			}
 		});
 
+		// Listen for bill updates (from other tabs/users)
+		socket.on('bill-update', (data: any) => {
+			if (data.bill && (data.bill._id === billId || data.bill.id === billId)) {
+				setBill(normalizeBillDates(data.bill as unknown as Record<string, unknown>));
+			}
+		});
+
+		// Listen for session updates
+		socket.on('session-update', (data: any) => {
+			if (data.session) {
+				fetchBill(false);
+			}
+		});
+
 		return () => {
 			// Don't disconnect in development due to Strict Mode
 			if (import.meta.env.DEV) {
 				socket.off('partial-payment-received');
 				socket.off('payment-received');
+				socket.off('bill-update');
+				socket.off('session-update');
 			} else {
 				socket.off('partial-payment-received');
 				socket.off('payment-received');
+				socket.off('bill-update');
+				socket.off('session-update');
 				socket.disconnect();
 			}
 		};

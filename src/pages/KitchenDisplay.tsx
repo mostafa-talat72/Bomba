@@ -60,8 +60,6 @@ export function KitchenDisplay() {
 
   useEffect(() => {
     Promise.all([fetchOrders(), fetchSections()]).then(() => setLoading(false));
-    const interval = setInterval(fetchOrders, 5000);
-    return () => clearInterval(interval);
   }, [fetchOrders, fetchSections]);
 
   useEffect(() => {

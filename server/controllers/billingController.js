@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import mongoose from "mongoose";
 import Bill from "../models/Bill.js";
 import Order from "../models/Order.js";
@@ -17,6 +18,10 @@ import syncConfig from "../config/syncConfig.js";
 import { aggregateItemsWithPayments, expandAggregatedItemsForPayment } from "../utils/billAggregation.js";
 import { getUserLanguage } from "../utils/localeHelper.js";
 import { getTableName } from "../utils/translations.js";
+
+const FAWRY_MERCHANT_CODE = process.env.FAWRY_MERCHANT_CODE || "YOUR_MERCHANT_CODE";
+const FAWRY_SECURE_KEY = process.env.FAWRY_SECURE_KEY || "YOUR_SECURE_KEY";
+const VALID_SUBSCRIPTION_AMOUNTS = { monthly: 299, yearly: 2999 };
 
 // دالة لتحويل الأرقام الإنجليزية إلى العربية
 const convertToArabicNumbers = (str) => {
@@ -228,6 +233,72 @@ export const getBills = async (req, res) => {
 // @desc    Get single bill
 // @route   GET /api/billing/:id
 // @access  Public (for QR code access)
+export const getPublicBill = async (req, res) => {
+    try {
+        if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({
+                success: false,
+                message: "معرف الفاتورة غير صحيح",
+            });
+        }
+
+        const bill = await Bill.findOne({ _id: req.params.id })
+            .populate({
+                path: "orders",
+                populate: {
+                    path: "items.menuItem",
+                    select: "name arabicName price",
+                },
+            })
+            .populate("organization", "name")
+            .populate("table", "number name");
+
+        if (!bill) {
+            return res.status(404).json({
+                success: false,
+                message: "الفاتورة غير موجودة",
+            });
+        }
+
+        const safeItems = [];
+        if (bill.orders && bill.orders.length > 0) {
+            for (const order of bill.orders) {
+                if (order.items && order.items.length > 0) {
+                    for (const item of order.items) {
+                        safeItems.push({
+                            name: item.menuItem?.name || item.menuItem?.arabicName || "Item",
+                            quantity: item.quantity || 1,
+                            price: item.price || item.menuItem?.price || 0,
+                        });
+                    }
+                }
+            }
+        }
+
+        return res.json({
+            success: true,
+            data: {
+                billNumber: bill.billNumber,
+                items: safeItems,
+                subtotal: bill.subtotal,
+                discount: bill.discount,
+                total: bill.total,
+                status: bill.status,
+                tableName: bill.table?.name || null,
+                tableNumber: bill.table?.number || null,
+                organizationName: bill.organization?.name || null,
+                createdAt: bill.createdAt,
+            },
+        });
+    } catch (error) {
+        Logger.error("Error in getPublicBill:", error);
+        return res.status(500).json({
+            success: false,
+            message: "حدث خطأ أثناء جلب الفاتورة",
+        });
+    }
+};
+
 export const getBill = async (req, res) => {
     try {
         // تحقق من صحة معرف الفاتورة أولاً
@@ -238,87 +309,6 @@ export const getBill = async (req, res) => {
             });
         }
 
-        // إذا كان الطلب من /public/:id (أي لم يوجد req.user أو organization)
-        if (!req.user || !req.user.organization) {
-            // السماح بعرض الفاتورة للجميع إذا كان الطلب من المسار العام
-            const bill = await Bill.findOne({ _id: req.params.id })
-                .populate({
-                    path: "orders",
-                    populate: [
-                        {
-                            path: "items.menuItem",
-                            select: "name arabicName preparationTime price",
-                        },
-                        {
-                            path: "createdBy",
-                            select: "name",
-                        },
-                    ],
-                })
-                .populate({
-                    path: "sessions",
-                    populate: [
-                        {
-                            path: "createdBy",
-                            select: "name",
-                        },
-                        {
-                            path: "table",
-                            select: "number name",
-                        },
-                    ],
-                })
-                .populate("organization", "name") // إضافة populate للمنشأة
-                .populate("table", "number name")
-                .populate("createdBy", "name")
-                .populate("updatedBy", "name")
-                .populate("payments.user", "name")
-                .populate("partialPayments.items.paidBy", "name")
-                .populate("itemPayments.paidBy", "name")
-                .populate("sessionPayments.payments.paidBy", "name");
-            if (!bill) {
-                return res.status(404).json({
-                    success: false,
-                    message: "الفاتورة غير موجودة",
-                });
-            }
-
-            // تحويل bill إلى object أولاً
-            const billObj = bill.toObject();
-
-            // إضافة controllersHistoryBreakdown لكل جلسة بلايستيشن
-            if (bill.sessions && bill.sessions.length > 0) {
-                const sessionsWithBreakdown = await Promise.all(
-                    bill.sessions.map(async (session) => {
-                        // حساب breakdown قبل تحويل إلى object
-                        let breakdownData = null;
-                        if (session.deviceType === 'playstation' && typeof session.getCostBreakdownAsync === 'function') {
-                            try {
-                                breakdownData = await session.getCostBreakdownAsync();
-                            } catch (error) {
-                                }
-                        }
-                        
-                        // تحويل إلى object بعد حساب breakdown
-                        const sessionObj = session.toObject ? session.toObject() : session;
-                        
-                        // إضافة breakdown إذا كان موجوداً
-                        if (breakdownData && breakdownData.breakdown) {
-                            sessionObj.controllersHistoryBreakdown = breakdownData.breakdown;
-                        }
-                        
-                        return sessionObj;
-                    })
-                );
-                billObj.sessions = sessionsWithBreakdown;
-            }
-
-            // لا نتحقق من حالة الفاتورة هنا (نسمح بعرض أي فاتورة)
-            return res.json({
-                success: true,
-                data: billObj,
-            });
-        }
         // تحقق من وجود المستخدم والمنشأة للمسار المحمي
         if (!req.user || !req.user.organization) {
             return res.status(401).json({
@@ -706,7 +696,7 @@ export const updateBill = async (req, res) => {
             table, // إضافة table (ID)
         } = req.body;
 
-        const bill = await Bill.findById(req.params.id);
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -1087,7 +1077,7 @@ export const addPayment = async (req, res) => {
             discountPercentage,
         } = req.body;
 
-        const bill = await Bill.findById(req.params.id);
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -1413,7 +1403,7 @@ export const addOrderToBill = async (req, res) => {
     try {
         const { orderId } = req.body;
 
-        const bill = await Bill.findById(req.params.id);
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -1489,7 +1479,7 @@ export const removeOrderFromBill = async (req, res) => {
     try {
         const { id, orderId } = req.params;
 
-        const bill = await Bill.findById(id);
+        const bill = await Bill.findOne({ _id: id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -1532,7 +1522,7 @@ export const removeOrderFromBill = async (req, res) => {
         await bill.save();
 
         // Check if bill is now empty (no orders and no sessions)
-        const updatedBill = await Bill.findById(id);
+        const updatedBill = await Bill.findOne({ _id: id, organization: req.user.organization });
         if (
             updatedBill &&
             (!updatedBill.orders || updatedBill.orders.length === 0) &&
@@ -1576,7 +1566,7 @@ export const addSessionToBill = async (req, res) => {
     try {
         const { sessionId } = req.body;
 
-        const bill = await Bill.findById(req.params.id);
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -1675,7 +1665,7 @@ export const getBillByQR = async (req, res) => {
 // @access  Private
 export const cancelBill = async (req, res) => {
     try {
-        const bill = await Bill.findById(req.params.id);
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -1727,7 +1717,7 @@ export const cancelBill = async (req, res) => {
 // @access  Private
 export const deleteBill = async (req, res) => {
     try {
-        const bill = await Bill.findById(req.params.id).populate('table');
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate('table');
 
         if (!bill) {
             return res.status(404).json({
@@ -1953,7 +1943,7 @@ export const addPartialPayment = async (req, res) => {
             items: items
         });
 
-        const bill = await Bill.findById(req.params.id).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2183,7 +2173,7 @@ export const addPartialPayment = async (req, res) => {
 // @access  Private
 export const redistributePayments = async (req, res) => {
     try {
-        const bill = await Bill.findById(req.params.id).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2228,7 +2218,7 @@ export const redistributePayments = async (req, res) => {
 // @access  Private
 export const cleanupBillPayments = async (req, res) => {
     try {
-        const bill = await Bill.findById(req.params.id).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2290,7 +2280,7 @@ export const cleanupBillPayments = async (req, res) => {
 // @access  Private
 export const getBillItems = async (req, res) => {
     try {
-        const bill = await Bill.findById(req.params.id).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({
@@ -2657,30 +2647,87 @@ export const createSubscriptionPayment = async (req, res) => {
 export const fawryWebhook = async (req, res) => {
     try {
         const { merchantRefNumber, paymentStatus, paymentAmount } = req.body;
-        // تحقق من نجاح الدفع
+        const incomingSignature = req.headers["x-fawry-signature"] || req.body.signature;
+
+        if (!merchantRefNumber || !paymentStatus) {
+            return res.status(400).json({
+                success: false,
+                message: "بيانات الطلب غير مكتملة",
+            });
+        }
+
+        if (!incomingSignature) {
+            Logger.warn("Fawry webhook received without signature", {
+                merchantRefNumber,
+                ip: req.ip,
+            });
+            return res.status(401).json({
+                success: false,
+                message: "توقيع Webhook مفقود",
+            });
+        }
+
+        const expectedSignature = crypto
+            .createHash("sha256")
+            .update(`${FAWRY_MERCHANT_CODE}${merchantRefNumber}${paymentAmount || ""}${paymentStatus}${FAWRY_SECURE_KEY}`)
+            .digest("hex");
+
+        const signatureValid = crypto.timingSafeEqual(
+            Buffer.from(expectedSignature, "hex"),
+            Buffer.from(incomingSignature, "hex")
+        );
+
+        if (!signatureValid) {
+            Logger.warn("Fawry webhook signature mismatch", {
+                merchantRefNumber,
+                ip: req.ip,
+            });
+            return res.status(401).json({
+                success: false,
+                message: "توقيع Webhook غير صالح",
+            });
+        }
+
         if (paymentStatus !== "PAID") {
             return res.status(200).json({
                 success: true,
                 message: "تم الاستلام، لكن لم يتم الدفع بعد.",
             });
         }
-        // استخراج organizationId من رقم الطلب
+
         const [organizationId] = merchantRefNumber.split("-");
-        // جلب أحدث اشتراك غير مفعل لهذه المنشأة
+
         const subscription = await Subscription.findOne({
             organization: organizationId,
             status: { $ne: "active" },
         }).sort({ endDate: -1 });
+
         if (!subscription) {
             return res.status(404).json({
                 success: false,
                 message: "لم يتم العثور على اشتراك لتفعيله",
             });
         }
-        // تفعيل الاشتراك
+
+        const expectedAmount = VALID_SUBSCRIPTION_AMOUNTS[subscription.plan];
+        if (!expectedAmount || Number(paymentAmount) !== expectedAmount) {
+            Logger.warn("Fawry webhook amount mismatch", {
+                merchantRefNumber,
+                plan: subscription.plan,
+                expectedAmount,
+                receivedAmount: paymentAmount,
+                ip: req.ip,
+            });
+            return res.status(400).json({
+                success: false,
+                message: "مبلغ الدفع غير متطابق",
+            });
+        }
+
         subscription.status = "active";
+        subscription.paymentRef = merchantRefNumber;
         await subscription.save();
-        // إرسال إشعار للمالك
+
         const organization = subscription.organization;
         const orgOwner = await User.findOne({ organization, role: "owner" });
         if (orgOwner) {
@@ -2690,11 +2737,13 @@ export const fawryWebhook = async (req, res) => {
                 "تم تفعيل اشتراك منشأتك بنجاح. شكراً لاستخدامك منصتنا!"
             );
         }
+
         res.status(200).json({
             success: true,
             message: "تم تفعيل الاشتراك بنجاح",
         });
     } catch (error) {
+        Logger.error("Fawry webhook processing error", { error: error.message });
         res.status(500).json({
             success: false,
             message: "خطأ في معالجة Webhook",
@@ -2753,7 +2802,7 @@ export const payForItems = async (req, res) => {
         }
 
         // Find the bill
-        const bill = await Bill.findById(req.params.id);
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -2940,7 +2989,7 @@ export const paySessionPartial = async (req, res) => {
         }
 
         // Find the bill
-        const bill = await Bill.findById(req.params.id);
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
 
         if (!bill) {
             return res.status(404).json({
@@ -3136,7 +3185,7 @@ export const addPartialPaymentAggregated = async (req, res) => {
             items: items
         });
 
-        const bill = await Bill.findById(req.params.id).populate("orders");
+        const bill = await Bill.findOne({ _id: req.params.id, organization: req.user.organization }).populate("orders");
 
         if (!bill) {
             return res.status(404).json({

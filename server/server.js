@@ -18,6 +18,7 @@ import { setupSocketIO } from "./socket/socketHandler.js";
 import { startAutoOrderCompleter } from "./services/autoOrderCompleter.js";
 import { initializeScheduler } from "./utils/scheduler.js";
 import Logger from "./middleware/logger.js";
+import jwt from "jsonwebtoken";
 import Bill from "./models/Bill.js";
 
 // Sync system imports
@@ -61,6 +62,7 @@ import organizationRoutes from "./routes/organizationRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
 import payrollRoutes from "./routes/payroll.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
+import inviteRoutes from "./routes/inviteRoutes.js";
 
 // Environment variables already loaded at the top of the file
 
@@ -484,28 +486,24 @@ const io = new Server(server, {
     },
 });
 
-// إعدادات CORS مرنة حسب البيئة
-const allowedOrigins =
-    process.env.NODE_ENV === "production"
-        ? [
-              process.env.FRONTEND_URL,
-              "https://bomba-iota.vercel.app",
-              "https://bomba-backend.vercel.app",
-              "https://*.vercel.app",
-              /^https?:\/\/([a-z0-9-]+\.)*vercel\.app$/, // السماح بجميع النطاقات الفرعية من zeabur.app
-          ]
-        : [
-              "http://localhost:3000",
-              "https://localhost:3000",
-              "http://localhost:5173",
-              "https://localhost:5173",
-              process.env.FRONTEND_URL || "http://localhost:3000",
-          ];
+// [SECURITY] Socket.IO authentication middleware
+io.use((socket, next) => {
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!token) {
+        return next(new Error("Authentication required"));
+    }
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.data.userId = decoded.id;
+        socket.data.role = decoded.role;
+        socket.data.organization = decoded.organization;
+        next();
+    } catch (err) {
+        next(new Error("Invalid token"));
+    }
+});
 
-// إزالة القيم الفارغة من المصفوفة
-const filteredOrigins = allowedOrigins.filter(Boolean);
-
-// إعدادات CORS مبسطة للتطوير
+// إعدادات CORS مبسطة
 const corsOptions = {
     origin: function (origin, callback) {
         // السماح بجميع المنشآت في وضع التطوير
@@ -518,12 +516,12 @@ const corsOptions = {
             "http://localhost:3000",
             "http://localhost:5173",
             "https://bomba-iota.vercel.app",
-            /^\.*\.vercel\.app$/, // يسمح بجميع النطاقات الفرعية من vercel.app
+            /\.vercel\.app$/, // يسمح بجميع النطاقات الفرعية من vercel.app
             process.env.FRONTEND_URL, // desktop mode (127.0.0.1)
         ].filter(Boolean);
 
-        // السماح بطلبات بدون origin (مثل الطلبات من تطبيقات الجوال)
-        if (!origin) return callback(null, true);
+        // رفض الطلبات بدون origin في الإنتاج
+        if (!origin) return callback(new Error("Not allowed by CORS"));
 
         // التحقق مما إذا كان origin مسموحاً به
         if (
@@ -608,8 +606,8 @@ app.use(performanceMonitor);
 
 // Rate limiting
 app.use("/api/", apiLimiter);
-// app.use('/api/auth/login', authLimiter);
-// app.use('/api/auth/register', authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
 
 // Body parser
 app.use(express.json({ limit: "10mb" }));
@@ -667,6 +665,7 @@ app.use("/api/sync", syncRoutes);
 app.use("/api/organization", organizationRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/warehouse", warehouseRoutes);
+app.use("/api/invites", inviteRoutes);
 app.use("/public", publicRoutes);
 
 // Desktop app static serving (enabled only when DESKTOP_DIST_PATH is set)

@@ -31,8 +31,7 @@ function normalizeEmail(email) {
 // @access  Public
 export const register = async (req, res) => {
     try {
-        const { name, email, password, role, permissions, businessName } =
-            req.body;
+        const { name, email, password, role, businessName } = req.body;
         const normalizedEmail = normalizeEmail(email);
         const userExists = await User.findOne({ email: normalizedEmail });
         if (userExists) {
@@ -105,45 +104,48 @@ export const register = async (req, res) => {
                 endDate: trialEndDate,
             });
         } else {
-            // إذا لم يتم تمرير organization، اربطه بنفس منشأة المستخدم الحالي (المدير)
-            let orgId = req.body.organization;
-            if (!orgId && req.user && req.user.organization) {
+            // [SECURITY] لا يُقبل permissions أو role من العميل — توليد تلقائي من السيرفر فقط
+            const allowedRoles = ["staff", "cashier", "kitchen"];
+            const safeRole = allowedRoles.includes(role) ? role : "staff";
+
+            // إضافة موظف لمؤسسة تتطلب inviteToken صالح
+            let orgId = null;
+            const inviteToken = req.body.inviteToken;
+            if (inviteToken) {
+                const Invite = (await import("../models/Invite.js")).default;
+                const invite = await Invite.findOne({
+                    token: inviteToken,
+                    used: false,
+                    expiresAt: { $gt: new Date() },
+                });
+                if (invite) {
+                    orgId = invite.organization;
+                    invite.used = true;
+                    await invite.save();
+                }
+            } else if (req.user && req.user.organization) {
                 orgId = req.user.organization;
             }
-            // لا يسمح بإضافة مستخدم بدور owner من لوحة المدير
-            let safeRole = role;
-            if (role === "owner") {
-                safeRole = "staff";
+            if (!orgId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب تقديم inviteToken صالح لانضمام لمؤسسة",
+                });
             }
-            // توزيع الصلاحيات تلقائيًا حسب الدور
-            let autoPermissions = [];
-            if ((safeRole || "staff") === "admin") {
-                autoPermissions = ["all"];
-            } else if ((safeRole || "staff") === "staff") {
-                autoPermissions = [
-                    "playstation",
-                    "computer",
-                    "cafe",
-                    "menu",
-                    "billing",
-                    "reports",
-                    "inventory",
-                    "costs",
-                ];
-            } else if ((safeRole || "staff") === "cashier") {
-                autoPermissions = ["billing", "cafe"];
-            } else if ((safeRole || "staff") === "kitchen") {
-                autoPermissions = ["cafe"];
-            }
+
+            const rolePermissionsMap = {
+                staff: ["playstation", "computer", "cafe", "menu", "billing", "reports", "inventory", "costs"],
+                cashier: ["billing", "cafe"],
+                kitchen: ["cafe"],
+            };
+            const autoPermissions = rolePermissionsMap[safeRole] || rolePermissionsMap.staff;
+
             user = await User.create({
                 name,
                 email: normalizedEmail,
                 password,
-                role: safeRole || "staff",
-                permissions:
-                    permissions && permissions.length > 0
-                        ? permissions
-                        : autoPermissions,
+                role: safeRole,
+                permissions: autoPermissions,
                 status: "pending",
                 verificationToken,
                 organization: orgId,

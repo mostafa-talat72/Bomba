@@ -1,89 +1,40 @@
-// Log levels
-const LOG_LEVELS = {
-    ERROR: "ERROR",
-    WARN: "WARN",
-    INFO: "INFO",
-    DEBUG: "DEBUG",
-};
-
-// Create log entry
-const createLogEntry = (level, message, meta = {}) => {
-    return {
-        timestamp: new Date().toISOString(),
-        level,
-        message,
-        ...meta,
-    };
-};
-
-// Logger class
-class Logger {
-    static error(message, meta = {}) {
-        // Only ERROR logging is enabled
-        const logEntry = createLogEntry(LOG_LEVELS.ERROR, message, meta);
-        console.error(JSON.stringify(logEntry));
-
-        if (meta && meta.error) {
-            console.error("Error details:", meta.error);
-        }
-        if (meta && meta.stack) {
-            console.error("Stack Trace:", meta.stack);
-        }
-    }
-
-    static warn(message, meta = {}) {
-        // WARNING logging disabled
-    }
-
-    static info(message, meta = {}) {
-        // INFO logging disabled
-    }
-
-    static debug(message, meta = {}) {
-        // DEBUG logging disabled
-    }
-
-    static audit(action, user, details = {}) {
-        // AUDIT logging disabled
-    }
-
-    // Performance monitoring methods
-    static performance(message, metrics = {}) {
-        // Performance logging disabled
-    }
-
-    static queryPerformance(endpoint, executionTime, recordCount, meta = {}) {
-        this.performance("Database Query Performance", {
-            endpoint,
-            executionTime: `${executionTime}ms`,
-            recordCount,
-            ...meta,
-        });
-    }
-
-    static apiPerformance(method, url, statusCode, duration, responseSize, compressed, meta = {}) {
-        this.performance("API Performance", {
+const Logger = {
+    info: (...args) => console.log('[INFO]', new Date().toISOString(), ...args),
+    warn: (...args) => console.warn('[WARN]', new Date().toISOString(), ...args),
+    error: (...args) => console.error('[ERROR]', new Date().toISOString(), ...args),
+    debug: (...args) => { if (process.env.NODE_ENV === 'development') console.debug('[DEBUG]', ...args); },
+    audit: (...args) => console.log('[AUDIT]', new Date().toISOString(), ...args),
+    apiPerformance: (method, url, statusCode, duration, responseSize, compressed, extra) => {
+        console.log(
+            '[API]',
+            new Date().toISOString(),
             method,
             url,
-            statusCode,
-            duration: `${duration}ms`,
-            responseSize: responseSize ? `${(responseSize / 1024).toFixed(2)} KB` : "N/A",
-            compressed: compressed ? "yes" : "no",
-            compressionRatio: meta.compressionRatio || "N/A",
-            ...meta,
-        });
-    }
-}
+            `status:${statusCode}`,
+            `time:${duration}ms`,
+            `size:${responseSize}`,
+            compressed ? `compressed:${extra?.compressionRatio}` : '',
+        );
+    },
+    queryPerformance: (endpoint, duration, count, extra) => {
+        console.log(
+            '[QUERY]',
+            new Date().toISOString(),
+            endpoint,
+            `time:${duration}ms`,
+            `count:${count}`,
+            extra ? JSON.stringify(extra) : '',
+        );
+    },
+};
 
-// Express middleware for request logging
 export const requestLogger = (req, res, next) => {
-    // Request logging disabled - no console output
+    Logger.info(`${req.method} ${req.url}`);
     next();
 };
 
-// Error logging middleware
 export const errorLogger = (err, req, res, next) => {
-    // Error logging disabled - no console output
+    Logger.error('Unhandled error:', err.message, { stack: err.stack });
     next(err);
 };
 

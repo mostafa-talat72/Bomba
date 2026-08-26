@@ -14,6 +14,13 @@ router.get(
     sessionController.getSessions
 );
 
+// تحديث تكلفة عدة جلسات دفعة واحدة (مجمّع)
+router.put(
+    "/update-costs-batch",
+    authorize("playstation", "computer", "tables", "all"),
+    sessionController.updateSessionCostsBatch
+);
+
 // Get single session (playstation and computer permissions)
 router.get(
     "/:id",

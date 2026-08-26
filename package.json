@@ -20,6 +20,7 @@
     "client:dev": "vite",
     "server:dev": "cd server && npm run dev",
     "build": "vite build",
+    "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "cd server && npm start",

@@ -12,12 +12,18 @@ export interface TableButtonProps {
   tableBills: Bill[];
   tableOrdersCount: number;
   activeSessionType: 'playstation' | 'computer' | 'both' | null;
+  /** عدد الجلسات النشطة على الطاولة */
+  activeSessionCount?: number;
+  /** مستوى تحذير مدة الجلسة */
+  sessionUrgency?: 'none' | 'warn' | 'danger';
   onClick: (table: Table) => void;
   onQuickOrder: (table: Table, e: React.MouseEvent) => void;
   onQuickBilling: (table: Table, e: React.MouseEvent) => void;
+  onEndAllSessions?: (table: Table, e: React.MouseEvent) => void;
+  onHoverChange?: (table: Table | null) => void;
 }
 
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, onClick, onQuickOrder, onQuickBilling }) => {
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onHoverChange }) => {
   const { t, i18n } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -43,7 +49,11 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
       }
     : isOccupied
     ? {
-        card:   'border-red-400 bg-gradient-to-br from-red-50 to-rose-100 dark:from-red-900/40 dark:to-red-800/30 hover:border-red-500 hover:shadow-lg hover:shadow-red-100 dark:hover:shadow-red-900/30',
+        card:   sessionUrgency === 'danger'
+                  ? 'border-red-500 bg-gradient-to-br from-red-50 to-rose-100 dark:from-red-900/40 dark:to-red-800/30 hover:border-red-600 shadow-lg shadow-red-200 dark:shadow-red-900/40 ring-2 ring-red-400 dark:ring-red-600 animate-pulse'
+                  : sessionUrgency === 'warn'
+                  ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-100 dark:from-amber-900/40 dark:to-amber-800/30 hover:border-amber-500 shadow-lg shadow-amber-100 dark:shadow-amber-900/30 ring-2 ring-amber-300 dark:ring-amber-700'
+                  : 'border-red-400 bg-gradient-to-br from-red-50 to-rose-100 dark:from-red-900/40 dark:to-red-800/30 hover:border-red-500 hover:shadow-lg hover:shadow-red-100 dark:hover:shadow-red-900/30',
         icon:   'bg-red-500',
         text:   'text-red-700 dark:text-red-300',
         sub:    'text-red-500 dark:text-red-400',
@@ -65,12 +75,15 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
   return (
     <div
       className="relative"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      onMouseEnter={() => { setShowTooltip(true); onHoverChange?.(table); }}
+      onMouseLeave={() => { setShowTooltip(false); onHoverChange?.(null); }}
     >
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onClick(table)}
-        className={`group relative w-full rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 sm:hover:scale-110 hover:-translate-y-1 ${styles.card}`}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(table); } }}
+        className={`group relative w-full rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 sm:hover:scale-110 hover:-translate-y-1 cursor-pointer ${styles.card}`}
       >
         {/* ── وقت / حالة badge ── */}
         <div className="absolute -top-2 -right-2 z-10">
@@ -143,6 +156,18 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
               <DollarSign className="h-3 w-3" />
               <span className="hidden sm:inline">دفع</span>
             </button>
+            {activeSessionCount > 0 && onEndAllSessions && (
+              <button
+                onClick={(e) => onEndAllSessions(table, e)}
+                className={`py-1 px-2 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border transition-all ${
+                  sessionUrgency === 'danger'
+                    ? 'border-red-400 text-red-600 dark:text-red-400 animate-pulse'
+                    : 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+                }`}
+                title={`إنهاء كل الجلسات (${activeSessionCount})`}>
+                ⏹<span className="font-extrabold">{activeSessionCount}</span>
+              </button>
+            )}
           </div>
         )}
         {!isOccupied && (
@@ -156,7 +181,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
             </button>
           </div>
         )}
-      </button>
+      </div>
 
       {/* ── Tooltip ── */}
       {showTooltip && isOccupied && tableBills.length > 0 && (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ConfigProvider } from 'antd';
@@ -17,26 +17,38 @@ import Register from './pages/Register';
 import EmailActions from './pages/EmailActions';
 import HomeRedirect from './components/HomeRedirect';
 
-import Dashboard from './pages/Dashboard';
-import PlayStation from './pages/PlayStation';
-import Computer from './pages/Computer';
-import Menu from './pages/Menu';
-import Tables from './pages/Tables';
-import BillView from './pages/BillView';
-import Reports from './pages/Reports';
-import Inventory from './pages/Inventory';
-import Costs from './pages/Costs';
-import Users from './pages/Users';
-import Settings from './pages/Settings';
-import NotificationManagement from './pages/NotificationManagement';
-import Subscription from './pages/Subscription';
-import VerifyEmail from './pages/VerifyEmail';
-import ResetPassword from './pages/ResetPassword';
-import ConsumptionReport from './pages/ConsumptionReport';
-import Payroll from './pages/Payroll';
-import SoldItems from './pages/SoldItems';
-import Warehouse from './pages/Warehouse';
-import KitchenDisplay from './pages/KitchenDisplay';
+// ── Code Splitting: تحميل الصفحات عند الطلب لتسريع الإقلاع ──────────────────
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const PlayStation = lazy(() => import('./pages/PlayStation'));
+const Computer = lazy(() => import('./pages/Computer'));
+const Menu = lazy(() => import('./pages/Menu'));
+const Tables = lazy(() => import('./pages/Tables'));
+const BillView = lazy(() => import('./pages/BillView'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Costs = lazy(() => import('./pages/Costs'));
+const Users = lazy(() => import('./pages/Users'));
+const Settings = lazy(() => import('./pages/Settings'));
+const NotificationManagement = lazy(() => import('./pages/NotificationManagement'));
+const Subscription = lazy(() => import('./pages/Subscription'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const ConsumptionReport = lazy(() => import('./pages/ConsumptionReport'));
+const Payroll = lazy(() => import('./pages/Payroll'));
+const SoldItems = lazy(() => import('./pages/SoldItems'));
+const Warehouse = lazy(() => import('./pages/Warehouse'));
+const KitchenDisplay = lazy(() => import('./pages/KitchenDisplay'));
+const CustomerMenu = lazy(() => import('./pages/CustomerMenu'));
+
+// شاشة تحميل أثناء تقسيم الحزم
+const PageLoader = () => (
+  <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+    <div className="text-center">
+      <div className="w-16 h-16 border-4 border-orange-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-gray-600 dark:text-gray-300">جارٍ التحميل...</p>
+    </div>
+  </div>
+);
 
 // مكون للتحقق من الصلاحيات وحماية المسارات
 const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
@@ -159,11 +171,13 @@ const RouteHandler = () => {
         return document.body;
       }}
     >
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       {/* صفحات عامة متاحة دائماً */}
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/bill/:billId" element={<BillView />} />
+      <Route path="/menu-view" element={<CustomerMenu />} />
               <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/email-actions" element={<EmailActions />} />
@@ -258,6 +272,7 @@ const RouteHandler = () => {
       {/* fallback */}
               <Route path="*" element={<Login />} />
     </Routes>
+    </Suspense>
     </ConfigProvider>
   );
 };

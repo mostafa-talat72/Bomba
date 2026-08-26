@@ -2,6 +2,7 @@ import express from "express";
 import {
     getBills,
     getBill,
+    getPublicBill,
     createBill,
     updateBill,
     addPayment,
@@ -28,7 +29,7 @@ const router = express.Router();
 
 // Public routes for customer access
 router.get("/qr/:billId", getBillByQR);
-router.get("/public/:id", getBill); // Route للعملاء بدون authentication
+router.get("/public/:id", getPublicBill); // Route للعملاء بدون authentication
 
 // All other routes require authentication
 router.use(protect);

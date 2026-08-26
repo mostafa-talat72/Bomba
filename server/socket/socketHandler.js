@@ -31,10 +31,19 @@ export const setupSocketIO = (io) => {
     const getDebouncedEmitter = createDebouncedEmitters(io);
     
     io.on("connection", (socket) => {
+        const userRole = socket.data.role;
+        const userOrg = socket.data.organization;
         
-        // Join user to their role room
+        // Auto-join organization room
+        if (userOrg) {
+            socket.join(`org-${userOrg}`);
+        }
+        
+        // Join user to their role room — only if role matches actual JWT role
         socket.on("join-role", (role) => {
-            socket.join(role);
+            if (role === userRole || (role === "admin" && userRole === "admin")) {
+                socket.join(role);
+            }
         });
 
         // Join specific rooms
@@ -42,85 +51,82 @@ export const setupSocketIO = (io) => {
             socket.join(room);
         });
 
-        // Session events
+        // Session events — scoped to organization
         socket.on("session-started", (data) => {
-            socket.broadcast.emit("session-update", {
+            socket.to(`org-${userOrg}`).emit("session-update", {
                 type: "started",
                 session: data,
             });
         });
 
         socket.on("session-ended", (data) => {
-            socket.broadcast.emit("session-update", {
+            socket.to(`org-${userOrg}`).emit("session-update", {
                 type: "ended",
                 session: data,
             });
         });
 
         socket.on("session-paused", (data) => {
-            socket.broadcast.emit("session-update", {
+            socket.to(`org-${userOrg}`).emit("session-update", {
                 type: "paused",
                 session: data,
             });
         });
 
         socket.on("controllers-changed", (data) => {
-            socket.broadcast.emit("session-update", {
+            socket.to(`org-${userOrg}`).emit("session-update", {
                 type: "controllers-changed",
                 session: data,
             });
         });
 
-        // Order events
+        // Order events — scoped to organization
         socket.on("order-created", (data) => {
-            // Notify kitchen staff
-            io.to("kitchen").emit("new-order", data);
-            // Notify all staff
-            socket.broadcast.emit("order-update", {
+            io.to(`org-${userOrg}`).emit("new-order", data);
+            socket.to(`org-${userOrg}`).emit("order-update", {
                 type: "created",
                 order: data,
             });
         });
 
         socket.on("order-status-changed", (data) => {
-            socket.broadcast.emit("order-update", {
+            socket.to(`org-${userOrg}`).emit("order-update", {
                 type: "status-changed",
                 order: data,
             });
 
-            // Send specific notifications based on status
             if (data.status === "ready") {
-                io.to("staff").emit("order-ready", data);
+                io.to(`org-${userOrg}`).emit("order-ready", data);
             }
         });
 
-        // Inventory events
+        // Inventory events — scoped to organization
         socket.on("inventory-low-stock", (data) => {
-            io.to("admin").emit("low-stock-alert", data);
+            io.to(`org-${userOrg}`).emit("low-stock-alert", data);
         });
 
         socket.on("inventory-updated", (data) => {
-            socket.broadcast.emit("inventory-update", data);
+            socket.to(`org-${userOrg}`).emit("inventory-update", data);
         });
 
-        // Bill events
+        // Bill events — scoped to organization
         socket.on("bill-created", (data) => {
-            socket.broadcast.emit("bill-update", {
+            socket.to(`org-${userOrg}`).emit("bill-update", {
                 type: "created",
                 bill: data,
             });
         });
 
         socket.on("payment-received", (data) => {
-            socket.broadcast.emit("bill-update", {
+            socket.to(`org-${userOrg}`).emit("bill-update", {
                 type: "payment-received",
                 bill: data,
             });
         });
 
-        // System notifications
+        // System notifications — scoped to organization
         socket.on("system-notification", (data) => {
-            io.emit("notification", data);
+            io.to(`org-${userOrg}`).emit("notification", data);
         });
 
         // Disconnect event
@@ -128,48 +134,54 @@ export const setupSocketIO = (io) => {
         });
     });
 
-    // Helper functions to emit events from controllers
-    io.notifySessionUpdate = (type, session) => {
-        io.emit("session-update", { type, session });
+    // Helper functions to emit events from controllers — scoped by organizationId
+    io.notifySessionUpdate = (type, session, organizationId) => {
+        const target = organizationId ? `org-${organizationId}` : undefined;
+        io.to(target).emit("session-update", { type, session });
     };
 
-    io.notifyOrderUpdate = (type, order) => {
-        io.emit("order-update", { type, order });
+    io.notifyOrderUpdate = (type, order, organizationId) => {
+        const target = organizationId ? `org-${organizationId}` : undefined;
+        io.to(target).emit("order-update", { type, order });
 
         if (type === "created") {
-            io.to("kitchen").emit("new-order", order);
+            io.to(target).emit("new-order", order);
         } else if (order.status === "ready") {
-            io.to("staff").emit("order-ready", order);
+            io.to(target).emit("order-ready", order);
         }
     };
 
-    io.notifyInventoryUpdate = (item) => {
-        
-        io.emit("inventory-update", item);
+    io.notifyInventoryUpdate = (item, organizationId) => {
+        const target = organizationId ? `org-${organizationId}` : undefined;
+        io.to(target).emit("inventory-update", item);
 
         if (item.isLowStock) {
-            io.to("admin").emit("low-stock-alert", item);
+            io.to(target).emit("low-stock-alert", item);
         }
     };
 
-    io.notifyBillUpdate = (type, bill) => {
-        io.emit("bill-update", { type, bill });
+    io.notifyBillUpdate = (type, bill, organizationId) => {
+        const target = organizationId ? `org-${organizationId}` : undefined;
+        io.to(target).emit("bill-update", { type, bill });
     };
 
-    io.sendNotification = (message, type = "info", targetRole = null) => {
+    io.sendNotification = (message, type = "info", targetRole = null, organizationId = null) => {
         const notification = {
             message,
             type,
             timestamp: new Date(),
         };
 
-        if (targetRole) {
-            io.to(targetRole).emit("notification", notification);
+        if (targetRole && organizationId) {
+            io.to(`org-${organizationId}`).emit("notification", notification);
         } else {
             io.emit("notification", notification);
         }
     };
 
     // Debounced table status update to reduce event frequency
-    io.notifyTableStatusUpdate = getDebouncedEmitter("table-status-update");
+    io.notifyTableStatusUpdate = (data, organizationId) => {
+        const target = organizationId ? `org-${organizationId}` : undefined;
+        io.to(target).emit("table-status-update", data);
+    };
 };

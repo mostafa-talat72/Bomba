@@ -1,15 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Utensils, Plus, Edit, Trash2, X, Search, TrendingUp, Clock, Star, CheckCircle, Folder, FolderOpen, ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Utensils, Plus, Search, Sparkles, Eye, EyeOff, ChevronDown, ChevronRight, Edit, Trash2, Copy, LayoutGrid } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { MenuItem, MenuSection, MenuCategory } from '../services/api';
-import { formatCurrency, formatQuantity, formatDecimal } from '../utils/formatters';
+import { formatDecimal } from '../utils/formatters';
 import '../styles/menu-animations.css';
+import {
+	MenuItemModal,
+	MenuQuickViewModal,
+	MenuSectionModal,
+	MenuCategoryModal,
+	MenuDeleteModal
+} from '../components/menu';
 
 const Menu: React.FC = () => {
 	const { t, i18n } = useTranslation();
-	const { language } = useLanguage();
 	const {
 		menuItems,
 		menuSections,
@@ -30,25 +35,31 @@ const Menu: React.FC = () => {
 		fetchInventoryItems,
 		showNotification
 	} = useApp();
+
+	// UI State
 	const [loading, setLoading] = useState(false);
-	const [showAddModal, setShowAddModal] = useState(false);
+	const [searchTerm, setSearchTerm] = useState('');
+	const [showUnavailable, setShowUnavailable] = useState(true);
+	const [activeSection, setActiveSection] = useState<string | null>(null);
+	const [activeCategory, setActiveCategory] = useState<string | null>(null);
+	const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+	const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+	const [showAddDropdown, setShowAddDropdown] = useState(false);
+
+	// Modal State
+	const [showItemModal, setShowItemModal] = useState(false);
 	const [showSectionModal, setShowSectionModal] = useState(false);
 	const [showCategoryModal, setShowCategoryModal] = useState(false);
+	const [showQuickView, setShowQuickView] = useState(false);
+	const [showDeleteModal, setShowDeleteModal] = useState<{ show: boolean; id: string | null; type: 'item' | 'section' | 'category' }>({ show: false, id: null, type: 'item' });
+
+	// Editing State
 	const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
 	const [editingSection, setEditingSection] = useState<MenuSection | null>(null);
 	const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
-	const [deletingItems, setDeletingItems] = useState<Record<string, boolean>>({});
-	const [deletingSections, setDeletingSections] = useState<Record<string, boolean>>({});
-	const [deletingCategories, setDeletingCategories] = useState<Record<string, boolean>>({});
-	const [savingItem, setSavingItem] = useState(false);
-	const [savingSection, setSavingSection] = useState(false);
-	const [savingCategory, setSavingCategory] = useState(false);
-	const [showDeleteModal, setShowDeleteModal] = useState<{show: boolean, itemId: string | null, type: 'item' | 'section' | 'category'}>({show: false, itemId: null, type: 'item'});
-	const [searchTerm, setSearchTerm] = useState('');
-	const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-	const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+	const [quickViewItem, setQuickViewItem] = useState<MenuItem | null>(null);
 
-	// Form state
+	// Form State
 	const [formData, setFormData] = useState({
 		name: '',
 		price: '',
@@ -60,17 +71,6 @@ const Menu: React.FC = () => {
 		ingredients: [] as { item: string; quantity: number; unit: string }[]
 	});
 
-	const unitOptions = [
-		t('menu.units.gram'),
-		t('menu.units.kilo'),
-		t('menu.units.ml'),
-		t('menu.units.liter'),
-		t('menu.units.piece'),
-		t('menu.units.spoon'),
-		t('menu.units.cup')
-	];
-
-	// Form states
 	const [sectionFormData, setSectionFormData] = useState({
 		name: '',
 		description: '',
@@ -84,6 +84,25 @@ const Menu: React.FC = () => {
 		sortOrder: 0
 	});
 
+	// Loading State
+	const [deletingItems, setDeletingItems] = useState<Record<string, boolean>>({});
+	const [deletingSections, setDeletingSections] = useState<Record<string, boolean>>({});
+	const [deletingCategories, setDeletingCategories] = useState<Record<string, boolean>>({});
+	const [savingItem, setSavingItem] = useState(false);
+	const [savingSection, setSavingSection] = useState(false);
+	const [savingCategory, setSavingCategory] = useState(false);
+
+	const unitOptions = [
+		t('menu.units.gram'),
+		t('menu.units.kilo'),
+		t('menu.units.ml'),
+		t('menu.units.liter'),
+		t('menu.units.piece'),
+		t('menu.units.spoon'),
+		t('menu.units.cup')
+	];
+
+	// Load Data
 	useEffect(() => {
 		loadMenuItems();
 		loadMenuSections();
@@ -91,10 +110,41 @@ const Menu: React.FC = () => {
 		fetchInventoryItems();
 	}, []);
 
+	useEffect(() => {
+		if (showItemModal && inventoryItems.length === 0) {
+			fetchInventoryItems();
+		}
+	}, [showItemModal]);
+
+	useEffect(() => {
+		const handleEscape = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				setShowItemModal(false);
+				setShowSectionModal(false);
+				setShowCategoryModal(false);
+				setShowQuickView(false);
+			}
+		};
+		document.addEventListener('keydown', handleEscape);
+		return () => document.removeEventListener('keydown', handleEscape);
+	}, []);
+
+	useEffect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			const target = e.target as HTMLElement;
+			if (!target.closest('[data-add-dropdown]')) {
+				setShowAddDropdown(false);
+			}
+		};
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => document.removeEventListener('mousedown', handleClickOutside);
+	}, []);
+
+	// Data Loading
 	const loadMenuSections = async () => {
 		try {
 			await fetchMenuSections();
-		} catch (error) {
+		} catch {
 			showNotification(t('menu.notifications.loadingSectionsError'), 'error');
 		}
 	};
@@ -102,76 +152,23 @@ const Menu: React.FC = () => {
 	const loadMenuCategories = async () => {
 		try {
 			await fetchMenuCategories();
-		} catch (error) {
+		} catch {
 			showNotification(t('menu.notifications.loadingCategoriesError'), 'error');
 		}
-	};
-
-	// إعادة تحميل الخامات عند فتح النافذة
-	useEffect(() => {
-		if (showAddModal && inventoryItems.length === 0) {
-			fetchInventoryItems();
-		}
-	}, [showAddModal]);
-
-
-	// إضافة دعم مفتاح ESC للخروج من النوافذ
-	useEffect(() => {
-		const handleEscape = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') {
-				setShowAddModal(false);
-				setShowSectionModal(false);
-				setShowCategoryModal(false);
-			}
-		};
-
-		document.addEventListener('keydown', handleEscape);
-		return () => document.removeEventListener('keydown', handleEscape);
-	}, []);
-
-	// Helper functions
-	const toggleSection = (sectionId: string) => {
-		setExpandedSections(prev => ({
-			...prev,
-			[sectionId]: !prev[sectionId]
-		}));
-	};
-
-	const toggleCategory = (categoryId: string) => {
-		setExpandedCategories(prev => ({
-			...prev,
-			[categoryId]: !prev[categoryId]
-		}));
-	};
-
-	// Get categories for a section
-	const getCategoriesForSection = (sectionId: string) => {
-		return menuCategories.filter(cat => {
-			const section = typeof cat.section === 'string' ? cat.section : cat.section?.id || cat.section?._id;
-			return section === sectionId;
-		}).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-	};
-
-	// Get items for a category
-	const getItemsForCategory = (categoryId: string) => {
-		return menuItems.filter(item => {
-			const category = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
-			return category === categoryId;
-		}).sort((a, b) => a.name.localeCompare(b.name));
 	};
 
 	const loadMenuItems = async () => {
 		setLoading(true);
 		try {
-			// Fetch all menu items
 			await fetchMenuItems();
-		} catch (error) {
+		} catch {
 			showNotification(t('menu.notifications.loadingMenuError'), 'error');
 		} finally {
 			setLoading(false);
 		}
 	};
 
+	// Item Handlers
 	const handleAddItem = (categoryId?: string) => {
 		setEditingItem(null);
 		setFormData({
@@ -184,7 +181,7 @@ const Menu: React.FC = () => {
 			isPopular: false,
 			ingredients: []
 		});
-		setShowAddModal(true);
+		setShowItemModal(true);
 	};
 
 	const handleEditItem = (item: MenuItem) => {
@@ -200,58 +197,120 @@ const Menu: React.FC = () => {
 			isPopular: item.isPopular,
 			ingredients: item.ingredients || []
 		});
-		setShowAddModal(true);
+		setShowItemModal(true);
 	};
 
-	const handleDeleteItem = async () => {
-		const { itemId } = showDeleteModal;
-		if (!itemId || showDeleteModal.type !== 'item') return;
+	const handleDuplicateItem = (item: MenuItem) => {
+		setEditingItem(null);
+		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
+		setFormData({
+			name: `${item.name} (${t('menu.duplicate')})`,
+			price: item.price.toString(),
+			category: categoryId,
+			description: item.description || '',
+			isAvailable: item.isAvailable,
+			preparationTime: item.preparationTime.toString(),
+			isPopular: item.isPopular,
+			ingredients: item.ingredients || []
+		});
+		setShowItemModal(true);
+	};
 
+	const handleQuickViewItem = (item: MenuItem) => {
+		setQuickViewItem(item);
+		setShowQuickView(true);
+	};
+
+	const handleSaveItem = async (data: { name: string; price: string; category: string; description: string; isAvailable: boolean; preparationTime: string; isPopular: boolean; ingredients: { item: string; quantity: number; unit: string }[] }) => {
+		if (!data.name || !data.price || !data.category) {
+			showNotification(t('menu.notifications.enterItemName'), 'error');
+			return;
+		}
+
+		const price = parseFloat(data.price);
+		if (isNaN(price) || price <= 0) {
+			showNotification(t('menu.notifications.enterPrice'), 'error');
+			return;
+		}
+
+		const validIngredients = data.ingredients.filter((ing: { item: string; quantity: number; unit: string }) =>
+			ing.item && ing.item.trim() !== '' && !isNaN(ing.quantity) && ing.quantity > 0
+		);
+
+		if (data.ingredients.length > 0 && validIngredients.length !== data.ingredients.length) {
+			showNotification(t('menu.notifications.invalidIngredients'), 'error');
+			return;
+		}
+
+		const itemData = {
+			name: data.name.trim(),
+			price: price,
+			category: data.category,
+			description: data.description.trim(),
+			isAvailable: data.isAvailable,
+			preparationTime: parseInt(data.preparationTime),
+			isPopular: data.isPopular,
+			ingredients: validIngredients
+		};
+
+		setSavingItem(true);
 		try {
-			setDeletingItems(prev => ({ ...prev, [itemId]: true }));
-			const success = await deleteMenuItem(itemId);
-			if (success) {
-				await loadMenuItems();
-				setShowDeleteModal({show: false, itemId: null, type: 'item'});
+			if (editingItem) {
+				const result = await updateMenuItem(editingItem.id, itemData);
+				if (result) {
+					setShowItemModal(false);
+					setEditingItem(null);
+					await loadMenuItems();
+					showNotification(t('menu.notifications.itemUpdatedSuccess'), 'success');
+				}
+			} else {
+				const result = await createMenuItem(itemData);
+				if (result) {
+					setShowItemModal(false);
+					await loadMenuItems();
+					showNotification(t('menu.notifications.itemAddedSuccess'), 'success');
+				}
 			}
-		} catch (error) {
-			showNotification(t('menu.notifications.deleteItemError'), 'error');
+		} catch {
+			showNotification(t('menu.notifications.saveItemError'), 'error');
 		} finally {
-			setDeletingItems(prev => ({ ...prev, [itemId]: false }));
+			setSavingItem(false);
 		}
 	};
 
-	const openDeleteModal = (itemId: string, type: 'item' | 'section' | 'category' = 'item') => {
-		setShowDeleteModal({show: true, itemId, type});
+	const handleDeleteItem = async () => {
+		const { id } = showDeleteModal;
+		if (!id || showDeleteModal.type !== 'item') return;
+
+		try {
+			setDeletingItems(prev => ({ ...prev, [id]: true }));
+			const success = await deleteMenuItem(id);
+			if (success) {
+				await loadMenuItems();
+				setShowDeleteModal({ show: false, id: null, type: 'item' });
+			}
+		} catch {
+			showNotification(t('menu.notifications.deleteItemError'), 'error');
+		} finally {
+			setDeletingItems(prev => ({ ...prev, [id]: false }));
+		}
 	};
 
-	const closeDeleteModal = () => {
-		setShowDeleteModal({show: false, itemId: null, type: 'item'});
-	};
-
-	// Section handlers
+	// Section Handlers
 	const handleAddSection = () => {
 		setEditingSection(null);
-		setSectionFormData({
-			name: '',
-			description: '',
-			sortOrder: menuSections.length
-		});
+		setSectionFormData({ name: '', description: '', sortOrder: menuSections.length });
 		setShowSectionModal(true);
 	};
 
 	const handleEditSection = (section: MenuSection) => {
 		setEditingSection(section);
-		setSectionFormData({
-			name: section.name,
-			description: section.description || '',
-			sortOrder: section.sortOrder
-		});
+		setSectionFormData({ name: section.name, description: section.description || '', sortOrder: section.sortOrder });
 		setShowSectionModal(true);
 	};
 
-	const handleSaveSection = async () => {
-		if (!sectionFormData.name.trim()) {
+	const handleSaveSection = async (data: { name: string; description: string; sortOrder: number }) => {
+		if (!data.name.trim()) {
 			showNotification(t('menu.notifications.enterSectionName'), 'error');
 			return;
 		}
@@ -259,14 +318,15 @@ const Menu: React.FC = () => {
 		setSavingSection(true);
 		try {
 			if (editingSection) {
-				await updateMenuSection(editingSection.id, sectionFormData);
+				await updateMenuSection(editingSection.id, data);
 			} else {
-				await createMenuSection(sectionFormData);
+				await createMenuSection(data);
 			}
 			setShowSectionModal(false);
 			setEditingSection(null);
 			await loadMenuSections();
-		} catch (error) {
+			showNotification(t('menu.notifications.sectionAddedSuccess'), 'success');
+		} catch {
 			showNotification(t('menu.notifications.saveSectionError'), 'error');
 		} finally {
 			setSavingSection(false);
@@ -274,24 +334,24 @@ const Menu: React.FC = () => {
 	};
 
 	const handleDeleteSection = async () => {
-		const { itemId } = showDeleteModal;
-		if (!itemId || showDeleteModal.type !== 'section') return;
+		const { id } = showDeleteModal;
+		if (!id || showDeleteModal.type !== 'section') return;
 
 		try {
-			setDeletingSections(prev => ({ ...prev, [itemId]: true }));
-			const success = await deleteMenuSection(itemId);
+			setDeletingSections(prev => ({ ...prev, [id]: true }));
+			const success = await deleteMenuSection(id);
 			if (success) {
 				await loadMenuSections();
-				setShowDeleteModal({show: false, itemId: null, type: 'item'});
+				setShowDeleteModal({ show: false, id: null, type: 'item' });
 			}
-		} catch (error) {
+		} catch {
 			showNotification(t('menu.notifications.deleteSectionError'), 'error');
 		} finally {
-			setDeletingSections(prev => ({ ...prev, [itemId]: false }));
+			setDeletingSections(prev => ({ ...prev, [id]: false }));
 		}
 	};
 
-	// Category handlers
+	// Category Handlers
 	const handleAddCategory = (sectionId?: string) => {
 		setEditingCategory(null);
 		setCategoryFormData({
@@ -309,22 +369,16 @@ const Menu: React.FC = () => {
 	const handleEditCategory = (category: MenuCategory) => {
 		setEditingCategory(category);
 		const sectionId = typeof category.section === 'string' ? category.section : category.section?.id || category.section?._id;
-		setCategoryFormData({
-			name: category.name,
-			description: category.description || '',
-			section: sectionId || '',
-			sortOrder: category.sortOrder
-		});
+		setCategoryFormData({ name: category.name, description: category.description || '', section: sectionId || '', sortOrder: category.sortOrder });
 		setShowCategoryModal(true);
 	};
 
-	const handleSaveCategory = async () => {
-		if (!categoryFormData.name.trim()) {
+	const handleSaveCategory = async (data: { name: string; description: string; section: string; sortOrder: number }) => {
+		if (!data.name.trim()) {
 			showNotification(t('menu.notifications.enterCategoryName'), 'error');
 			return;
 		}
-
-		if (!categoryFormData.section) {
+		if (!data.section) {
 			showNotification(t('menu.selectSection'), 'error');
 			return;
 		}
@@ -332,14 +386,15 @@ const Menu: React.FC = () => {
 		setSavingCategory(true);
 		try {
 			if (editingCategory) {
-				await updateMenuCategory(editingCategory.id, categoryFormData);
+				await updateMenuCategory(editingCategory.id, data);
 			} else {
-				await createMenuCategory(categoryFormData);
+				await createMenuCategory(data);
 			}
 			setShowCategoryModal(false);
 			setEditingCategory(null);
 			await loadMenuCategories();
-		} catch (error) {
+			showNotification(t('menu.notifications.categoryAddedSuccess'), 'success');
+		} catch {
 			showNotification(t('menu.notifications.saveCategoryError'), 'error');
 		} finally {
 			setSavingCategory(false);
@@ -347,117 +402,30 @@ const Menu: React.FC = () => {
 	};
 
 	const handleDeleteCategory = async () => {
-		const { itemId } = showDeleteModal;
-		if (!itemId || showDeleteModal.type !== 'category') return;
+		const { id } = showDeleteModal;
+		if (!id || showDeleteModal.type !== 'category') return;
 
 		try {
-			setDeletingCategories(prev => ({ ...prev, [itemId]: true }));
-			const success = await deleteMenuCategory(itemId);
+			setDeletingCategories(prev => ({ ...prev, [id]: true }));
+			const success = await deleteMenuCategory(id);
 			if (success) {
 				await loadMenuCategories();
-				setShowDeleteModal({show: false, itemId: null, type: 'item'});
+				setShowDeleteModal({ show: false, id: null, type: 'item' });
 			}
-		} catch (error) {
+		} catch {
 			showNotification(t('menu.notifications.deleteCategoryError'), 'error');
 		} finally {
-			setDeletingCategories(prev => ({ ...prev, [itemId]: false }));
+			setDeletingCategories(prev => ({ ...prev, [id]: false }));
 		}
 	};
 
-	const handleSaveItem = async () => {
-		if (!formData.name || !formData.price || !formData.category) {
-			showNotification(t('menu.notifications.enterItemName'), 'error');
-			return;
-		}
-
-		setSavingItem(true);
-
-		const price = parseFloat(formData.price);
-		if (isNaN(price) || price <= 0) {
-			showNotification(t('menu.notifications.enterPrice'), 'error');
-			return;
-		}
-
-		// تصفية الخامات الفارغة أو غير الصالحة
-		const validIngredients = formData.ingredients.filter(ing =>
-			// احتفظ فقط بالخامات التي تحتوي على معرف وجزء صحيح موجب
-			ing.item && ing.item.trim() !== '' &&
-			!isNaN(ing.quantity) &&
-			ing.quantity > 0
-		);
-
-		// التحقق من أن جميع الخامات المضافة صحيحة (فقط إذا كانت هناك خامات مضافة)
-		if (formData.ingredients.length > 0 && validIngredients.length !== formData.ingredients.length) {
-			showNotification(t('menu.notifications.invalidIngredients'), 'error');
-			return;
-		}
-
-		const itemData = {
-			name: formData.name.trim(),
-			price: price,
-			category: formData.category,
-			description: formData.description.trim(),
-			isAvailable: formData.isAvailable,
-			preparationTime: parseInt(formData.preparationTime),
-			isPopular: formData.isPopular,
-			ingredients: validIngredients // إرسال مصفوفة فارغة إذا لم تكن هناك خامات
-		};
-
-		try {
-			if (editingItem) {
-				const result = await updateMenuItem(editingItem.id, itemData);
-				if (result) {
-					setShowAddModal(false);
-					setEditingItem(null);
-					await loadMenuItems();
-					showNotification(t('menu.notifications.itemUpdatedSuccess'), 'success');
-				}
-			} else {
-				const result = await createMenuItem(itemData);
-				if (result) {
-					setShowAddModal(false);
-					await loadMenuItems();
-					showNotification(t('menu.notifications.itemAddedSuccess'), 'success');
-				}
-			}
-		} catch (error) {
-			showNotification(t('menu.notifications.saveItemError'), 'error');
-		} finally {
-			setSavingItem(false);
-		}
-	};
-
-	// Debug: Log the raw menu items
-	useEffect(() => {
-		// Menu items loaded
-	}, [menuItems]);
-
-	// Filter menu items by search term
-	const filteredMenuItems = menuItems.filter(item => {
-		if (!searchTerm) return true;
-		const matches = (
-			item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-			(item.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false)
-		);
-		return matches;
-	});
-
-
-	const getStatusText = (isAvailable: boolean) => {
-		return isAvailable ? t('menu.available') : t('menu.unavailable');
-	};
-
+	// Ingredients Handlers
 	const addIngredient = () => {
-		// التحقق من وجود خامات متاحة للاختيار
 		const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
 		const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
 		const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
 
-		if (availableItems.length === 0) {
-			// لا نضيف صف جديد إذا لم تكن هناك خامات متاحة
-			// الرسالة ستظهر في الواجهة تلقائياً
-			return;
-		}
+		if (availableItems.length === 0) return;
 
 		setFormData(prev => ({
 			...prev,
@@ -472,108 +440,105 @@ const Menu: React.FC = () => {
 		}));
 	};
 
-	// دالة لتحويل الكمية بين الوحدات المتوافقة
-	const convertQuantity = (quantity: number, fromUnit: string, toUnit: string): number => {
-		const conversions: { [key: string]: { [key: string]: number } } = {
-			'كيلو': { 'جرام': 1000 },
-			'جرام': { 'كيلو': 0.001 },
-			'لتر': { 'مل': 1000 },
-			'مل': { 'لتر': 0.001 }
-		};
-
-		const conversionRate = conversions[fromUnit]?.[toUnit];
-		return conversionRate ? quantity * conversionRate : quantity;
-	};
-
-	// دالة للحصول على الوحدات المتوافقة بناءً على وحدة الخامة
-	const getCompatibleUnits = (inventoryUnit: string) => {
-		const unitCompatibility: { [key: string]: string[] } = {
-			'كيلو': ['كيلو', 'جرام'],
-			'جرام': ['جرام', 'كيلو'],
-			'لتر': ['لتر', 'مل'],
-			'مل': ['مل', 'لتر'],
-			'قطعة': ['قطعة'],
-			'علبة': ['علبة'],
-			'كيس': ['كيس'],
-			'زجاجة': ['زجاجة']
-		};
-
-		return unitCompatibility[inventoryUnit] || [inventoryUnit];
-	};
-
 	const updateIngredient = (index: number, field: 'item' | 'quantity' | 'unit', value: string | number) => {
-		// إذا تم تغيير الوحدة، تحويل الكمية تلقائياً
-		if (field === 'unit') {
-			const currentIngredient = formData.ingredients[index];
-			const selectedInventoryItem = inventoryItems.find(item => item.id === currentIngredient.item);
+		setFormData(prev => {
+			const newIngredients = [...prev.ingredients];
+			const current = { ...newIngredients[index] };
 
-			if (selectedInventoryItem && currentIngredient.quantity > 0) {
-				const convertedQuantity = convertQuantity(currentIngredient.quantity, currentIngredient.unit, value as string);
-
-				setFormData(prev => ({
-					...prev,
-					ingredients: prev.ingredients.map((ingredient, i) =>
-						i === index ? {
-							...ingredient,
-							unit: value as string,
-							quantity: Math.round(convertedQuantity * 1000) / 1000 // تقريب إلى 3 أرقام عشرية
-						} : ingredient
-					)
-				}));
-				return;
+			if (field === 'unit' && current.quantity > 0) {
+				const invItem = inventoryItems.find(i => i.id === current.item);
+				if (invItem) {
+					const conversions: Record<string, Record<string, number>> = {
+						'كيلو': { 'جرام': 1000 }, 'جرام': { 'كيلو': 0.001 },
+						'لتر': { 'مل': 1000 }, 'مل': { 'لتر': 0.001 }
+					};
+					const rate = conversions[current.unit]?.[value as string];
+					current.quantity = rate ? Math.round(current.quantity * rate * 1000) / 1000 : current.quantity;
+				}
 			}
-		}
 
-		setFormData(prev => ({
-			...prev,
-			ingredients: prev.ingredients.map((ingredient, i) =>
-				i === index ? {
-					...ingredient,
-					[field]: field === 'item' ? value as string : value
-				} : ingredient
-			)
-		}));
-
-		// إذا تم تغيير الخامة، تحديث الوحدة تلقائياً بناءً على وحدة الخامة في المخزون
-		if (field === 'item' && value !== '') {
-			const selectedInventoryItem = inventoryItems.find(item => item.id === value);
-			if (selectedInventoryItem) {
-				setFormData(prev => ({
-					...prev,
-					ingredients: prev.ingredients.map((ingredient, i) =>
-						i === index ? {
-							...ingredient,
-							item: value as string,
-							unit: selectedInventoryItem.unit // تحديث الوحدة تلقائياً
-						} : ingredient
-					)
-				}));
+			if (field === 'item' && value !== '') {
+				current.unit = inventoryItems.find(i => i.id === value)?.unit || current.unit;
+				newIngredients.forEach((ing, i) => { if (i !== index && ing.item === value) ing.item = ''; });
 			}
-		}
 
-		// إذا تم تغيير الخامة، تأكد من عدم تكرارها في صفوف أخرى
-		if (field === 'item' && value !== '') {
-			setFormData(prev => ({
-				...prev,
-				ingredients: prev.ingredients.map((ingredient, i) => {
-					if (i !== index && ingredient.item === value) {
-						// إزالة الخامة المكررة من الصفوف الأخرى
-						return { ...ingredient, item: '' };
-					}
-					return ingredient;
-				})
-			}));
-		}
+			current[field] = field === 'item' ? (value as string) : value;
+			newIngredients[index] = current;
+			return { ...prev, ingredients: newIngredients };
+		});
 	};
 
+	// Filtered Data
+	const filteredMenuItems = useMemo(() => {
+		let items = menuItems;
+		if (searchTerm) {
+			items = items.filter(item =>
+				item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+				(item.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false)
+			);
+		}
+		if (!showUnavailable) {
+			items = items.filter(item => item.isAvailable);
+		}
+		return items;
+	}, [menuItems, searchTerm, showUnavailable]);
 
+	const filteredMenuItemsByAvailability = showUnavailable
+		? menuItems
+		: menuItems.filter(item => item.isAvailable);
+
+	const getCategoryId = (item: MenuItem) => typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
+	const getSectionId = (cat: MenuCategory) => typeof cat.section === 'string' ? cat.section : cat.section?.id || cat.section?._id;
+
+	const sortedSections = useMemo(() =>
+		[...menuSections].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+		[menuSections]
+	);
+
+	const sectionGroups = useMemo(() =>
+		sortedSections.map(section => {
+			const categories = menuCategories
+				.filter(cat => getSectionId(cat) === section.id)
+				.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+			const categoryIds = new Set(categories.map(c => c.id));
+			const items = filteredMenuItems.filter(item => categoryIds.has(getCategoryId(item)));
+			return { section, categories, items };
+		}),
+		[sortedSections, menuCategories, filteredMenuItems]
+	);
+
+	const filteredGroups = useMemo(() => {
+		let groups = sectionGroups;
+		if (activeSection) {
+			groups = groups.filter(g => g.section.id === activeSection);
+		}
+		if (activeCategory) {
+			groups = groups.map(g => ({
+				...g,
+				categories: g.categories.filter(c => c.id === activeCategory),
+				items: g.items.filter(item => {
+					const catId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id;
+					return catId === activeCategory;
+				})
+			})).filter(g => g.items.length > 0);
+		}
+		return groups;
+	}, [sectionGroups, activeSection, activeCategory]);
+
+	const toggleSectionCollapse = (sectionId: string) => {
+		setCollapsedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+	};
+
+	const toggleCategoryCollapse = (categoryId: string) => {
+		setCollapsedCategories(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
+	};
 
 	return (
 		<div className="space-y-6 p-4">
-			{/* Header with gradient background */}
+			{/* Header */}
 			<div className="bg-gradient-to-r from-orange-50 via-white to-orange-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border border-orange-100 dark:border-gray-700 p-6">
-				<div className="flex items-center justify-between flex-wrap xs:flex-col xs:items-start xs:gap-4 xs:w-full">
-					<div className="flex flex-col xs:w-full">
+				<div className="flex items-center justify-between flex-wrap gap-4">
+					<div className="flex flex-col">
 						<div className="flex items-center gap-3 mb-2">
 							<div className="p-3 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg">
 								<Utensils className="h-7 w-7 text-white" />
@@ -589,40 +554,69 @@ const Menu: React.FC = () => {
 							</div>
 						</div>
 					</div>
-					<div className="flex items-center gap-2 xs:w-full xs:flex-col">
+					<div className="flex items-center gap-2 flex-wrap">
 						<button
-							onClick={handleAddSection}
-							className="action-button bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 dark:from-blue-500 dark:to-blue-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
+							onClick={() => window.open('/menu-view', '_blank')}
+							className="action-button bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200"
 						>
-							<Layers className="h-5 w-5" />
-							<span className="font-medium">{t('menu.addSection')}</span>
+							<Eye className="h-5 w-5" />
+							<span className="font-medium">{t('menu.preview')}</span>
 						</button>
-						<button
-							onClick={() => handleAddCategory()}
-							className="action-button bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 dark:from-green-500 dark:to-green-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
-						>
-							<Folder className="h-5 w-5" />
-							<span className="font-medium">{t('menu.addCategory')}</span>
-						</button>
-						<button
-							onClick={() => handleAddItem()}
-							className="action-button bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 xs:w-full xs:justify-center"
-						>
-							<Plus className="h-5 w-5" />
-							<span className="font-medium">{t('menu.addItem')}</span>
-						</button>
+						<div className="relative" data-add-dropdown>
+							<button
+								onClick={() => setShowAddDropdown(!showAddDropdown)}
+								className="action-button bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200"
+							>
+								<Plus className="h-5 w-5" />
+								<span className="font-medium">{t('menu.add')}</span>
+								<ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showAddDropdown ? 'rotate-180' : ''}`} />
+							</button>
+							{showAddDropdown && (
+								<div className="absolute right-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
+									<button
+										onClick={() => { setShowAddDropdown(false); handleAddSection(); }}
+										className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+									>
+										<div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+											<LayoutGrid className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+										</div>
+										<div>
+											<div className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('menu.addSection')}</div>
+										</div>
+									</button>
+									<button
+										onClick={() => { setShowAddDropdown(false); handleAddCategory(); }}
+										className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+									>
+										<div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-lg">
+											<LayoutGrid className="h-4 w-4 text-green-600 dark:text-green-400" />
+										</div>
+										<div>
+											<div className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('menu.addCategory')}</div>
+										</div>
+									</button>
+									<button
+										onClick={() => { setShowAddDropdown(false); handleAddItem(); }}
+										className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+									>
+										<div className="p-1.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+											<Plus className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+										</div>
+										<div>
+											<div className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('menu.addItem')}</div>
+										</div>
+									</button>
+								</div>
+							)}
+						</div>
 					</div>
 				</div>
 			</div>
 
-			{/* Search with enhanced design */}
-			<div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl transition-shadow duration-300">
+			{/* Search + Filters */}
+			<div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
 				<div className="flex items-center gap-4 flex-wrap">
 					<div className="flex-1 min-w-[250px]">
-						<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-							<Search className="h-4 w-4 text-orange-500" />
-							{t('menu.quickSearch')}
-						</label>
 						<div className="relative">
 							<Search className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
 							<input
@@ -634,16 +628,99 @@ const Menu: React.FC = () => {
 							/>
 						</div>
 					</div>
-					<div className="flex items-end">
-						<div className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 px-6 py-3 rounded-xl border border-orange-200 dark:border-orange-700">
-							<div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{t('menu.totalItems')}</div>
-							<div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatDecimal(filteredMenuItems.length, i18n.language)}</div>
-						</div>
+					<div className="flex items-center gap-2">
+						<button
+							onClick={() => setShowUnavailable(!showUnavailable)}
+							className={`p-2.5 rounded-xl transition-all duration-200 ${showUnavailable ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}
+							title={showUnavailable ? t('menu.showAvailable') : t('menu.hideUnavailable')}
+						>
+							{showUnavailable ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+						</button>
+					</div>
+					<div className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 px-4 py-2 rounded-xl border border-orange-200 dark:border-orange-700">
+						<div className="text-xs text-gray-600 dark:text-gray-400">{t('menu.totalItems')}</div>
+						<div className="text-lg font-bold text-orange-600 dark:text-orange-400">{formatDecimal(filteredMenuItemsByAvailability.length, i18n.language)}</div>
 					</div>
 				</div>
 			</div>
 
-			{/* Hierarchical Menu Display */}
+			{/* Section Tabs */}
+			{menuSections.length > 0 && (
+				<div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+					<button
+						onClick={() => { setActiveSection(null); setActiveCategory(null); }}
+						className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0 ${
+							!activeSection
+								? 'bg-orange-500 text-white shadow-md'
+								: 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+						}`}
+					>
+						{t('menu.all')}
+						<span className="ms-1.5 text-xs opacity-80">({formatDecimal(filteredMenuItemsByAvailability.length, i18n.language)})</span>
+					</button>
+					{sortedSections.map(section => {
+						const sectionCatIds = menuCategories.filter(c => getSectionId(c) === section.id).map(c => c.id);
+						const count = filteredMenuItemsByAvailability.filter(item => sectionCatIds.includes(getCategoryId(item))).length;
+						return (
+							<button
+								key={section.id}
+								onClick={() => { setActiveSection(activeSection === section.id ? null : section.id); setActiveCategory(null); }}
+								className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-1.5 flex-shrink-0 ${
+									activeSection === section.id
+										? 'bg-blue-500 text-white shadow-md'
+										: 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+								}`}
+							>
+								{section.name}
+								<span className={`text-xs px-1.5 py-0.5 rounded-full ${
+									activeSection === section.id ? 'bg-blue-400 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400'
+								}`}>{formatDecimal(count, i18n.language)}</span>
+							</button>
+						);
+					})}
+				</div>
+			)}
+
+			{/* Category Tabs (shown when a section is selected) */}
+			{activeSection && (() => {
+				const sectionCategories = menuCategories.filter(c => getSectionId(c) === activeSection).sort((a, b) => a.sortOrder - b.sortOrder);
+				if (sectionCategories.length <= 1) return null;
+				return (
+					<div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+						<button
+							onClick={() => setActiveCategory(null)}
+							className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0 ${
+								!activeCategory
+									? 'bg-emerald-500 text-white shadow-sm'
+									: 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600'
+							}`}
+						>
+							{t('menu.all')}
+						</button>
+						{sectionCategories.map(cat => {
+							const count = filteredMenuItems.filter(item => getCategoryId(item) === cat.id).length;
+							return (
+								<button
+									key={cat.id}
+									onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
+									className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-1.5 flex-shrink-0 ${
+										activeCategory === cat.id
+											? 'bg-emerald-500 text-white shadow-sm'
+											: 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600'
+									}`}
+								>
+									{cat.name}
+									<span className={`text-xs px-1 py-0.5 rounded-full ${
+										activeCategory === cat.id ? 'bg-emerald-400 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400'
+									}`}>{formatDecimal(count, i18n.language)}</span>
+								</button>
+							);
+						})}
+					</div>
+				);
+			})()}
+
+			{/* Main Content */}
 			{loading ? (
 				<div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
 					<div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-200 border-t-orange-600 dark:border-orange-800 dark:border-t-orange-400 mx-auto"></div>
@@ -652,837 +729,289 @@ const Menu: React.FC = () => {
 			) : menuSections.length === 0 ? (
 				<div className="empty-state text-center py-16 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
 					<div className="bg-gradient-to-br from-orange-100 to-orange-50 dark:from-orange-900/20 dark:to-orange-800/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-						<Layers className="h-10 w-10 text-orange-600 dark:text-orange-400" />
+						<LayoutGrid className="h-10 w-10 text-orange-600 dark:text-orange-400" />
 					</div>
 					<p className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.noSections')}</p>
-					<p className="text-sm text-gray-500 dark:text-gray-400">{t('menu.noSectionsSubtitle')}</p>
+					<p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('menu.noSectionsSubtitle')}</p>
+					<button
+						onClick={handleAddSection}
+						className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-medium transition-all duration-200"
+					>
+						{t('menu.addSection')}
+					</button>
+				</div>
+			) : filteredGroups.length === 0 ? (
+				<div className="empty-state text-center py-16 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 rounded-2xl shadow-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+					<div className="bg-gradient-to-br from-orange-100 to-orange-50 dark:from-orange-900/20 dark:to-orange-800/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+						<Search className="h-10 w-10 text-orange-600 dark:text-orange-400" />
+					</div>
+					<p className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.noSearchResults')}</p>
+					<p className="text-sm text-gray-500 dark:text-gray-400">{t('menu.tryDifferentSearch')}</p>
 				</div>
 			) : (
 				<div className="space-y-6">
-					{menuSections
-						.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
-						.map((section) => {
-							const sectionCategories = getCategoriesForSection(section.id);
-							const isExpanded = expandedSections[section.id] ?? false;
-							
-							return (
-								<div key={section.id} className="menu-card bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-									{/* Section Header with enhanced gradient */}
-									<div className="section-header p-5 border-b-2 border-blue-200 dark:border-blue-700">
-										<div className="flex items-center justify-between">
-											<div className="flex items-center gap-4 flex-1">
-												<button
-													onClick={() => toggleSection(section.id)}
-													className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-all duration-200"
-												>
-													{isExpanded ? <ChevronDown className="h-6 w-6" /> : <ChevronRight className="h-6 w-6" />}
-												</button>
-												<div className="p-2.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md">
-													<Layers className="h-5 w-5 text-white" />
-												</div>
-												<div className="flex-1">
-													<h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1">{section.name}</h2>
-													{section.description && (
-														<p className="text-sm text-gray-600 dark:text-gray-400">{section.description}</p>
-													)}
-												</div>
-											</div>
-											<div className="flex items-center gap-2">
-												<button
-													onClick={() => handleAddCategory(section.id)}
-													className="action-button p-2.5 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
-													title={t('menu.addCategory')}
-												>
-													<Plus className="h-5 w-5" />
-												</button>
-												<button
-													onClick={() => handleEditSection(section)}
-													className="action-button p-2.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
-													title={t('menu.editSection')}
-												>
-													<Edit className="h-5 w-5" />
-												</button>
-												<button
-													onClick={() => openDeleteModal(section.id, 'section')}
-													disabled={deletingSections[section.id]}
-													className={`action-button p-2.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md ${deletingSections[section.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-													title={t('menu.deleteSection')}
-												>
-													{deletingSections[section.id] ? (
-														<div className="animate-spin rounded-full h-5 w-5 border-2 border-red-200 border-t-red-600"></div>
-													) : (
-														<Trash2 className="h-5 w-5" />
-													)}
-												</button>
-											</div>
+					{filteredGroups.map(({ section, categories, items }) => (
+						<div key={section.id} className="rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+							{/* Section Header */}
+							<div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 px-6 py-4 cursor-pointer hover:from-blue-700 hover:to-blue-800 transition-colors" onClick={() => toggleSectionCollapse(section.id)}>
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-3">
+										<div className="p-1.5 text-white/60">
+											{collapsedSections[section.id] ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
 										</div>
+										<div className="w-1.5 h-10 bg-white/30 rounded-full"></div>
+										<div>
+											<h2 className="text-lg font-bold text-white">{section.name}</h2>
+											{section.description && (
+												<p className="text-xs text-blue-100 mt-0.5">{section.description}</p>
+											)}
+										</div>
+										<span className="text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-medium">
+											{formatDecimal(items.length, i18n.language)} {t('menu.itemsCountLabel')}
+										</span>
 									</div>
+									<div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+										<button
+											onClick={() => handleAddCategory(section.id)}
+											className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+											title={t('menu.addCategory')}
+										>
+											<Plus className="h-3.5 w-3.5" />
+											{t('menu.addCategory')}
+										</button>
+										<button
+											onClick={() => handleEditSection(section)}
+											className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+											title={t('common.edit')}
+										>
+											<Edit className="h-4 w-4" />
+										</button>
+										<button
+											onClick={() => setShowDeleteModal({ show: true, id: section.id, type: 'section' })}
+											className="p-2 rounded-lg hover:bg-red-500/30 text-white/80 hover:text-white transition-colors"
+											title={t('common.delete')}
+											disabled={!!deletingSections[section.id]}
+										>
+											<Trash2 className="h-4 w-4" />
+										</button>
+									</div>
+								</div>
+							</div>
 
-									{/* Categories */}
-									{isExpanded && (
-										<div className="p-5 space-y-4 bg-gray-50/50 dark:bg-gray-900/20">
-											{sectionCategories.length === 0 ? (
-												<div className="empty-state text-center py-8 bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600">
-													<Folder className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-													<p className="text-gray-500 dark:text-gray-400 text-sm">{t('menu.noCategoriesInSection')}</p>
+							{/* Categories */}
+							{!collapsedSections[section.id] && (
+							<div className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+								{categories.length === 0 && items.length === 0 ? (
+									<div className="px-6 py-8 text-center">
+										<p className="text-sm text-gray-400 dark:text-gray-500 italic">{t('menu.noCategoriesOrItems')}</p>
+									</div>
+								) : (
+									categories.map(category => {
+										const categoryItems = items.filter(item => getCategoryId(item) === category.id);
+										return (
+											<div key={category.id}>
+												{/* Category Header */}
+												<div className="bg-gradient-to-r from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-800/10 px-6 py-3 cursor-pointer hover:from-emerald-100 hover:to-emerald-100/70 dark:hover:from-emerald-900/30 dark:hover:to-emerald-800/20 transition-colors" onClick={() => toggleCategoryCollapse(category.id)}>
+													<div className="flex items-center justify-between">
+														<div className="flex items-center gap-2.5">
+															<div className="p-1 text-emerald-500 dark:text-emerald-400">
+																{collapsedCategories[category.id] ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+															</div>
+															<div className="w-1.5 h-6 bg-emerald-500 rounded-full"></div>
+															<h3 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">{category.name}</h3>
+															{category.description && (
+																<span className="text-xs text-emerald-600/70 dark:text-emerald-400/60">- {category.description}</span>
+															)}
+															<span className="text-xs bg-emerald-200 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
+																{formatDecimal(categoryItems.length, i18n.language)}
+															</span>
+														</div>
+														<div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+															<button
+																onClick={() => handleAddItem(category.id)}
+																className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-1 transition-colors"
+																title={t('menu.addItem')}
+															>
+																<Plus className="h-3 w-3" />
+																{t('menu.addItem')}
+															</button>
+															<button
+																onClick={() => handleEditCategory(category)}
+																className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 transition-colors"
+																title={t('common.edit')}
+															>
+																<Edit className="h-3.5 w-3.5" />
+															</button>
+															<button
+																onClick={() => setShowDeleteModal({ show: true, id: category.id, type: 'category' })}
+																className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 dark:text-red-400 transition-colors"
+																title={t('common.delete')}
+																disabled={!!deletingCategories[category.id]}
+															>
+																<Trash2 className="h-3.5 w-3.5" />
+															</button>
+														</div>
+													</div>
 												</div>
-											) : (
-												sectionCategories.map((category) => {
-													const categoryItems = getItemsForCategory(category.id);
-													const isCategoryExpanded = expandedCategories[category.id] ?? false;
-													const filteredCategoryItems = searchTerm
-														? categoryItems.filter(item => 
-															item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-															(item.description?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false)
-														)
-														: categoryItems;
 
-													return (
-														<div key={category.id} className="menu-card border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-md">
-															{/* Category Header */}
-															<div className="category-header p-4 border-b-2 border-gray-200 dark:border-gray-700">
-																<div className="flex items-center justify-between">
-																	<div className="flex items-center gap-3 flex-1">
-																		<button
-																			onClick={() => toggleCategory(category.id)}
-																			className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-all duration-200"
-																		>
-																			{isCategoryExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-																		</button>
-																		<div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-sm">
-																			<FolderOpen className="h-4 w-4 text-white" />
-																		</div>
-																		<div className="flex-1">
-																			<div className="flex items-center gap-2">
-																				<h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{category.name}</h3>
-																				<span className="badge px-2.5 py-1 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
-																					{formatDecimal(filteredCategoryItems.length, i18n.language)} {t('menu.itemsCountLabel')}
-																				</span>
-																			</div>
-																			{category.description && (
-																				<p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{category.description}</p>
+												{/* Items Grid */}
+												{!collapsedCategories[category.id] && (
+												<div>
+												{categoryItems.length === 0 ? (
+													<div className="px-6 py-5 text-center">
+														<p className="text-xs text-gray-400 dark:text-gray-500 italic">{t('menu.noItemsInCategory')}</p>
+													</div>
+												) : (
+													<div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+														{categoryItems.map(item => (
+															<div
+																key={item.id}
+																className="group bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 p-4 transition-all duration-200 hover:shadow-md"
+															>
+																<div className="flex items-start justify-between mb-2">
+																	<div className="flex-1 min-w-0">
+																		<div className="flex items-center gap-2">
+																			<p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{item.name}</p>
+																			{item.isPopular && (
+																				<span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full flex-shrink-0">★</span>
 																			)}
 																		</div>
+																		{item.description && (
+																			<p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{item.description}</p>
+																		)}
 																	</div>
-																	<div className="flex items-center gap-2">
+																	<span className={`flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+																		item.isAvailable
+																			? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+																			: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+																	}`}>
+																		{item.isAvailable ? t('menu.available') : t('menu.unavailable')}
+																	</span>
+																</div>
+
+																<div className="flex items-center justify-between mt-3">
+																	<div className="flex items-center gap-3">
+																		<span className="text-base font-bold text-gray-900 dark:text-gray-100">
+																			{formatDecimal(item.price, i18n.language)}
+																		</span>
+																		<span className="text-xs text-gray-400 dark:text-gray-500">
+																			{formatDecimal(item.preparationTime, i18n.language)} {t('menu.minutes')}
+																		</span>
+																	</div>
+																	<div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
 																		<button
-																			onClick={() => handleAddItem(category.id)}
-																			className="action-button p-2 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-																			title={t('menu.addItem')}
+																			onClick={() => handleQuickViewItem(item)}
+																			className="p-1.5 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-600 dark:text-purple-400 transition-colors"
+																			title={t('menu.view')}
 																		>
-																			<Plus className="h-4 w-4" />
+																			<Eye className="h-3.5 w-3.5" />
 																		</button>
 																		<button
-																			onClick={() => handleEditCategory(category)}
-																			className="action-button p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-																			title={t('menu.editCategory')}
+																			onClick={() => handleEditItem(item)}
+																			className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 transition-colors"
+																			title={t('common.edit')}
 																		>
-																			<Edit className="h-4 w-4" />
+																			<Edit className="h-3.5 w-3.5" />
 																		</button>
 																		<button
-																			onClick={() => openDeleteModal(category.id, 'category')}
-																			disabled={deletingCategories[category.id]}
-																			className={`action-button p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md ${deletingCategories[category.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-																			title={t('menu.deleteCategory')}
+																			onClick={() => handleDuplicateItem(item)}
+																			className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 transition-colors"
+																			title={t('menu.duplicate')}
 																		>
-																			{deletingCategories[category.id] ? (
-																				<div className="animate-spin rounded-full h-4 w-4 border-2 border-red-200 border-t-red-600"></div>
-																			) : (
-																				<Trash2 className="h-4 w-4" />
-																			)}
+																			<Copy className="h-3.5 w-3.5" />
+																		</button>
+																		<button
+																			onClick={() => setShowDeleteModal({ show: true, id: item.id, type: 'item' })}
+																			className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 dark:text-red-400 transition-colors"
+																			title={t('common.delete')}
+																			disabled={!!deletingItems[item.id]}
+																		>
+																			<Trash2 className="h-3.5 w-3.5" />
 																		</button>
 																	</div>
 																</div>
 															</div>
-
-															{/* Items Grid */}
-															{isCategoryExpanded && (
-																<div className="p-5 bg-gradient-to-br from-gray-50 to-white dark:from-gray-900/30 dark:to-gray-800/30">
-																	{filteredCategoryItems.length === 0 ? (
-																		<div className="empty-state text-center py-8 bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600">
-																			<Utensils className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-																			<p className="text-gray-500 dark:text-gray-400 text-sm">
-																				{searchTerm ? t('menu.noSearchResults') : t('menu.noItemsInCategory')}
-																			</p>
-																		</div>
-																	) : (
-																		<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-																			{filteredCategoryItems.map((item) => (
-																				<div key={item.id} className="item-card bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 hover:border-orange-300 dark:hover:border-orange-600 transition-all duration-300">
-																					<div className="flex items-start justify-between mb-4">
-																						<div className="flex-1">
-																							<div className="flex items-center gap-2 mb-2 flex-wrap">
-																								<h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{item.name}</h3>
-																								{item.isNew && (
-																									<span className="badge px-2.5 py-1 text-xs font-semibold bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full shadow-sm">{t('menu.new')}</span>
-																								)}
-																								{item.isPopular && (
-																									<Star className="popular-star h-5 w-5 text-yellow-500 fill-yellow-500" />
-																								)}
-																							</div>
-																							{item.description && (
-																								<p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">{item.description}</p>
-																							)}
-																							{item.ingredients && item.ingredients.length > 0 && (
-																								<div className="text-xs text-blue-600 dark:text-blue-400 mb-3 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
-																									<span className="font-semibold">{t('menu.ingredientsLabel')}:</span> {item.ingredients.map(ing => {
-																										const ingredientItem = inventoryItems.find(inv => inv.id === ing.item);
-																										return ingredientItem ? `${ingredientItem.name} (${formatQuantity(ing.quantity, ing.unit)})` : `${formatQuantity(ing.quantity, ing.unit)}`;
-																									}).join(', ')}
-																								</div>
-																							)}
-																						</div>
-																						<span className={`badge px-3 py-1.5 text-xs font-bold rounded-full shadow-sm ${item.isAvailable ? 'status-available bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
-																							{getStatusText(item.isAvailable)}
-																						</span>
-																					</div>
-
-																					<div className="space-y-3 mb-5 pb-5 border-b border-gray-200 dark:border-gray-700">
-																						<div className="flex items-center justify-between">
-																							<span className="price-tag text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">{formatCurrency(item.price, i18n.language)}</span>
-																							<div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-full">
-																								<TrendingUp className="h-4 w-4" />
-																								<span className="font-semibold">{formatDecimal(item.orderCount, i18n.language)}</span>
-																							</div>
-																						</div>
-																						<div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-																							<Clock className="h-4 w-4 text-orange-500" />
-																							<span>{formatDecimal(item.preparationTime, i18n.language)} {t('menu.minutes')}</span>
-																						</div>
-																					</div>
-
-																					<div className="flex items-center justify-end gap-2">
-																						<button
-																							onClick={() => handleEditItem(item)}
-																							className="action-button flex-1 p-2.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
-																							title={t('menu.edit')}
-																						>
-																							<Edit className="h-4 w-4" />
-																							<span className="text-sm font-medium">{t('menu.edit')}</span>
-																						</button>
-																						<button
-																							onClick={() => openDeleteModal(item.id, 'item')}
-																							disabled={deletingItems[item.id]}
-																							className={`action-button flex-1 p-2.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 ${deletingItems[item.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
-																							title={t('menu.delete')}
-																						>
-																							{deletingItems[item.id] ? (
-																								<div className="animate-spin rounded-full h-4 w-4 border-2 border-red-200 border-t-red-600"></div>
-																							) : (
-																								<>
-																									<Trash2 className="h-4 w-4" />
-																									<span className="text-sm font-medium">{t('menu.delete')}</span>
-																								</>
-																							)}
-																						</button>
-																					</div>
-																				</div>
-																			))}
-																		</div>
-																	)}
-																</div>
-															)}
-														</div>
-													);
-												})
-											)}
-										</div>
-									)}
-								</div>
-							);
-						})}
-					</div>
-				)}
-
-
-			{/* Add/Edit Modal */}
-			{showAddModal && (
-				<div
-					className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-					onClick={(e) => {
-						if (e.target === e.currentTarget) {
-							setShowAddModal(false);
-						}
-					}}
-				>
-					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
-						<div className="sticky top-0 bg-gradient-to-r from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 px-6 py-5 rounded-t-2xl shadow-lg">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-3">
-									<div className="p-2 bg-white/20 rounded-lg">
-										<Utensils className="h-6 w-6 text-white" />
-									</div>
-									<h3 className="text-xl font-bold text-white">
-										{editingItem ? t('menu.editItemTitle') : t('menu.addNewItem')}
-									</h3>
-								</div>
-								<button
-									onClick={() => setShowAddModal(false)}
-									className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-all duration-200"
-								>
-									<X className="h-6 w-6" />
-								</button>
-							</div>
-						</div>
-						<div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.itemNameLabel')} {t('menu.required')}</label>
-								<input
-									type="text"
-									value={formData.name}
-									onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-									placeholder={t('menu.itemNamePlaceholder')}
-								/>
-							</div>
-
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.priceEGP')} {t('menu.required')}</label>
-								<input
-									type="number"
-									value={formData.price}
-									onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-									placeholder="0.00"
-									min="0"
-									step="0.01"
-								/>
-							</div>
-
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.category')} {t('menu.required')}</label>
-								<select
-									value={formData.category}
-									onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-								>
-									<option value="">{t('menu.selectCategory')}</option>
-									{menuCategories.map(category => {
-										const sectionName = typeof category.section === 'string' 
-											? menuSections.find(s => s.id === category.section)?.name || ''
-											: (category.section as MenuSection)?.name || '';
-										return (
-											<option key={category.id} value={category.id}>
-												{sectionName ? `${sectionName} - ` : ''}{category.name}
-											</option>
-										);
-									})}
-								</select>
-							</div>
-
-							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('menu.preparationTimeMinutes')}</label>
-								<input
-									type="number"
-									value={formData.preparationTime}
-									onChange={(e) => setFormData({ ...formData, preparationTime: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-									min="1"
-									max="60"
-								/>
-							</div>
-
-								<div className="flex items-center space-x-4 space-x-reverse">
-									<label className="flex items-center">
-										<input
-											type="checkbox"
-											checked={formData.isAvailable}
-											onChange={(e) => setFormData({ ...formData, isAvailable: e.target.checked })}
-											className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
-										/>
-										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">{t('menu.availableForOrder')}</span>
-									</label>
-									<label className="flex items-center">
-								<input
-											type="checkbox"
-											checked={formData.isPopular}
-											onChange={(e) => setFormData({ ...formData, isPopular: e.target.checked })}
-											className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded"
-										/>
-										<span className="mr-2 text-sm text-gray-700 dark:text-gray-300">{t('menu.popularItem')}</span>
-									</label>
-							</div>
-
-							<div className="md:col-span-2">
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.description')}</label>
-								<textarea
-									value={formData.description}
-									onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200"
-									rows={3}
-									placeholder={t('menu.descriptionPlaceholder')}
-								/>
-							</div>
-
-							<div className="md:col-span-2">
-									<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-										{t('menu.ingredientsLinked')}
-										<span className="text-xs text-gray-500 dark:text-gray-400 mr-2 font-normal">
-											({(() => {
-												const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
-												const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
-												const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
-												return `${formatDecimal(availableItems.length, i18n.language)} ${t('menu.of')} ${formatDecimal(availableRawMaterials.length, i18n.language)} ${t('menu.availableRawMaterials')}`;
-											})()})
-										</span>
-										{inventoryItems.length === 0 && (
-											<button
-												type="button"
-												onClick={() => fetchInventoryItems()}
-												className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mr-2"
-											>
-												{t('menu.updateIngredients')}
-											</button>
-										)}
-									</label>
-
-									{/* تمت إزالة رسالة تحذير الخامات المطلوبة */}
-
-									<div className="space-y-3 max-h-60 overflow-y-auto">
-									{formData.ingredients.map((ingredient, index) => (
-											<div key={index} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-											<div className="flex-1">
-													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('menu.ingredients')}</label>
-												<select
-													value={ingredient.item}
-													onChange={(e) => updateIngredient(index, 'item', e.target.value)}
-														className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-												>
-													<option value="">{t('menu.selectIngredient')}</option>
-													{inventoryItems && inventoryItems.length > 0 ? (
-														inventoryItems.filter(item => item.isRawMaterial).length > 0 ? (
-															(() => {
-																const availableItems = inventoryItems
-																	.filter(item => item.isRawMaterial)
-																	.filter(item => {
-																		// لا تظهر الخامة إذا كانت مختارة في صف آخر
-																		const isSelectedInOtherRows = formData.ingredients.some((ing, ingIndex) =>
-																			ingIndex !== index && ing.item === item.id
-																		);
-																		return !isSelectedInOtherRows;
-																	});
-
-																if (availableItems.length === 0) {
-																	return <option value="" disabled>{t('menu.allIngredientsAlreadySelected')}</option>;
-																}
-
-																return availableItems.map(item => (
-																		<option key={item.id} value={item.id}>
-																			{item.name}
-																		</option>
-																));
-															})()
-														) : (
-															<option value="" disabled>{t('menu.noIngredientsAvailable')}</option>
-														)
-													) : (
-														<option value="" disabled>{t('menu.loadingIngredients')}</option>
-													)}
-												</select>
-											</div>
-											<div className="w-24">
-													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('menu.quantity')}</label>
-												<input
-													type="number"
-													value={ingredient.quantity}
-													onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
-														className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-														placeholder="0"
-													min="0"
-													step="0.1"
-												/>
-											</div>
-											<div className="w-24">
-													<label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-														{t('menu.unit')}
-														{(() => {
-															const selectedInventoryItem = inventoryItems.find(item => item.id === ingredient.item);
-															return selectedInventoryItem ? (
-																<span className="text-blue-600 dark:text-blue-400 font-medium"> ({selectedInventoryItem.unit})</span>
-															) : '';
-														})()}
-													</label>
-												<select
-													value={ingredient.unit}
-													onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
-														className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-													>
-														{(() => {
-															const selectedInventoryItem = inventoryItems.find(item => item.id === ingredient.item);
-															if (selectedInventoryItem) {
-																const compatibleUnits = getCompatibleUnits(selectedInventoryItem.unit);
-																return compatibleUnits.map(unit => (
-																	<option key={unit} value={unit}>{unit}</option>
-																));
-															}
-															return unitOptions.map(unit => (
-														<option key={unit} value={unit}>{unit}</option>
-															));
-														})()}
-												</select>
-											</div>
-											<button
-												type="button"
-												onClick={() => removeIngredient(index)}
-													className="p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200 self-end"
-											>
-												<Trash2 className="h-4 w-4" />
-											</button>
-										</div>
-									))}
-
-									{(() => {
-										const availableRawMaterials = inventoryItems.filter(item => item.isRawMaterial);
-										const selectedItems = formData.ingredients.map(ing => ing.item).filter(item => item !== '');
-										const availableItems = availableRawMaterials.filter(item => !selectedItems.includes(item.id));
-
-										if (availableItems.length === 0 && availableRawMaterials.length > 0) {
-												return (
-													<div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600 rounded-lg p-4 text-center">
-														<div className="flex items-center justify-center mb-2">
-															<svg className="h-5 w-5 text-yellow-600 dark:text-yellow-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-															</svg>
-															<span className="text-yellow-800 dark:text-yellow-200 font-medium">{t('menu.allIngredientsSelected')}</span>
-														</div>
-														<p className="text-sm text-yellow-700 dark:text-yellow-300">{t('menu.cannotAddMore')}</p>
+														))}
 													</div>
-												);
-											} else if (availableRawMaterials.length === 0 && inventoryItems.length > 0) {
-												return (
-													<div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-4 text-center">
-														<div className="flex items-center justify-center mb-2">
-															<svg className="h-5 w-5 text-blue-600 dark:text-blue-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-															</svg>
-															<span className="text-blue-800 dark:text-blue-200 font-medium">{t('menu.noIngredientsAvailable')}</span>
-														</div>
-														<p className="text-sm text-blue-700 dark:text-blue-300">{t('menu.addIngredientsFirst')}</p>
-													</div>
-												);
-											} else {
-										return (
-											<button
-												type="button"
-												onClick={addIngredient}
-														className="w-full p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:border-orange-500 dark:hover:border-orange-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors duration-200 flex items-center justify-center"
-													>
-														<Plus className="h-4 w-4 ml-2" />
-														{t('menu.addIngredient')}
-											</button>
+												)}
+												</div>
+												)}
+											</div>
 										);
-											}
-									})()}
+									})
+								)}
 							</div>
+							)}
 						</div>
-					</div>
-
-					<div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-							<button
-									type="button"
-								onClick={() => setShowAddModal(false)}
-								className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-							>
-								{t('common.cancel')}
-							</button>
-							<button
-									type="button"
-								onClick={handleSaveItem}
-								disabled={savingItem}
-									className="action-button px-8 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 dark:from-orange-500 dark:to-orange-600 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
-								>
-									{savingItem ? (
-										<>
-											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-											<span>{t('menu.saving')}</span>
-										</>
-									) : (
-										<>
-											<CheckCircle className="h-5 w-5" />
-											<span>{editingItem ? t('common.saveChanges') : t('common.save')}</span>
-										</>
-									)}
-							</button>
-							</div>
-						</div>
-					</div>
+					))}
 				</div>
 			)}
 
-			{/* Delete Confirmation Modal */}
-			{showDeleteModal.show && (
-				<div className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
-						<div className="p-6">
-							<div className="flex items-center justify-between mb-6">
-								<div className="flex items-center gap-3">
-									<div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
-										<Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
-									</div>
-									<h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('menu.confirmDelete')}</h3>
-								</div>
-								<button
-									onClick={closeDeleteModal}
-									className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200"
-									disabled={
-										(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
-									}
-								>
-									<X className="h-6 w-6" />
-								</button>
-							</div>
+			{/* Modals */}
+			<MenuItemModal
+				isOpen={showItemModal}
+				onClose={() => setShowItemModal(false)}
+				onSave={handleSaveItem}
+				editingItem={editingItem}
+				formData={formData}
+				setFormData={setFormData}
+				menuCategories={menuCategories}
+				menuSections={menuSections}
+				inventoryItems={inventoryItems}
+				saving={savingItem}
+				unitOptions={unitOptions}
+				addIngredient={addIngredient}
+				removeIngredient={removeIngredient}
+				updateIngredient={updateIngredient}
+				fetchInventoryItems={fetchInventoryItems}
+			/>
 
-							<div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
-								<p className="text-gray-700 dark:text-gray-300 text-center font-medium">
-									{showDeleteModal.type === 'section' && `${t('menu.confirmDelete')} ${t('menu.deleteSection')}?`}
-									{showDeleteModal.type === 'category' && `${t('menu.confirmDelete')} ${t('menu.deleteCategory')}?`}
-									{showDeleteModal.type === 'item' && `${t('menu.confirmDelete')} ${t('menu.item')}?`}
-								</p>
-								<p className="text-sm text-red-600 dark:text-red-400 text-center mt-2">
-									⚠️ {t('menu.cannotUndo')}
-								</p>
-							</div>
+			<MenuQuickViewModal
+				isOpen={showQuickView}
+				onClose={() => setShowQuickView(false)}
+				item={quickViewItem}
+				onEdit={handleEditItem}
+				onDuplicate={handleDuplicateItem}
+				inventoryItems={inventoryItems}
+			/>
 
-							<div className="flex justify-end gap-3">
-								<button
-									onClick={closeDeleteModal}
-									disabled={
-										(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
-									}
-									className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium shadow-sm hover:shadow-md"
-								>
-									{t('common.cancel')}
-								</button>
-								<button
-									onClick={() => {
-										if (showDeleteModal.type === 'item') handleDeleteItem();
-										else if (showDeleteModal.type === 'section') handleDeleteSection();
-										else if (showDeleteModal.type === 'category') handleDeleteCategory();
-									}}
-									disabled={
-										(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])
-									}
-									className="action-button px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 dark:from-red-500 dark:to-red-600 text-white rounded-xl transition-all duration-200 disabled:opacity-50 flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
-								>
-									{((showDeleteModal.type === 'item' && deletingItems[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.itemId || '']) ||
-										(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.itemId || ''])) ? (
-										<>
-											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-											<span>{t('menu.deleting')}</span>
-										</>
-									) : (
-										<>
-											<Trash2 className="h-5 w-5" />
-											<span>{t('common.delete')}</span>
-										</>
-									)}
-								</button>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
+			<MenuSectionModal
+				isOpen={showSectionModal}
+				onClose={() => setShowSectionModal(false)}
+				onSave={handleSaveSection}
+				editingSection={editingSection}
+				formData={sectionFormData}
+				setFormData={setSectionFormData}
+				saving={savingSection}
+			/>
 
-			{/* Add/Edit Section Modal */}
-			{showSectionModal && (
-				<div
-					className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-					onClick={(e) => {
-						if (e.target === e.currentTarget) {
-							setShowSectionModal(false);
-						}
-					}}
-				>
-					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
-						<div className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 px-6 py-5 rounded-t-2xl">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-3">
-									<div className="p-2 bg-white/20 rounded-lg">
-										<Layers className="h-6 w-6 text-white" />
-									</div>
-									<h3 className="text-xl font-bold text-white">
-										{editingSection ? t('menu.editSectionTitle') : t('menu.addNewSection')}
-									</h3>
-								</div>
-								<button
-									onClick={() => setShowSectionModal(false)}
-									className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-all duration-200"
-								>
-									<X className="h-6 w-6" />
-								</button>
-							</div>
-						</div>
-						<div className="p-6 space-y-5">
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.sectionName')} {t('menu.required')}</label>
-								<input
-									type="text"
-									value={sectionFormData.name}
-									onChange={(e) => setSectionFormData({ ...sectionFormData, name: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-									placeholder={t('menu.sectionNamePlaceholder')}
-								/>
-							</div>
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.description')}</label>
-								<textarea
-									value={sectionFormData.description}
-									onChange={(e) => setSectionFormData({ ...sectionFormData, description: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-									rows={3}
-									placeholder={t('menu.descriptionPlaceholder')}
-								/>
-							</div>
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.sortOrder')}</label>
-								<input
-									type="number"
-									value={sectionFormData.sortOrder}
-									onChange={(e) => setSectionFormData({ ...sectionFormData, sortOrder: parseInt(e.target.value) || 0 })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-									min="0"
-								/>
-							</div>
-							<div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-								<button
-									onClick={() => setShowSectionModal(false)}
-									className="action-button px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-								>
-									{t('common.cancel')}
-								</button>
-								<button
-									onClick={handleSaveSection}
-									disabled={savingSection}
-									className="action-button px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 dark:from-blue-500 dark:to-blue-600 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
-								>
-									{savingSection ? (
-										<>
-											<div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-											<span>{t('menu.saving')}</span>
-										</>
-									) : (
-										<>
-											<CheckCircle className="h-5 w-5" />
-											<span>{editingSection ? t('common.saveChanges') : t('common.save')}</span>
-										</>
-									)}
-								</button>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
+			<MenuCategoryModal
+				isOpen={showCategoryModal}
+				onClose={() => setShowCategoryModal(false)}
+				onSave={handleSaveCategory}
+				editingCategory={editingCategory}
+				formData={categoryFormData}
+				setFormData={setCategoryFormData}
+				menuSections={menuSections}
+				saving={savingCategory}
+			/>
 
-			{/* Add/Edit Category Modal */}
-			{showCategoryModal && (
-				<div
-					className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-					onClick={(e) => {
-						if (e.target === e.currentTarget) {
-							setShowCategoryModal(false);
-						}
-					}}
-				>
-					<div className="modal-content bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
-						<div className="bg-gradient-to-r from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 px-6 py-5 rounded-t-2xl">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-3">
-									<div className="p-2 bg-white/20 rounded-lg">
-										<Folder className="h-6 w-6 text-white" />
-									</div>
-									<h3 className="text-xl font-bold text-white">
-										{editingCategory ? t('menu.editCategoryTitle') : t('menu.addNewCategory')}
-									</h3>
-								</div>
-								<button
-									onClick={() => setShowCategoryModal(false)}
-									className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-all duration-200"
-								>
-									<X className="h-6 w-6" />
-								</button>
-							</div>
-						</div>
-						<div className="p-6 space-y-5">
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.categoryName')} {t('menu.required')}</label>
-								<input
-									type="text"
-									value={categoryFormData.name}
-									onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-									placeholder={t('menu.categoryNamePlaceholder')}
-								/>
-							</div>
-							<div>
-								<label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('menu.selectSection')} {t('menu.required')}</label>
-								<select
-									value={categoryFormData.section}
-									onChange={(e) => setCategoryFormData({ ...categoryFormData, section: e.target.value })}
-									className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-								>
-									<option value="">{t('menu.selectSection')}</option>
-									{menuSections.map(section => (
-										<option key={section.id} value={section.id}>{section.name}</option>
-									))}
-								</select>
-							</div>
-							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('menu.description')}</label>
-								<textarea
-									value={categoryFormData.description}
-									onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
-									rows={3}
-									placeholder={t('menu.descriptionPlaceholder')}
-								/>
-							</div>
-							<div>
-								<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('menu.sortOrder')}</label>
-								<input
-									type="number"
-									value={categoryFormData.sortOrder}
-									onChange={(e) => setCategoryFormData({ ...categoryFormData, sortOrder: parseInt(e.target.value) || 0 })}
-									className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-green-500"
-									min="0"
-								/>
-							</div>
-							<div className="flex justify-end space-x-3 space-x-reverse pt-4">
-								<button
-									onClick={() => setShowCategoryModal(false)}
-									className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors duration-200"
-								>
-									{t('common.cancel')}
-								</button>
-								<button
-									onClick={handleSaveCategory}
-									disabled={savingCategory}
-									className="px-6 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-								>
-									{savingCategory ? (
-										<>
-											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
-											{t('menu.saving')}
-										</>
-									) : (
-										<>
-											<CheckCircle className="h-4 w-4 ml-2" />
-											{editingCategory ? t('common.saveChanges') : t('common.save')}
-										</>
-									)}
-								</button>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
+			<MenuDeleteModal
+				isOpen={showDeleteModal.show}
+				onClose={() => setShowDeleteModal({ show: false, id: null, type: 'item' })}
+				onConfirm={() => {
+					if (showDeleteModal.type === 'item') handleDeleteItem();
+					else if (showDeleteModal.type === 'section') handleDeleteSection();
+					else if (showDeleteModal.type === 'category') handleDeleteCategory();
+				}}
+				type={showDeleteModal.type}
+				isDeleting={
+					(showDeleteModal.type === 'item' && deletingItems[showDeleteModal.id || '']) ||
+					(showDeleteModal.type === 'section' && deletingSections[showDeleteModal.id || '']) ||
+					(showDeleteModal.type === 'category' && deletingCategories[showDeleteModal.id || '']) ||
+					false
+				}
+			/>
 		</div>
 	);
 };

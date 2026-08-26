@@ -3,43 +3,34 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { WORLD_LANGUAGES } from '../../shared/languages';
 
-// Dynamically import all translation files
-const translationModules = import.meta.glob('./locales/*.json', { eager: true });
+// Dynamically import all translation files (non-eager - lazy loaded)
+const localeModules = import.meta.glob('./locales/*.json');
 
-// Language resources - dynamically load all available translations
-const resources: Record<string, { translation: any }> = {};
+// Preload commonly used locales
+const preloadLocales = ['en', 'ar'];
 
-// Load all translation files
-Object.entries(translationModules).forEach(([path, module]: [string, any]) => {
-  // Extract language code from path (e.g., './locales/ar.json' -> 'ar')
-  const langCode = path.match(/\.\/locales\/(.+)\.json$/)?.[1];
-  if (langCode && module.default) {
-    resources[langCode] = { translation: module.default };
-  }
-});
-
+// Load locale on demand
+const loadLocaleResources = async (lng: string) => {
+    const mod = localeModules[`./locales/${lng}.json`];
+    if (mod) {
+        const resources = await mod() as Record<string, Record<string, string>>;
+        i18n.addResourceBundle(lng, 'translation', resources.default || resources, true, true);
+    }
+};
 
 /**
  * Detect user's preferred language based on browser locale and timezone
  */
 const detectUserLanguage = (): string => {
-  // Check if user has already selected a language
   const savedLanguage = localStorage.getItem('language');
-  if (savedLanguage && resources[savedLanguage]) {
+  if (savedLanguage) {
     return savedLanguage;
   }
 
-  // Get browser language (e.g., 'ar-EG', 'en-US', 'fr-FR')
   const browserLang = navigator.language || (navigator as any).userLanguage;
-  const primaryLang = browserLang.split('-')[0]; // Extract primary language code
+  const primaryLang = browserLang.split('-')[0];
 
-  // Check if we have translation for this language
-  if (resources[primaryLang]) {
-    return primaryLang;
-  }
-
-  // Fallback to English if language not supported
-  return 'en';
+  return primaryLang || 'en';
 };
 
 // Supported languages configuration - use all world languages
@@ -55,7 +46,7 @@ i18n
   .use(LanguageDetector) // Detect user language
   .use(initReactI18next) // Pass i18n instance to react-i18next
   .init({
-    resources,
+    resources: {},
     fallbackLng: 'en', // Default fallback language
     lng: detectUserLanguage(), // Auto-detect user's language
     
@@ -73,29 +64,38 @@ i18n
     },
   });
 
-// Update HTML attributes when language changes
-i18n.on('languageChanged', (lng) => {
-  const language = languages.find(l => l.code === lng);
-  if (language) {
-    document.documentElement.lang = lng;
-    document.documentElement.dir = language.dir;
-    
-    // Check if user is authenticated
-    const token = localStorage.getItem('token');
-    // For auth pages or not logged in, keep body as ltr
-    const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
-    
-    // Apply direction to body
-    // If authenticated and not on auth page, apply the language direction
-    // Otherwise keep ltr for auth pages
-    if (token && !isAuthPage) {
-      document.body.dir = language.dir;
-    } else {
-      document.body.dir = 'ltr';
+// Load preloaded locales eagerly (only English and Arabic)
+for (const lng of preloadLocales) {
+    const mod = localeModules[`./locales/${lng}.json`];
+    if (mod) {
+        mod().then((resources: Record<string, Record<string, string>>) => {
+            i18n.addResourceBundle(lng, 'translation', resources.default || resources, true, true);
+        });
     }
-    
-    localStorage.setItem('language', lng);
-  }
+}
+
+// Load on language change
+i18n.on('languageChanged', (lng) => {
+    if (!i18n.hasResourceBundle(lng, 'translation')) {
+        loadLocaleResources(lng);
+    }
+
+    const language = languages.find(l => l.code === lng);
+    if (language) {
+      document.documentElement.lang = lng;
+      document.documentElement.dir = language.dir;
+      
+      const token = localStorage.getItem('token');
+      const isAuthPage = window.location.pathname.match(/^\/(login|register|verify-email|reset-password|email-actions)/);
+      
+      if (token && !isAuthPage) {
+        document.body.dir = language.dir;
+      } else {
+        document.body.dir = 'ltr';
+      }
+      
+      localStorage.setItem('language', lng);
+    }
 });
 
 // Make i18n available globally for AppContext

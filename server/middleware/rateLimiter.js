@@ -1,33 +1,49 @@
 import rateLimit from "express-rate-limit";
 
-// General API rate limiter (مفتوح العدد)
+// General API rate limiter
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: Infinity, // لا يوجد حد للطلبات
-    handler: (req, res, next) => next(), // لا تمنع أي طلب
-    skip: () => true, // تخطى دائماً
+    max: 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "تم تجاوز الحد المسموح للطلبات، حاول بعد 15 دقيقة",
+    },
 });
 
-// Strict rate limiter for auth routes (مفتوح العدد)
+// Strict rate limiter for auth routes (login)
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: Infinity,
-    handler: (req, res, next) => next(),
-    skip: () => true,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "محاولات كثيرة جدًا، حاول بعد 15 دقيقة",
+    },
 });
 
-// Create account limiter (مفتوح العدد)
+// Create account limiter
 export const createAccountLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: Infinity,
-    handler: (req, res, next) => next(),
-    skip: () => true,
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "تم تجاوز الحد المسموح لإنشاء الحسابات، حاول بعد ساعة",
+    },
 });
 
-// Password reset limiter (مفتوح العدد)
+// Password reset limiter
 export const passwordResetLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: Infinity,
-    handler: (req, res, next) => next(),
-    skip: () => true,
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "تم تجاوز الحد المسموح لإعادة تعيين كلمة المرور، حاول بعد ساعة",
+    },
 });

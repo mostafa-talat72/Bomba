@@ -714,7 +714,7 @@ export const createOrder = async (req, res) => {
             }
 
             // Verify table exists
-            const tableDoc = await Table.findById(table);
+            const tableDoc = await Table.findOne({ _id: table, organization: req.user.organization });
             if (!tableDoc) {
                 return res.status(404).json({
                     success: false,
@@ -841,7 +841,7 @@ export const createOrder = async (req, res) => {
         // إذا كان هناك table ولم يكن bill محدداً، ابحث عن فاتورة غير مدفوعة
         if (table && !billToUse) {
             // Get table info for logging
-            const tableDoc = await Table.findById(table);
+            const tableDoc = await Table.findOne({ _id: table, organization: req.user.organization });
             const tableNumber = tableDoc ? tableDoc.number : table;
             
             // البحث عن فاتورة غير مدفوعة للطاولة (draft, partial, overdue)
@@ -1075,9 +1075,6 @@ export const updateOrder = async (req, res) => {
         // Check if the ID is a valid MongoDB ObjectId
         const mongoose = await import("mongoose");
         const isValidObjectId = mongoose.Types.ObjectId.isValid(req.params.id);
-
-        // First check if the order exists without organization filter
-        const orderWithoutOrg = await Order.findById(req.params.id);
 
         const order = await Order.findOne({
             _id: req.params.id,
@@ -2226,7 +2223,7 @@ export const updateOrderStatus = async (req, res) => {
             }
         }
 
-        const updatedOrder = await Order.findByIdAndUpdate(id, updateData, {
+        const updatedOrder = await Order.findOneAndUpdate({ _id: id, organization: req.user.organization }, updateData, {
             new: true,
             runValidators: true,
         })
