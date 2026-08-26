@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Gamepad2, Monitor, Play, Square, Users, Plus, Table as TableIcon, X, Edit, Trash2, Clock, Search } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -98,390 +98,6 @@ const translateDefaultCustomerName = (customerName: string, deviceType: string, 
   // ??? ?? ??? ????? ?????????? ???? ????? ??? ??
   return customerName;
 };
-
-
-interface DeviceCardProps {
-  device: Device;
-  activeSession: Session | null;
-  config: any;
-  deviceType: 'playstation' | 'computer';
-  Icon: any;
-  i18n: any;
-  isRTL: boolean;
-  formatDecimal: (num: number, lang: string) => string;
-  formatCurrency: (num: number, lang: string) => string;
-  formatDateTime: (date: any) => string;
-  currencySymbol: string;
-  tables: any[];
-  user: any;
-  endingSessions: Record<string, boolean>;
-  updatingControllers: Record<string, boolean>;
-  onEndSession: (sessionId: string) => void;
-  onOpenControllersEditor: (session: Session) => void;
-  onOpenEditStartTimeModal: (session: Session) => void;
-  onOpenEditPeriodTimeModal: (session: Session, index: number) => void;
-  onOpenLinkTableModal: (session: Session) => void;
-  onOpenUnlinkTableModal: (session: Session) => void;
-  onOpenSessionModal: (device: Device) => void;
-  onEditDevice: (device: Device) => void;
-  onDeleteDevice: (device: Device) => void;
-  getTableDisplay: (num: string | number | undefined | null) => string;
-  translateDefaultCustomerName: (name: string, type: string, num: string | number, t: any) => string;
-  t: any;
-}
-
-const DeviceCard: React.FC<DeviceCardProps> = React.memo(({
-  device, activeSession, config, deviceType, Icon, i18n, isRTL,
-  formatDecimal, formatCurrency, formatDateTime, currencySymbol,
-  tables, user, endingSessions, updatingControllers,
-  onEndSession, onOpenControllersEditor, onOpenEditStartTimeModal,
-  onOpenEditPeriodTimeModal, onOpenLinkTableModal, onOpenUnlinkTableModal,
-  onOpenSessionModal, onEditDevice, onDeleteDevice,
-  getTableDisplay, translateDefaultCustomerName, t,
-}) => {
-  const isActive = device.status === 'active';
-
-  return (
-  <div key={device.id} className={`
-    rounded-2xl shadow-lg border-2 p-6 flex flex-col h-full transition-all duration-300 transform hover:scale-105 hover:shadow-2xl
-    ${isActive
-      ? `bg-gradient-to-br ${config.colors.card} dark:${config.colors.cardDark} ${config.colors.border} hover:shadow-green-300 dark:hover:shadow-green-900/70`
-      : 'bg-gradient-to-br from-gray-50 via-slate-50 to-gray-100 dark:from-gray-800 dark:via-slate-800 dark:to-gray-900 border-gray-300 dark:border-gray-700 hover:shadow-gray-300 dark:hover:shadow-gray-900/70'
-    }
-  `}>
-    {/* Status Badge */}
-    <div className="absolute -top-2 -right-2">
-      {isActive ? (
-        <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
-          {t('gaming.active')}
-        </span>
-      ) : (
-        <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-500 to-slate-500 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
-          {t('gaming.available')}
-        </span>
-      )}
-    </div>
-  
-    <div className="flex items-center justify-between mb-4 pt-4">
-      <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-        <div className={`
-          w-12 h-12 rounded-xl flex items-center justify-center shadow-md
-          ${isActive
-            ? 'bg-gradient-to-br from-green-400 to-emerald-500'
-            : 'bg-gradient-to-br from-gray-400 to-slate-500'
-          }
-        `}>
-          <Icon className="h-6 w-6 text-white" />
-        </div>
-        {device.name}
-      </h3>
-    </div>
-  
-    <div className="flex-1">
-      {activeSession ? (
-        <div className="space-y-4">
-          {/* Real-time cost display */}
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-4 rounded-xl border-2 border-green-300 dark:border-green-700 shadow-sm">
-            <SessionCostDisplay session={activeSession} device={device} />
-          </div>
-  
-          {deviceType === 'playstation' && (
-            <>
-              <div className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
-                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{formatDecimal(activeSession.controllers ?? 1, i18n.language)} {t('gaming.controllers')}</span>
-              </div>
-  
-              {/* ????? ???????? */}
-              {activeSession.controllersHistory && activeSession.controllersHistory.length > 0 && (
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-xl border-2 border-purple-300 dark:border-purple-700 shadow-sm">
-                  <h4 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    {t('gaming.controllersHistory')}
-                  </h4>
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {activeSession.controllersHistory.map((period, index) => {
-                      const isCurrentPeriod = !period.to;
-                      return (
-                        <div key={index} className={`flex items-center justify-between p-2 rounded-lg border ${
-                          isCurrentPeriod
-                            ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700'
-                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600'
-                        }`}>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                                isCurrentPeriod
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-purple-500 text-white'
-                              }`}>
-                                {formatDecimal(period.controllers, i18n.language)} {t('gaming.controllers')}
-                              </span>
-                              {isCurrentPeriod && (
-                                <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full animate-pulse">
-                                  {t('gaming.active')}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                              {t('gaming.from')}: {formatDateTime(period.from)}
-                              {period.to && (
-                                <span> - {t('gaming.to')}: {formatDateTime(period.to)}</span>
-                              )}
-                            </div>
-                          </div>
-  
-                          {/* ?? ????? ??? ?????? */}
-                          <button
-                            onClick={() => openEditPeriodTimeModal(activeSession, index)}
-                            className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105 flex items-center justify-center"
-                            title={t('gaming.editStartTime')}
-                          >
-                            <Edit className="h-3 w-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-  
-              {/* ????? ????? ??? ?????? */}
-              <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 p-4 rounded-xl border-2 border-orange-300 dark:border-orange-700">
-                <p className="text-xs font-bold text-orange-900 dark:text-orange-100 mb-3 text-center">{t('gaming.editControllers')}</p>
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-bold text-white transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110"
-                    disabled={(activeSession.controllers ?? 1) <= 1 || updatingControllers[activeSession.id]}
-                    onClick={() => openControllersEditor(activeSession)}
-                    title={t('gaming.editControllers')}
-                  >
-                    {updatingControllers[activeSession.id] ? (
-                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <span className="text-xl">-</span>
-                    )}
-                  </button>
-                  <button
-                    className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm min-w-[80px] hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                    onClick={() => openControllersEditor(activeSession)}
-                    disabled={updatingControllers[activeSession.id]}
-                    title={t('gaming.editControllers')}
-                  >
-                    <span className="font-bold text-xl text-orange-600 dark:text-orange-400 block text-center">
-                      {formatDecimal(activeSession.controllers ?? 1, i18n.language)}
-                    </span>
-                    <span className="text-xs text-gray-600 dark:text-gray-400 block text-center">{t('gaming.controllers')}</span>
-                  </button>
-                  <button
-                    className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-bold text-white transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110"
-                    disabled={(activeSession.controllers ?? 1) >= 4 || updatingControllers[activeSession.id]}
-                    onClick={() => openControllersEditor(activeSession)}
-                    title={t('gaming.editControllers')}
-                  >
-                    {updatingControllers[activeSession.id] ? (
-                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <span className="text-xl">+</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-  
-          {/* ??? ???? ??? ??????? ??? (???? ?????) */}
-          {activeSession.bill && (() => {
-            const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
-            const billTable = bill ? (bill as any)?.table : null;
-  
-            let billTableNumber = null;
-            if (billTable) {
-              if (typeof billTable === 'object') {
-                billTableNumber = billTable.number || billTable.name;
-              } else {
-                const foundTable = tables.find(t => t._id === billTable || t.id === billTable);
-                billTableNumber = foundTable?.number;
-              }
-            }
-  
-            return (
-              <div className="flex items-center text-sm justify-center p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
-                {billTableNumber ? (
-                  <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
-                    <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
-                    {t('gaming.linkedToTable')}: {getTableDisplay(billTableNumber)}
-                  </div>
-                ) : (
-                  <div className="flex items-center text-gray-500 dark:text-gray-400">
-                    <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
-                    {t('gaming.notLinkedToTable')}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-      ) : device.status === 'maintenance' ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500 dark:text-gray-400 text-sm">{t('gaming.maintenance')}</p>
-        </div>
-      ) : device.status === 'unavailable' ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500 dark:text-gray-400 text-sm">{t('gaming.unavailable')}</p>
-        </div>
-      ) : null}
-    </div>
-  
-    {/* ??????? ?????? ?? ????? ?????? */}
-    <div className="mt-4 space-y-2">
-      {activeSession ? (
-        <>
-          {/* ????? ?????? ?????? ?????? */}
-          {(() => {
-            const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
-            const isLinkedToTable = bill ? !!(bill as any)?.table : false;
-  
-            return isLinkedToTable ? (
-              <>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <button
-                    onClick={() => openEditStartTimeModal(activeSession)}
-                    className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
-                  >
-                    <Edit className="h-4 w-4" />
-                    {t('gaming.editStartTime')}
-                  </button>
-  
-                  <button
-                    onClick={() => {
-                      setSelectedSessionForLink(activeSession);
-                      setShowLinkTableModal(true);
-                      setTableSearch('');
-                    }}
-                    className="px-3 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
-                  >
-                    <TableIcon className="h-4 w-4" />
-                    {t('gaming.changeTable')}
-                  </button>
-                </div>
-  
-                <div className="mb-2">
-                  <button
-                    onClick={() => {
-                      setSelectedSessionForUnlink(activeSession);
-                      // ????? ??? ?????? ????????? ????? ??? ????? ???????
-                      const translatedName = translateDefaultCustomerName(
-                        activeSession.customerName || '',
-                        activeSession.deviceType,
-                        activeSession.deviceNumber,
-                        t
-                      );
-                      setCustomerNameForUnlink(translatedName);
-                      setShowUnlinkTableModal(true);
-                    }}
-                    className="w-full px-3 py-2 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
-                  >
-                    <X className="h-4 w-4" />
-                    {t('gaming.unlinkTable')}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <button
-                  onClick={() => openEditStartTimeModal(activeSession)}
-                  className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
-                >
-                  <Edit className="h-4 w-4" />
-                  {t('gaming.editStartTime')}
-                </button>
-  
-                <button
-                  onClick={() => {
-                    setSelectedSessionForLink(activeSession);
-                    setShowLinkTableModal(true);
-                    setTableSearch('');
-                  }}
-                  className="px-3 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
-                >
-                  <TableIcon className="h-4 w-4" />
-                  {t('gaming.linkTable')}
-                </button>
-              </div>
-            );
-          })()}
-  
-          <button
-            onClick={() => handleEndSession(activeSession.id)}
-            disabled={endingSessions[activeSession.id]}
-            className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'} text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105`}
-          >
-            {endingSessions[activeSession.id] ? (
-              <>
-                <svg className={`animate-spin h-5 w-5 text-white ${isRTL ? 'ml-2' : 'mr-2'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {t('gaming.ending')}
-              </>
-            ) : (
-              <>
-                <Square className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
-                {t('gaming.endSession')}
-              </>
-            )}
-          </button>
-        </>
-      ) : device.status === 'available' ? (
-        <button
-          onClick={() => onOpenSessionModal(device)}
-          className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
-        >
-          <Play className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
-          {t('gaming.startSession')}
-        </button>
-      ) : (
-        <div className="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm font-semibold">
-          {t('gaming.unavailable')}
-        </div>
-      )}
-    </div>
-  
-    {/* ????? ??????? ?????? - ?????? ??? */}
-    {user?.role === 'admin' && (
-      <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => handleEditDevice(device)}
-          disabled={isActive}
-          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2 ${
-            isActive
-              ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white'
-          }`}
-          title={isActive ? t('gaming.cannotEditActiveDevice') : t('gaming.editDevice')}
-        >
-          <Edit className="h-4 w-4" />
-          {t('common.edit')}
-        </button>
-        <button
-          onClick={() => handleDeleteDevice(device)}
-          disabled={isActive}
-          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2 ${
-            isActive
-              ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white'
-          }`}
-          title={isActive ? t('gaming.cannotDeleteActiveDevice') : t('gaming.deleteDevice')}
-        >
-          <Trash2 className="h-4 w-4" />
-          {t('common.delete')}
-        </button>
-      </div>
-    )}
-  </div>
-  );
-});
 
 interface GamingDevicesProps {
   deviceType: 'playstation' | 'computer';
@@ -1333,75 +949,6 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
     }
   };
 
-  // Memoized filtered devices to avoid re-filtering on every render
-  const filteredDevices = useMemo(
-    () => devices.filter(d => d.type === deviceType),
-    [devices, deviceType]
-  );
-
-  // Memoized active sessions lookup per device
-  const activeSessionByDeviceNumber = useMemo(() => {
-    const map = new Map<string, Session>();
-    for (const s of sessions) {
-      if (s.status === 'active') {
-        map.set(String(s.deviceNumber), s);
-      }
-    }
-    return map;
-  }, [sessions]);
-
-  const handleEndSessionCallback = useCallback((sessionId: string) => {
-    handleEndSession(sessionId);
-  }, [handleEndSession]);
-
-  const openControllersEditorCallback = useCallback((session: Session) => {
-    openControllersEditor(session);
-  }, [openControllersEditor]);
-
-  const openEditStartTimeModalCallback = useCallback((session: Session) => {
-    openEditStartTimeModal(session);
-  }, [openEditStartTimeModal]);
-
-  const openEditPeriodTimeModalCallback = useCallback((session: Session, index: number) => {
-    openEditPeriodTimeModal(session, index);
-  }, [openEditPeriodTimeModal]);
-
-  const openSessionModalCallback = useCallback((device: Device) => {
-    openSessionModal(device);
-  }, [openSessionModal]);
-
-  const handleEditDeviceCallback = useCallback((device: any) => {
-    handleEditDevice(device);
-  }, [handleEditDevice]);
-
-  const handleDeleteDeviceCallback = useCallback((device: any) => {
-    handleDeleteDevice(device);
-  }, [handleDeleteDevice]);
-
-  const openLinkTableModalCallback = useCallback((session: Session) => {
-    setSelectedSessionForLink(session);
-    setShowLinkTableModal(true);
-    setTableSearch('');
-  }, []);
-
-  const openUnlinkTableModalCallback = useCallback((session: Session) => {
-    setSelectedSessionForUnlink(session);
-    const translatedName = translateDefaultCustomerName(
-      session.customerName || '',
-      session.deviceType,
-      session.deviceNumber,
-      t
-    );
-    setCustomerNameForUnlink(translatedName);
-    setShowUnlinkTableModal(true);
-  }, [t]);
-
-  const filteredTables = useMemo(() => {
-    return tables
-      .filter((t: any) => t.isActive)
-      .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), 'ar', { numeric: true }));
-  }, [tables]);
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1486,38 +1033,351 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
         <>
           {/* Devices Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredDevices.map((device) => (
-              <DeviceCard
-                key={device.id}
-                device={device}
-                activeSession={activeSessionByDeviceNumber.get(String(device.number)) || null}
-                config={config}
-                deviceType={deviceType}
-                Icon={Icon}
-                i18n={i18n}
-                isRTL={isRTL}
-                formatDecimal={formatDecimal}
-                formatCurrency={formatCurrency}
-                formatDateTime={formatDateTime}
-                currencySymbol={currencySymbol}
-                tables={tables}
-                user={user}
-                endingSessions={endingSessions}
-                updatingControllers={updatingControllers}
-                onEndSession={handleEndSessionCallback}
-                onOpenControllersEditor={openControllersEditorCallback}
-                onOpenEditStartTimeModal={openEditStartTimeModalCallback}
-                onOpenEditPeriodTimeModal={openEditPeriodTimeModalCallback}
-                onOpenLinkTableModal={openLinkTableModalCallback}
-                onOpenUnlinkTableModal={openUnlinkTableModalCallback}
-                onOpenSessionModal={openSessionModalCallback}
-                onEditDevice={handleEditDeviceCallback}
-                onDeleteDevice={handleDeleteDeviceCallback}
-                getTableDisplay={getTableDisplay}
-                translateDefaultCustomerName={translateDefaultCustomerName}
-                t={t}
-              />
-            ))}
+            {devices.filter(d => d.type === deviceType).map((device) => {
+              const activeSession = sessions.find(s => s.deviceNumber === device.number && s.status === 'active');
+              const isActive = device.status === 'active';
+
+              return (
+                <div key={device.id} className={`
+                  rounded-2xl shadow-lg border-2 p-6 flex flex-col h-full transition-all duration-300 transform hover:scale-105 hover:shadow-2xl
+                  ${isActive
+                    ? `bg-gradient-to-br ${config.colors.card} dark:${config.colors.cardDark} ${config.colors.border} hover:shadow-green-300 dark:hover:shadow-green-900/70`
+                    : 'bg-gradient-to-br from-gray-50 via-slate-50 to-gray-100 dark:from-gray-800 dark:via-slate-800 dark:to-gray-900 border-gray-300 dark:border-gray-700 hover:shadow-gray-300 dark:hover:shadow-gray-900/70'
+                  }
+                `}>
+                  {/* Status Badge */}
+                  <div className="absolute -top-2 -right-2">
+                    {isActive ? (
+                      <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs font-bold rounded-full animate-pulse shadow-lg border-4 border-white dark:border-gray-800">
+                        {t('gaming.active')}
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-500 to-slate-500 text-white text-xs font-bold rounded-full shadow-lg border-4 border-white dark:border-gray-800">
+                        {t('gaming.available')}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between mb-4 pt-4">
+                    <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+                      <div className={`
+                        w-12 h-12 rounded-xl flex items-center justify-center shadow-md
+                        ${isActive
+                          ? 'bg-gradient-to-br from-green-400 to-emerald-500'
+                          : 'bg-gradient-to-br from-gray-400 to-slate-500'
+                        }
+                      `}>
+                        <Icon className="h-6 w-6 text-white" />
+                      </div>
+                      {device.name}
+                    </h3>
+                  </div>
+
+                  <div className="flex-1">
+                    {activeSession ? (
+                      <div className="space-y-4">
+                        {/* Real-time cost display */}
+                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-4 rounded-xl border-2 border-green-300 dark:border-green-700 shadow-sm">
+                          <SessionCostDisplay session={activeSession} device={device} />
+                        </div>
+
+                        {deviceType === 'playstation' && (
+                          <>
+                            <div className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
+                              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                              <span className="text-sm font-bold text-blue-900 dark:text-blue-100">{formatDecimal(activeSession.controllers ?? 1, i18n.language)} {t('gaming.controllers')}</span>
+                            </div>
+
+                            {/* ????? ???????? */}
+                            {activeSession.controllersHistory && activeSession.controllersHistory.length > 0 && (
+                              <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-xl border-2 border-purple-300 dark:border-purple-700 shadow-sm">
+                                <h4 className="text-sm font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
+                                  <Users className="h-4 w-4" />
+                                  {t('gaming.controllersHistory')}
+                                </h4>
+                                <div className="space-y-2 max-h-32 overflow-y-auto">
+                                  {activeSession.controllersHistory.map((period, index) => {
+                                    const isCurrentPeriod = !period.to;
+                                    return (
+                                      <div key={index} className={`flex items-center justify-between p-2 rounded-lg border ${
+                                        isCurrentPeriod
+                                          ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700'
+                                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600'
+                                      }`}>
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                              isCurrentPeriod
+                                                ? 'bg-green-500 text-white'
+                                                : 'bg-purple-500 text-white'
+                                            }`}>
+                                              {formatDecimal(period.controllers, i18n.language)} {t('gaming.controllers')}
+                                            </span>
+                                            {isCurrentPeriod && (
+                                              <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full animate-pulse">
+                                                {t('gaming.active')}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                            {t('gaming.from')}: {formatDateTime(period.from)}
+                                            {period.to && (
+                                              <span> - {t('gaming.to')}: {formatDateTime(period.to)}</span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* ?? ????? ??? ?????? */}
+                                        <button
+                                          onClick={() => openEditPeriodTimeModal(activeSession, index)}
+                                          className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105 flex items-center justify-center"
+                                          title={t('gaming.editStartTime')}
+                                        >
+                                          <Edit className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ????? ????? ??? ?????? */}
+                            <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 p-4 rounded-xl border-2 border-orange-300 dark:border-orange-700">
+                              <p className="text-xs font-bold text-orange-900 dark:text-orange-100 mb-3 text-center">{t('gaming.editControllers')}</p>
+                              <div className="flex items-center justify-center gap-3">
+                                <button
+                                  className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-bold text-white transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110"
+                                  disabled={(activeSession.controllers ?? 1) <= 1 || updatingControllers[activeSession.id]}
+                                  onClick={() => openControllersEditor(activeSession)}
+                                  title={t('gaming.editControllers')}
+                                >
+                                  {updatingControllers[activeSession.id] ? (
+                                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                  ) : (
+                                    <span className="text-xl">-</span>
+                                  )}
+                                </button>
+                                <button
+                                  className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm min-w-[80px] hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                                  onClick={() => openControllersEditor(activeSession)}
+                                  disabled={updatingControllers[activeSession.id]}
+                                  title={t('gaming.editControllers')}
+                                >
+                                  <span className="font-bold text-xl text-orange-600 dark:text-orange-400 block text-center">
+                                    {formatDecimal(activeSession.controllers ?? 1, i18n.language)}
+                                  </span>
+                                  <span className="text-xs text-gray-600 dark:text-gray-400 block text-center">{t('gaming.controllers')}</span>
+                                </button>
+                                <button
+                                  className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-bold text-white transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110"
+                                  disabled={(activeSession.controllers ?? 1) >= 4 || updatingControllers[activeSession.id]}
+                                  onClick={() => openControllersEditor(activeSession)}
+                                  title={t('gaming.editControllers')}
+                                >
+                                  {updatingControllers[activeSession.id] ? (
+                                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                  ) : (
+                                    <span className="text-xl">+</span>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ??? ???? ??? ??????? ??? (???? ?????) */}
+                        {activeSession.bill && (() => {
+                          const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
+                          const billTable = bill ? (bill as any)?.table : null;
+
+                          let billTableNumber = null;
+                          if (billTable) {
+                            if (typeof billTable === 'object') {
+                              billTableNumber = billTable.number || billTable.name;
+                            } else {
+                              const foundTable = tables.find(t => t._id === billTable || t.id === billTable);
+                              billTableNumber = foundTable?.number;
+                            }
+                          }
+
+                          return (
+                            <div className="flex items-center text-sm justify-center p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
+                              {billTableNumber ? (
+                                <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
+                                  <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
+                                  {t('gaming.linkedToTable')}: {getTableDisplay(billTableNumber)}
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-gray-500 dark:text-gray-400">
+                                  <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
+                                  {t('gaming.notLinkedToTable')}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : device.status === 'maintenance' ? (
+                      <div className="text-center py-4">
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">{t('gaming.maintenance')}</p>
+                      </div>
+                    ) : device.status === 'unavailable' ? (
+                      <div className="text-center py-4">
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">{t('gaming.unavailable')}</p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* ??????? ?????? ?? ????? ?????? */}
+                  <div className="mt-4 space-y-2">
+                    {activeSession ? (
+                      <>
+                        {/* ????? ?????? ?????? ?????? */}
+                        {(() => {
+                          const bill = typeof activeSession.bill === 'object' ? activeSession.bill : null;
+                          const isLinkedToTable = bill ? !!(bill as any)?.table : false;
+
+                          return isLinkedToTable ? (
+                            <>
+                              <div className="grid grid-cols-2 gap-2 mb-2">
+                                <button
+                                  onClick={() => openEditStartTimeModal(activeSession)}
+                                  className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                  {t('gaming.editStartTime')}
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    setSelectedSessionForLink(activeSession);
+                                    setShowLinkTableModal(true);
+                                    setTableSearch('');
+                                  }}
+                                  className="px-3 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                                >
+                                  <TableIcon className="h-4 w-4" />
+                                  {t('gaming.changeTable')}
+                                </button>
+                              </div>
+
+                              <div className="mb-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedSessionForUnlink(activeSession);
+                                    // ????? ??? ?????? ????????? ????? ??? ????? ???????
+                                    const translatedName = translateDefaultCustomerName(
+                                      activeSession.customerName || '',
+                                      activeSession.deviceType,
+                                      activeSession.deviceNumber,
+                                      t
+                                    );
+                                    setCustomerNameForUnlink(translatedName);
+                                    setShowUnlinkTableModal(true);
+                                  }}
+                                  className="w-full px-3 py-2 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                                >
+                                  <X className="h-4 w-4" />
+                                  {t('gaming.unlinkTable')}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              <button
+                                onClick={() => openEditStartTimeModal(activeSession)}
+                                className="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                              >
+                                <Edit className="h-4 w-4" />
+                                {t('gaming.editStartTime')}
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setSelectedSessionForLink(activeSession);
+                                  setShowLinkTableModal(true);
+                                  setTableSearch('');
+                                }}
+                                className="px-3 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-1"
+                              >
+                                <TableIcon className="h-4 w-4" />
+                                {t('gaming.linkTable')}
+                              </button>
+                            </div>
+                          );
+                        })()}
+
+                        <button
+                          onClick={() => handleEndSession(activeSession.id)}
+                          disabled={endingSessions[activeSession.id]}
+                          className={`w-full ${endingSessions[activeSession.id] ? 'bg-red-700 dark:bg-red-800' : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'} text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105`}
+                        >
+                          {endingSessions[activeSession.id] ? (
+                            <>
+                              <svg className={`animate-spin h-5 w-5 text-white ${isRTL ? 'ml-2' : 'mr-2'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              {t('gaming.ending')}
+                            </>
+                          ) : (
+                            <>
+                              <Square className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
+                              {t('gaming.endSession')}
+                            </>
+                          )}
+                        </button>
+                      </>
+                    ) : device.status === 'available' ? (
+                      <button
+                        onClick={() => openSessionModal(device)}
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
+                      >
+                        <Play className={`h-5 w-5 ${isRTL ? 'mr-2' : 'ml-2'}`} />
+                        {t('gaming.startSession')}
+                      </button>
+                    ) : (
+                      <div className="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center text-sm font-semibold">
+                        {t('gaming.unavailable')}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ????? ??????? ?????? - ?????? ??? */}
+                  {user?.role === 'admin' && (
+                    <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        onClick={() => handleEditDevice(device)}
+                        disabled={isActive}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2 ${
+                          isActive
+                            ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white'
+                        }`}
+                        title={isActive ? t('gaming.cannotEditActiveDevice') : t('gaming.editDevice')}
+                      >
+                        <Edit className="h-4 w-4" />
+                        {t('common.edit')}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteDevice(device)}
+                        disabled={isActive}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2 ${
+                          isActive
+                            ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white'
+                        }`}
+                        title={isActive ? t('gaming.cannotDeleteActiveDevice') : t('gaming.deleteDevice')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -1940,12 +1800,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 >
                   {t('gaming.noTable')}
                 </button>
-                {filteredTables
+                {tables
+                  .filter((t: any) => t.isActive)
                   .filter((t: any) => {
                     if (!tableSearch) return true;
                     const q = tableSearch.toLowerCase();
                     return String(t.number).toLowerCase().includes(q) || (t.name || '').toLowerCase().includes(q);
                   })
+                  .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), 'ar', { numeric: true }))
                   .map((table: any) => (
                     <button
                       key={table.id || table._id}
@@ -2157,12 +2019,14 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 >
                   {t('gaming.noTable')}
                 </button>
-                {filteredTables
+                {tables
+                  .filter((t: any) => t.isActive)
                   .filter((t: any) => {
                     if (!tableSearch) return true;
                     const q = tableSearch.toLowerCase();
                     return String(t.number).toLowerCase().includes(q) || (t.name || '').toLowerCase().includes(q);
                   })
+                  .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), 'ar', { numeric: true }))
                   .map((table: any) => {
                     const bill = typeof selectedSessionForLink.bill === 'object' ? selectedSessionForLink.bill : null;
                     const linkedTableId = (bill as any)?.table?._id;
