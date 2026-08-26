@@ -10,98 +10,98 @@ router.use(protect);
 // Get all sessions (playstation and computer permissions)
 router.get(
     "/",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.getSessions
 );
 
 // Get single session (playstation and computer permissions)
 router.get(
     "/:id",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.getSession
 );
 
 // Create new session (playstation and computer permissions)
 router.post(
     "/",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.createSession
 );
 
 // Create new session with existing bill (playstation and computer permissions)
 router.post(
     "/with-existing-bill",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.createSessionWithExistingBill
 );
 
 // Update controllers during session (playstation and computer permissions)
 router.put(
     "/:sessionId/controllers",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.updateControllers
 );
 
 // Update controllers period start time (playstation and computer permissions)
 router.put(
     "/:sessionId/controllers-period-time",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.updateControllersPeriodTime
 );
 
 // Resolve controllers period time conflicts (playstation and computer permissions)
 router.put(
     "/:sessionId/resolve-period-conflict",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.resolveControllersPeriodConflict
 );
 
 // Update session cost in real-time (playstation and computer permissions)
 router.put(
     "/:id/update-cost",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.updateSessionCost
 );
 
 // Update session start time (playstation and computer permissions)
 router.put(
     "/:id/start-time",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.updateSessionStartTime
 );
 
 // Update completed session times (playstation and computer permissions)
 router.put(
     "/:id/times",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.updateSessionTimes
 );
 
 // End session (playstation and computer permissions)
 router.put(
     "/:id/end",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.endSession
 );
 
 // Unlink session from table (playstation and computer permissions)
 router.put(
     "/:sessionId/unlink-table",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.unlinkTableFromSession
 );
 
 // Link session to table with smart bill merging (playstation and computer permissions)
 router.put(
     "/:sessionId/link-table",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.linkSessionToTable
 );
 
 // Change session table - moves only the specific session to a new table
 router.put(
     "/:sessionId/change-table",
-    authorize("playstation", "computer", "all"),
+    authorize("playstation", "computer", "tables", "all"),
     sessionController.changeSessionTable
 );
 

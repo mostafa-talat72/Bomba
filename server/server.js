@@ -126,6 +126,26 @@ let atlasChangeListener = null;
 // Run the fix after database connection
 mongoose.connection.once("open", async () => {
     fixUsernameIndex();
+
+    // ترحيل الصلاحيات القديمة: أي مستخدم يملك cafe أو billing يحصل على tables
+    // (صفحة الطاولات الموحدة حلت محل صفحتي الطلبات والفواتير)
+    try {
+        const { default: User } = await import('./models/User.js');
+        const migRes = await User.updateMany(
+            {
+                $and: [
+                    { permissions: { $in: ["cafe", "billing"] } },
+                    { permissions: { $ne: "tables" } },
+                ],
+            },
+            { $addToSet: { permissions: "tables" } }
+        );
+        if (migRes.modifiedCount > 0) {
+            Logger.info(`✅ Granted 'tables' permission to ${migRes.modifiedCount} user(s) with cafe/billing`);
+        }
+    } catch (migError) {
+        Logger.error("❌ Error migrating user permissions:", migError.message);
+    }
     
     // Auto-fix paid bills on startup
     try {

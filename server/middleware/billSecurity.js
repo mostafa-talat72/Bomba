@@ -31,6 +31,7 @@ export const secureBillAccess = async (req, res, next) => {
     const canAccess = 
       user.role === 'admin' || // المدير يمكنه الوصول لجميع الفواتير
       user.hasPermission('billing') || // صلاحية الفواتير
+      user.hasPermission('tables') || // صلاحية صفحة الطاولات الموحدة
       user.hasPermission('all') || // صلاحية شاملة
       bill.createdBy?.toString() === user._id.toString(); // منشئ الفاتورة
 

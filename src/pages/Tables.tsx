@@ -185,7 +185,7 @@ const Tables: React.FC = () => {
   const [activeSectionFilter, setActiveSectionFilter] = useState<string>('all');
 
   // #7 - Activity log tab
-  const [activeTab3, setActiveTab3] = useState<'orders' | 'billing' | 'log'>('orders');
+  const [activeTab3, setActiveTab3] = useState<'orders' | 'billing' | 'log' | 'sessions'>('orders');
   const [tableActivityLog, setTableActivityLog] = useState<Array<{type: string; message: string; time: Date; color: string}>>([]);
 
   // #8 - Drag & Drop in management modal (order tracking)
@@ -332,12 +332,59 @@ const Tables: React.FC = () => {
 
   // ── Active sessions state مستقر للـ interval ────────────────────────────
   // معرّفة قبل أول استخدام (كانت تحت تسبب ReferenceError قبل التهيئة)
-  const hasActiveSession = useCallback((bill: Bill) =>
-    bill.sessions?.some((s: any) => (typeof s === 'object' ? s.status : null) === 'active') || false,
+  const hasActiveSession = useCallback((bill: Bill | null | undefined) =>
+    bill?.sessions?.some((s: any) => (typeof s === 'object' ? s.status : null) === 'active') || false,
   []);
+
+  // حساب التكلفة الفعلية للجلسة ( appending/updating للجلسات النشطة )
+  const getSessionCost = useCallback((session: any): number => {
+    if (!session) return 0;
+    if (session.status !== 'active') {
+      return Number(session.finalCost) || Number(session.totalCost) || 0;
+    }
+    // للجلسات النشطة: احسب من الأجهزة والوقت الفعلي
+    const device = session.deviceId;
+    if (!device || typeof device !== 'object') {
+      return Number(session.finalCost) || Number(session.totalCost) || 0;
+    }
+    const startMs = session.startTime ? new Date(session.startTime).getTime() : 0;
+    if (!startMs) return 0;
+    const now = Date.now();
+    const getRate = (controllers: number) => {
+      if (device.type === 'playstation' && device.playstationRates) {
+        return device.playstationRates[String(controllers)] || 0;
+      }
+      return device.hourlyRate || 0;
+    };
+    let total = 0;
+    if (!session.controllersHistory || session.controllersHistory.length === 0) {
+      const durMin = Math.max(0, (now - startMs)) / 60000;
+      const rate = getRate(session.controllers || 1);
+      total = (durMin * rate) / 60;
+    } else {
+      for (const period of session.controllersHistory) {
+        const pEnd = period.to ? new Date(period.to).getTime() : now;
+        const pStart = period.from ? new Date(period.from).getTime() : 0;
+        if (pStart && pEnd > pStart) {
+          const durMin = (pEnd - pStart) / 60000;
+          const rate = getRate(period.controllers || 1);
+          total += (durMin * rate) / 60;
+        }
+      }
+    }
+    return Math.round(total);
+  }, []);
 
   const hasAnyActiveSession = useMemo(() =>
     bills.some(b => hasActiveSession(b)), [bills]);
+
+  // ── Tick للجلسات النشطة — تحديث التكلفة كل 5 ثوانٍ ───────────────────────
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!hasAnyActiveSession) return;
+    const id = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, [hasAnyActiveSession]);
 
   const activeSessionBillIds = useMemo(() => {
     if (!hasAnyActiveSession) return '';
@@ -376,21 +423,32 @@ const Tables: React.FC = () => {
 
   useEffect(() => {
     if (!hasAnyActiveSession) return;
+    let isRunning = false;
     const updateActiveSessions = async () => {
-      const currentBills = billsRef.current;
-      const activeSessionBills = currentBills.filter(b => hasActiveSession(b));
-      if (activeSessionBills.length === 0) return;
-      await Promise.all(activeSessionBills.flatMap(bill =>
-        (bill.sessions || []).filter((s: any) => s.status === 'active').map(async (s: any) => {
-          await api.updateSessionCost(s._id || s.id);
-          const curBill = selectedBillRef2.current;
-          if (curBill && (curBill._id === bill._id || curBill.id === bill.id) && !showPaymentModalRef.current) {
-            const r = await api.getBill(bill._id || bill.id);
-            if (r.success && r.data) setSelectedBill(r.data);
+      if (isRunning) return;
+      isRunning = true;
+      try {
+        const currentBills = billsRef.current;
+        const activeSessionBills = currentBills.filter(b => hasActiveSession(b));
+        if (activeSessionBills.length === 0) return;
+        // تسلسلي وليس Promise.all — الطلبات المتوازية تحفظ نفس الفاتورة وتسبب VersionError
+        const selectedBillId = selectedBillRef2.current?._id || selectedBillRef2.current?.id;
+        let shouldRefreshSelected = false;
+        for (const bill of activeSessionBills) {
+          const activeSessions = (bill.sessions || []).filter((s: any) => s.status === 'active');
+          for (const s of activeSessions) {
+            try { await api.updateSessionCost(s._id || s.id); } catch { /* الدورة القادمة تعيد المحاولة */ }
           }
-        })
-      ));
-      await fetchBills();
+          if ((bill._id || bill.id) === selectedBillId && !showPaymentModalRef.current) shouldRefreshSelected = true;
+        }
+        await fetchBills();
+        if (shouldRefreshSelected && selectedBillId) {
+          const r = await api.getBill(selectedBillId as string);
+          if (r.success && r.data) setSelectedBill(r.data);
+        }
+      } finally {
+        isRunning = false;
+      }
     };
     const interval = setInterval(updateActiveSessions, 5000);
     return () => clearInterval(interval);
@@ -697,8 +755,8 @@ const Tables: React.FC = () => {
 
   const getStatusText = (status: string) => t(`billing.status.${status}`) || status;
 
-  const getCustomerDisplay = (bill: Bill) => {
-    if (!bill.customerName) return t('billing.defaultCustomer');
+  const getCustomerDisplay = (bill: Bill | null | undefined) => {
+    if (!bill || !bill.customerName) return t('billing.defaultCustomer');
     const m = bill.customerName.match(/^(?:طاولة|Table|table)\s+(\d+)$/i);
     if (m) return t('billing.tableWithNumber', { number: m[1] });
     return bill.customerName;
@@ -761,7 +819,7 @@ const Tables: React.FC = () => {
           const statusSessionAr: Record<string, string> = { active: 'نشطة 🟢', completed: 'منتهية', paused: 'متوقفة', cancelled: 'ملغاة' };
           const start = s.startTime ? new Date(s.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—';
           const end   = s.endTime   ? new Date(s.endTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : 'جارية';
-          const cost  = s.finalCost || s.totalCost || 0;
+          const cost  = getSessionCost(s);
           const icon  = s.deviceType === 'playstation' ? '🎮' : '💻';
           log.push({
             type: 'session',
@@ -1322,11 +1380,16 @@ const Tables: React.FC = () => {
         amount: parseFloat(sessionToPayData.amount), paymentMethod: sessionToPayData.method,
       });
       if (result.success && result.data) {
-        setSelectedBill(result.data);
         setShowSessionPaymentConfirmModal(false); setSessionToPayData(null);
         setIsProcessingSessionPayment(false); setSessionPaymentAmount(''); setSelectedSession(null);
-        // تحديث فوري للفواتير والطلبات والكروت
-        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
+        // تحديث الفواتير ثم جلب الفاتورة الكاملة من السيرفر
+        const billId = selectedBill.id || selectedBill._id;
+        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => {
+          fetchAllTableStatuses();
+          if (billId) {
+            api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
+          }
+        }).catch(() => {});
         showNotification(t('billing.notifications.sessionPaymentSuccess'), 'success');
       } else {
         showNotification(result.message || t('billing.notifications.sessionPaymentError'), 'error');
@@ -1352,13 +1415,18 @@ const Tables: React.FC = () => {
     try {
       const result = await api.endSession(sessionToEnd, customerNameForEndSession.trim() || undefined);
       if (result?.success) {
-        if (result.data) setSelectedBill(result.data as unknown as Bill);
         setShowSessionEndModal(false); setSessionToEnd(null); setCustomerNameForEndSession('');
         setIsEndingSession(false);
         showNotification(t('billing.notifications.endSessionSuccess'), 'success');
         setPaymentAmount(''); setPaymentMethod('cash'); setPaymentReference('');
-        // تحديث فوري في الخلفية
-        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
+        // تحديث الفواتير أولاً ثم إعادة جلب الفاتورة الكاملة من السيرفر
+        const billId = selectedBill?.id || selectedBill?._id;
+        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => {
+          fetchAllTableStatuses();
+          if (billId) {
+            api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
+          }
+        }).catch(() => {});
       } else { showNotification(t('billing.notifications.endSessionError'), 'error'); setIsEndingSession(false); }
     } catch { showNotification(t('billing.notifications.endSessionUnexpectedError'), 'error'); setIsEndingSession(false); }
   };
@@ -1388,11 +1456,19 @@ const Tables: React.FC = () => {
       const targetTable = tables.find((t: any) => t._id === newTableNumber);
       if (!targetTable) { showNotification(t('billing.notifications.tableNotFound'), 'error'); return; }
       const result = await api.updateBill(selectedBill.id || selectedBill._id, { table: targetTable._id });
-      if (result?.success) {
-        if (result.data) setSelectedBill(result.data);
+      if (result?.success && result.data) {
         showNotification(t('billing.notifications.tableChangeSuccess', { tableNumber: targetTable?.number || newTableNumber }), 'success');
         setShowChangeTableModal(false); setNewTableNumber(null); setTableChangeSearch('');
-        Promise.all([fetchBills(), fetchTables()]).then(() => fetchAllTableStatuses()).catch(() => {});
+        // عند الدمج يُحذف المعرف القديم — استخدم معرف الفاتورة المرجعة (قد تكون مدمجة جديدة)
+        const returnedId = ((result.data as any).id || (result.data as any)._id) as string;
+        setSelectedBill(result.data);
+        Promise.all([fetchBills(), fetchTables()]).then(async () => {
+          await fetchAllTableStatuses();
+          if (returnedId) {
+            const r = await api.getBill(returnedId);
+            if (r?.data) setSelectedBill(r.data);
+          }
+        }).catch(() => {});
       } else { showNotification(t('billing.notifications.tableChangeError'), 'error'); }
     } catch (error: any) {
       showNotification(`❌ ${error?.response?.data?.message || error?.message || t('billing.notifications.unexpectedError')}`, 'error');
@@ -1987,750 +2063,1034 @@ const Tables: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════════
           UNIFIED TABLE MODAL
       ══════════════════════════════════════════════════════════════════ */}
-      {showUnifiedTableModal && selectedTable && (
+      {showUnifiedTableModal && selectedTable && (() => {
+        // ── بيانات الطاولة ──────────────────────────────────────────
+        const tableId = selectedTable._id || (selectedTable as any).id;
+        const tBills = (tableBillsMap as any)[selectedTable.number]?.bills || [];
+        const unpaidBills = tBills.filter((b: Bill) => ['draft','partial','overdue'].includes(b.status));
+        // الإجماليات من الفواتير غير المدفوعة فقط
+        const unpaidTotal     = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.total) || 0), 0);
+        const unpaidPaid      = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.paid) || 0), 0);
+        const unpaidRemaining = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0), 0);
+        const hasUnpaid = unpaidBills.length > 0;
+
+        // جلسات من الفواتير غير المدفوعة فقط مع حقل _billObj للرجوع للفاتورة
+        const allSessions = unpaidBills.flatMap((b: Bill) =>
+          ((b as any).sessions || []).map((s: any) => ({ ...s, _billId: b._id || (b as any).id, _billNumber: (b as any).billNumber, _billObj: b }))
+        );
+        const sessionsCount       = allSessions.length;
+        const activeSessionsCount = allSessions.filter((s: any) => s.status === 'active').length;
+
+        // إجماليات الجلسات — التكلفة من finalCost/totalCost للمنتهية، حساب فوري للنشطة
+        const sessionsTotalCost = allSessions.reduce((sum: number, sess: any) =>
+          sum + getSessionCost(sess), 0);
+        const sessionsPaid = unpaidBills.reduce((sum: number, b: Bill) => {
+          const sps: any[] = (b as any).sessionPayments || [];
+          return sum + sps.reduce((ss: number, sp: any) => ss + (Number(sp.paidAmount) || 0), 0);
+        }, 0);
+        const sessionsRemaining = Math.max(0, sessionsTotalCost - sessionsPaid);
+
+        const sideItems = [
+          { id: 'orders',   icon: ShoppingCart, label: 'الطلبات',  count: filteredTableOrders.length, color: 'orange' },
+          { id: 'billing',  icon: Receipt,      label: 'الفواتير', count: unpaidBills.length,          color: 'blue',  dot: unpaidBills.length > 0 },
+          { id: 'sessions', icon: Gamepad2,      label: 'الجلسات', count: sessionsCount,               color: 'purple', dot: activeSessionsCount > 0 },
+          { id: 'log',      icon: History,       label: 'السجل',   count: tableActivityLog.length,     color: 'gray' },
+        ] as const;
+
+        const colorMap: Record<string, { active: string; activeBg: string; dot: string; icon: string; accent: string }> = {
+          orange: { active: 'text-orange-600 dark:text-orange-400', activeBg: 'bg-orange-500', dot: 'bg-orange-500', icon: 'text-orange-400 dark:text-orange-500', accent: 'border-orange-500' },
+          blue:   { active: 'text-blue-600 dark:text-blue-400',     activeBg: 'bg-blue-500',   dot: 'bg-red-500',    icon: 'text-blue-400 dark:text-blue-500',   accent: 'border-blue-500' },
+          purple: { active: 'text-purple-600 dark:text-purple-400', activeBg: 'bg-purple-500', dot: 'bg-green-500',  icon: 'text-purple-400 dark:text-purple-500', accent: 'border-purple-500' },
+          gray:   { active: 'text-gray-700 dark:text-gray-200',     activeBg: 'bg-gray-500',   dot: 'bg-gray-400',   icon: 'text-gray-400',                       accent: 'border-gray-400' },
+        };
+
+        const closeModal = () => { setShowUnifiedTableModal(false); setSelectedTable(null); setTableBillsFilter('unpaid'); setSearchQuery(''); setSearchResults(null); };
+
+        return (
         <ModalPortal>
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[300] p-2 sm:p-4 md:p-6"
-          onClick={() => { setShowUnifiedTableModal(false); setSelectedTable(null); setTableBillsFilter('unpaid'); setSearchQuery(''); setSearchResults(null); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-5xl max-h-[95vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700"
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[300] p-2 sm:p-4"
+          onClick={closeModal}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[96vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700"
             onClick={e => e.stopPropagation()}>
 
-            {/* Modal Header */}
-            <div className="relative p-4 sm:p-5 md:p-6 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex-shrink-0">
-              <div className="absolute top-2 right-2 w-16 h-16 sm:w-20 sm:h-20 bg-white/10 rounded-full"></div>
-              <div className="relative flex items-center justify-between z-10">
-                <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-sm rounded-xl sm:rounded-2xl flex items-center justify-center shadow-xl border border-white/30 flex-shrink-0">
-                    <TableIcon className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
+            {/* ══ HEADER ══ */}
+            <div className="flex-shrink-0 bg-gradient-to-l from-slate-800 via-gray-900 to-slate-900 px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                {/* اليسار: أيقونة + اسم الطاولة */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20">
+                    <TableIcon className="h-5 w-5 text-white" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-lg sm:text-2xl font-bold text-white drop-shadow-lg truncate">
-                      {t('cafe.tableOrdersModal.tableTitle', { number: getTableDisplay(selectedTable.number, i18n.language) })}
-                    </h2>
-                    <p className="text-xs sm:text-sm text-orange-100 mt-1">
-                      {t('cafe.tableOrdersModal.ordersCount', { count: filteredTableOrders.length })}
-                    </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base font-bold text-white leading-tight">
+                        طاولة {getTableDisplay(selectedTable.number, i18n.language)}
+                      </h2>
+                      {(() => {
+                        const sec = typeof selectedTable.section === 'object'
+                          ? (selectedTable.section as any)?.name
+                          : tableSections.find((s: any) => s._id === selectedTable.section || s.id === selectedTable.section)?.name;
+                        return sec ? <span className="text-xs text-gray-400 font-medium">· {sec}</span> : null;
+                      })()}
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
+                        hasUnpaid
+                          ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      }`}>
+                        {hasUnpaid ? '● مشغولة' : '○ فارغة'}
+                      </span>
+                    </div>
+                    {/* ── الإجماليات: تظهر فقط عند وجود فواتير غير مدفوعة ── */}
+                    {hasUnpaid && (
+                      <div className="flex items-center gap-4 mt-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white/40 inline-block"></span>
+                          <span className="text-xs text-gray-400">إجمالي</span>
+                          <span className="text-xs font-bold text-white">{formatCurrency(unpaidTotal)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                          <span className="text-xs text-gray-400">مدفوع</span>
+                          <span className="text-xs font-bold text-emerald-400">{formatCurrency(unpaidPaid)}</span>
+                        </div>
+                        {unpaidRemaining > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block animate-pulse"></span>
+                            <span className="text-xs text-gray-400">متبقي</span>
+                            <span className="text-xs font-bold text-red-400">{formatCurrency(unpaidRemaining)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <button onClick={() => { setShowUnifiedTableModal(false); setSelectedTable(null); setTableBillsFilter('unpaid'); setSearchQuery(''); setSearchResults(null); }}
-                  className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all flex items-center justify-center text-white hover:scale-110 flex-shrink-0">
-                  <X className="h-4 w-4 sm:h-6 sm:w-6" />
+                {/* زر الإغلاق */}
+                <button onClick={closeModal}
+                  className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center text-white/70 hover:text-white transition-all flex-shrink-0 border border-white/10">
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-              <button onClick={() => { setActiveTab('orders'); setActiveTab3('orders'); }}
-                className={`flex-1 py-3 sm:py-4 px-3 sm:px-6 text-xs sm:text-base font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab3 === 'orders' ? 'text-orange-600 dark:text-orange-400 border-b-2 border-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>
-                <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">{t('nav.orders', 'الطلبات')}</span>
-                <span className="sm:hidden">طلبات</span>
-                {filteredTableOrders.length > 0 && (
-                  <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5">{filteredTableOrders.length}</span>
-                )}
-              </button>
-              <button onClick={() => { setActiveTab('billing'); setActiveTab3('billing'); }}
-                className={`flex-1 py-3 sm:py-4 px-3 sm:px-6 text-xs sm:text-base font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab3 === 'billing' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>
-                <Receipt className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">{t('nav.billing', 'الفاتورة')}</span>
-                <span className="sm:hidden">فاتورة</span>
-                {tableBillsMap[selectedTable.number as number]?.hasUnpaid && (
-                  <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 animate-pulse">!</span>
-                )}
-              </button>
-              {/* ── #7 Activity Log Tab ── */}
-              <button onClick={() => setActiveTab3('log')}
-                className={`flex-1 py-3 sm:py-4 px-3 sm:px-6 text-xs sm:text-base font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab3 === 'log' ? 'text-purple-600 dark:text-purple-400 border-b-2 border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>
-                <History className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">السجل</span>
-                <span className="sm:hidden">سجل</span>
-                {tableActivityLog.length > 0 && (
-                  <span className="bg-purple-500 text-white text-xs rounded-full px-1.5 py-0.5">{tableActivityLog.length}</span>
-                )}
-              </button>
-            </div>
+            {/* ── BODY: sidebar + content ── */}
+            <div className="flex-1 flex overflow-hidden min-h-0">
 
-            {/* ── ORDERS TAB ── */}
-            {activeTab3 === 'orders' && (
-              <>
-                <div className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6 bg-gray-50 dark:bg-gray-900">
-                  {filteredTableOrders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 sm:py-16">
-                      <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                        <ShoppingCart className="h-8 w-8 sm:h-10 sm:w-10 text-gray-400" />
+              {/* ══ SIDEBAR ══ */}
+              <div className="w-[72px] flex-shrink-0 flex flex-col bg-gray-50 dark:bg-gray-800/80 border-l border-gray-200 dark:border-gray-700/60 py-2 gap-1">
+                {sideItems.map(item => {
+                  const isActive = activeTab3 === item.id;
+                  const cfg = colorMap[item.color];
+                  const Icon = item.icon;
+                  return (
+                    <button key={item.id}
+                      onClick={() => { setActiveTab3(item.id as any); if (item.id !== 'log' && item.id !== 'sessions') setActiveTab(item.id as any); }}
+                      className={`relative flex flex-col items-center gap-1 py-3 mx-1.5 rounded-xl text-[10px] font-semibold transition-all duration-200
+                        ${isActive
+                          ? `bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600 ${cfg.active}`
+                          : `text-gray-400 dark:text-gray-500 hover:bg-white/60 dark:hover:bg-gray-700/50 hover:text-gray-600 dark:hover:text-gray-300`
+                        }`}>
+                      {/* شريط جانبي للعنصر النشط */}
+                      {isActive && (
+                        <span className={`absolute right-0 top-2 bottom-2 w-0.5 rounded-l-full ${cfg.activeBg}`} />
+                      )}
+                      <div className="relative">
+                        <Icon className={`h-[18px] w-[18px] ${isActive ? '' : cfg.icon}`} />
+                        {item.count > 0 && !isActive && (
+                          <span className={`absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] ${cfg.dot} text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none shadow-sm`}>
+                            {item.count > 9 ? '9+' : item.count}
+                          </span>
+                        )}
+                        {(item as any).dot && isActive && (
+                          <span className={`absolute -top-0.5 -right-0.5 w-2 h-2 ${cfg.dot} rounded-full animate-pulse border-2 border-white dark:border-gray-700`} />
+                        )}
                       </div>
-                      <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg font-semibold">{t('cafe.tableOrdersModal.noOrders')}</p>
-                      <p className="text-gray-400 dark:text-gray-500 text-xs sm:text-sm mt-2 text-center px-4">{t('cafe.tableOrdersModal.clickNewOrder')}</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 sm:space-y-4">
-                      {filteredTableOrders.map(order => (
-                        <div key={order.id} className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl sm:rounded-2xl p-3 sm:p-4 hover:shadow-xl hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-300">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-br from-orange-400 via-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                                <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="font-bold text-gray-900 dark:text-gray-100 text-sm sm:text-base truncate">{order.orderNumber}</div>
-                                <div className="text-xs sm:text-sm font-semibold text-orange-600 dark:text-orange-400 truncate">
-                                  {formatCurrency(order.finalAmount ?? order.totalAmount ?? order.items?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0)}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                              <button onClick={() => handlePrintOrder(order)} className="p-2 sm:p-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-all" title={t('cafe.tableOrdersModal.print')}>
-                                <Printer className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
-                              </button>
-                              <button onClick={() => handleEditOrder(order)} className="p-2 sm:p-2.5 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-xl transition-all" title={t('cafe.tableOrdersModal.edit')}>
-                                <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
-                              </button>
-                              <button onClick={() => handleDeleteOrder(order)} className="p-2 sm:p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-all" title={t('cafe.tableOrdersModal.delete')}>
-                                <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" />
-                              </button>
-                            </div>
+                      <span className="text-center leading-tight">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Content area */}
+              <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-gray-900">
+
+                {/* ══ ORDERS TAB ══ */}
+                {activeTab3 === 'orders' && (
+                  <>
+                    <div className="flex-1 overflow-y-auto p-3 min-h-0">
+                      {filteredTableOrders.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full py-16 text-gray-400">
+                          <div className="w-16 h-16 bg-orange-50 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center mb-4 border border-orange-100 dark:border-orange-800">
+                            <ShoppingCart className="h-8 w-8 text-orange-300" />
                           </div>
-                          {order.items && order.items.length > 0 && (
-                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
-                              {(order.items as any[]).slice(0, 3).map((item: any, idx: number) => (
-                                <div key={idx} className="flex justify-between items-center text-xs sm:text-sm bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
-                                  <span className="text-gray-700 dark:text-gray-300 font-medium truncate flex-1">{item.name}</span>
-                                  <span className="text-gray-500 dark:text-gray-400 font-semibold flex-shrink-0 ml-2">×{item.quantity}</span>
+                          <p className="font-semibold text-gray-500 text-sm">{t('cafe.tableOrdersModal.noOrders')}</p>
+                          <p className="text-xs text-gray-400 mt-1 text-center px-4">{t('cafe.tableOrdersModal.clickNewOrder')}</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredTableOrders.map(order => {
+                            const total = order.finalAmount ?? order.totalAmount ?? order.items?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0;
+                            const statusCfg: Record<string, { color: string; label: string; dot: string }> = {
+                              pending:   { color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',     label: 'معلق',   dot: 'bg-amber-400' },
+                              preparing: { color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',         label: 'يُحضَّر', dot: 'bg-blue-400' },
+                              ready:     { color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',     label: 'جاهز',   dot: 'bg-green-400' },
+                              delivered: { color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300', label: 'سُلِّم', dot: 'bg-emerald-400' },
+                              cancelled: { color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',             label: 'ملغي',   dot: 'bg-red-400' },
+                              draft:     { color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',            label: 'مسودة',  dot: 'bg-gray-400' },
+                            };
+                            const sc = statusCfg[order.status] || statusCfg.draft;
+                            return (
+                              <div key={order.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200/80 dark:border-gray-700/60 overflow-hidden hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all group">
+                                <div className={`h-0.5 ${sc.dot}`} />
+                                <div className="flex items-center gap-2.5 px-3 py-2.5">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <span className="font-bold text-gray-900 dark:text-gray-100 text-sm">#{order.orderNumber}</span>
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${sc.color}`}>{sc.label}</span>
+                                    </div>
+                                    {order.items && order.items.length > 0 && (
+                                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                                        {(order.items as any[]).slice(0,3).map((i: any) => `${i.name} ×${i.quantity}`).join(' · ')}
+                                        {order.items.length > 3 && <span className="text-gray-400"> +{order.items.length - 3}</span>}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className="font-bold text-orange-600 dark:text-orange-400 text-sm flex-shrink-0">{formatCurrency(total)}</span>
+                                  <div className="flex items-center gap-0.5 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => handlePrintOrder(order)} title={t('cafe.tableOrdersModal.print')}
+                                      className="w-7 h-7 flex items-center justify-center hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all text-gray-400">
+                                      <Printer className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button onClick={() => handleEditOrder(order)} title={t('cafe.tableOrdersModal.edit')}
+                                      className="w-7 h-7 flex items-center justify-center hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-all text-gray-400">
+                                      <Edit className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button onClick={() => handleDeleteOrder(order)} title={t('cafe.tableOrdersModal.delete')}
+                                      className="w-7 h-7 flex items-center justify-center hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all text-gray-400">
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
-                              ))}
-                              {order.items.length > 3 && (
-                                <div className="text-xs text-center text-gray-500 dark:text-gray-400 font-medium">
-                                  {t('cafe.tableOrdersModal.moreItems', { count: order.items.length - 3 })}
-                                </div>
-                              )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <div className="px-3 py-2.5 border-t border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 flex-shrink-0 flex gap-2">
+                      {canAddOrder(user) ? (
+                        <button onClick={handleAddOrder}
+                          className="flex-1 py-2.5 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
+                          <Plus className="h-4 w-4" />{t('cafe.tableOrdersModal.newOrder')}
+                        </button>
+                      ) : <PermissionDenied size="small" message={t('users.permissions.canAddOrderDesc')} />}
+                      {hasUnpaid && (
+                        <button onClick={() => handlePaymentManagement(selectedTable)}
+                          className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
+                          <DollarSign className="h-4 w-4" />{t('cafe.tableOrdersModal.paymentManagement')}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* ══ BILLING TAB ══ */}
+                {activeTab3 === 'billing' && (
+                  <>
+                    {/* فلتر + بحث */}
+                    <div className="px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-2 flex-shrink-0">
+                      <select value={tableBillsFilter} onChange={e => setTableBillsFilter(e.target.value)}
+                        className="flex-1 text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:ring-1 focus:ring-blue-400 outline-none min-w-0">
+                        <option value="all">الكل</option>
+                        <option value="unpaid">غير مدفوعة</option>
+                        <option value="paid">مدفوعة</option>
+                        <option value="partial">جزئية</option>
+                      </select>
+                      <div className="relative flex-1 min-w-0">
+                        <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                          placeholder="بحث..." className="w-full pr-7 pl-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 outline-none focus:ring-1 focus:ring-blue-400" />
+                      </div>
+                      {searchQuery && (
+                        <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors flex-shrink-0">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* إجماليات شرطية: تظهر فقط إذا الفلتر مش "unpaid" أو عند البحث */}
+                    {(() => {
+                      const src = searchResults !== null ? searchResults : ((tableBillsMap as any)[selectedTable.number]?.bills || []);
+                      const filtered = src.filter((b: Bill) => {
+                        if (tableBillsFilter === 'all') return true;
+                        if (tableBillsFilter === 'unpaid') return ['draft','partial','overdue'].includes(b.status);
+                        return b.status === tableBillsFilter;
+                      });
+                      const showSummary = (tableBillsFilter !== 'unpaid' || searchResults !== null) && filtered.length > 0;
+                      if (!showSummary) return null;
+                      const fTotal     = filtered.reduce((s: number, b: Bill) => s + (Number(b.total) || 0), 0);
+                      const fPaid      = filtered.reduce((s: number, b: Bill) => s + (Number(b.paid) || 0), 0);
+                      const fRemaining = filtered.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0), 0);
+                      return (
+                        <div className="flex-shrink-0 px-3 py-2 bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/30 flex items-center gap-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block"></span>
+                            <span className="text-[10px] text-gray-500">إجمالي</span>
+                            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{formatCurrency(fTotal)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                            <span className="text-[10px] text-gray-500">مدفوع</span>
+                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(fPaid)}</span>
+                          </div>
+                          {fRemaining > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span>
+                              <span className="text-[10px] text-gray-500">متبقي</span>
+                              <span className="text-xs font-bold text-red-600 dark:text-red-400">{formatCurrency(fRemaining)}</span>
                             </div>
                           )}
+                          <span className="mr-auto text-[10px] text-gray-400">{filtered.length} فاتورة</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="p-4 sm:p-5 md:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    {canAddOrder(user) ? (
-                      <button onClick={handleAddOrder}
-                        className="flex-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 hover:from-orange-600 hover:via-red-600 hover:to-pink-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all">
-                        <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
-                        {t('cafe.tableOrdersModal.newOrder')}
-                      </button>
-                    ) : <div className="flex-1"><PermissionDenied size="small" message={t('users.permissions.canAddOrderDesc')} /></div>}
-                    {(tableStatuses as any)[selectedTable.number]?.hasUnpaid && (
-                      <button onClick={() => handlePaymentManagement(selectedTable)}
-                        className="flex-1 sm:flex-none sm:min-w-[140px] bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 font-bold text-sm sm:text-base shadow-xl hover:shadow-2xl transition-all">
-                        <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
-                        {t('cafe.tableOrdersModal.paymentManagement')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
+                      );
+                    })()}
 
-            {/* ── BILLING TAB ── */}
-            {activeTab3 === 'billing' && (
-              <>
-                {/* Filter & Search */}
-                <div className="p-3 sm:p-4 bg-white/50 dark:bg-gray-800/50 border-b border-orange-200 dark:border-orange-800 space-y-3 flex-shrink-0">
-                  <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-                    <label className="text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                      <span className="w-2 h-2 bg-orange-500 rounded-full"></span>{t('billing.filterByStatus')}:
-                    </label>
-                    <select value={tableBillsFilter} onChange={e => setTableBillsFilter(e.target.value)}
-                      className="border-2 border-orange-300 dark:border-orange-700 rounded-xl px-2 sm:px-4 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm">
-                      <option value="all">🔍 {t('billing.filters.allBills')}</option>
-                      <option value="unpaid">💰 {t('billing.filters.unpaid')}</option>
-                      <option value="paid">✅ {t('billing.status.paid')}</option>
-                      <option value="partial">⚡ {t('billing.status.partial')}</option>
-                      <option value="overdue">⚠️ {t('billing.status.overdue')}</option>
-                      <option value="cancelled">❌ {t('billing.status.cancelled')}</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="relative flex-1">
-                      <Search className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
-                      <input type="text" placeholder={t('billing.searchBillPlaceholder')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pr-10 sm:pr-12 pl-3 sm:pl-4 py-2 sm:py-3 border-2 border-orange-300 dark:border-orange-700 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 text-sm sm:text-base" />
-                    </div>
-                    {searchQuery && (
-                      <button onClick={() => { setSearchQuery(''); setSearchResults(null); }}
-                        className="w-8 h-8 sm:w-10 sm:h-10 bg-red-500 hover:bg-red-600 text-white rounded-xl flex items-center justify-center hover:scale-110 shadow-md">
-                        <X className="h-4 w-4 sm:h-5 sm:w-5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Bills List */}
-                <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
-                  {(() => {
-                    const tableBills = searchResults !== null ? searchResults : ((tableBillsMap as any)[selectedTable.number]?.bills || []);
-                    const filtered = tableBills.filter((bill: Bill) => {
-                      if (tableBillsFilter === 'all') return true;
-                      if (tableBillsFilter === 'unpaid') return ['draft', 'partial', 'overdue'].includes(bill.status);
-                      return bill.status === tableBillsFilter;
-                    });
-                    if (filtered.length === 0) return (
-                      <div className="text-center py-12 sm:py-16">
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 shadow-lg">
-                          <Receipt className="h-10 w-10 sm:h-12 sm:w-12 text-orange-500 dark:text-orange-400" />
-                        </div>
-                        <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3">{t('billing.noBills')}</h3>
-                        <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg px-4">{t('billing.noBillsForTable')}</p>
-                      </div>
-                    );
-                    return (
-                      <div className="space-y-2 sm:space-y-3">
-                        {filtered.map((bill: Bill) => {
-                          const isUnpaid = ['draft', 'partial', 'overdue'].includes(bill.status);
-                          return (
-                            <div key={bill.id || bill._id} onClick={() => handlePaymentClick(bill)}
-                              className={`relative overflow-hidden rounded-xl border-2 p-3 sm:p-4 transition-all duration-300 transform hover:scale-[1.01] hover:shadow-lg cursor-pointer group
-                                ${isUnpaid ? 'bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-300 dark:border-orange-600' : 'bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border-emerald-300 dark:border-emerald-600'}`}>
-                              <div className={`absolute top-0 left-0 right-0 h-0.5 ${isUnpaid ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-emerald-500 to-green-500'}`}></div>
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="font-bold text-base text-gray-900 dark:text-gray-100">#{bill.billNumber || bill.id || bill._id}</span>
-                                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${getStatusColor(bill.status)}`}>{getStatusText(bill.status)}</span>
-                                  </div>
-                                  <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
-                                    {bill.createdAt && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDate(bill.createdAt, { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
-                                    {bill.customerName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{getCustomerDisplay(bill)}</span>}
-                                  </div>
-                                </div>
-                                <div className="text-center bg-white/50 dark:bg-gray-800/50 p-3 rounded-lg shadow-sm min-w-[120px]">
-                                  <div className={`text-lg font-bold mb-1 ${isUnpaid ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(bill.total || 0)}</div>
-                                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
-                                    <div>{t('billing.paidAmount')}: <span className="text-green-600 font-medium">{formatCurrency(bill.paid || 0)}</span></div>
-                                    <div>{t('billing.remainingAmount')}: <span className={`font-medium ${(bill.remaining || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(bill.remaining || 0)}</span></div>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-1.5 min-w-[100px]">
-                                  <div className="flex gap-1.5">
-                                    <button onClick={e => { e.stopPropagation(); window.open(`/bill/${bill.id || bill._id}`, '_blank', 'noopener,noreferrer'); }}
-                                      className="flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors flex items-center justify-center gap-1">
-                                      <Eye className="h-3 w-3" /><span>{t('billing.view')}</span>
-                                    </button>
-                                    <button onClick={async e => {
-                                      e.stopPropagation();
-                                      try { const r = await api.getBill(bill.id || bill._id); if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t); } catch { showNotification(t('billing.notifications.fetchBillForPrintUnexpectedError'), 'error'); }
-                                    }} className="flex-1 px-2 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-md transition-colors flex items-center justify-center gap-1">
-                                      <Printer className="h-3 w-3" /><span>{t('billing.print')}</span>
-                                    </button>
-                                  </div>
-                                  {isUnpaid && (
-                                    <button onClick={e => { e.stopPropagation(); handlePayFullBill(bill); }}
-                                      className="w-full px-2 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg hover:scale-105">
-                                      <DollarSign className="h-3.5 w-3.5" /><span>{t('billing.payFull')}</span>
-                                    </button>
-                                  )}
-                                  <button onClick={e => { e.stopPropagation(); handlePaymentClick(bill); }}
-                                    className="w-full px-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-md transition-colors flex items-center justify-center gap-1">
-                                    <DollarSign className="h-3 w-3" /><span>{t('billing.paymentManagement')}</span>
-                                  </button>
-                                </div>
-                              </div>
+                    <div className="flex-1 overflow-y-auto p-3 min-h-0">
+                      {(() => {
+                        const src = searchResults !== null ? searchResults : ((tableBillsMap as any)[selectedTable.number]?.bills || []);
+                        const filtered = src.filter((b: Bill) => {
+                          if (tableBillsFilter === 'all') return true;
+                          if (tableBillsFilter === 'unpaid') return ['draft','partial','overdue'].includes(b.status);
+                          return b.status === tableBillsFilter;
+                        });
+                        if (!filtered.length) return (
+                          <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400">
+                            <div className="w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center mb-3 border border-blue-100 dark:border-blue-800">
+                              <Receipt className="h-7 w-7 text-blue-300" />
                             </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-                  <button onClick={() => { setActiveTab('orders'); setActiveTab3('orders'); }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-xl font-bold text-sm sm:text-base shadow-lg transition-all">
-                    <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
-                    {t('billing.manageOrders')}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── #7 ACTIVITY LOG TAB ── */}
-            {activeTab3 === 'log' && (
-              <>
-                <div className="flex-1 overflow-y-auto p-3 sm:p-4 bg-gray-50 dark:bg-gray-900">
-                  {tableActivityLog.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16">
-                      <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
-                        <CheckCircle className="h-8 w-8 text-green-500" />
-                      </div>
-                      <p className="text-gray-600 dark:text-gray-300 font-semibold text-sm">لا توجد فواتير مفتوحة</p>
-                      <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">السجل يعرض فقط الفواتير غير المدفوعة</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {tableActivityLog.map((entry, idx) => {
-                        const cfgMap: Record<string, { dot: string; border: string; bg: string; label: string; labelColor: string }> = {
-                          bill:    { dot: 'bg-blue-500',   border: 'border-r-4 border-blue-400',   bg: 'bg-white dark:bg-gray-800',          label: 'فاتورة',  labelColor: 'text-blue-600 dark:text-blue-400' },
-                          order:   { dot: 'bg-orange-500', border: 'border-r-4 border-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20',  label: 'طلب',     labelColor: 'text-orange-600 dark:text-orange-400' },
-                          payment: { dot: 'bg-green-500',  border: 'border-r-4 border-green-400',  bg: 'bg-green-50 dark:bg-green-900/20',   label: 'دفعة',    labelColor: 'text-green-600 dark:text-green-400' },
-                          session: {
-                            dot: entry.color === 'red' ? 'bg-red-500 animate-pulse' : 'bg-purple-500',
-                            border: entry.color === 'red' ? 'border-r-4 border-red-400' : 'border-r-4 border-purple-400',
-                            bg: entry.color === 'red' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-purple-50 dark:bg-purple-900/20',
-                            label: 'جلسة',
-                            labelColor: entry.color === 'red' ? 'text-red-600 dark:text-red-400' : 'text-purple-600 dark:text-purple-400',
-                          },
-                        };
-                        const cfg = cfgMap[entry.type] || cfgMap.bill;
-                        const iconMap: Record<string, React.ReactNode> = {
-                          bill:    <Receipt className="h-3.5 w-3.5 text-white" />,
-                          order:   <ShoppingCart className="h-3.5 w-3.5 text-white" />,
-                          payment: <DollarSign className="h-3.5 w-3.5 text-white" />,
-                          session: <Gamepad2 className="h-3.5 w-3.5 text-white" />,
-                        };
-                        // الرسالة قد تحتوي على سطر ثاني بعد \n
-                        const [mainLine, subLine] = entry.message.split('\n');
-                        return (
-                          <div key={idx} className={`flex items-start gap-3 p-3 rounded-xl shadow-sm ${cfg.bg} ${cfg.border}`}>
-                            <div className={`flex-shrink-0 w-7 h-7 rounded-full ${cfg.dot} flex items-center justify-center shadow-sm mt-0.5`}>
-                              {iconMap[entry.type] || <Zap className="h-3.5 w-3.5 text-white" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2 mb-0.5">
-                                <span className={`text-xs font-bold uppercase tracking-wide ${cfg.labelColor}`}>{cfg.label}</span>
-                                <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0 flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {entry.time.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                                  &nbsp;
-                                  {entry.time.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-800 dark:text-gray-200 font-medium leading-snug">{mainLine}</p>
-                              {subLine && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subLine}</p>}
-                            </div>
+                            <p className="text-sm font-medium text-gray-500">{t('billing.noBills')}</p>
                           </div>
                         );
-                      })}
+                        return (
+                          <div className="space-y-2">
+                            {filtered.map((bill: Bill) => {
+                              const isUnpaid = ['draft','partial','overdue'].includes(bill.status);
+                              const hasSessions = ((bill as any).sessions?.length || 0) > 0;
+                              return (
+                                <div key={bill.id || bill._id}
+                                  className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all hover:shadow-md group cursor-pointer
+                                    ${isUnpaid ? 'border-orange-200 dark:border-orange-800/60 hover:border-orange-300' : 'border-emerald-200 dark:border-emerald-800/60 hover:border-emerald-300'}`}
+                                  onClick={() => handlePaymentClick(bill)}>
+                                  <div className={`h-0.5 ${isUnpaid ? 'bg-gradient-to-l from-orange-400 to-amber-400' : 'bg-gradient-to-l from-emerald-400 to-green-400'}`} />
+                                  <div className="flex items-center gap-2.5 px-3 py-2.5">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        <span className="font-bold text-sm text-gray-900 dark:text-gray-100">#{bill.billNumber || (bill.id || bill._id)?.toString().slice(-6)}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${getStatusColor(bill.status)}`}>{getStatusText(bill.status)}</span>
+                                        {hasSessions && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 flex items-center gap-0.5"><Gamepad2 className="h-2.5 w-2.5" />{(bill as any).sessions?.length}</span>}
+                                      </div>
+                                      <div className="flex items-center gap-3 text-xs">
+                                        <span className="text-gray-500">إجمالي: <strong className="text-gray-800 dark:text-gray-200">{formatCurrency(Number(bill.total)||0)}</strong></span>
+                                        <span className="text-emerald-600 dark:text-emerald-400">مدفوع: <strong>{formatCurrency(Number(bill.paid)||0)}</strong></span>
+                                        {(Number(bill.remaining)||0) > 0 && <span className="text-red-600 dark:text-red-400 font-bold">متبقي: {formatCurrency(Number(bill.remaining))}</span>}
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-1 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                                      {isUnpaid && (
+                                        <button onClick={e => { e.stopPropagation(); handlePayFullBill(bill); }}
+                                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-all whitespace-nowrap">
+                                          <DollarSign className="h-3 w-3" />دفع
+                                        </button>
+                                      )}
+                                      <button onClick={async e => { e.stopPropagation(); try { const r = await api.getBill(bill.id || bill._id); if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t); } catch {} }}
+                                        className="w-7 h-7 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 rounded-lg flex items-center justify-center transition-all">
+                                        <Printer className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
-                  )}
-                </div>
-                <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-                  <button onClick={() => { setActiveTab('orders'); setActiveTab3('orders'); }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl font-bold text-sm sm:text-base shadow-lg transition-all">
-                    <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
-                    إدارة الطلبات
-                  </button>
-                </div>
-              </>
-            )}
+                  </>
+                )}
+
+                {/* ══ SESSIONS TAB ══ */}
+                {activeTab3 === 'sessions' && (
+                  <>
+                    {/* ملخص الجلسات — يظهر فقط إذا في جلسات */}
+                    {sessionsCount > 0 && (
+                      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700/60 flex items-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block"></span>
+                          <span className="text-[10px] text-gray-500">إجمالي</span>
+                          <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{formatCurrency(sessionsTotalCost)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                          <span className="text-[10px] text-gray-500">مدفوع</span>
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(sessionsPaid)}</span>
+                        </div>
+                        {sessionsRemaining > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span>
+                            <span className="text-[10px] text-gray-500">متبقي</span>
+                            <span className="text-xs font-bold text-red-600 dark:text-red-400">{formatCurrency(sessionsRemaining)}</span>
+                          </div>
+                        )}
+                        <span className="mr-auto text-[10px] text-gray-400 flex items-center gap-1">
+                          {activeSessionsCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse"></span>}
+                          {activeSessionsCount > 0 ? `${activeSessionsCount} نشطة · ` : ''}{sessionsCount} جلسة
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-y-auto p-3 min-h-0">
+                      {allSessions.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full py-16 text-gray-400">
+                          <div className="w-16 h-16 bg-purple-50 dark:bg-purple-900/20 rounded-2xl flex items-center justify-center mb-4 border border-purple-100 dark:border-purple-800">
+                            <Gamepad2 className="h-8 w-8 text-purple-300" />
+                          </div>
+                          <p className="text-sm font-medium text-gray-500">لا توجد جلسات لهذه الطاولة</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {allSessions.map((session: any, idx: number) => {
+                            const isActive    = session.status === 'active';
+                            const isCompleted = session.status === 'completed';
+                            const isPS        = (session.deviceType || '').includes('playstation');
+                            const icon        = isPS ? '🎮' : '💻';
+
+                            // ── التكلفة الصحيحة (حساب فوري للجلسات النشطة) ──
+                            const cost = getSessionCost(session);
+
+                            // ── المدة ──
+                            const startMs  = session.startTime ? new Date(session.startTime).getTime() : 0;
+                            const endMs    = session.endTime   ? new Date(session.endTime).getTime()   : Date.now();
+                            const durMs    = startMs ? Math.max(0, endMs - startMs) : 0;
+                            const durH     = Math.floor(durMs / 3600000);
+                            const durM     = Math.floor((durMs % 3600000) / 60000);
+                            const durStr   = durH > 0 ? `${durH}س ${durM}د` : `${durM}د`;
+                            const startStr = session.startTime ? new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—';
+                            const endStr   = session.endTime   ? new Date(session.endTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : 'جارية';
+
+                            // ── المدفوع/المتبقي من sessionPayments ──
+                            const sessId         = session._id || session.id;
+                            const billForSession = tBills.find((b: Bill) =>
+                              (b as any)._id === session._billId || (b as any).id === session._billId
+                            );
+                            const sp          = (billForSession as any)?.sessionPayments?.find(
+                              (p: any) => p.sessionId === sessId || p.session === sessId
+                            );
+                            const spPaid      = Number(sp?.paidAmount) || 0;
+                            const spRemaining = sp
+                              ? Math.max(0, Number(sp.remainingAmount) !== undefined ? Number(sp.remainingAmount) : (cost - spPaid))
+                              : Math.max(0, cost - spPaid);
+
+                            return (
+                              <div key={sessId || idx}
+                                className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all hover:shadow-md
+                                  ${isActive ? 'border-green-300 dark:border-green-700' : 'border-gray-200 dark:border-gray-700/60'}`}>
+                                {/* شريط علوي */}
+                                <div className={`h-1 ${isActive ? 'bg-gradient-to-l from-green-400 to-emerald-500 animate-pulse' : isCompleted ? 'bg-gray-200 dark:bg-gray-600' : 'bg-amber-300'}`} />
+                                <div className="px-3 py-2.5 space-y-2">
+                                  {/* صف العنوان */}
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-base leading-none">{icon}</span>
+                                      <div>
+                                        <p className="font-bold text-sm text-gray-900 dark:text-gray-100 leading-tight">
+                                          {session.deviceName || `جهاز ${session.deviceNumber || ''}`}
+                                        </p>
+                                        <p className="text-[10px] text-gray-400">{isPS ? 'بلايستيشن' : 'كمبيوتر'}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {session._billNumber && (
+                                        <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                                          #{session._billNumber}
+                                        </span>
+                                      )}
+                                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${
+                                        isActive    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                                        isCompleted ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
+                                                      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                      }`}>
+                                        {isActive ? '● نشطة' : isCompleted ? '✓ منتهية' : session.status}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {/* الوقت والمدة */}
+                                  <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{startStr} → {endStr}</span>
+                                    <span className="font-semibold text-gray-600 dark:text-gray-400">⏱ {durStr}</span>
+                                    {session.controllers > 0 && <span>🕹 {session.controllers} دراعة</span>}
+                                  </div>
+                                  {/* الملخص المالي */}
+                                  <div className="flex items-stretch gap-2 bg-gray-50 dark:bg-gray-700/40 rounded-xl p-2">
+                                    <div className="flex-1 text-center">
+                                      <p className="text-[10px] text-gray-400 mb-0.5">الاجمالي</p>
+                                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{formatCurrency(cost)}</p>
+                                    </div>
+                                    <div className="w-px bg-gray-200 dark:bg-gray-600" />
+                                    <div className="flex-1 text-center">
+                                      <p className="text-[10px] text-gray-400 mb-0.5">مدفوع</p>
+                                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(spPaid)}</p>
+                                    </div>
+                                    <div className="w-px bg-gray-200 dark:bg-gray-600" />
+                                    <div className="flex-1 text-center">
+                                      <p className="text-[10px] text-gray-400 mb-0.5">متبقي</p>
+                                      <p className={`text-sm font-bold ${spRemaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                        {formatCurrency(spRemaining)}
+                                      </p>
+                                    </div>
+                                    {(isActive || spRemaining > 0) && (
+                                      <>
+                                        <div className="w-px bg-gray-200 dark:bg-gray-600" />
+                                        <div className="flex flex-col gap-1 justify-center pl-1">
+                                          {isActive && billForSession && (
+                                            <button onClick={() => handleEndSession(sessId)}
+                                              className="px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold rounded-lg transition-all whitespace-nowrap">
+                                              ⏹ إنهاء
+                                            </button>
+                                          )}
+                                          {billForSession && spRemaining > 0 && !isActive && (
+                                            <button onClick={async () => { const r = await api.getBill(billForSession._id || (billForSession as any).id); if (r?.data) setSelectedBill(r.data); else setSelectedBill(billForSession as Bill); setShowPaymentModal(true); setPaymentAmount(spRemaining.toString()); }}
+                                              className="px-2.5 py-1 bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold rounded-lg transition-all whitespace-nowrap">
+                                              💵 دفع
+                                            </button>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                  {/* سجل الدراعات */}
+                                  {isCompleted && session.controllersHistory && session.controllersHistory.length > 1 && (
+                                    <div className="pt-1.5 border-t border-gray-100 dark:border-gray-700">
+                                      <p className="text-[10px] text-gray-400 mb-1 flex items-center gap-1"><Gamepad2 className="h-2.5 w-2.5" />سجل الدراعات</p>
+                                      <div className="space-y-0.5">
+                                        {session.controllersHistory.map((period: any, pi: number) => (
+                                          <div key={pi} className="flex items-center justify-between text-[10px] text-gray-500 bg-gray-50 dark:bg-gray-700/30 rounded px-2 py-0.5">
+                                            <span>{period.controllers} دراعة</span>
+                                            <span>{new Date(period.from).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})} — {period.to ? new Date(period.to).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : 'الآن'}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* ══ LOG TAB ══ */}
+                {activeTab3 === 'log' && (
+                  <>
+                    <div className="flex-1 overflow-y-auto p-3 bg-gray-50 dark:bg-gray-900 min-h-0">
+                      {tableActivityLog.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400">
+                          <CheckCircle className="h-10 w-10 mb-3 text-green-300" />
+                          <p className="text-sm font-semibold text-gray-500">لا توجد فواتير مفتوحة</p>
+                          <p className="text-xs text-gray-400 mt-1">السجل يعرض الفواتير غير المدفوعة فقط</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {tableActivityLog.map((entry, idx) => {
+                            const cfgMap: Record<string, { dot: string; border: string; bg: string; label: string; labelColor: string }> = {
+                              bill:    { dot: 'bg-blue-500',   border: 'border-r-2 border-blue-400',   bg: 'bg-white dark:bg-gray-800',        label: 'فاتورة', labelColor: 'text-blue-600' },
+                              order:   { dot: 'bg-orange-500', border: 'border-r-2 border-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', label: 'طلب',    labelColor: 'text-orange-600' },
+                              payment: { dot: 'bg-green-500',  border: 'border-r-2 border-green-400',  bg: 'bg-green-50 dark:bg-green-900/20',  label: 'دفعة',   labelColor: 'text-green-600' },
+                              session: { dot: entry.color === 'red' ? 'bg-red-500' : 'bg-purple-500', border: entry.color === 'red' ? 'border-r-2 border-red-400' : 'border-r-2 border-purple-400', bg: entry.color === 'red' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-purple-50 dark:bg-purple-900/20', label: 'جلسة', labelColor: entry.color === 'red' ? 'text-red-600' : 'text-purple-600' },
+                            };
+                            const cfg = cfgMap[entry.type] || cfgMap.bill;
+                            const iconMap: Record<string, React.ReactNode> = {
+                              bill: <Receipt className="h-3 w-3 text-white" />,
+                              order: <ShoppingCart className="h-3 w-3 text-white" />,
+                              payment: <DollarSign className="h-3 w-3 text-white" />,
+                              session: <Gamepad2 className="h-3 w-3 text-white" />,
+                            };
+                            const [mainLine, subLine] = entry.message.split('\n');
+                            return (
+                              <div key={idx} className={`flex items-start gap-2.5 p-2.5 rounded-lg ${cfg.bg} ${cfg.border} shadow-sm`}>
+                                <div className={`flex-shrink-0 w-6 h-6 rounded-full ${cfg.dot} flex items-center justify-center`}>
+                                  {iconMap[entry.type] || <Zap className="h-3 w-3 text-white" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className={`text-xs font-bold ${cfg.labelColor}`}>{cfg.label}</span>
+                                    <span className="text-xs text-gray-400">
+                                      {entry.time.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                      {' • '}
+                                      {entry.time.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-800 dark:text-gray-200 font-medium mt-0.5">{mainLine}</p>
+                                  {subLine && <p className="text-xs text-gray-500 mt-0.5">{subLine}</p>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+              </div>
+            </div>
           </div>
         </div>
         </ModalPortal>
-      )}
-
+        );
+      })()}
 
       {/* ── Payment Modal — نفس شكل صفحة الفواتير ── */}
       {showPaymentModal && selectedBill && (
         <ModalPortal>
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[300] animate-fade-in">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl border-2 border-blue-200 dark:border-blue-800 animate-bounce-in mx-2 sm:mx-0">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 z-[300]">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden"
+            style={{ height: 'min(96vh, 820px)', maxWidth: '1100px' }}
+            onClick={e => e.stopPropagation()}>
 
-            {/* Header */}
-            <div className="sticky top-0 z-10 p-3 sm:p-6 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700 flex items-center justify-between rounded-t-2xl">
-              <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                  <DollarSign className="h-5 w-5 sm:h-8 sm:w-8 text-blue-600 dark:text-blue-400" />
+            {/* ══ HEADER ══ */}
+            <div className="flex-shrink-0 bg-gradient-to-l from-blue-700 to-indigo-800 px-5 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/20">
+                  <DollarSign className="h-4 w-4 text-white" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-lg sm:text-2xl font-bold text-white truncate">{t('billing.paymentManagementTitle')}</h3>
-                  <p className="text-xs sm:text-sm text-blue-100 mt-1 truncate">{t('billing.bill')} #{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</p>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white leading-tight">{t('billing.paymentManagementTitle')}</h3>
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                    <span className="text-xs text-blue-200">فاتورة #{selectedBill?.billNumber || (selectedBill?.id || selectedBill?._id)?.toString().slice(-6)}</span>
+                    {selectedBill?.table && <span className="text-xs text-blue-200">• طاولة {getTableDisplay((selectedBill.table as any).number, i18n.language)}</span>}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getStatusColor(selectedBill.status)}`}>{getStatusText(selectedBill.status)}</span>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {selectedBill?.table && (
                   <button onClick={() => { setShowPaymentModal(false); setActiveTab3('orders'); setActiveTab('orders'); }}
-                    className="hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white hover:scale-105 transform">
-                    <TableIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                    <span className="text-xs sm:text-sm font-medium">{t('billing.editOrders')}</span>
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-lg text-white text-xs font-medium transition-all border border-white/20">
+                    <TableIcon className="h-3.5 w-3.5" />الطاولة
                   </button>
                 )}
                 <button onClick={handleClosePaymentModal}
-                  className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 flex items-center justify-center text-white hover:scale-110 transform flex-shrink-0">
-                  <X className="h-4 w-4 sm:h-6 sm:w-6" />
+                  className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-lg flex items-center justify-center text-white/80 hover:text-white transition-all border border-white/20">
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
-            <div className="p-3 sm:p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
-
-                {/* ── LEFT: Payment Info ── */}
-                <div>
-                  <h4 className="font-bold text-xl text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    {t('billing.paymentInfo')}
-                  </h4>
-
-                  {/* Bill Info Card */}
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-5 rounded-xl mb-6 border-2 border-blue-200 dark:border-blue-800 shadow-md">
-                    <h5 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
-                      <Receipt className="h-5 w-5" />{t('billing.billInfo')}
-                    </h5>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">{t('billing.billNumber')}</span>
-                        <span className="font-bold text-gray-900 dark:text-gray-100">#{selectedBill?.billNumber || selectedBill?.id || selectedBill?._id}</span>
-                      </div>
-                      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">{t('billing.customer')}</span>
-                        <span className="font-bold text-gray-900 dark:text-gray-100">{getCustomerDisplay(selectedBill)}</span>
-                      </div>
-                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-3 rounded-lg shadow-sm border border-green-200 dark:border-green-800">
-                        <span className="text-green-700 dark:text-green-300 text-xs block mb-1">{t('billing.totalAmount')}</span>
-                        <span className="font-bold text-xl text-green-600 dark:text-green-400">{formatCurrency(selectedBill?.total || 0)}</span>
-                      </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 p-3 rounded-lg shadow-sm border border-blue-200 dark:border-blue-800">
-                        <span className="text-blue-700 dark:text-blue-300 text-xs block mb-1">{t('billing.paidPreviously')}</span>
-                        <span className="font-bold text-xl text-blue-600 dark:text-blue-400">{formatCurrency(selectedBill?.paid || 0)}</span>
-                      </div>
-                      <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/30 dark:to-orange-900/30 p-3 rounded-lg shadow-sm border border-red-200 dark:border-red-800">
-                        <span className="text-red-700 dark:text-red-300 text-xs block mb-1">{t('billing.remaining')}</span>
-                        <span className="font-bold text-xl text-red-600 dark:text-red-400">{formatCurrency(selectedBill?.remaining || 0)}</span>
-                      </div>
-                      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs block mb-1">{t('common.status')}</span>
-                        <span className={`px-3 py-1.5 text-xs font-bold rounded-full inline-block shadow-sm ${getStatusColor(selectedBill?.status || 'draft')}`}>
-                          {getStatusText(selectedBill?.status || 'draft')}
-                        </span>
-                      </div>
-                      {selectedBill?.table && (
-                        <div className="col-span-2 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-4 rounded-lg shadow-sm border border-purple-200 dark:border-purple-800">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <TableIcon className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                              <div>
-                                <span className="text-purple-700 dark:text-purple-300 text-xs block">{t('billing.table')}</span>
-                                <span className="font-bold text-lg text-purple-900 dark:text-purple-100">{t('billing.tableWithNumber', { number: getTableDisplay((selectedBill.table as any).number, i18n.language) })}</span>
-                              </div>
-                            </div>
-                            <button onClick={() => { setNewTableNumber((selectedBill.table as any)?._id || null); setShowChangeTableModal(true); }}
-                              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-bold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-md">
-                              {t('billing.changeTable')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
+            {/* ══ إجماليات ثابتة ══ */}
+            <div className="flex-shrink-0 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/60">
+              <div className="flex items-center gap-3 max-w-lg">
+                <div className="grid grid-cols-3 gap-3 flex-1">
+                  {[
+                    { label: t('billing.totalAmount'),    value: selectedBill?.total     || 0, cls: 'text-gray-800 dark:text-gray-100',          bg: 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' },
+                    { label: t('billing.paidPreviously'), value: selectedBill?.paid      || 0, cls: 'text-emerald-700 dark:text-emerald-400',     bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
+                    { label: t('billing.remaining'),      value: selectedBill?.remaining || 0,
+                      cls: (selectedBill?.remaining||0) > 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400',
+                      bg:  (selectedBill?.remaining||0) > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/60' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60' },
+                  ].map(item => (
+                    <div key={item.label} className={`${item.bg} border rounded-xl px-3 py-1.5 text-center`}>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{item.label}</p>
+                      <p className={`text-sm font-bold ${item.cls}`}>{formatCurrency(item.value)}</p>
                     </div>
-                  </div>
+                  ))}
+                </div>
+                {selectedBill?.table && (
+                  <button onClick={() => { setNewTableNumber((selectedBill.table as any)?._id || null); setShowChangeTableModal(true); }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded-xl text-amber-600 dark:text-amber-400 text-xs font-bold transition-all border border-amber-200 dark:border-amber-700 flex-shrink-0">
+                    <TableIcon className="h-3.5 w-3.5" />{t('billing.changeTable')}
+                  </button>
+                )}
+              </div>
+            </div>
 
-                  {/* Active Session Warning */}
-                  {hasActiveSession(selectedBill) && (
-                    <div className="bg-gradient-to-br from-red-50 via-orange-50 to-red-50 dark:from-red-900/40 dark:via-orange-900/30 dark:to-red-900/40 p-5 rounded-xl mb-6 border-2 border-red-300 dark:border-red-700 shadow-lg">
-                      <h5 className="font-bold text-lg text-red-900 dark:text-red-100 mb-4 flex items-center gap-3">
-                        <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse shadow-lg"></div>
-                        <Gamepad2 className="h-6 w-6" />{t('billing.activeDevice')}
-                      </h5>
-                      <div className="space-y-2 text-sm">
-                        {selectedBill.sessions?.filter(s => s.status === 'active').map((session, index) => (
-                          <div key={index} className="bg-white dark:bg-gray-800 p-3 rounded border border-red-100 dark:border-red-700">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="font-medium text-red-800 dark:text-red-200">{session.deviceName}</span>
-                              <span className="text-xs text-red-600 dark:text-red-300 bg-red-100 dark:bg-red-800 px-2 py-1 rounded">
-                                {session.deviceType === 'playstation' ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}
-                              </span>
-                            </div>
-                            <div className="text-xs text-red-700 dark:text-red-300 mb-3">
-                              <div>{t('billing.startTime')}: {formatTime(session.startTime)}</div>
-                              {session.deviceType === 'playstation' && (
-                                <div>{t('billing.controllers')}: {formatDecimal(session.controllers || 1, i18n.language)}</div>
-                              )}
-                            </div>
-                            <div className="flex justify-end">
-                              <button onClick={() => handleEndSession(session._id || session.id)}
-                                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors duration-200">
-                                {t('billing.endSession')}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+            {/* ══ BODY: 4 أعمدة ══ */}
+            <div className="flex-1 flex overflow-hidden min-h-0">
 
-                  {/* Item Details */}
-                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-5 rounded-xl mb-6 border-2 border-purple-200 dark:border-purple-800 shadow-md">
-                    <h5 className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-4 flex items-center gap-2">
-                      <Receipt className="h-5 w-5" />{t('billing.itemDetails')}
-                    </h5>
-                    <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                      {aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.itemPayments || [], selectedBill?.status, selectedBill?.paid, selectedBill?.total).map((item, index) => (
-                        <div key={index} className="bg-white dark:bg-gray-800 p-4 rounded-xl border-2 border-purple-200 dark:border-purple-700 shadow-sm hover:shadow-md transition-all">
-                          <div className="flex justify-between items-start mb-3">
-                            <span className="font-bold text-gray-900 dark:text-gray-100">{item.name}</span>
-                            <span className="text-sm font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-1 rounded-lg">{formatCurrency(item.price)}</span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-3 text-xs">
-                            <div className="text-center p-3 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-lg shadow-sm">
-                              <div className="text-gray-600 dark:text-gray-400 font-semibold mb-1">{t('billing.totalQuantity')}</div>
-                              <div className="font-bold text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity, i18n.language)}</div>
-                            </div>
-                            <div className="text-center p-3 bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/50 dark:to-emerald-900/50 rounded-lg shadow-sm">
-                              <div className="text-green-700 dark:text-green-300 font-semibold mb-1">{t('billing.paidQuantity')}</div>
-                              <div className="font-bold text-lg text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity, i18n.language)}</div>
-                            </div>
-                            <div className="text-center p-3 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/50 dark:to-red-900/50 rounded-lg shadow-sm">
-                              <div className="text-orange-700 dark:text-orange-300 font-semibold mb-1">{t('billing.remainingQuantity')}</div>
-                              <div className="font-bold text-lg text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity, i18n.language)}</div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {/* ══ عمود 1: خيارات الدفع + الجلسات النشطة ══ */}
+              <div className="flex flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60" style={{ width: '320px', flexShrink: 0 }}>
+                <div className="flex-shrink-0 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-gray-100 dark:border-gray-700/60">
+                  <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" />خيارات الدفع
+                  </p>
+                </div>
+                <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+                  <div className="p-3 flex flex-col gap-2 flex-1">
 
-                  {/* Previous Item Payments */}
-                  {selectedBill?.itemPayments && selectedBill.itemPayments.length > 0 && (() => {
-                    const allPayments: any[] = [];
-                    selectedBill.itemPayments.forEach((ip: any) => {
-                      ip.paymentHistory?.forEach((p: any, idx: number) => {
-                        allPayments.push({ itemPayment: ip, payment: p, paymentIdx: idx });
-                      });
-                    });
-                    if (!allPayments.length) return null;
-                    return (
-                      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-5 rounded-xl mb-6 border-2 border-blue-200 dark:border-blue-800 shadow-md">
-                        <h5 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
-                          <Receipt className="h-5 w-5" />{t('billing.previousItemPayments')}
-                        </h5>
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                          {allPayments.map(({ itemPayment, payment, paymentIdx }, idx) => (
-                            <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm">
-                              <div className="flex justify-between items-start mb-2">
-                                <div className="flex-1">
-                                  <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{itemPayment.itemName || t('billing.unknownItem')}</p>
-                                  <p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.quantity')}: {formatDecimal(payment.quantity, i18n.language)} × {formatCurrency(itemPayment.pricePerUnit)}</p>
-                                </div>
-                                <p className="font-bold text-blue-600 dark:text-blue-400">{formatCurrency(payment.amount)}</p>
-                              </div>
-                              <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-200 dark:border-gray-600">
-                                <span className="text-gray-500">{payment.method ? t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`) : t('billing.paymentMethodCash')}</span>
-                                {canEditPartialPayment(user) && (
-                                  <button onClick={() => handleEditItemPayment({ itemPayment, payment, paymentIdx }, idx)}
-                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium">{t('common.edit')}</button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Payment Options */}
-                  {selectedBill?.status !== 'paid' && (
-                    <>
-                      <div className="mb-6">
-                        <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">{t('billing.paymentOptions')}</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <button
-                            onClick={() => {
+                    {selectedBill?.status !== 'paid' ? (<>
+                      {/* أزرار الخيارات */}
+                      <div className="flex flex-col gap-2">
+                        {[
+                          {
+                            emoji: '💰', title: t('billing.payFullBillOption'),
+                            sub: selectedBill?.remaining ? formatCurrency(selectedBill.remaining) : '',
+                            disabled: hasActiveSession(selectedBill),
+                            onClick: () => {
                               if (!canPayFullBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
                               if (selectedBill?.remaining) {
                                 setPaymentAmount(selectedBill.remaining.toString());
                                 setOriginalAmount(selectedBill.remaining.toString());
                                 setDiscountPercentage(''); setPaymentMethod('cash'); setPaymentReference('');
                               }
-                            }}
-                            disabled={hasActiveSession(selectedBill)}
-                            className={`p-4 border-2 rounded-lg text-center transition-colors duration-200 cursor-pointer ${hasActiveSession(selectedBill) ? 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-gray-400 cursor-not-allowed' : 'border-orange-200 dark:border-orange-600 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20'}`}>
-                            <div className="text-2xl mb-2">💰</div>
-                            <div className="font-medium dark:text-gray-100">{t('billing.payFullBillOption')}</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">{selectedBill?.remaining ? t('billing.payFullBillOptionDesc', { amount: formatCurrency(selectedBill.remaining) }) : t('billing.payFullBillOptionDescAlt')}</div>
-                            {hasActiveSession(selectedBill) && <div className="text-xs text-red-500 mt-1">{t('billing.unavailableActiveSession')}</div>}
+                            },
+                          },
+                          { emoji: '🍹', title: t('billing.paySpecificItem'), sub: '', disabled: false, onClick: async () => { if (selectedBill) await handlePartialPayment(selectedBill); } },
+                          ...(selectedBill?.sessions && selectedBill.sessions.length > 0
+                            ? [{ emoji: '🎮', title: t('billing.partialPaymentForSessions'), sub: '', disabled: false, onClick: () => setShowSessionPaymentModal(true) }]
+                            : []),
+                        ].map(opt => (
+                          <button key={opt.title} onClick={opt.onClick} disabled={opt.disabled}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-right w-full transition-all ${
+                              opt.disabled
+                                ? 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-400 cursor-not-allowed opacity-60'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md'
+                            }`}>
+                            <span className="text-2xl flex-shrink-0">{opt.emoji}</span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">{opt.title}</p>
+                              {opt.sub && <p className="text-xs text-gray-500 mt-0.5">{opt.sub}</p>}
+                              {opt.disabled && <p className="text-xs text-red-500 mt-0.5">{t('billing.unavailableActiveSession')}</p>}
+                            </div>
                           </button>
-                          <button onClick={async () => { if (selectedBill) await handlePartialPayment(selectedBill); }}
-                            className="p-4 border-2 rounded-lg text-center transition-colors border-gray-200 dark:border-gray-600 hover:border-gray-300">
-                            <div className="text-2xl mb-2">🍹</div>
-                            <div className="font-medium dark:text-gray-100">{t('billing.paySpecificItem')}</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">{t('billing.paySpecificItemDesc')}</div>
-                          </button>
-                          {selectedBill?.sessions && selectedBill.sessions.length > 0 && (
-                            <button onClick={() => setShowSessionPaymentModal(true)}
-                              className="p-4 border-2 rounded-lg text-center transition-colors border-gray-200 dark:border-gray-600 hover:border-gray-300">
-                              <div className="text-2xl mb-2">🎮</div>
-                              <div className="font-medium dark:text-gray-100">{t('billing.partialPaymentForSessions')}</div>
-                              <div className="text-sm text-gray-600 dark:text-gray-300">{t('billing.partialPaymentForSessionsDesc')}</div>
-                            </button>
-                          )}
-                        </div>
+                        ))}
                       </div>
+
+                      {/* حقول الدفع */}
                       {paymentAmount && (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('billing.paymentAmount')}</label>
-                            <input type="text" value={formatCurrency(parseFloat(paymentAmount))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100" disabled />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('billing.discountPercentageLabel')}</label>
-                            <input type="number" value={discountPercentage} onChange={e => {
-                              const v = e.target.value;
-                              if (v === '' || (parseFloat(v) >= 0 && parseFloat(v) <= 100)) {
-                                setDiscountPercentage(v);
-                                if (v && !isNaN(parseFloat(v)) && selectedBill?.remaining) {
-                                  setPaymentAmount((selectedBill.remaining * (1 - parseFloat(v) / 100)).toFixed(2));
-                                } else if (selectedBill?.remaining) setPaymentAmount(selectedBill.remaining.toString());
-                              }
-                            }} min="0" max="100" step="0.01" placeholder="0"
-                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('billing.paymentMethodLabel', 'طريقة الدفع')}</label>
-                            <div className="grid grid-cols-3 gap-3">
-                              {(['cash', 'card', 'transfer'] as const).map(m => (
-                                <button key={m} onClick={() => setPaymentMethod(m)}
-                                  className={`p-3 border-2 rounded-xl text-center transition-all ${paymentMethod === m ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-lg scale-105' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}>
-                                  <div className="text-2xl mb-1">{m === 'cash' ? '💵' : m === 'card' ? '💳' : '📱'}</div>
-                                  <div className="text-xs font-semibold">{t(`billing.paymentMethod${m.charAt(0).toUpperCase() + m.slice(1)}`)}</div>
-                                </button>
-                              ))}
+                        <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3 border border-gray-200 dark:border-gray-700 space-y-2.5 mt-1">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.paymentAmount')}</label>
+                              <input type="text" value={formatCurrency(parseFloat(paymentAmount))}
+                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-bold" disabled />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.discountPercentageLabel')}</label>
+                              <input type="number" value={discountPercentage} min="0" max="100" step="0.01" placeholder="0%"
+                                onChange={e => {
+                                  const v = e.target.value;
+                                  if (v === '' || (parseFloat(v) >= 0 && parseFloat(v) <= 100)) {
+                                    setDiscountPercentage(v);
+                                    if (v && !isNaN(parseFloat(v)) && selectedBill?.remaining)
+                                      setPaymentAmount((selectedBill.remaining * (1 - parseFloat(v) / 100)).toFixed(2));
+                                    else if (selectedBill?.remaining)
+                                      setPaymentAmount(selectedBill.remaining.toString());
+                                  }
+                                }}
+                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 outline-none" />
                             </div>
                           </div>
-                          {/* Payment status indicator */}
+                          <div className="grid grid-cols-3 gap-2">
+                            {(['cash', 'card', 'transfer'] as const).map(m => (
+                              <button key={m} onClick={() => setPaymentMethod(m)}
+                                className={`py-2 rounded-xl border-2 text-center text-xs font-bold transition-all ${
+                                  paymentMethod === m ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
+                                }`}>
+                                <div className="text-base mb-0.5">{m === 'cash' ? '💵' : m === 'card' ? '💳' : '📱'}</div>
+                                {t(`billing.paymentMethod${m.charAt(0).toUpperCase() + m.slice(1)}`)}
+                              </button>
+                            ))}
+                          </div>
                           {(() => {
-                            let effectiveTotal = selectedBill.total || 0;
-                            if (discountPercentage && parseFloat(discountPercentage) > 0) {
-                              effectiveTotal -= (selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage) / 100);
-                            }
-                            const newPaid = (selectedBill.paid || 0) + parseFloat(paymentAmount);
-                            const remaining = Math.max(0, effectiveTotal - newPaid);
-                            const willBePaid = remaining === 0 || newPaid >= effectiveTotal;
+                            const effTotal = (selectedBill.total || 0) - ((selectedBill.subtotal || selectedBill.total || 0) * (parseFloat(discountPercentage || '0') / 100));
+                            const newPaid  = (selectedBill.paid || 0) + parseFloat(paymentAmount);
+                            const willPaid = newPaid >= effTotal;
                             return (
-                              <div className={`p-3 rounded-lg border ${willBePaid ? 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700' : 'bg-yellow-50 dark:bg-yellow-900 border-yellow-200 dark:border-yellow-700'}`}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">{willBePaid ? '✅' : '💰'}</span>
-                                  <div>
-                                    <p className={`font-medium ${willBePaid ? 'text-green-800 dark:text-green-200' : 'text-yellow-800 dark:text-yellow-200'}`}>
-                                      {willBePaid ? t('billing.billPaidInFull') : t('billing.billPartiallyPaid')}
-                                    </p>
-                                    <p className={`text-sm ${willBePaid ? 'text-green-600 dark:text-green-300' : 'text-yellow-600 dark:text-yellow-300'}`}>
-                                      {willBePaid ? t('billing.remainingWillBeZero') : t('billing.remainingWillBe', { amount: formatCurrency(remaining) })}
-                                    </p>
-                                  </div>
-                                </div>
+                              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${willPaid ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
+                                <span>{willPaid ? '✅' : '💰'}</span>
+                                <p className={`text-xs font-bold ${willPaid ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                                  {willPaid ? t('billing.remainingWillBeZero') : t('billing.remainingWillBe', { amount: formatCurrency(Math.max(0, effTotal - newPaid)) })}
+                                </p>
                               </div>
                             );
                           })()}
                         </div>
                       )}
-                    </>
-                  )}
 
-                  {selectedBill?.status === 'paid' && (
-                    <div className="bg-green-50 dark:bg-green-900 p-6 rounded-lg text-center">
-                      <div className="text-6xl mb-4">✅</div>
-                      <h5 className="font-medium text-green-900 dark:text-green-100 mb-2">{t('billing.billFullyPaidMessage')}</h5>
-                      <p className="text-green-700 dark:text-green-300 mb-4">{t('billing.allAmountsPaid')}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── RIGHT: QR Code ── */}
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">{t('billing.qrCodeForCustomer')}</h4>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg text-center">
-                    {selectedBill?.qrCode ? (
-                      <img src={selectedBill.qrCode} alt="QR Code" className="mx-auto mb-4 w-48 h-48 border-4 border-white dark:border-gray-600 shadow-lg" />
-                    ) : (
-                      <div className="mx-auto mb-4 w-48 h-48 border-4 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center">
-                        <QrCode className="h-16 w-16 text-gray-300 dark:text-gray-600" />
+                    </>) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+                        <div className="text-4xl mb-2">✅</div>
+                        <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{t('billing.billFullyPaidMessage')}</p>
                       </div>
                     )}
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">{t('billing.scanQRInstruction')}</p>
-                    <div className="flex justify-center gap-2">
-                      <button onClick={() => selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error)}
-                        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1">
-                        <Printer className="h-4 w-4" />{t('billing.printBill')}
-                      </button>
-                      <button onClick={() => {
-                        const url = selectedBill?.qrCodeUrl || `${window.location.origin}/bill/${selectedBill?.id || selectedBill?._id}`;
-                        navigator.clipboard.writeText(url); showNotification(t('billing.linkCopied'));
-                      }} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors">
-                        {t('billing.copy')}
-                      </button>
-                      <button onClick={() => {
-                        const url = selectedBill?.qrCodeUrl || `${window.location.origin}/bill/${selectedBill?.id || selectedBill?._id}`;
-                        window.open(url, '_blank');
-                      }} className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors">
-                        {t('billing.open')}
-                      </button>
-                    </div>
                   </div>
+                </div>
 
-                  {/* Bill Summary */}
-                  <div className="mt-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3">{t('billing.billSummary')}</h5>
-                    <table className="w-full text-sm">
-                      <tbody>
-                        <tr>
-                          <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
-                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">{t('billing.ordersCount')}</div>
-                            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatDecimal(selectedBill?.orders?.length || 0, i18n.language)}</div>
-                          </td>
-                          <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
-                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">{t('billing.sessionsCount')}</div>
-                            <div className="text-lg font-bold flex items-center justify-center gap-1 text-gray-900 dark:text-gray-100">
-                              {formatDecimal(selectedBill?.sessions?.length || 0, i18n.language)}
-                              {hasActiveSession(selectedBill) && (
-                                <><div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                                <span className="text-xs text-red-600 dark:text-red-400 font-bold">{t('billing.active')}</span></>
-                              )}
+                {/* footer */}
+                <div className="flex-shrink-0 px-3 py-2.5 border-t border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-900 flex items-center justify-between gap-2">
+                  {selectedBill?.status !== 'paid' ? (
+                    <button onClick={() => { if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; } setShowCancelConfirmModal(true); }}
+                      className="px-3 py-1.5 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 rounded-lg text-xs font-medium transition-all border border-red-100 dark:border-red-800/50">
+                      {t('billing.deleteBill')}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      <span className="text-xs font-medium">{t('billing.billFullyPaid')}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={handleClosePaymentModal}
+                      className="px-3 py-1.5 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 rounded-lg text-xs font-medium transition-all">
+                      {t('common.close')}
+                    </button>
+                    {selectedBill?.status !== 'paid' && paymentAmount && (
+                      <button onClick={handlePaymentSubmit} disabled={hasActiveSession(selectedBill) || isProcessingPayment}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${
+                          hasActiveSession(selectedBill) || isProcessingPayment
+                            ? 'bg-gray-300 dark:bg-gray-600 text-gray-400 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-sm'
+                        }`}>
+                        {isProcessingPayment
+                          ? <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>جاري...</>
+                          : <><DollarSign className="h-3.5 w-3.5" />تأكيد الدفع</>
+                        }
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ══ عمود 2: تفاصيل الأصناف ↕ الدفعات السابقة ══ */}
+              <div className="flex flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60 overflow-hidden" style={{ width: '240px', flexShrink: 0 }}>
+
+                {/* ── الأصناف (نصف علوي) ── */}
+                <div className="flex flex-col min-h-0" style={{ flex: 1 }}>
+                  <div className="flex-shrink-0 px-3 py-1.5 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-100 dark:border-gray-700/60">
+                    <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      <Receipt className="h-3 w-3" />{t('billing.itemDetails')}
+                      {(selectedBill?.orders?.length || 0) > 0 && (
+                        <span className="mr-auto bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-[10px] font-bold rounded-full px-1.5 leading-5">
+                          {aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.itemPayments || [], selectedBill?.status, selectedBill?.paid, selectedBill?.total).length}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+                    {(selectedBill?.orders?.length || 0) === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600">
+                        <Receipt className="h-6 w-6 mb-1 opacity-40" /><p className="text-[10px]">لا توجد أصناف</p>
+                      </div>
+                    ) : aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.itemPayments || [], selectedBill?.status, selectedBill?.paid, selectedBill?.total).map((item, i) => (
+                      <div key={i} className="bg-white dark:bg-gray-800 rounded-lg px-2.5 py-2 border border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
+                        <div className="flex items-start justify-between gap-1 mb-1">
+                          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{item.name}</p>
+                          <span className="text-[10px] text-gray-500 flex-shrink-0">{formatCurrency(item.price)}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 text-center">
+                          {[
+                            { label: 'الكمية', value: item.totalQuantity,     cls: 'text-gray-700 dark:text-gray-200' },
+                            { label: 'مدفوع',  value: item.paidQuantity,      cls: 'text-emerald-600 dark:text-emerald-400' },
+                            { label: 'متبقي',  value: item.remainingQuantity, cls: item.remainingQuantity > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600' },
+                          ].map(f => (
+                            <div key={f.label} className="bg-gray-50 dark:bg-gray-700/40 rounded px-1 py-0.5">
+                              <p className="text-[9px] text-gray-400 leading-tight">{f.label}</p>
+                              <p className={`text-xs font-bold leading-tight ${f.cls}`}>{f.value}</p>
                             </div>
-                          </td>
-                          <td className="py-2 px-3 text-center border border-gray-200 dark:border-gray-600">
-                            <div className="text-gray-600 dark:text-gray-300 font-medium mb-1">{t('billing.creationDate')}</div>
-                            <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                              {selectedBill?.createdAt ? formatDate(selectedBill.createdAt) : '-'}
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* فاصل */}
+                <div className="flex-shrink-0 h-px bg-gray-200 dark:bg-gray-700" />
+
+                {/* ── الدفعات السابقة (نصف سفلي) ── */}
+                <div className="flex flex-col min-h-0" style={{ flex: 1 }}>
+                  <div className="flex-shrink-0 px-3 py-1.5 bg-blue-50/60 dark:bg-blue-900/20 border-b border-gray-100 dark:border-gray-700/60">
+                    <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" />{t('billing.previousItemPayments')}
+                      {(() => {
+                        const c = (selectedBill?.itemPayments || []).reduce((s: number, ip: any) => s + (ip.paymentHistory?.length || 0), 0);
+                        return c > 0 ? <span className="mr-auto bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200 text-[10px] font-bold rounded-full px-1.5 leading-5">{c}</span> : null;
+                      })()}
+                    </p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+                    {(() => {
+                      const allPmts: any[] = [];
+                      (selectedBill?.itemPayments || []).forEach((ip: any) => {
+                        ip.paymentHistory?.forEach((p: any, idx: number) => allPmts.push({ ip, p, idx }));
+                      });
+                      if (!allPmts.length) return (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600">
+                          <DollarSign className="h-6 w-6 mb-1 opacity-40" /><p className="text-[10px]">لا توجد دفعات</p>
+                        </div>
+                      );
+                      return allPmts.map(({ ip, p, idx }, i) => (
+                        <div key={i} className="bg-white dark:bg-gray-800 rounded-lg px-2.5 py-2 border border-blue-100 dark:border-blue-800/40 hover:border-blue-300 transition-colors">
+                          <div className="flex items-start justify-between gap-1 mb-0.5">
+                            <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{ip.itemName || t('billing.unknownItem')}</p>
+                            <p className="text-xs font-bold text-blue-700 dark:text-blue-300 flex-shrink-0">{formatCurrency(p.amount)}</p>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-gray-400 truncate flex-1">
+                              {formatDecimal(p.quantity, i18n.language)} × {formatCurrency(ip.pricePerUnit)} · {p.method ? t(`billing.paymentMethod${p.method.charAt(0).toUpperCase() + p.method.slice(1)}`) : t('billing.paymentMethodCash')}
+                            </p>
+                            {canEditPartialPayment(user) && (
+                              <button onClick={() => handleEditItemPayment({ itemPayment: ip, payment: p, paymentIdx: idx }, i)}
+                                className="text-[10px] text-blue-500 hover:text-blue-700 dark:text-blue-400 font-medium px-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-all flex-shrink-0">
+                                {t('common.edit')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* ══ عمود 3: جميع الجلسات (نشطة + منتهية) ══ */}
+              <div className="flex flex-col min-h-0 border-l border-gray-100 dark:border-gray-700/60 overflow-hidden" style={{ width: '220px', flexShrink: 0 }}>
+                <div className="flex-shrink-0 px-3 py-1.5 bg-violet-50/60 dark:bg-violet-900/20 border-b border-gray-100 dark:border-gray-700/60">
+                  <p className="text-[11px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider flex items-center gap-1">
+                    <Gamepad2 className="h-3 w-3" />الجلسات
+                    {(() => {
+                      const all = selectedBill?.sessions?.length || 0;
+                      const active = selectedBill?.sessions?.filter((s: any) => s.status === 'active').length || 0;
+                      return all > 0 ? <span className="mr-auto text-[10px] font-bold rounded-full px-1.5 leading-5 bg-violet-200 dark:bg-violet-800 text-violet-700 dark:text-violet-200">{active}/{all}</span> : null;
+                    })()}
+                  </p>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                  {(() => {
+                    const allSess = selectedBill?.sessions || [];
+                    if (!allSess.length) return (
+                      <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600">
+                        <Gamepad2 className="h-7 w-7 mb-1 opacity-40" />
+                        <p className="text-[10px] text-center">لا توجد جلسات</p>
+                      </div>
+                    );
+                    return allSess.map((session: any, i: number) => {
+                      const isActive = session.status === 'active';
+                      const startMs  = session.startTime ? new Date(session.startTime).getTime() : 0;
+                      const endMs    = isActive ? Date.now() : (session.endTime ? new Date(session.endTime).getTime() : startMs);
+                      const durMs    = Math.max(0, endMs - startMs);
+                      const durH     = Math.floor(durMs / 3600000);
+                      const durM     = Math.floor((durMs % 3600000) / 60000);
+                      const durStr   = durH > 0 ? `${durH}س ${durM}د` : `${durM}د`;
+                      const startStr = session.startTime ? new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—';
+                      const sp = (selectedBill as any)?.sessionPayments?.find((p: any) => p.sessionId === (session._id || session.id));
+                      const cost      = getSessionCost(session);
+                      const spPaid    = Number(sp?.paidAmount) || 0;
+                      const spRemain  = Math.max(0, sp ? Number(sp.remainingAmount) ?? (cost - spPaid) : cost - spPaid);
+                      const icon      = session.deviceType === 'playstation' ? '🎮' : '💻';
+                      return (
+                        <div key={i} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden ${isActive ? 'border-emerald-200 dark:border-emerald-800/60' : 'border-gray-200 dark:border-gray-700 opacity-75'}`}>
+                          {isActive ? (
+                            <div className="h-0.5 bg-gradient-to-l from-emerald-400 to-green-500 animate-pulse" />
+                          ) : (
+                            <div className="h-0.5 bg-gray-200 dark:bg-gray-700" />
+                          )}
+                          <div className="px-2.5 py-2">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <span className="text-base">{icon}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-gray-800 dark:text-gray-100 leading-tight truncate">{session.deviceName || `جهاز ${session.deviceNumber}`}</p>
+                                <p className={`text-[10px] ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                  {isActive ? '● نشطة' : '✓ منتهية'} · {durStr} · {startStr}
+                                </p>
+                              </div>
                             </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <h6 className="font-medium text-gray-900 dark:text-gray-100 mb-2">{t('billing.customerLink')}</h6>
-                      <div className="flex items-center gap-2">
-                        <input type="text" value={selectedBill?.qrCodeUrl || `${window.location.origin}/bill/${selectedBill?.id || selectedBill?._id}`} readOnly
-                          className="flex-1 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-gray-900 dark:text-gray-100" />
+                            {session.controllers && (
+                              <p className="text-[10px] text-gray-500 mb-1.5">🕹 {session.controllers} دراعة</p>
+                            )}
+                            <div className="grid grid-cols-3 gap-1 text-center mb-2">
+                              {[
+                                { label: 'الاجمالي', value: formatCurrency(cost),     cls: 'text-gray-700 dark:text-gray-200' },
+                                { label: 'مدفوع',   value: formatCurrency(spPaid),   cls: 'text-emerald-600 dark:text-emerald-400' },
+                                { label: 'متبقي',   value: formatCurrency(spRemain), cls: spRemain > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600' },
+                              ].map(f => (
+                                <div key={f.label} className="bg-gray-50 dark:bg-gray-700/40 rounded px-1 py-0.5">
+                                  <p className="text-[9px] text-gray-400 leading-tight">{f.label}</p>
+                                  <p className={`text-[10px] font-bold leading-tight ${f.cls}`}>{f.value}</p>
+                                </div>
+                              ))}
+                            </div>
+                            {isActive ? (
+                              <button onClick={() => handleEndSession(session._id || session.id)}
+                                className="w-full py-1 bg-red-500 hover:bg-red-600 active:scale-95 text-white text-[11px] font-bold rounded-lg transition-all">
+                                ⏹ إنهاء الجلسة
+                              </button>
+                            ) : (
+                              <div className="w-full py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[11px] font-bold rounded-lg text-center">
+                                ✓ منتهية
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* ══ عمود 4: QR + ملخص ══ */}
+              <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-800/40 overflow-y-auto min-w-0">
+                <div className="p-3 space-y-3">
+                  {/* QR */}
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('billing.qrCodeForCustomer')}</p>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-200 dark:border-gray-700 text-center">
+                      {selectedBill?.qrCode ? (
+                        <img src={selectedBill.qrCode} alt="QR" className="mx-auto w-28 h-28 object-contain" />
+                      ) : (
+                        <div className="w-28 h-28 mx-auto border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-xl flex items-center justify-center">
+                          <QrCode className="h-9 w-9 text-gray-300 dark:text-gray-600" />
+                        </div>
+                      )}
+                      <div className="flex gap-1.5 mt-2.5">
+                        <button onClick={() => selectedBill && printBill(selectedBill, user?.organizationName, i18n.language, t).catch(console.error)}
+                          className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[11px] font-medium rounded-lg flex items-center justify-center gap-1 transition-all">
+                          <Printer className="h-3 w-3" />طباعة
+                        </button>
                         <button onClick={() => { const url = selectedBill?.qrCodeUrl || `${window.location.origin}/bill/${selectedBill?.id || selectedBill?._id}`; navigator.clipboard.writeText(url); showNotification(t('billing.linkCopied')); }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors">{t('billing.copy')}</button>
+                          className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[11px] font-medium rounded-lg transition-all">نسخ</button>
                       </div>
                     </div>
                   </div>
+                  {/* ملخص */}
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('billing.billSummary')}</p>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+                      {[
+                        { label: t('billing.customer'),      value: getCustomerDisplay(selectedBill) },
+                        { label: t('billing.ordersCount'),   value: `${selectedBill?.orders?.length || 0}` },
+                        { label: t('billing.sessionsCount'), value: `${selectedBill?.sessions?.length || 0}${hasActiveSession(selectedBill) ? ' ● نشطة' : ''}` },
+                        { label: t('billing.creationDate'),  value: selectedBill?.createdAt ? formatDate(selectedBill.createdAt) : '-' },
+                      ].map(row => (
+                        <div key={row.label} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                          <span className="text-gray-500 dark:text-gray-400">{row.label}</span>
+                          <span className="font-semibold text-gray-800 dark:text-gray-100 text-right max-w-[100px] truncate">{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* رابط */}
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t('billing.customerLink')}</p>
+                    <div className="flex gap-1.5">
+                      <input type="text" readOnly value={selectedBill?.qrCodeUrl || `${window.location.origin}/bill/${selectedBill?.id || selectedBill?._id}`}
+                        className="flex-1 text-[10px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-gray-700 dark:text-gray-300 min-w-0" />
+                      <button onClick={() => { const url = selectedBill?.qrCodeUrl || `${window.location.origin}/bill/${selectedBill?.id || selectedBill?._id}`; navigator.clipboard.writeText(url); showNotification(t('billing.linkCopied')); }}
+                        className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] rounded-lg transition-all font-medium">{t('billing.copy')}</button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Footer */}
-            <div className="p-3 sm:p-6 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between gap-3">
-              {selectedBill?.status !== 'paid' && (
-                <button onClick={() => { if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; } setShowCancelConfirmModal(true); }}
-                  className="px-4 py-2 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 rounded-lg transition-colors duration-200">
-                  {t('billing.deleteBill')}
-                </button>
-              )}
-              {selectedBill?.status === 'paid' && (
-                <div className="flex items-center text-green-700 dark:text-green-300">
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  <span className="text-sm font-medium">{t('billing.billFullyPaid')}</span>
-                </div>
-              )}
-              <div className="flex gap-3">
-                <button onClick={handleClosePaymentModal} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200">{t('common.close')}</button>
-                {selectedBill?.status !== 'paid' && paymentAmount && (
-                  <button onClick={handlePaymentSubmit} disabled={hasActiveSession(selectedBill) || isProcessingPayment}
-                    className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 min-w-[180px] ${hasActiveSession(selectedBill) || isProcessingPayment ? 'bg-gray-400 text-gray-200 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}>
-                    {isProcessingPayment ? (
-                      <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>{t('billing.processingPayment')}</>
-                    ) : t('billing.payFullBillButton')}
-                  </button>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -2813,7 +3173,7 @@ const Tables: React.FC = () => {
                 const sid = session._id || session.id;
                 const sp = selectedBill.sessionPayments?.find(p => p.sessionId === sid);
                 const isActive = session.status === 'active';
-                const totalCost = sp?.sessionCost || session.finalCost || session.totalCost || 0;
+                const totalCost = sp?.sessionCost || getSessionCost(session);
                 const paidAmt = sp?.paidAmount || 0;
                 const remainingAmt = isActive ? totalCost - paidAmt : (sp?.remainingAmount !== undefined ? sp.remainingAmount : totalCost - paidAmt);
                 const isFullyPaid = !isActive && remainingAmt <= 0;
@@ -3190,7 +3550,6 @@ const Tables: React.FC = () => {
   );
 };
 
-export default Tables;
 
 const QuickAddModal: React.FC<{
   table: Table;
@@ -4021,3 +4380,5 @@ const TableModalComp: React.FC<{
     </ModalPortal>
   );
 };
+
+export default Tables;

@@ -6,7 +6,6 @@ import {
   Gamepad2,
   Monitor,
   ShoppingCart,
-  Receipt,
   BarChart3,
   Package,
   Wallet,
@@ -152,9 +151,7 @@ const Layout = () => {
 
   const navigation = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: Home, permissions: ['dashboard'] },
-    { name: t('nav.orders'), href: '/cafe', icon: ShoppingCart, permissions: ['cafe'], badgePreparing: preparingOrders, badgeReady: readyOrders },
-    { name: t('nav.tables', 'الطاولات'), href: '/tables', icon: TableIcon, permissions: ['cafe', 'billing'], badgePreparing: preparingOrders, badgeReady: readyOrders },
-    { name: t('nav.billing'), href: '/billing', icon: Receipt, permissions: ['billing'] },
+    { name: t('nav.tables', 'الطاولات'), href: '/tables', icon: TableIcon, permissions: ['tables', 'cafe', 'billing'], badgePreparing: preparingOrders, badgeReady: readyOrders },
     {
       name: t('nav.devices'),
       icon: Server,
@@ -174,7 +171,7 @@ const Layout = () => {
     { name: t('nav.costs'), href: '/costs', icon: Wallet, permissions: ['costs'] },
     { name: t('nav.payroll'), href: '/payroll', icon: DollarSign, permissions: ['users'] },
     { name: t('nav.users'), href: '/users', icon: Users, permissions: ['users'] },
-    { name: t('nav.notifications'), href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings'], badge: unreadNotifications },
+    { name: t('nav.notifications'), href: '/notifications', icon: Bell, permissions: ['dashboard', 'playstation', 'computer', 'tables', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings'], badge: unreadNotifications },
     { name: t('nav.subscriptions'), href: '/subscription', icon: CreditCard, permissions: ['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings'] },
     { name: t('nav.settings'), href: '/settings', icon: Settings, permissions: ['settings'] },
   ];

@@ -31,22 +31,22 @@ router.use(protect);
 
 router
     .route("/")
-    .get(authorize("billing", "staff", "all"), getBills)
-    .post(authorize("billing", "staff", "all"), createBill);
+    .get(authorize("billing", "tables", "staff", "all"), getBills)
+    .post(authorize("billing", "tables", "staff", "all"), createBill);
 
 router
     .route("/:id")
-    .get(authorize("billing", "staff", "all"), getBill)
-    .put(authorize("billing", "staff", "all"), updateBill)
-    .delete(authorize("billing", "staff", "all"), deleteBill);
+    .get(authorize("billing", "tables", "staff", "all"), getBill)
+    .put(authorize("billing", "tables", "staff", "all"), updateBill)
+    .delete(authorize("billing", "tables", "staff", "all"), deleteBill);
 
-router.post("/:id/payment", authorize("billing", "staff", "all"), addPayment);
-router.put("/:id/payment", authorize("billing", "staff", "all"), addPayment);
-router.post("/:id/pay-items", authorize("billing", "staff", "all"), payForItems);
-router.post("/:id/pay-session-partial", authorize("billing", "staff", "all"), paySessionPartial);
-router.post("/:id/redistribute-payments", authorize("billing", "staff", "all"), redistributePayments);
-router.post("/:id/orders", authorize("billing", "staff", "all"), addOrderToBill);
-router.post("/:id/sessions", authorize("billing", "staff", "all"), addSessionToBill);
-router.put("/:id/cancel", authorize("billing", "staff", "all"), cancelBill);
+router.post("/:id/payment", authorize("billing", "tables", "staff", "all"), addPayment);
+router.put("/:id/payment", authorize("billing", "tables", "staff", "all"), addPayment);
+router.post("/:id/pay-items", authorize("billing", "tables", "staff", "all"), payForItems);
+router.post("/:id/pay-session-partial", authorize("billing", "tables", "staff", "all"), paySessionPartial);
+router.post("/:id/redistribute-payments", authorize("billing", "tables", "staff", "all"), redistributePayments);
+router.post("/:id/orders", authorize("billing", "tables", "staff", "all"), addOrderToBill);
+router.post("/:id/sessions", authorize("billing", "tables", "staff", "all"), addSessionToBill);
+router.put("/:id/cancel", authorize("billing", "tables", "staff", "all"), cancelBill);
 
 export default router;

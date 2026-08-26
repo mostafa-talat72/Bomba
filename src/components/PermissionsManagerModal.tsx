@@ -91,8 +91,15 @@ const PermissionsManagerModal: React.FC<PermissionsManagerModalProps> = ({
       [t('users.permissionsModal.systemManagement')]: ['all', 'users', 'settings'],
       [t('users.permissionsModal.reportsAndStats')]: ['dashboard', 'reports', 'consumption'],
       [t('users.permissionsModal.gaming')]: ['playstation', 'computer'],
-      [t('users.permissionsModal.restaurantAndCafe')]: ['cafe', 'menu', 'inventory', 'warehouse', 'canAddWarehouseItem', 'canEditWarehouseItem', 'canDeleteWarehouseItem', 'canViewWarehouseMovements', 'canAdjustWarehouseStock', 'canEditWarehouseMovement', 'canDeleteWarehouseMovement', 'canTransferToInventory', 'canReturnToWarehouse'],
-      [t('users.permissionsModal.financial')]: ['billing', 'costs'],
+      [t('users.permissionsModal.restaurantAndCafe')]: ['tables', 'cafe', 'kitchenDisplay', 'menu',
+          // صلاحيات المخزون التفصيلية (كانت مخفية سابقاً)
+          'inventory', 'canViewInventory', 'canAddInventoryItem', 'canEditInventoryItem',
+          'canDeleteInventoryItem', 'canAddStock', 'canRemoveStock', 'canAdjustStock',
+          'canViewStockMovements', 'canEditStockMovement', 'canDeleteStockMovement',
+          'warehouse', 'canAddWarehouseItem', 'canEditWarehouseItem', 'canDeleteWarehouseItem',
+          'canViewWarehouseMovements', 'canAdjustWarehouseStock', 'canEditWarehouseMovement',
+          'canDeleteWarehouseMovement', 'canTransferToInventory', 'canReturnToWarehouse'],
+      [t('users.permissionsModal.financial')]: ['billing', 'view_all_bills', 'costs'],
     };
 
     return categories;

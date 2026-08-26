@@ -156,14 +156,18 @@ export const getBills = async (req, res) => {
             ...query,
         })
             // جلب الحقول الضرورية بما في ذلك sessions و billType
-            .select('billNumber customerName customerPhone table status total paid remaining createdAt discount tax billType sessions orders')
+            .select('billNumber customerName customerPhone table status total paid remaining createdAt discount tax billType sessions orders itemPayments partialPayments sessionPayments paymentHistory')
             .populate({
                 path: "table",
                 select: "number name",
             })
             .populate({
                 path: "sessions",
-                select: "deviceName deviceNumber deviceType status startTime endTime",
+                select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
+                populate: {
+                    path: "deviceId",
+                    select: "type hourlyRate playstationRates",
+                },
             })
             .sort({ createdAt: -1 })
             .lean(); // تحسين الأداء بنسبة 40-50%

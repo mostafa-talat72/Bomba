@@ -20,9 +20,7 @@ import HomeRedirect from './components/HomeRedirect';
 import Dashboard from './pages/Dashboard';
 import PlayStation from './pages/PlayStation';
 import Computer from './pages/Computer';
-import Cafe from './pages/Cafe';
 import Menu from './pages/Menu';
-import Billing from './pages/Billing';
 import Tables from './pages/Tables';
 import BillView from './pages/BillView';
 import Reports from './pages/Reports';
@@ -68,10 +66,10 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
         { path: '/dashboard', permission: 'dashboard' },
         { path: '/playstation', permission: 'playstation' },
         { path: '/computer', permission: 'computer' },
-        { path: '/cafe', permission: 'cafe' },
+        { path: '/tables', permission: 'tables' },
         { path: '/tables', permission: 'cafe' },
+        { path: '/tables', permission: 'billing' },
         { path: '/menu', permission: 'menu' },
-        { path: '/billing', permission: 'billing' },
         { path: '/reports', permission: 'reports' },
         { path: '/inventory', permission: 'inventory' },
         { path: '/warehouse', permission: 'warehouse' },
@@ -189,24 +187,14 @@ const RouteHandler = () => {
               <Computer />
             </ProtectedRoute>
           } />
-          <Route path="cafe" element={
-            <ProtectedRoute requiredPermissions={['cafe']}>
-              <Cafe />
-            </ProtectedRoute>
-          } />
           <Route path="tables" element={
-            <ProtectedRoute requiredPermissions={['cafe', 'billing']}>
+            <ProtectedRoute requiredPermissions={['tables', 'cafe', 'billing']}>
               <Tables />
             </ProtectedRoute>
           } />
           <Route path="menu" element={
             <ProtectedRoute requiredPermissions={['menu']}>
               <Menu />
-            </ProtectedRoute>
-          } />
-          <Route path="billing" element={
-            <ProtectedRoute requiredPermissions={['billing']}>
-              <Billing />
             </ProtectedRoute>
           } />
           <Route path="reports" element={
@@ -260,7 +248,7 @@ const RouteHandler = () => {
             </ProtectedRoute>
           } />
           <Route path="notifications" element={
-            <ProtectedRoute requiredPermissions={['dashboard', 'playstation', 'computer', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings']}>
+            <ProtectedRoute requiredPermissions={['dashboard', 'playstation', 'computer', 'tables', 'cafe', 'menu', 'billing', 'reports', 'inventory', 'warehouse', 'costs', 'users', 'settings']}>
               <NotificationManagement />
             </ProtectedRoute>
           } />

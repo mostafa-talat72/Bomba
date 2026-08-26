@@ -1270,17 +1270,26 @@ const sessionController = {
             session.finalCost = currentCost - (session.discount || 0);
 
             // تحديث الفاتورة المرتبطة إذا وجدت
+            // calculateSubtotal يحفظ داخلياً — لا نستدعي save مرة ثانية
+            // مع retry عند VersionError (طلبات متزامنة لجلسات متعددة على نفس الفاتورة)
             let billUpdated = false;
             if (session.bill) {
-                try {
-                    const bill = await Bill.findById(session.bill);
-                    if (bill) {
-                        await bill.calculateSubtotal();
-                        await bill.save();
-                        billUpdated = true;
+                const billId = session.bill._id || session.bill;
+                for (let attempt = 0; attempt < 3 && !billUpdated; attempt++) {
+                    try {
+                        const bill = await Bill.findById(billId);
+                        if (bill) {
+                            await bill.calculateSubtotal();
+                            billUpdated = true;
+                        }
+                    } catch (billError) {
+                        if (attempt < 2 && (billError?.name === 'VersionError' || String(billError?.message || '').includes('No matching document'))) {
+                            await new Promise(r => setTimeout(r, 150 * (attempt + 1)));
+                        } else {
+                            Logger.error("❌ Error updating bill:", billError);
+                            break;
+                        }
                     }
-                } catch (billError) {
-                    Logger.error("❌ Error updating bill:", billError);
                 }
             }
 
