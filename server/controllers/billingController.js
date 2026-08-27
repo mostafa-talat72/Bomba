@@ -174,8 +174,80 @@ export const getBills = async (req, res) => {
                     select: "type hourlyRate playstationRates",
                 },
             })
+            .populate({
+                path: "orders",
+                select: "totalAmount finalAmount status",
+            })
             .sort({ createdAt: -1 })
             .lean(); // تحسين الأداء بنسبة 40-50%
+
+        // ── حساب حي للفواتير التي بها جلسات نشطة (بدون حفظ في DB) ──
+        const now = new Date();
+        for (const bill of bills) {
+            const hasActive = bill.sessions && bill.sessions.some((s) => s.status === 'active');
+            if (!hasActive) continue;
+            let liveSessionsTotal = 0;
+            for (const s of bill.sessions) {
+                if (s.status !== 'active') {
+                    liveSessionsTotal += Number(s.finalCost) || Number(s.totalCost) || 0;
+                } else {
+                    const device = s.deviceId;
+                    const getRate = (controllers) => {
+                        if (device && device.type === 'playstation' && device.playstationRates) {
+                            return device.playstationRates[String(controllers)] || 0;
+                        } else if (device && device.type === 'computer') {
+                            return device.hourlyRate || 0;
+                        }
+                        return 0;
+                    };
+                    let total = 0;
+                    if (!s.controllersHistory || s.controllersHistory.length === 0) {
+                        const startMs = s.startTime ? new Date(s.startTime).getTime() : 0;
+                        if (startMs) {
+                            const durMin = Math.max(0, (now.getTime() - startMs) / 60000);
+                            const rate = getRate(s.controllers || 1);
+                            total = (durMin * rate) / 60;
+                        }
+                    } else {
+                        for (const period of s.controllersHistory) {
+                            const pEnd = period.to ? new Date(period.to).getTime() : now.getTime();
+                            const pStart = period.from ? new Date(period.from).getTime() : 0;
+                            if (pStart && pEnd > pStart) {
+                                const durMin = (pEnd - pStart) / 60000;
+                                const rate = getRate(period.controllers || 1);
+                                total += (durMin * rate) / 60;
+                            }
+                        }
+                    }
+                    liveSessionsTotal += Math.round(total);
+                }
+            }
+            const ordersTotal = Array.isArray(bill.orders)
+                ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
+                : 0;
+            // إذا كانت orders غير مأهولة (ids فقط) نعتمد على subtotal القديم ناقص الجلسات الثابتة
+            let liveSubtotal;
+            if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0 && typeof bill.orders[0] === 'object' && 'totalAmount' in bill.orders[0])) {
+                liveSubtotal = ordersTotal + liveSessionsTotal;
+            } else {
+                const staleSessions = bill.sessions.reduce((sum, s) => sum + (Number(s.totalCost) || Number(s.finalCost) || 0), 0);
+                const staleSubtotal = Number(bill.subtotal) || 0;
+                const ordersPart = Math.max(0, staleSubtotal - staleSessions);
+                liveSubtotal = ordersPart + liveSessionsTotal;
+            }
+            let discountAmt = 0;
+            if (bill.discountPercentage && bill.discountPercentage > 0) {
+                discountAmt = Math.round((liveSubtotal * bill.discountPercentage) / 100);
+            } else {
+                discountAmt = Number(bill.discount) || 0;
+            }
+            const liveTotal = Math.max(0, liveSubtotal + (Number(bill.tax) || 0) - discountAmt);
+            const liveRemaining = Math.max(0, liveTotal - (Number(bill.paid) || 0));
+            bill.subtotal = liveSubtotal;
+            bill.total = liveTotal;
+            bill.remaining = liveRemaining;
+            if (bill.discountPercentage) bill.discount = discountAmt;
+        }
 
         // Update bills that have orders but zero total
         // Note: Since we're using .lean(), we need to update the database directly
@@ -380,6 +452,75 @@ export const getBill = async (req, res) => {
         } catch (upgradeError) {
             // Don't fail the request if upgrade fails, just log it
             Logger.warn(`⚠️ [Auto-Upgrade] Failed to upgrade bill ${bill.billNumber}:`, upgradeError);
+        }
+
+        // ── حساب حي للفاتورة التي بها جلسات نشطة (بدون حفظ) ──
+        try {
+            const hasActive = bill.sessions && bill.sessions.some((s) => s.status === 'active');
+            if (hasActive) {
+                const now = new Date();
+                let liveSessionsTotal = 0;
+                for (const s of bill.sessions) {
+                    if (s.status !== 'active') {
+                        liveSessionsTotal += Number(s.finalCost) || Number(s.totalCost) || 0;
+                    } else {
+                        const device = s.deviceId;
+                        const getRate = (controllers) => {
+                            if (device && device.type === 'playstation' && device.playstationRates) {
+                                return device.playstationRates[String(controllers)] || 0;
+                            } else if (device && device.type === 'computer') {
+                                return device.hourlyRate || 0;
+                            }
+                            return 0;
+                        };
+                        let total = 0;
+                        if (!s.controllersHistory || s.controllersHistory.length === 0) {
+                            const startMs = s.startTime ? new Date(s.startTime).getTime() : 0;
+                            if (startMs) {
+                                const durMin = Math.max(0, (now.getTime() - startMs) / 60000);
+                                const rate = getRate(s.controllers || 1);
+                                total = (durMin * rate) / 60;
+                            }
+                        } else {
+                            for (const period of s.controllersHistory) {
+                                const pEnd = period.to ? new Date(period.to).getTime() : now.getTime();
+                                const pStart = period.from ? new Date(period.from).getTime() : 0;
+                                if (pStart && pEnd > pStart) {
+                                    const durMin = (pEnd - pStart) / 60000;
+                                    const rate = getRate(period.controllers || 1);
+                                    total += (durMin * rate) / 60;
+                                }
+                            }
+                        }
+                        liveSessionsTotal += Math.round(total);
+                    }
+                }
+                const ordersTotal = Array.isArray(bill.orders)
+                    ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
+                    : 0;
+                let liveSubtotal;
+                if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0)) {
+                    liveSubtotal = ordersTotal + liveSessionsTotal;
+                } else {
+                    const staleSess = bill.sessions.reduce((sum, s) => sum + (Number(s.totalCost) || Number(s.finalCost) || 0), 0);
+                    const ordersPart = Math.max(0, (Number(bill.subtotal) || 0) - staleSess);
+                    liveSubtotal = ordersPart + liveSessionsTotal;
+                }
+                let discountAmt = 0;
+                if (bill.discountPercentage && bill.discountPercentage > 0) {
+                    discountAmt = Math.round((liveSubtotal * bill.discountPercentage) / 100);
+                } else {
+                    discountAmt = Number(bill.discount) || 0;
+                }
+                const liveTotal = Math.max(0, liveSubtotal + (Number(bill.tax) || 0) - discountAmt);
+                const liveRemaining = Math.max(0, liveTotal - (Number(bill.paid) || 0));
+                bill.subtotal = liveSubtotal;
+                bill.total = liveTotal;
+                bill.remaining = liveRemaining;
+                if (bill.discountPercentage) bill.discount = discountAmt;
+            }
+        } catch (e) {
+            Logger.warn('live calc failed for getBill', e);
         }
 
         // Generate QR code if it doesn't exist or regenerate with current domain

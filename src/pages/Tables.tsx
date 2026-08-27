@@ -43,6 +43,9 @@ import { playWarnBeep, playDangerBeep, isSoundEnabled, setSoundEnabled } from '.
 
 // ─── Memoized sub-components مستخرجة إلى src/components/tables/ ─────────────
 
+const EMPTY_BILLS: Bill[] = [];
+const EMPTY_ORDERS_COUNT = 0;
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 const Tables: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -59,9 +62,9 @@ const Tables: React.FC = () => {
     getTableStatus: getTableStatusFromContext,
     createTableSection, updateTableSection, deleteTableSection,
     createTable, updateTable, deleteTable,
-    bills, fetchBills, orders, fetchOrders, user,
+    bills, fetchBills, setBills, orders, fetchOrders, setOrders, user,
     cancelBill, addPartialPayment,
-  } = useApp();
+  } = useApp() as any;
 
   const socketRef = useRef<Socket | null>(null);
   const selectedBillRef = useRef<Bill | null>(null);
@@ -381,26 +384,6 @@ const Tables: React.FC = () => {
   const hasAnyActiveSession = useMemo(() =>
     bills.some(b => hasActiveSession(b)), [bills]);
 
-  // ── tick لحظي كل 10 ثوانٍ — يعمل فقط لو فيه جلسات نشطة ──────────────────
-  // فارغة أو مشغولة بدون جلسة → لا interval ولا حساب
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!hasAnyActiveSession) return;
-    const id = setInterval(() => setTick(t => t + 1), 10000);
-    return () => clearInterval(id);
-  }, [hasAnyActiveSession]);
-
-  // ── selectedBill الحي — يضيف delta الجلسات النشطة كل 10 ثوانٍ ──────────
-  const liveSelectedBill = useMemo(() => {
-    if (!selectedBill) return null;
-    const active = (selectedBill.sessions || []).filter((s: any) => s.status === 'active');
-    if (!active.length) return selectedBill;
-    void tick;
-    const delta = active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
-    if (delta === 0) return selectedBill;
-    return { ...selectedBill, total: (selectedBill.total || 0) + delta, remaining: (selectedBill.remaining || 0) + delta, subtotal: (selectedBill.subtotal || 0) + delta } as Bill;
-  }, [selectedBill, tick, getSessionCost]);
-
   const fetchersRef = useRef({ fetchBills, fetchOrders });
   useEffect(() => { fetchersRef.current = { fetchBills, fetchOrders }; });
 
@@ -415,6 +398,21 @@ const Tables: React.FC = () => {
       Promise.all(jobs).then(() => fetchAllTableStatuses()).catch(() => {});
     }, 800);
   }, []);
+
+  // ── tick لحظي كل 10 ثوانٍ — يعمل فقط لو فيه جلسات نشطة ──────────────────
+  // السيرفر يحسب الفاتورة حية، نحدّث tick للجلسات + نطلب fetch كل 10 ثوانٍ
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!hasAnyActiveSession) return;
+    const id = setInterval(() => {
+      setTick(t => t + 1);
+      scheduleBackgroundRefetch();
+    }, 10000);
+    return () => clearInterval(id);
+  }, [hasAnyActiveSession, scheduleBackgroundRefetch]);
+
+  // السيرفر يحسب الفاتورة حية — لا نضيف delta هنا
+  const liveSelectedBill = selectedBill;
 
   // ── بحث وفلتر كروت الطاولات ─────────────────────────────────────────────
   const [tableSearch, setTableSearch] = useState('');
@@ -808,8 +806,8 @@ const Tables: React.FC = () => {
     const cache = tableCardDataCache.current;
     activeTables.forEach((table: Table) => {
       const tid = (table._id || (table as any).id).toString();
-      const tBills = tidToBills.get(tid) || [];
-      const tOrdersCount = tidToOrderCount.get(tid) || 0;
+      const tBills = tidToBills.get(tid) ?? EMPTY_BILLS;
+      const tOrdersCount = tidToOrderCount.get(tid) ?? EMPTY_ORDERS_COUNT;
 
       // active sessions
       const activeSessions = tBills.flatMap(b =>
@@ -820,15 +818,8 @@ const Tables: React.FC = () => {
       const activeSessionType: 'playstation' | 'computer' | 'both' | null =
         hasPS && hasPC ? 'both' : hasPS ? 'playstation' : hasPC ? 'computer' : null;
 
-      // تكلفة الجلسات الحية — delta فقط لتجنب العد المزدوج
-      // bill.remaining يحتوي بالفعل على تكلفة الجلسة حتى آخر fetch، فنضيف الفرق فقط
-      const liveExtra = activeSessions.length > 0
-        ? activeSessions.reduce((sum: number, s: any) => {
-            const live = getSessionCost(s);
-            const stale = Number(s.totalCost) || Number(s.finalCost) || 0;
-            return sum + Math.max(0, live - stale);
-          }, 0)
-        : 0;
+      // السيرفر الآن يحسب الفاتورة حية، لا حاجة لـ delta على الكارت — نعتمد على bill.remaining الحي من السيرفر
+      const liveExtra = 0;
 
       // إعادة استخدام المرجع القديم لو البيانات لم تتغير (يمنع re-render غير ضروري)
       // للطاولات الفارغة أو المشغولة بدون جلسة: liveExtra دائماً 0 → لا تتأثر بـ tick
@@ -1087,7 +1078,7 @@ const Tables: React.FC = () => {
         setQuickAddTable(null);
         showNotification(t('cafe.orderAddedSuccess'), 'success');
         fetchAvailableMenuItems();
-        setTimeout(() => { fetchOrders(); fetchBills(); }, 100);
+        scheduleBackgroundRefetch(true);
       }
     } catch (err: any) {
       showNotification(err?.message || t('cafe.errorAddingOrder'), 'error');
@@ -1281,7 +1272,7 @@ const Tables: React.FC = () => {
         items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, quantity: i.quantity, notes: i.notes || null })),
         notes: orderNotes || null, status,
       });
-      if (order) {
+        if (order) {
         setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes('');
         showNotification(t('cafe.orderAddedSuccess'), 'success');
         fetchAvailableMenuItems();
@@ -1292,9 +1283,10 @@ const Tables: React.FC = () => {
             await printOrder({ ...order, items: order.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t);
           }, 0);
         }
-        // tableStatuses يتحدث تلقائياً من useMemo عند fetchBills
+        // تحديث متفائل — createOrder في DataContext حدث orders+bills، نحدث tableOrders فقط
         setTableOrders(p => [...p, order]);
-        setTimeout(() => { fetchOrders(); fetchBills(); }, 100);
+        // لا حاجة لـ fetchBills/fetchOrders المكرر — scheduleBackgroundRefetch للتأكيد فقط
+        scheduleBackgroundRefetch(true);
       }
     } catch (error: any) {
       showNotification(error?.message || t('cafe.errorAddingOrder'), 'error');
@@ -1324,7 +1316,7 @@ const Tables: React.FC = () => {
           }, 0);
         }
         if (selectedTable) setTableOrders(p => p.map(o => o.id === updated.id ? updated : o));
-        setTimeout(() => { fetchOrders(); fetchBills(); }, 100);
+        scheduleBackgroundRefetch(true);
       }
     } catch (error: any) {
       showNotification(error?.message || t('cafe.errorUpdatingOrder'), 'error');
@@ -1360,7 +1352,8 @@ const Tables: React.FC = () => {
           if (result === true) {
             showNotification(t('cafe.orderDeletedSuccess'), 'success');
             fetchAvailableMenuItems();
-            setTimeout(() => { fetchOrders(); fetchBills(); fetchAllTableStatuses(); }, 100);
+            setTableOrders(prev => prev.filter(o => (o as any).id !== order.id && (o as any)._id !== order.id));
+            scheduleBackgroundRefetch(true);
           } else {
             showNotification(t('cafe.orderDeletedError'), 'error');
           }
@@ -1418,7 +1411,7 @@ const Tables: React.FC = () => {
   const paySinglePart = async (
     bill: Bill, payVal: number, method: string,
     effTotal: number, discountAmount: number, discountPct: string
-  ): Promise<boolean> => {
+  ): Promise<any> => {
     const newPaidAmount = (bill.paid || 0) + payVal;
     const newRemaining = Math.max(0, effTotal - newPaidAmount);
     let newStatus = bill.status || 'draft';
@@ -1435,13 +1428,20 @@ const Tables: React.FC = () => {
       paymentData.discountPercentage = parseFloat(discountPct);
       paymentData.discount = discountAmount;
     }
+    // تحديث متفائل فوري قبل انتظار السيرفر
+    const optimisticBill: any = { ...bill, paid: newPaidAmount, remaining: newRemaining, status: newStatus };
+    setBills(prev => prev.map(b => String(b._id || b.id) === String(bill._id || bill.id) ? optimisticBill : b));
+    if (selectedBill && String(selectedBill._id || selectedBill.id) === String(bill._id || bill.id)) setSelectedBill(optimisticBill as Bill);
     const result = await api.updatePayment(bill.id || bill._id, paymentData);
     if (!result?.data) throw new Error('payment failed');
+    // تأكيد بالبيانات الراجعة من السيرفر
+    setBills(prev => prev.map(b => String(b._id || b.id) === String(bill._id || bill.id) ? result.data : b));
+    if (selectedBill && String(selectedBill._id || selectedBill.id) === String(bill._id || bill.id)) setSelectedBill(result.data as Bill);
     if (newStatus === 'paid') {
       setShowPaymentSuccessAnim(true);
       setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
     }
-    return true;
+    return result.data;
   };
 
   const processPayment = async () => {
@@ -1467,8 +1467,8 @@ const Tables: React.FC = () => {
         if (isNaN(a1) || isNaN(a2) || a1 <= 0 || a2 <= 0) {
           showNotification(t('billing.notifications.invalidAmount'), 'error'); setIsProcessingPayment(false); return;
         }
-        await paySinglePart(selectedBill, a1, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
-        await paySinglePart(selectedBill, a2, method2, effectiveTotal, discountAmount, discountPercentage);
+        const updatedAfterFirst = await paySinglePart(selectedBill, a1, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
+        await paySinglePart(updatedAfterFirst || { ...selectedBill, paid: (selectedBill.paid || 0) + a1 }, a2, method2, effectiveTotal, discountAmount, discountPercentage);
         handleClosePaymentModal();
         showNotification(t('billing.notifications.paymentSuccess'), 'success');
         scheduleBackgroundRefetch(true);
@@ -1485,8 +1485,7 @@ const Tables: React.FC = () => {
       await paySinglePart(selectedBill, payVal, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
       handleClosePaymentModal();
       showNotification(t('billing.notifications.paymentSuccess'), 'success');
-      // تحديث فوري للفواتير والطلبات والكروت في الخلفية
-      Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
+      scheduleBackgroundRefetch(true);
     } catch { showNotification(t('billing.notifications.paymentError'), 'error'); }
     finally { setIsProcessingPayment(false); splitPartsRef.current = null; }
   };
@@ -1522,17 +1521,20 @@ const Tables: React.FC = () => {
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null); return;
       }
       const remaining = billToPayFull.remaining || 0;
+      // تحديث متفائل
+      const optimisticFull: any = { ...billToPayFull, paid: (billToPayFull.paid || 0) + remaining, remaining: 0, status: 'paid' };
+      setBills(prev => prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? optimisticFull : b));
       const result = await api.updatePayment(billToPayFull.id || billToPayFull._id, {
         paid: (billToPayFull.paid || 0) + remaining, remaining: 0, status: 'paid',
         paymentAmount: remaining, method: 'cash', reference: '',
       } as any);
       if (result?.data) {
+        setBills(prev => prev.map(b => String(b._id || b.id) === String(billToPayFull._id || billToPayFull.id) ? result.data : b));
         setShowPayFullBillConfirmModal(false); setBillToPayFull(null);
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
-        // تحديث فوري للفواتير والطلبات والكروت
-        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
+        scheduleBackgroundRefetch(true);
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
       }
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
@@ -1556,9 +1558,9 @@ const Tables: React.FC = () => {
         setIsProcessingPartialPayment(false);
         showNotification(t('billing.notifications.partialPaymentSuccess', { amount: formatCurrency(totalPaid) }), 'success');
         if (response.data) {
+          setBills(prev => prev.map(b => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? response.data : b));
           setSelectedBill(response.data as Bill);
-          // تحديث فوري للفواتير والطلبات والكروت
-          Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
+          scheduleBackgroundRefetch(true);
           if ((response.data as Bill).status === 'paid') {
             setShowPartialPaymentModal(false);
             showNotification(t('billing.notifications.billCompleted'), 'success');
@@ -1597,16 +1599,11 @@ const Tables: React.FC = () => {
         amount: parseFloat(sessionToPayData.amount), paymentMethod: sessionToPayData.method,
       });
       if (result.success && result.data) {
+        setBills(prev => prev.map(b => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? result.data : b));
+        setSelectedBill(result.data as Bill);
         setShowSessionPaymentConfirmModal(false); setSessionToPayData(null);
         setIsProcessingSessionPayment(false); setSessionPaymentAmount(''); setSelectedSession(null);
-        // تحديث الفواتير ثم جلب الفاتورة الكاملة من السيرفر
-        const billId = selectedBill.id || selectedBill._id;
-        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => {
-          fetchAllTableStatuses();
-          if (billId) {
-            api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
-          }
-        }).catch(() => {});
+        scheduleBackgroundRefetch(true);
         showNotification(t('billing.notifications.sessionPaymentSuccess'), 'success');
       } else {
         showNotification(result.message || t('billing.notifications.sessionPaymentError'), 'error');
@@ -1685,24 +1682,22 @@ const Tables: React.FC = () => {
         }
 
         const billId = selectedBill?.id || selectedBill?._id;
-        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => {
-          fetchAllTableStatuses();
-          if (billId) {
-            api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
-          }
-        }).catch(() => {});
+        scheduleBackgroundRefetch(true);
+        if (billId) {
+          api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
+        }
       } else { showNotification(t('billing.notifications.endSessionError'), 'error'); setIsEndingSession(false); }
     } catch { showNotification(t('billing.notifications.endSessionUnexpectedError'), 'error'); setIsEndingSession(false); }
   };
 
   // ── إنهاء كل جلسات الطاولة دفعة واحدة ────────────────────────────────────
-  const handleEndAllSessions = (table: Table, e: React.MouseEvent) => {
+  const handleEndAllSessions = useCallback((table: Table, e: React.MouseEvent) => {
     e.stopPropagation();
     const tid = String((table as any)._id || table.id || '');
     const info = sessionUrgencyByTable.get(tid);
     if (!info || info.sessions.length === 0) { showNotification(t('billing.noActiveSessions', 'لا توجد جلسات نشطة'), 'error'); return; }
     setEndAllTarget({ table, sessions: info.sessions });
-  };
+  }, [sessionUrgencyByTable]);
 
   const confirmEndAllSessions = async () => {
     if (!endAllTarget) return;
@@ -1788,9 +1783,11 @@ const Tables: React.FC = () => {
       setIsCancelingBill(true);
       const result = await api.deleteBill(selectedBill.id || selectedBill._id);
       if (result?.success) {
+        const delId = String(selectedBill._id || (selectedBill as any).id);
+        setBills(prev => prev.filter(b => String(b._id || (b as any).id) !== delId));
         setShowCancelConfirmModal(false); handleClosePaymentModal(); setIsCancelingBill(false);
         showNotification(t('billing.notifications.deleteBillSuccess'), 'success');
-        Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
+        scheduleBackgroundRefetch(true);
       } else { showNotification(t('billing.notifications.deleteBillError'), 'error'); setIsCancelingBill(false); }
     } catch { showNotification(t('billing.notifications.deleteBillUnexpectedError'), 'error'); setIsCancelingBill(false); }
   };
@@ -1809,16 +1806,16 @@ const Tables: React.FC = () => {
       if (result?.success && result.data) {
         showNotification(t('billing.notifications.tableChangeSuccess', { tableNumber: targetTable?.number || newTableNumber }), 'success');
         setShowChangeTableModal(false); setNewTableNumber(null); setTableChangeSearch('');
-        // عند الدمج يُحذف المعرف القديم — استخدم معرف الفاتورة المرجعة (قد تكون مدمجة جديدة)
         const returnedId = ((result.data as any).id || (result.data as any)._id) as string;
+        // تحديث متفائل — لو حدث دمج نحذف القديم ونحدث بالجديد
+        const oldId = String(selectedBill._id || (selectedBill as any).id);
+        if (String(returnedId) !== oldId) {
+          setBills(prev => prev.filter(b => String(b._id || (b as any).id) !== oldId).map(b => String(b._id || (b as any).id) === String(returnedId) ? result.data : b));
+        } else {
+          setBills(prev => prev.map(b => String(b._id || (b as any).id) === oldId ? result.data : b));
+        }
         setSelectedBill(result.data);
-        Promise.all([fetchBills(), fetchTables()]).then(async () => {
-          await fetchAllTableStatuses();
-          if (returnedId) {
-            const r = await api.getBill(returnedId);
-            if (r?.data) setSelectedBill(r.data);
-          }
-        }).catch(() => {});
+        scheduleBackgroundRefetch(true);
       } else { showNotification(t('billing.notifications.tableChangeError'), 'error'); }
     } catch (error: any) {
       showNotification(`❌ ${error?.response?.data?.message || error?.message || t('billing.notifications.unexpectedError')}`, 'error');
@@ -1908,13 +1905,11 @@ const Tables: React.FC = () => {
       if (response.success) {
         showNotification(t('billing.editPayment.success'), 'success');
         setShowEditPaymentModal(false); setPaymentToEdit(null);
-        // تحديث فوري بدون انتظار
-        if (response.data) setSelectedBill(response.data as Bill);
-        Promise.all([fetchBills(), fetchTables()]).then(() => {
-          if (showSessionPaymentModal && selectedBill) {
-            api.getBill(selectedBill.id || selectedBill._id).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
-          }
-        }).catch(() => {});
+        if (response.data) {
+          setBills(prev => prev.map(b => String(b._id || (b as any).id) === String(selectedBill._id || (selectedBill as any).id) ? response.data : b));
+          setSelectedBill(response.data as Bill);
+        }
+        scheduleBackgroundRefetch(true);
       } else { showNotification(response.message || t('billing.editPayment.error'), 'error'); }
     } catch (error: any) { showNotification(error.message || t('billing.editPayment.error'), 'error'); }
     finally { setIsEditingPayment(false); }
@@ -2460,17 +2455,11 @@ const Tables: React.FC = () => {
         const tableId = selectedTable._id || (selectedTable as any).id;
         const tBills = (tableBillsMap as any)[selectedTable.number]?.bills || [];
         const unpaidBills = tBills.filter((b: Bill) => ['draft','partial','overdue'].includes(b.status));
-        // الإجماليات من الفواتير غير المدفوعة فقط — تتحدث لحظياً كل 10 ثوانٍ عبر getSessionCost delta
-        // tick يُستخدم ضمنياً لأن getSessionCost يعتمد على Date.now() ويعاد حسابه عند كل render للـ tick
-        const getLiveDelta = (b: Bill) => {
-          const active = ((b as any).sessions || []).filter((s: any) => s.status === 'active');
-          if (!active.length) return 0;
-          return active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
-        };
-        void tick; // لضمان إعادة حساب عند tick (even if not directly read)
-        const unpaidTotal     = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.total) || 0) + getLiveDelta(b), 0);
+        // السيرفر يحسب الفاتورة حية — نستخدم القيم مباشرة (تتحدث عبر fetch كل 10 ثوانٍ)
+        void tick;
+        const unpaidTotal     = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.total) || 0), 0);
         const unpaidPaid      = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.paid) || 0), 0);
-        const unpaidRemaining = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0) + getLiveDelta(b), 0);
+        const unpaidRemaining = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0), 0);
         const hasUnpaid = unpaidBills.length > 0;
 
         // جلسات من الفواتير غير المدفوعة فقط مع حقل _billObj للرجوع للفاتورة
@@ -2727,14 +2716,9 @@ const Tables: React.FC = () => {
                       const showSummary = (tableBillsFilter !== 'unpaid' || searchResults !== null) && filtered.length > 0;
                       if (!showSummary) return null;
                       void tick;
-                      const getLiveDeltaF = (b: Bill) => {
-                        const active = ((b as any).sessions || []).filter((s: any) => s.status === 'active');
-                        if (!active.length) return 0;
-                        return active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
-                      };
-                      const fTotal     = filtered.reduce((s: number, b: Bill) => s + (Number(b.total) || 0) + getLiveDeltaF(b), 0);
+                      const fTotal     = filtered.reduce((s: number, b: Bill) => s + (Number(b.total) || 0), 0);
                       const fPaid      = filtered.reduce((s: number, b: Bill) => s + (Number(b.paid) || 0), 0);
-                      const fRemaining = filtered.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0) + getLiveDeltaF(b), 0);
+                      const fRemaining = filtered.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0), 0);
                       return (
                         <div className="flex-shrink-0 px-3 py-2 bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/30 flex items-center gap-4">
                           <div className="flex items-center gap-1.5">
@@ -2780,14 +2764,9 @@ const Tables: React.FC = () => {
                             {filtered.map((bill: Bill) => {
                               const isUnpaid = ['draft','partial','overdue'].includes(bill.status);
                               const hasSessions = ((bill as any).sessions?.length || 0) > 0;
-                              const liveDelta = (() => {
-                                const active = ((bill as any).sessions || []).filter((s: any) => s.status === 'active');
-                                if (!active.length) return 0;
-                                void tick;
-                                return active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
-                              })();
-                              const liveTotal = (Number(bill.total) || 0) + liveDelta;
-                              const liveRemaining = (Number(bill.remaining) || 0) + liveDelta;
+                              void tick;
+                              const liveTotal = Number(bill.total) || 0;
+                              const liveRemaining = Number(bill.remaining) || 0;
                               return (
                                 <div key={bill.id || bill._id}
                                   className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all hover:shadow-md group cursor-pointer
@@ -2800,7 +2779,7 @@ const Tables: React.FC = () => {
                                         <span className="font-bold text-sm text-gray-900 dark:text-gray-100">#{bill.billNumber || (bill.id || bill._id)?.toString().slice(-6)}</span>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${getStatusColor(bill.status)}`}>{getStatusText(bill.status)}</span>
                                         {hasSessions && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 flex items-center gap-0.5"><Gamepad2 className="h-2.5 w-2.5" />{(bill as any).sessions?.length}</span>}
-                                        {liveDelta > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="تحديث لحظي كل 10 ثوانٍ" />}
+                                        {hasSessions && (bill as any).sessions?.some((s: any) => s.status === 'active') && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="تحديث لحظي كل 10 ثوانٍ" />}
                                       </div>
                                       <div className="flex items-center gap-3 text-xs">
                                         <span className="text-gray-500">إجمالي: <strong className="text-gray-800 dark:text-gray-200">{formatCurrency(liveTotal)}</strong></span>

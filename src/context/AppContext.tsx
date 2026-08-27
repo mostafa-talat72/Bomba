@@ -48,6 +48,9 @@ interface AppContextType {
   fetchOrders: () => Promise<void>;
   fetchInventory: () => Promise<void>;
   fetchBills: () => Promise<void>;
+  setBills: React.Dispatch<React.SetStateAction<any[]>>;
+  setOrders: React.Dispatch<React.SetStateAction<any[]>>;
+  setTables: React.Dispatch<React.SetStateAction<any[]>>;
   fetchCosts: () => Promise<void>;
   fetchMenuItems: () => Promise<void>;
   fetchAvailableMenuItems: () => Promise<void>;
@@ -222,6 +225,9 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     fetchOrders: data.fetchOrders,
     fetchInventory: data.fetchInventory,
     fetchBills: data.fetchBills,
+    setBills: data.setBills as any,
+    setOrders: data.setOrders as any,
+    setTables: data.setTables as any,
     fetchCosts: data.fetchCosts,
     fetchMenuItems: data.fetchMenuItems,
     fetchAvailableMenuItems: data.fetchAvailableMenuItems,

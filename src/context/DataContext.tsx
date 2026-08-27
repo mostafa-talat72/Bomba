@@ -61,6 +61,10 @@ interface DataContextType {
   fetchInventory: () => Promise<void>;
   fetchBills: () => Promise<void>;
   fetchCosts: () => Promise<void>;
+  setBills: React.Dispatch<React.SetStateAction<Bill[]>>;
+  setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+  setTables: React.Dispatch<React.SetStateAction<Table[]>>;
+  setTableSections: React.Dispatch<React.SetStateAction<TableSection[]>>;
   fetchMenuItems: () => Promise<void>;
   fetchAvailableMenuItems: () => Promise<void>;
   fetchMenuSections: () => Promise<void>;
@@ -2130,6 +2134,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     fetchUsers,
     fetchSettings,
     fetchWarehouseItems,
+    setBills,
+    setOrders,
+    setTables,
+    setTableSections,
 
     refreshData,
     forceRefreshData,
