@@ -84,6 +84,9 @@ const Tables: React.FC = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showEditOrderModal, setShowEditOrderModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [hoveredOrder, setHoveredOrder] = useState<Order | null>(null);
+  const [pinnedOrder, setPinnedOrder] = useState<Order | null>(null);
+  const previewOrder = pinnedOrder || hoveredOrder;
   const [currentOrderItems, setCurrentOrderItems] = useState<LocalOrderItem[]>([]);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
@@ -2496,11 +2499,11 @@ const Tables: React.FC = () => {
           gray:   { active: 'text-gray-700 dark:text-gray-200',     activeBg: 'bg-gray-500',   dot: 'bg-gray-400',   icon: 'text-gray-400',                       accent: 'border-gray-400' },
         };
 
-        const closeModal = () => { setShowUnifiedTableModal(false); setSelectedTable(null); setTableBillsFilter('unpaid'); setSearchQuery(''); setSearchResults(null); };
+        const closeModal = () => { setShowUnifiedTableModal(false); setSelectedTable(null); setTableBillsFilter('unpaid'); setSearchQuery(''); setSearchResults(null); setPinnedOrder(null); setHoveredOrder(null); };
 
         return (
         <ModalPortal>
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[300] p-2 sm:p-4"
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex flex-col lg:flex-row items-center justify-center z-[300] p-2 sm:p-4 gap-4 overflow-y-auto"
           onClick={closeModal}>
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[96vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700"
             onClick={e => e.stopPropagation()}>
@@ -2630,14 +2633,19 @@ const Tables: React.FC = () => {
                               draft:     { color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',            label: 'مسودة',  dot: 'bg-gray-400' },
                             };
                             const sc = statusCfg[order.status] || statusCfg.draft;
+                            const orderTime = order.createdAt ? formatDateTime(order.createdAt) : '';
                             return (
-                              <div key={order.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200/80 dark:border-gray-700/60 overflow-hidden hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all group">
+                              <div key={order.id} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden hover:shadow-md transition-all group cursor-pointer ${pinnedOrder?.id === order.id ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-200/80 dark:border-gray-700/60 hover:border-gray-300'}`}
+                                onMouseEnter={() => { if (!pinnedOrder) setHoveredOrder(order); }}
+                                onMouseLeave={() => { if (!pinnedOrder) setHoveredOrder(null); }}
+                                onClick={() => { if (pinnedOrder?.id === order.id) setPinnedOrder(null); else { setPinnedOrder(order); setHoveredOrder(order); } }}>
                                 <div className={`h-0.5 ${sc.dot}`} />
                                 <div className="flex items-center gap-2.5 px-3 py-2.5">
                                   <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-0.5">
+                                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                                       <span className="font-bold text-gray-900 dark:text-gray-100 text-sm">#{order.orderNumber}</span>
                                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${sc.color}`}>{sc.label}</span>
+                                      {orderTime && <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1"><Clock className="h-3 w-3" />{orderTime}</span>}
                                     </div>
                                     {order.items && order.items.length > 0 && (
                                       <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
@@ -2648,15 +2656,15 @@ const Tables: React.FC = () => {
                                   </div>
                                   <span className="font-bold text-orange-600 dark:text-orange-400 text-sm flex-shrink-0">{formatCurrency(total)}</span>
                                   <div className="flex items-center gap-0.5 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handlePrintOrder(order)} title={t('cafe.tableOrdersModal.print')}
+                                    <button onClick={(e) => { e.stopPropagation(); handlePrintOrder(order); }} title={t('cafe.tableOrdersModal.print')}
                                       className="w-7 h-7 flex items-center justify-center hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all text-gray-400">
                                       <Printer className="h-3.5 w-3.5" />
                                     </button>
-                                    <button onClick={() => handleEditOrder(order)} title={t('cafe.tableOrdersModal.edit')}
+                                    <button onClick={(e) => { e.stopPropagation(); handleEditOrder(order); }} title={t('cafe.tableOrdersModal.edit')}
                                       className="w-7 h-7 flex items-center justify-center hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-all text-gray-400">
                                       <Edit className="h-3.5 w-3.5" />
                                     </button>
-                                    <button onClick={() => handleDeleteOrder(order)} title={t('cafe.tableOrdersModal.delete')}
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order); }} title={t('cafe.tableOrdersModal.delete')}
                                       className="w-7 h-7 flex items-center justify-center hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all text-gray-400">
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
@@ -2768,6 +2776,7 @@ const Tables: React.FC = () => {
                             {filtered.map((bill: Bill) => {
                               const isUnpaid = ['draft','partial','overdue'].includes(bill.status);
                               const hasSessions = ((bill as any).sessions?.length || 0) > 0;
+                              const billTime = (bill as any).createdAt ? formatDateTime((bill as any).createdAt) : '';
                               void tick;
                               const liveTotal = Number(bill.total) || 0;
                               const liveRemaining = Number(bill.remaining) || 0;
@@ -2785,6 +2794,7 @@ const Tables: React.FC = () => {
                                         {hasSessions && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 flex items-center gap-0.5"><Gamepad2 className="h-2.5 w-2.5" />{(bill as any).sessions?.length}</span>}
                                         {hasSessions && (bill as any).sessions?.some((s: any) => s.status === 'active') && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="تحديث لحظي كل 10 ثوانٍ" />}
                                       </div>
+                                      {billTime && <div className="flex items-center gap-1 text-[10px] text-gray-400 mb-1"><Clock className="h-3 w-3" />{billTime}</div>}
                                       <div className="flex items-center gap-3 text-xs">
                                         <span className="text-gray-500">إجمالي: <strong className="text-gray-800 dark:text-gray-200">{formatCurrency(liveTotal)}</strong></span>
                                         <span className="text-emerald-600 dark:text-emerald-400">مدفوع: <strong>{formatCurrency(Number(bill.paid)||0)}</strong></span>
@@ -3043,6 +3053,51 @@ const Tables: React.FC = () => {
               </div>
             </div>
           </div>
+          {previewOrder && (
+            <div
+              className="flex w-full lg:w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex-col overflow-hidden max-h-[96vh] lg:max-h-[96vh] max-h-[50vh] animate-in fade-in slide-in-from-right-4 flex-shrink-0"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gradient-to-l from-orange-50 to-white dark:from-gray-700 dark:to-gray-800">
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 text-sm"><Receipt className="h-4 w-4 text-orange-500" />طلب #{previewOrder.orderNumber}</h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" />{previewOrder.createdAt ? formatDateTime(previewOrder.createdAt) : ''} {pinnedOrder ? '· مثبت' : '· معاينة'}</p>
+                </div>
+                <button onClick={() => { setPinnedOrder(null); setHoveredOrder(null); }} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" title={pinnedOrder ? 'إلغاء التثبيت' : 'إغلاق'}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {(previewOrder.items as any[]).map((it: any, idx: number) => (
+                  <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-600">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">{it.name}</p>
+                      {it.notes && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">ملاحظة: {it.notes}</p>}
+                      <p className="text-xs text-gray-400">{formatCurrency(it.price || 0)} × {it.quantity}</p>
+                    </div>
+                    <div className="text-right flex flex-col items-end gap-1">
+                      <span className="bg-orange-500 text-white text-xs font-bold rounded-full px-2 py-1">×{it.quantity}</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{formatCurrency((it.price || 0) * (it.quantity || 0))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm text-gray-500">الإجمالي</span>
+                  <span className="font-bold text-orange-600 dark:text-orange-400 text-lg">{formatCurrency((previewOrder as any).finalAmount ?? (previewOrder as any).totalAmount ?? (previewOrder.items as any[])?.reduce((s: number, i: any) => s + (i.price || 0) * (i.quantity || 0), 0) ?? 0)}</span>
+                </div>
+                {!pinnedOrder ? (
+                  <p className="text-[11px] text-center text-gray-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg py-2">اضغط على الطلب لتثبيت النافذة والتحكم بها</p>
+                ) : (
+                  <div className="flex gap-2">
+                    <button onClick={() => handlePrintOrder(pinnedOrder)} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"><Printer className="h-4 w-4" />طباعة</button>
+                    <button onClick={() => handleEditOrder(pinnedOrder)} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-1.5"><Edit className="h-4 w-4" />تعديل</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         </ModalPortal>
         );
