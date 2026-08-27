@@ -409,6 +409,9 @@ const Tables: React.FC = () => {
   const quickDigitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [quickPickerTables, setQuickPickerTables] = useState<Table[] | null>(null);
 
+  // ── reflector لتكلفة الجلسات اللحظية (ينفرج ف 200ms من غير fetchBills) ────────
+  const instantSessionCostRef = useRef<Map<string, number>>(new Map());
+
   // ── شريط التراجع ─────────────────────────────────────────────────────────
   const [undoRequest, setUndoRequest] = useState<UndoRequest | null>(null);
 
@@ -545,7 +548,28 @@ const Tables: React.FC = () => {
 
     // ── تحديث الجلسات ────────────────────────────────────────────────────
     socket.on('session-update', (data: any) => {
-      // جلب الفواتير لأن الجلسة مرتبطة بفاتورة
+      // 1) تكلفة لحظية خلال 200ms (بدون fetchBills — ليFeel User السرعة)
+      const tableCosts: Map<string, number> = new Map();
+      // نمر على كل الجلسات updated و نحدد Table ID المرتبط
+      const updatedSessions: any[] = data.sessions || [];
+      updatedSessions.forEach((s: any) => {
+        const sid = s._id || s.id || '';
+        // نبحث عن الطاولة المرتبطة بهذه الجلسة من sessionUrgencyByTable
+        for (const [tid, info] of sessionUrgencyByTable) {
+          if (info.sessions.some((s2: any) => (s2._id || s2.id) === sid)) {
+            // نحسب التكلفة الجديدة: الوقت المنقضي * rate
+            const durMin = s.startTime ? (Date.now() - new Date(s.startTime).getTime()) / 60000 : 0;
+            const rate = (info.deviceRate || 1);
+            const newCost = Math.round(durMin * rate / 60); // بالدقيقة
+            tableCosts.set(tid, (tableCosts.get(tid) || 0) + newCost);
+          }
+        }
+      });
+      // نحدث reflector خلال 200ms (المستخدم يحس اللحظة)
+      instantSessionCostRef.current = tableCosts;
+      setTimeout(() => { instantSessionCostRef.current = new Map(); }, 300);
+
+      // 2) جلب الفواتير للتأكيد والتزامن (الطريق الطويل 800ms)
       scheduleBackgroundRefetch();
       // تحديث selectedBill إذا كانت تحتوي هذه الجلسة
       const cur = selectedBillRef.current;
@@ -1740,6 +1764,19 @@ const Tables: React.FC = () => {
   const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, []);
   const stableHoverChange = useCallback((tb: Table | null) => { lastFocusedTableRef.current = tb; }, []);
 
+  const handleQuickPrint = useCallback(async (tb: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
+    const unpaid = bills.filter((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
+    if (unpaid.length === 0) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
+    try {
+      const r = await api.getBill(unpaid[0].id || unpaid[0]._id);
+      if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t);
+    } catch { showNotification('خطأ في الطباعة', 'error'); }
+  }, [tableCardData, user, i18n.language, t]);
+
+  const stableQuickPrint = useCallback((tb: Table, e: React.MouseEvent) => { handleQuickPrint(tb, e); }, [handleQuickPrint]);
+
   const handleCancelBill = async () => {
     if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     if (!selectedBill) return;
@@ -2294,6 +2331,7 @@ const Tables: React.FC = () => {
                               onClick={stableTableClick}
                               onQuickOrder={stableQuickOrder}
                               onQuickBilling={stableQuickBilling}
+                              onQuickPrint={stableQuickPrint}
                               onEndAllSessions={handleEndAllSessions}
                               onHoverChange={stableHoverChange}
                             />

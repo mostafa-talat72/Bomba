@@ -186,9 +186,10 @@ const CustomerMenu: React.FC = () => {
 						</button>
 					</div>
 				</div>
-			</div>
+</div>
+		</div>
 
-			<div className="max-w-7xl mx-auto px-4 py-6">
+		<div className="max-w-7xl mx-auto px-4 py-6">
 				{/* Search + Filters */}
 				<div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-4 mb-6">
 					<div className="flex items-center gap-4">
@@ -363,7 +364,7 @@ const CustomerMenu: React.FC = () => {
 
 							return (
 								<div key={section.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-									<div className="section-header p-4 border-b-2 border-blue-200 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/10">
+									<div className="section-header p-4 border-b-2 border-blue-200 dark:border-blue-700">
 										<h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{section.name}</h2>
 										{section.description && (
 											<p className="text-sm text-gray-600 dark:text-gray-400">{section.description}</p>
