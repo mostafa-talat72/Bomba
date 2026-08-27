@@ -51,6 +51,8 @@ interface PaymentManagementModalProps {
   applyRounding?: (v: number) => number;
   // الدفع المقسوم
   onSplitSubmit?: (amount2: string, method2: 'cash' | 'card' | 'transfer') => Promise<void> | void;
+  // للـ tick اللحظي كل 10 ثوانٍ
+  tick?: number;
 }
 
 const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
@@ -87,6 +89,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
   onToggleRounding,
   applyRounding,
   onSplitSubmit,
+  tick,
 }) => {
   const { t, i18n } = useTranslation();
   const { formatDate } = useOrganization();
@@ -138,6 +141,8 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
 
   const hasActiveSession = (bill: Bill | null | undefined) =>
     bill?.sessions?.some((s: any) => (typeof s === 'object' ? s.status : null) === 'active') || false;
+
+  void tick; // يعيد الحساب كل 10 ثوانٍ للجلسات النشطة
 
   return (
         <ModalPortal>
@@ -526,6 +531,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       </div>
                     );
                     return allSess.map((session: any, i: number) => {
+                      void tick;
                       const isActive = session.status === 'active';
                       const startMs  = session.startTime ? new Date(session.startTime).getTime() : 0;
                       const endMs    = isActive ? Date.now() : (session.endTime ? new Date(session.endTime).getTime() : startMs);
@@ -537,7 +543,8 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       const sp = (selectedBill as any)?.sessionPayments?.find((p: any) => p.sessionId === (session._id || session.id));
                       const cost      = getSessionCost(session);
                       const spPaid    = Number(sp?.paidAmount) || 0;
-                      const spRemain  = Math.max(0, sp ? Number(sp.remainingAmount) ?? (cost - spPaid) : cost - spPaid);
+                      // للجلسة النشطة: المتبقي حي = التكلفة الحية - المدفوع (نتجاهل remainingAmount المخزن القديم)
+                      const spRemain  = isActive ? Math.max(0, cost - spPaid) : Math.max(0, sp ? (sp.remainingAmount !== undefined && sp.remainingAmount !== null ? Number(sp.remainingAmount) : (cost - spPaid)) : cost - spPaid);
                       const icon      = session.deviceType === 'playstation' ? '🎮' : '💻';
                       return (
                         <div key={i} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden ${isActive ? 'border-emerald-200 dark:border-emerald-800/60' : 'border-gray-200 dark:border-gray-700 opacity-75'}`}>

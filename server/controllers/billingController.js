@@ -346,6 +346,10 @@ export const getBill = async (req, res) => {
                         path: "table",
                         select: "number name",
                     },
+                    {
+                        path: "deviceId",
+                        select: "type hourlyRate playstationRates",
+                    },
                 ],
             })
             .populate("organization", "name") // إضافة populate للمنشأة

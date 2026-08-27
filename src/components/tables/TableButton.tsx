@@ -22,9 +22,11 @@ export interface TableButtonProps {
   onEndAllSessions?: (table: Table, e: React.MouseEvent) => void;
   onQuickPrint?: (table: Table, e: React.MouseEvent) => void;
   onHoverChange?: (table: Table | null) => void;
+  /** تكلفة إضافية حية للجلسات النشطة (delta كل 10 ثوانٍ) */
+  liveExtra?: number;
 }
 
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onHoverChange }) => {
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onHoverChange, liveExtra = 0 }) => {
   const { t, i18n } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -33,6 +35,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
   const totalRemaining = tableBills
     .filter(b => ['draft', 'partial', 'overdue'].includes(b.status))
     .reduce((s, b) => s + (b.remaining || 0), 0);
+  const liveRemaining = totalRemaining + (liveExtra || 0);
 
   // ── ثلاث حالات فقط ──────────────────────────────────────────────────────
   // 1. فارغة  → رمادي
@@ -129,10 +132,11 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
             {getTableDisplay(table.number, i18n.language)}
           </span>
 
-          {/* المبلغ المتبقي */}
-          {isOccupied && totalRemaining > 0 && (
+          {/* المبلغ المتبقي — يشمل delta الجلسات الحية كل 10 ثوانٍ */}
+          {isOccupied && liveRemaining > 0 && (
             <span className={`text-xs font-semibold mt-1 hidden sm:block ${styles.sub}`}>
-              {formatCurrencyUtil(totalRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
+              {formatCurrencyUtil(liveRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
+              {liveExtra > 0 && <span className="ml-1 text-[10px] animate-pulse">●</span>}
             </span>
           )}
         </div>

@@ -381,7 +381,25 @@ const Tables: React.FC = () => {
   const hasAnyActiveSession = useMemo(() =>
     bills.some(b => hasActiveSession(b)), [bills]);
 
+  // ── tick لحظي كل 10 ثوانٍ — يعمل فقط لو فيه جلسات نشطة ──────────────────
+  // فارغة أو مشغولة بدون جلسة → لا interval ولا حساب
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!hasAnyActiveSession) return;
+    const id = setInterval(() => setTick(t => t + 1), 10000);
+    return () => clearInterval(id);
+  }, [hasAnyActiveSession]);
 
+  // ── selectedBill الحي — يضيف delta الجلسات النشطة كل 10 ثوانٍ ──────────
+  const liveSelectedBill = useMemo(() => {
+    if (!selectedBill) return null;
+    const active = (selectedBill.sessions || []).filter((s: any) => s.status === 'active');
+    if (!active.length) return selectedBill;
+    void tick;
+    const delta = active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
+    if (delta === 0) return selectedBill;
+    return { ...selectedBill, total: (selectedBill.total || 0) + delta, remaining: (selectedBill.remaining || 0) + delta, subtotal: (selectedBill.subtotal || 0) + delta } as Bill;
+  }, [selectedBill, tick, getSessionCost]);
 
   const fetchersRef = useRef({ fetchBills, fetchOrders });
   useEffect(() => { fetchersRef.current = { fetchBills, fetchOrders }; });
@@ -408,9 +426,6 @@ const Tables: React.FC = () => {
   const [quickDigits, setQuickDigits] = useState('');
   const quickDigitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [quickPickerTables, setQuickPickerTables] = useState<Table[] | null>(null);
-
-  // ── reflector لتكلفة الجلسات اللحظية (ينفرج ف 200ms من غير fetchBills) ────────
-  const instantSessionCostRef = useRef<Map<string, number>>(new Map());
 
   // ── شريط التراجع ─────────────────────────────────────────────────────────
   const [undoRequest, setUndoRequest] = useState<UndoRequest | null>(null);
@@ -444,8 +459,7 @@ const Tables: React.FC = () => {
       });
     });
     return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bills]);
+  }, [bills, tick]);
 
   // تنبيه صوتي مرة واحدة عند دخول جلسة نطاق التحذير/الخطر
   const alertedSessionsRef = useRef<Set<string>>(new Set());
@@ -461,7 +475,7 @@ const Tables: React.FC = () => {
         else if (durMin >= 120) { alertedSessionsRef.current.add(sid); playWarnBeep(); }
       });
     });
-  }, [bills]);
+  }, [bills, tick]);
 
   // ── Socket.IO ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -548,28 +562,6 @@ const Tables: React.FC = () => {
 
     // ── تحديث الجلسات ────────────────────────────────────────────────────
     socket.on('session-update', (data: any) => {
-      // 1) تكلفة لحظية خلال 200ms (بدون fetchBills — ليFeel User السرعة)
-      const tableCosts: Map<string, number> = new Map();
-      // نمر على كل الجلسات updated و نحدد Table ID المرتبط
-      const updatedSessions: any[] = data.sessions || [];
-      updatedSessions.forEach((s: any) => {
-        const sid = s._id || s.id || '';
-        // نبحث عن الطاولة المرتبطة بهذه الجلسة من sessionUrgencyByTable
-        for (const [tid, info] of sessionUrgencyByTable) {
-          if (info.sessions.some((s2: any) => (s2._id || s2.id) === sid)) {
-            // نحسب التكلفة الجديدة: الوقت المنقضي * rate
-            const durMin = s.startTime ? (Date.now() - new Date(s.startTime).getTime()) / 60000 : 0;
-            const rate = (info.deviceRate || 1);
-            const newCost = Math.round(durMin * rate / 60); // بالدقيقة
-            tableCosts.set(tid, (tableCosts.get(tid) || 0) + newCost);
-          }
-        }
-      });
-      // نحدث reflector خلال 200ms (المستخدم يحس اللحظة)
-      instantSessionCostRef.current = tableCosts;
-      setTimeout(() => { instantSessionCostRef.current = new Map(); }, 300);
-
-      // 2) جلب الفواتير للتأكيد والتزامن (الطريق الطويل 800ms)
       scheduleBackgroundRefetch();
       // تحديث selectedBill إذا كانت تحتوي هذه الجلسة
       const cur = selectedBillRef.current;
@@ -785,12 +777,14 @@ const Tables: React.FC = () => {
   [i18n.language]);
 
   // ── tableCardData — بيانات كل طاولة مع cache فردي للطاولات ──
-  const tableCardDataCache = useRef(new Map<string, { tBills: Bill[]; tOrdersCount: number; activeSessionType: 'playstation' | 'computer' | 'both' | null }>());
+  // liveExtra: تكلفة الجلسات النشطة الحية (تتحدث كل 10 ثوانٍ فقط للطاولات اللي فيها جلسات)
+  const tableCardDataCache = useRef(new Map<string, { tBills: Bill[]; tOrdersCount: number; activeSessionType: 'playstation' | 'computer' | 'both' | null; liveExtra: number }>());
   const tableCardData = useMemo(() => {
     const result = new Map<string, {
       tBills: Bill[];
       tOrdersCount: number;
       activeSessionType: 'playstation' | 'computer' | 'both' | null;
+      liveExtra: number;
     }>();
 
     // index: tableId -> bills (مرة واحدة)
@@ -826,18 +820,30 @@ const Tables: React.FC = () => {
       const activeSessionType: 'playstation' | 'computer' | 'both' | null =
         hasPS && hasPC ? 'both' : hasPS ? 'playstation' : hasPC ? 'computer' : null;
 
+      // تكلفة الجلسات الحية — delta فقط لتجنب العد المزدوج
+      // bill.remaining يحتوي بالفعل على تكلفة الجلسة حتى آخر fetch، فنضيف الفرق فقط
+      const liveExtra = activeSessions.length > 0
+        ? activeSessions.reduce((sum: number, s: any) => {
+            const live = getSessionCost(s);
+            const stale = Number(s.totalCost) || Number(s.finalCost) || 0;
+            return sum + Math.max(0, live - stale);
+          }, 0)
+        : 0;
+
       // إعادة استخدام المرجع القديم لو البيانات لم تتغير (يمنع re-render غير ضروري)
+      // للطاولات الفارغة أو المشغولة بدون جلسة: liveExtra دائماً 0 → لا تتأثر بـ tick
       const prev = cache.get(tid);
-      if (prev && prev.tOrdersCount === tOrdersCount && prev.activeSessionType === activeSessionType && prev.tBills.length === tBills.length && prev.tBills.every((b, i) => b._id === tBills[i]._id && b.status === tBills[i].status && b.remaining === tBills[i].remaining)) {
+      if (prev && prev.tOrdersCount === tOrdersCount && prev.activeSessionType === activeSessionType && prev.liveExtra === liveExtra && prev.tBills.length === tBills.length && prev.tBills.every((b, i) => b._id === tBills[i]._id && b.status === tBills[i].status && b.remaining === tBills[i].remaining)) {
         result.set(tid, prev);
       } else {
-        const entry = { tBills, tOrdersCount, activeSessionType };
+        const entry = { tBills, tOrdersCount, activeSessionType, liveExtra };
         result.set(tid, entry);
         cache.set(tid, entry);
       }
     });
     return result;
-  }, [bills, orders, activeTables]);
+    // tick يعيد الحساب كل 10 ثوانٍ فقط للطاولات اللي فيها جلسات (liveExtra سيتغير)
+  }, [bills, orders, activeTables, tick, getSessionCost]);
 
   // ── gamingDeviceData — بيانات الأجهزة محسوبة خارج JSX ──────────────────
   const gamingDeviceData = useMemo(() => {
@@ -1003,17 +1009,15 @@ const Tables: React.FC = () => {
 
     log.sort((a, b) => b.time.getTime() - a.time.getTime());
     setTableActivityLog(log.slice(0, 50));
-  }, [bills, orders]);
+  }, [bills, orders, tick, getSessionCost]);
 
-  // تحديث تلقائي للسجل عند تغيير bills أو orders والطاولة مفتوحة
-  // السجل يتحدث فقط عند فتح مودال الطاولة أو عند تغيير الطاولة المحددة
-  // لا يُعاد عند كل تغيير في bills/orders لتجنب الـ re-render المستمر
+  // تحديث لحظي للسجل كل 10 ثوانٍ عند فتح مودال الطاولة (فقط للطاولة المفتوحة)
   useEffect(() => {
     if (selectedTable && showUnifiedTableModal) {
       const tableId = selectedTable._id || (selectedTable as any).id;
       buildActivityLog(tableId);
     }
-  }, [selectedTable?._id, showUnifiedTableModal]);
+  }, [selectedTable?._id, showUnifiedTableModal, tick, buildActivityLog]);
 
   // #1 Quick order from table card
   const handleQuickOrder = (table: Table, e: React.MouseEvent) => {
@@ -2328,6 +2332,7 @@ const Tables: React.FC = () => {
                               activeSessionType={cardData?.activeSessionType || null}
                               activeSessionCount={sessInfo?.count || 0}
                               sessionUrgency={sessInfo?.urgency || 'none'}
+                              liveExtra={cardData?.liveExtra || 0}
                               onClick={stableTableClick}
                               onQuickOrder={stableQuickOrder}
                               onQuickBilling={stableQuickBilling}
@@ -2455,10 +2460,17 @@ const Tables: React.FC = () => {
         const tableId = selectedTable._id || (selectedTable as any).id;
         const tBills = (tableBillsMap as any)[selectedTable.number]?.bills || [];
         const unpaidBills = tBills.filter((b: Bill) => ['draft','partial','overdue'].includes(b.status));
-        // الإجماليات من الفواتير غير المدفوعة فقط
-        const unpaidTotal     = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.total) || 0), 0);
+        // الإجماليات من الفواتير غير المدفوعة فقط — تتحدث لحظياً كل 10 ثوانٍ عبر getSessionCost delta
+        // tick يُستخدم ضمنياً لأن getSessionCost يعتمد على Date.now() ويعاد حسابه عند كل render للـ tick
+        const getLiveDelta = (b: Bill) => {
+          const active = ((b as any).sessions || []).filter((s: any) => s.status === 'active');
+          if (!active.length) return 0;
+          return active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
+        };
+        void tick; // لضمان إعادة حساب عند tick (even if not directly read)
+        const unpaidTotal     = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.total) || 0) + getLiveDelta(b), 0);
         const unpaidPaid      = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.paid) || 0), 0);
-        const unpaidRemaining = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0), 0);
+        const unpaidRemaining = unpaidBills.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0) + getLiveDelta(b), 0);
         const hasUnpaid = unpaidBills.length > 0;
 
         // جلسات من الفواتير غير المدفوعة فقط مع حقل _billObj للرجوع للفاتورة
@@ -2714,9 +2726,15 @@ const Tables: React.FC = () => {
                       });
                       const showSummary = (tableBillsFilter !== 'unpaid' || searchResults !== null) && filtered.length > 0;
                       if (!showSummary) return null;
-                      const fTotal     = filtered.reduce((s: number, b: Bill) => s + (Number(b.total) || 0), 0);
+                      void tick;
+                      const getLiveDeltaF = (b: Bill) => {
+                        const active = ((b as any).sessions || []).filter((s: any) => s.status === 'active');
+                        if (!active.length) return 0;
+                        return active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
+                      };
+                      const fTotal     = filtered.reduce((s: number, b: Bill) => s + (Number(b.total) || 0) + getLiveDeltaF(b), 0);
                       const fPaid      = filtered.reduce((s: number, b: Bill) => s + (Number(b.paid) || 0), 0);
-                      const fRemaining = filtered.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0), 0);
+                      const fRemaining = filtered.reduce((s: number, b: Bill) => s + (Number(b.remaining) || 0) + getLiveDeltaF(b), 0);
                       return (
                         <div className="flex-shrink-0 px-3 py-2 bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/30 flex items-center gap-4">
                           <div className="flex items-center gap-1.5">
@@ -2762,6 +2780,14 @@ const Tables: React.FC = () => {
                             {filtered.map((bill: Bill) => {
                               const isUnpaid = ['draft','partial','overdue'].includes(bill.status);
                               const hasSessions = ((bill as any).sessions?.length || 0) > 0;
+                              const liveDelta = (() => {
+                                const active = ((bill as any).sessions || []).filter((s: any) => s.status === 'active');
+                                if (!active.length) return 0;
+                                void tick;
+                                return active.reduce((sum: number, s: any) => sum + Math.max(0, getSessionCost(s) - (Number(s.totalCost) || Number(s.finalCost) || 0)), 0);
+                              })();
+                              const liveTotal = (Number(bill.total) || 0) + liveDelta;
+                              const liveRemaining = (Number(bill.remaining) || 0) + liveDelta;
                               return (
                                 <div key={bill.id || bill._id}
                                   className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all hover:shadow-md group cursor-pointer
@@ -2774,11 +2800,12 @@ const Tables: React.FC = () => {
                                         <span className="font-bold text-sm text-gray-900 dark:text-gray-100">#{bill.billNumber || (bill.id || bill._id)?.toString().slice(-6)}</span>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${getStatusColor(bill.status)}`}>{getStatusText(bill.status)}</span>
                                         {hasSessions && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 flex items-center gap-0.5"><Gamepad2 className="h-2.5 w-2.5" />{(bill as any).sessions?.length}</span>}
+                                        {liveDelta > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="تحديث لحظي كل 10 ثوانٍ" />}
                                       </div>
                                       <div className="flex items-center gap-3 text-xs">
-                                        <span className="text-gray-500">إجمالي: <strong className="text-gray-800 dark:text-gray-200">{formatCurrency(Number(bill.total)||0)}</strong></span>
+                                        <span className="text-gray-500">إجمالي: <strong className="text-gray-800 dark:text-gray-200">{formatCurrency(liveTotal)}</strong></span>
                                         <span className="text-emerald-600 dark:text-emerald-400">مدفوع: <strong>{formatCurrency(Number(bill.paid)||0)}</strong></span>
-                                        {(Number(bill.remaining)||0) > 0 && <span className="text-red-600 dark:text-red-400 font-bold">متبقي: {formatCurrency(Number(bill.remaining))}</span>}
+                                        {liveRemaining > 0 && <span className="text-red-600 dark:text-red-400 font-bold">متبقي: {formatCurrency(liveRemaining)}</span>}
                                       </div>
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
@@ -2849,7 +2876,8 @@ const Tables: React.FC = () => {
                             const isPS        = (session.deviceType || '').includes('playstation');
                             const icon        = isPS ? '🎮' : '💻';
 
-                            // ── التكلفة الصحيحة (حساب فوري للجلسات النشطة) ──
+                            // ── التكلفة الصحيحة (حساب فوري للجلسات النشطة) — تتحدث كل 10 ثوانٍ ──
+                            void tick;
                             const cost = getSessionCost(session);
 
                             // ── المدة ──
@@ -2871,9 +2899,9 @@ const Tables: React.FC = () => {
                               (p: any) => p.sessionId === sessId || p.session === sessId
                             );
                             const spPaid      = Number(sp?.paidAmount) || 0;
-                            const spRemaining = sp
-                              ? Math.max(0, Number(sp.remainingAmount) !== undefined ? Number(sp.remainingAmount) : (cost - spPaid))
-                              : Math.max(0, cost - spPaid);
+                            const spRemaining = isActive
+                              ? Math.max(0, cost - spPaid)
+                              : sp ? Math.max(0, sp.remainingAmount !== undefined && sp.remainingAmount !== null ? Number(sp.remainingAmount) : (cost - spPaid)) : Math.max(0, cost - spPaid);
 
                             return (
                               <div key={sessId || idx}
@@ -3040,7 +3068,7 @@ const Tables: React.FC = () => {
       {/* ── Payment Modal — نفس شكل صفحة الفواتير ── */}
       <PaymentManagementModal
         isOpen={showPaymentModal}
-        selectedBill={selectedBill}
+        selectedBill={liveSelectedBill || selectedBill}
         user={user}
         paymentAmount={paymentAmount} setPaymentAmount={setPaymentAmount}
         originalAmount={originalAmount} setOriginalAmount={setOriginalAmount}
@@ -3070,6 +3098,7 @@ const Tables: React.FC = () => {
           splitPartsRef.current = { amount2, method2 };
           await processPayment();
         }}
+        tick={tick}
       />
 
       {/* ── شريط التراجع ── */}
