@@ -1613,23 +1613,27 @@ const Tables: React.FC = () => {
   };
 
   const handleEndSession = async (sessionId: string) => {
-    if (selectedBill?.sessions) {
-      const session = selectedBill.sessions.find((s: any) => (s.id || s._id) === sessionId);
-      if (session && !selectedBill?.table) setCustomerNameForEndSession((session as any).customerName || '');
-      else setCustomerNameForEndSession('');
-    }
+    // ابحث عن الفاتورة الحاوية للجلسة لتحديد إن كانت مرتبطة بطاولة
+    const billForSession = bills.find((b: any) => (b.sessions || []).some((s: any) => String(s._id || s.id) === String(sessionId)));
+    const isLinked = !!(billForSession?.table || selectedBill?.table || selectedTable);
+    if (!isLinked) {
+      const session = (billForSession?.sessions || selectedBill?.sessions || []).find((s: any) => String(s._id || s.id) === String(sessionId));
+      setCustomerNameForEndSession((session as any)?.customerName || '');
+    } else setCustomerNameForEndSession('');
     setSessionToEnd(sessionId); setShowSessionEndModal(true);
   };
 
   const confirmSessionEnd = async () => {
     if (!sessionToEnd) return;
-    const linked = !!(selectedBill?.table);
+    const endedSessionId = sessionToEnd;
+    // حدد الفاتورة الحاوية — قد تكون من sessions tab وليس selectedBill
+    const billForSession = bills.find((b: any) => (b.sessions || []).some((s: any) => String(s._id || s.id) === String(endedSessionId)));
+    const targetBill = (selectedBill?.sessions?.some((s: any) => String(s._id || s.id) === String(endedSessionId)) ? selectedBill : billForSession) as Bill | null;
+    const linked = !!(targetBill?.table || billForSession?.table || selectedTable);
     if (!linked && !customerNameForEndSession.trim()) { showNotification(t('billing.notifications.customerNameRequired'), 'error'); return; }
     setIsEndingSession(true);
-    const endedSessionId = sessionToEnd;
     // بيانات الجلسة قبل الإنهاء — للتراجع والتحديث المتفائل
-    const targetBill = selectedBill;
-    const endedSession = targetBill?.sessions?.find((s: any) => (s._id || s.id) === endedSessionId);
+    const endedSession = (targetBill as any)?.sessions?.find((s: any) => String(s._id || s.id) === String(endedSessionId));
     const optimisticCost = endedSession ? getSessionCost(endedSession) : 0;
     try {
       const result = await api.endSession(endedSessionId, customerNameForEndSession.trim() || undefined);
@@ -1681,7 +1685,7 @@ const Tables: React.FC = () => {
           });
         }
 
-        const billId = selectedBill?.id || selectedBill?._id;
+        const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBill?.id || selectedBill?._id;
         scheduleBackgroundRefetch(true);
         if (billId) {
           api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});
@@ -3170,14 +3174,18 @@ const Tables: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-[300]">
           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto p-3 sm:p-6 mx-2 sm:mx-0">
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.confirmModals.endSessionTitle')}</h3>
-            {!selectedBill?.table && (
+            {(() => {
+              const billForModal = bills.find((b: any) => (b.sessions || []).some((s: any) => String(s._id || s.id) === String(sessionToEnd))) || selectedBill;
+              const isLinkedModal = !!(billForModal?.table || selectedTable);
+              return !isLinkedModal ? (
               <div className="mb-4">
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('billing.confirmModals.endSessionCustomerName')} <span className="text-red-500">*</span></label>
                 <input type="text" value={customerNameForEndSession} onChange={e => setCustomerNameForEndSession(e.target.value)}
                   placeholder={t('billing.confirmModals.endSessionCustomerNamePlaceholder')}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-gray-100" disabled={isEndingSession} />
               </div>
-            )}
+              ) : null;
+            })()}
             <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mb-4">{t('billing.confirmModals.endSessionMessage')}</p>
             <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
               <button onClick={() => { if (!isEndingSession) { setShowSessionEndModal(false); setSessionToEnd(null); } }} disabled={isEndingSession}
