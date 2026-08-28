@@ -87,20 +87,20 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
         tabIndex={0}
         onClick={() => onClick(table)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(table); } }}
-        className={`group relative w-full rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 sm:hover:scale-110 hover:-translate-y-1 cursor-pointer ${styles.card}`}
+        className={`group relative w-full rounded-xl sm:rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5 cursor-pointer ${styles.card}`}
       >
         {/* ── وقت / حالة badge ── */}
         <div className="absolute -top-2 -right-2 z-10">
           {isSelected ? (
-            <span className="flex items-center justify-center px-2 h-6 bg-orange-500 text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800">
+            <span className="flex items-center justify-center px-2 h-5 bg-orange-500 text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800">
               {t('cafe.selected')}
             </span>
           ) : isOccupied ? (
-            <span className={`flex items-center justify-center px-2 h-6 ${styles.badge} text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800 ${ageColor === 'red' ? 'animate-pulse' : ''}`}>
+            <span className={`flex items-center justify-center px-2 h-5 ${styles.badge} text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800 ${ageColor === 'red' ? 'animate-pulse' : ''}`}>
               {ageLabel || t('cafe.occupied')}
             </span>
           ) : (
-            <span className="flex items-center justify-center px-2 h-6 bg-gray-400 dark:bg-gray-500 text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800">
+            <span className="flex items-center justify-center px-2 h-5 bg-gray-400 dark:bg-gray-500 text-white text-xs font-bold rounded-full shadow border-2 border-white dark:border-gray-800">
               {t('cafe.empty')}
             </span>
           )}
@@ -108,22 +108,22 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
 
         {/* ── orders count badge ── */}
         {isOccupied && tableOrdersCount > 0 && (
-          <div className="absolute -top-2 -left-2 z-10 w-6 h-6 bg-blue-600 text-white text-xs font-bold rounded-full flex items-center justify-center shadow border border-white dark:border-gray-800">
+          <div className="absolute -top-2 -left-2 z-10 w-5 h-5 bg-blue-600 text-white text-xs font-bold rounded-full flex items-center justify-center shadow border border-white dark:border-gray-800">
             {tableOrdersCount}
           </div>
         )}
 
         {/* ── جسم الكارت ── */}
-        <div className="flex flex-col items-center justify-center px-2 pt-4 pb-7 sm:pt-5 sm:pb-8">
+        <div className="flex flex-col items-center justify-center px-2 pt-3 pb-6 sm:pt-4 sm:pb-7">
           {/* أيقونة الطاولة / الجلسة النشطة */}
-          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center mb-2 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
+          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-1.5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${styles.icon}`}>
             {isOccupied && activeSessionType ? (
               <span className="text-2xl sm:text-3xl leading-none select-none animate-pulse">
                 {activeSessionType === 'playstation' ? '🎮' :
                  activeSessionType === 'computer'    ? '💻' : '🎮💻'}
               </span>
             ) : (
-              <TableIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              <TableIcon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             )}
           </div>
 
@@ -134,7 +134,7 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
 
           {/* المبلغ المتبقي — يشمل delta الجلسات الحية كل 10 ثوانٍ */}
           {isOccupied && liveRemaining > 0 && (
-            <span className={`text-xs font-semibold mt-1 hidden sm:block ${styles.sub}`}>
+            <span className={`text-sm font-semibold mt-0.5 hidden sm:block ${styles.sub}`}>
               {formatCurrencyUtil(liveRemaining, i18n.language, localStorage.getItem('organizationCurrency') || 'EGP')}
               {liveExtra > 0 && <span className="ml-1 text-[10px] animate-pulse">●</span>}
             </span>
@@ -198,8 +198,8 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
 
       {/* ── Tooltip ── */}
       {showTooltip && isOccupied && tableBills.length > 0 && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-gray-900 dark:bg-gray-700 text-white rounded-xl shadow-2xl p-3 text-xs pointer-events-none">
-          <div className="font-bold text-sm mb-2 text-red-300 flex items-center gap-1.5">
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-gray-900 dark:bg-gray-700 text-white rounded-xl shadow-2xl p-3 text-base pointer-events-none">
+          <div className="font-bold text-lg mb-2 text-red-300 flex items-center gap-1.5">
             <TableIcon className="h-3.5 w-3.5" />
             {t('cafe.table')} {getTableDisplay(table.number, i18n.language)}
           </div>

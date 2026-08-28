@@ -111,6 +111,7 @@ export const createUser = async (req, res) => {
             role, 
             permissions, 
             phone, 
+            username,
             address,
             department,
             position,
@@ -128,12 +129,29 @@ export const createUser = async (req, res) => {
                 message: "المستخدم موجود بالفعل",
             });
         }
+        
+        // Validate unique username if provided
+        if (username) {
+            const usernameExists = await User.findOne({ username: username.trim().toLowerCase() });
+            if (usernameExists) {
+                return res.status(400).json({ success: false, message: "اسم المستخدم مستخدم بالفعل" });
+            }
+        }
+        
+        // Validate unique phone if provided
+        if (phone) {
+            const phoneExists = await User.findOne({ phone: phone.trim() });
+            if (phoneExists) {
+                return res.status(400).json({ success: false, message: "رقم الهاتف مستخدم بالفعل" });
+            }
+        }
 
         // Create user
         const user = await User.create({
             name,
             email,
             password,
+            username: username?.trim().toLowerCase(),
             role: role || "staff",
             permissions: permissions || [],
             phone,
@@ -177,6 +195,7 @@ export const updateUser = async (req, res) => {
             permissions, 
             status, 
             phone, 
+            username,
             address,
             department,
             position,
@@ -256,11 +275,42 @@ export const updateUser = async (req, res) => {
                 });
             }
         }
+        
+        // Validate unique username if provided
+        if (username && username !== user.username) {
+            const usernameExists = await User.findOne({ 
+                username: username.trim().toLowerCase(), 
+                _id: { $ne: req.params.id } 
+            });
+            
+            if (usernameExists) {
+                return res.status(400).json({
+                    success: false,
+                    message: "اسم المستخدم مستخدم بالفعل",
+                });
+            }
+        }
+        
+        // Validate unique phone if provided
+        if (phone && phone !== user.phone) {
+            const phoneExists = await User.findOne({ 
+                phone: phone.trim(), 
+                _id: { $ne: req.params.id } 
+            });
+            
+            if (phoneExists) {
+                return res.status(400).json({
+                    success: false,
+                    message: "رقم الهاتف مستخدم بالفعل",
+                });
+            }
+        }
 
         // Update fields
         if (name) user.name = name;
         if (email) user.email = email;
         if (password) user.password = password; // Will be hashed by pre-save middleware
+        if (username) user.username = username.trim().toLowerCase();
         if (role) user.role = role;
         if (permissions) user.permissions = permissions;
         if (status) user.status = status;

@@ -22,7 +22,12 @@ const userSchema = new mongoose.Schema(
         },
         username: {
             type: String,
-            default: null,
+            unique: true,
+            sparse: true,
+            trim: true,
+            minlength: [3, "اسم المستخدم يجب أن يكون 3 أحرف على الأقل"],
+            maxlength: [20, "اسم المستخدم لا يجب أن يتجاوز 20 حرف"],
+            match: [/^[a-zA-Z0-9_]+$/, "اسم المستخدم يجب أن يحتوي على حروف وأرقام وشرطة سفلية فقط"],
         },
         password: {
             type: String,
@@ -112,7 +117,10 @@ const userSchema = new mongoose.Schema(
         },
         phone: {
             type: String,
-            default: null,
+            unique: true,
+            sparse: true,
+            trim: true,
+            match: [/^(\+20|0)?1[0-9]{9}$/, "رقم الهاتف المصري غير صحيح (مثال: 01012345678)"],
         },
         address: {
             type: String,

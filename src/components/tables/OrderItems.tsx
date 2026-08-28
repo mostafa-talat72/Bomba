@@ -15,13 +15,13 @@ export const ItemCard = React.memo(({ item, qty, onAdd, fmt }: {
     <button onClick={() => onAdd(item)}
       className={`relative group flex flex-col items-center rounded-lg border transition-colors duration-100 overflow-hidden active:scale-95 ${inOrder ? 'border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-orange-200 hover:shadow-sm'}`}>
       {inOrder && (
-        <span className="absolute top-1 left-1 min-w-[16px] h-[16px] bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-0.5 leading-none">{qty}</span>
+        <span className="absolute top-1 left-1 min-w-[16px] h-[16px] bg-orange-500 text-white text-base font-bold rounded-full flex items-center justify-center px-0.5 leading-none">{qty}</span>
       )}
       <div className="px-1.5 pt-2 pb-1 flex-1 flex flex-col items-center justify-center w-full">
-        <p className="font-medium text-gray-900 dark:text-gray-100 text-xs leading-snug line-clamp-2 text-center mb-1">{item.name}</p>
-        <p className={`text-xs font-bold text-center ${inOrder ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>{fmt(item.price)}</p>
+        <p className="font-medium text-gray-900 dark:text-gray-100 text-base leading-snug line-clamp-2 text-center mb-1">{item.name}</p>
+        <p className={`text-base font-bold text-center ${inOrder ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>{fmt(item.price)}</p>
       </div>
-      <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-xs font-medium transition-colors duration-100 ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
+      <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-base font-medium transition-colors duration-100 ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
         <Plus className="h-2.5 w-2.5" /><span>{inOrder ? 'إضافة' : 'أضف'}</span>
       </div>
     </button>
@@ -46,14 +46,14 @@ export const OrderItemRow = React.memo(({ item, isFlash, isExpanded, onMinus, on
     <div className="flex items-center gap-2 px-2 py-2">
       <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
         <button onClick={onMinus} title="تقليل الكمية"
-          className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-colors font-bold text-base">−</button>
-        <span className="w-7 text-center font-bold text-sm text-gray-900 dark:text-gray-100 select-none border-x border-gray-200 dark:border-gray-700">{item.quantity}</span>
+          className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-colors font-bold text-xl">−</button>
+        <span className="w-7 text-center font-bold text-lg text-gray-900 dark:text-gray-100 select-none border-x border-gray-200 dark:border-gray-700">{item.quantity}</span>
         <button onClick={onPlus} title="زيادة الكمية"
-          className="w-7 h-7 flex items-center justify-center text-green-500 hover:bg-green-500 hover:text-white transition-colors font-bold text-base">+</button>
+          className="w-7 h-7 flex items-center justify-center text-green-500 hover:bg-green-500 hover:text-white transition-colors font-bold text-xl">+</button>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900 dark:text-gray-100 text-xs leading-snug">{item.name}</p>
-        <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold">{fmt(item.price * item.quantity)}</p>
+        <p className="font-semibold text-gray-900 dark:text-gray-100 text-base leading-snug">{item.name}</p>
+        <p className="text-base text-orange-600 dark:text-orange-400 font-semibold">{fmt(item.price * item.quantity)}</p>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         <button onClick={onToggleNote} title={item.notes ? 'عرض/تعديل الملاحظة' : 'إضافة ملاحظة'}
@@ -70,7 +70,7 @@ export const OrderItemRow = React.memo(({ item, isFlash, isExpanded, onMinus, on
       <div className="px-2 pb-2">
         <input type="text" value={item.notes || ''} onChange={e => onNoteChange(e.target.value)}
           placeholder={notePlaceholder} autoFocus
-          className="w-full text-xs border border-blue-200 dark:border-blue-700 rounded-lg px-2 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-400 outline-none" />
+          className="w-full text-base border border-blue-200 dark:border-blue-700 rounded-lg px-2 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-400 outline-none" />
       </div>
     )}
   </div>

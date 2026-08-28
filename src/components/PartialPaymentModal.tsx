@@ -135,8 +135,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
               <Receipt className="h-5 w-5 sm:h-8 sm:w-8 text-green-600 dark:text-green-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-lg sm:text-2xl font-bold text-white truncate">{t('billing.partialPaymentModal.title')}</h3>
-              <p className="text-xs sm:text-sm text-green-100 mt-1 truncate">{t('billing.partialPaymentModal.billNumber')} #{bill.billNumber}</p>
+              <h3 className="text-2xl sm:text-4xl font-bold text-white truncate">{t('billing.partialPaymentModal.title')}</h3>
+              <p className="text-base sm:text-lg text-green-100 mt-1 truncate">{t('billing.partialPaymentModal.billNumber')} #{bill.billNumber}</p>
             </div>
           </div>
           <button
@@ -150,7 +150,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
         <div className="p-3 sm:p-6">
           {/* العناصر المتاحة للدفع */}
           <div className="mb-4 sm:mb-6">
-            <h4 className="font-bold text-lg sm:text-xl text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center gap-2">
+            <h4 className="font-bold text-2xl sm:text-3xl text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 flex items-center gap-2">
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
               {t('billing.partialPaymentModal.selectItems')}
             </h4>
@@ -160,8 +160,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                 <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg">
                   <CheckCircle className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
                 </div>
-                <h5 className="font-bold text-lg sm:text-xl text-green-900 dark:text-green-100 mb-2">{t('billing.partialPaymentModal.allItemsPaid')}</h5>
-                <p className="text-green-700 dark:text-green-300 text-base sm:text-lg px-4">
+                <h5 className="font-bold text-2xl sm:text-3xl text-green-900 dark:text-green-100 mb-2">{t('billing.partialPaymentModal.allItemsPaid')}</h5>
+                <p className="text-green-700 dark:text-green-300 text-xl sm:text-2xl px-4">
                   {t('billing.partialPaymentModal.noItemsRemaining')}
                 </p>
               </div>
@@ -178,14 +178,14 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate">{item.name}</span>
+                            <span className="font-bold text-xl sm:text-2xl text-gray-900 dark:text-gray-100 truncate">{item.name}</span>
                             {item.hasAddons && (
-                              <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full whitespace-nowrap">
+                              <span className="text-base bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full whitespace-nowrap">
                                 🍯 {t('billing.partialPaymentModal.withAddons')}
                               </span>
                             )}
                           </div>
-                          <div className="text-xs sm:text-sm text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-1 rounded-lg inline-block mt-1">
+                          <div className="text-base sm:text-lg text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-1 rounded-lg inline-block mt-1">
                             {formatCurrency(item.price, i18n.language)}
                           </div>
                         </div>
@@ -195,16 +195,16 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                     {/* إحصائيات العنصر */}
                     <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3 sm:mb-4">
                       <div className="text-center p-2 sm:p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                        <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">{t('billing.totalQuantity')}</div>
-                        <div className="font-bold text-sm sm:text-lg text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity, i18n.language)}</div>
+                        <div className="text-gray-600 dark:text-gray-400 text-base mb-1">{t('billing.totalQuantity')}</div>
+                        <div className="font-bold text-lg sm:text-2xl text-gray-900 dark:text-gray-100">{formatDecimal(item.totalQuantity, i18n.language)}</div>
                       </div>
                       <div className="text-center p-2 sm:p-3 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                        <div className="text-green-700 dark:text-green-300 text-xs mb-1">{t('billing.paidQuantity')}</div>
-                        <div className="font-bold text-sm sm:text-lg text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity, i18n.language)}</div>
+                        <div className="text-green-700 dark:text-green-300 text-base mb-1">{t('billing.paidQuantity')}</div>
+                        <div className="font-bold text-lg sm:text-2xl text-green-800 dark:text-green-200">{formatDecimal(item.paidQuantity, i18n.language)}</div>
                       </div>
                       <div className="text-center p-2 sm:p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
-                        <div className="text-orange-700 dark:text-orange-300 text-xs mb-1">{t('billing.remainingQuantity')}</div>
-                        <div className="font-bold text-sm sm:text-lg text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity, i18n.language)}</div>
+                        <div className="text-orange-700 dark:text-orange-300 text-base mb-1">{t('billing.remainingQuantity')}</div>
+                        <div className="font-bold text-lg sm:text-2xl text-orange-800 dark:text-orange-200">{formatDecimal(item.remainingQuantity, i18n.language)}</div>
                       </div>
                     </div>
 
@@ -213,20 +213,20 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                       <div className="flex items-center gap-2 sm:gap-3 bg-green-100 dark:bg-green-900/50 px-3 sm:px-4 py-2 rounded-lg">
                         <button
                           type="button"
-                          className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-lg sm:text-xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-2xl sm:text-3xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleQuantityChange(item.id, -1)}
                           disabled={(selectedItems[item.id] || 0) <= 0}
                         >
                           <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
                         </button>
                         
-                        <span className="mx-1 sm:mx-2 w-8 sm:w-12 text-center select-none font-bold text-lg sm:text-2xl text-green-700 dark:text-green-300">
+                        <span className="mx-1 sm:mx-2 w-8 sm:w-12 text-center select-none font-bold text-2xl sm:text-4xl text-green-700 dark:text-green-300">
                           {formatDecimal(selectedItems[item.id] || 0, i18n.language)}
                         </span>
                         
                         <button
                           type="button"
-                          className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-lg sm:text-xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-2xl sm:text-3xl font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleQuantityChange(item.id, 1)}
                           disabled={(selectedItems[item.id] || 0) >= item.remainingQuantity}
                         >
@@ -236,7 +236,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
 
                       <button
                         type="button"
-                        className="px-3 sm:px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white text-xs sm:text-sm font-bold rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 sm:px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white text-base sm:text-lg font-bold rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => handlePayAll(item.id)}
                         disabled={(selectedItems[item.id] || 0) === item.remainingQuantity}
                       >
@@ -247,7 +247,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                     {/* عرض المبلغ المحدد */}
                     {(selectedItems[item.id] || 0) > 0 && (
                       <div className="mt-3 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
-                        <div className="flex justify-between items-center text-sm sm:text-base">
+                        <div className="flex justify-between items-center text-lg sm:text-xl">
                           <span className="text-blue-800 dark:text-blue-200 font-medium">
                             {t('billing.partialPaymentModal.selectedAmount')}: {formatDecimal(selectedItems[item.id], i18n.language)} × {formatCurrency(item.price, i18n.language)}
                           </span>
@@ -276,8 +276,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                       : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                   }`}
                 >
-                  <div className="text-xl sm:text-2xl mb-1">💵</div>
-                  <div className="text-xs sm:text-sm font-medium">{t('billing.paymentMethodCash')}</div>
+                  <div className="text-3xl sm:text-4xl mb-1">💵</div>
+                  <div className="text-base sm:text-lg font-medium">{t('billing.paymentMethodCash')}</div>
                 </button>
                 <button
                   onClick={() => setPaymentMethod('card')}
@@ -287,8 +287,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                       : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                   }`}
                 >
-                  <div className="text-xl sm:text-2xl mb-1">💳</div>
-                  <div className="text-xs sm:text-sm font-medium">{t('billing.paymentMethodCard')}</div>
+                  <div className="text-3xl sm:text-4xl mb-1">💳</div>
+                  <div className="text-base sm:text-lg font-medium">{t('billing.paymentMethodCard')}</div>
                 </button>
                 <button
                   onClick={() => setPaymentMethod('transfer')}
@@ -298,8 +298,8 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                       : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                   }`}
                 >
-                  <div className="text-xl sm:text-2xl mb-1">📱</div>
-                  <div className="text-xs sm:text-sm font-medium">{t('billing.paymentMethodTransfer')}</div>
+                  <div className="text-3xl sm:text-4xl mb-1">📱</div>
+                  <div className="text-base sm:text-lg font-medium">{t('billing.paymentMethodTransfer')}</div>
                 </button>
               </div>
             </div>
@@ -317,7 +317,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                     if (!item) return null;
                     
                     return (
-                      <div key={itemId} className="flex justify-between text-xs sm:text-sm bg-orange-100 dark:bg-orange-800 p-2 rounded border border-orange-200 dark:border-orange-600">
+                      <div key={itemId} className="flex justify-between text-base sm:text-lg bg-orange-100 dark:bg-orange-800 p-2 rounded border border-orange-200 dark:border-orange-600">
                         <span className="text-orange-800 dark:text-orange-200 truncate flex-1 pr-2">
                           {item.name} × {formatDecimal(quantity, i18n.language)}
                         </span>
@@ -328,7 +328,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                     );
                   })}
                 <div className="border-t border-orange-200 dark:border-orange-600 pt-2 mt-2">
-                  <div className="flex justify-between font-bold text-base sm:text-lg text-orange-900 dark:text-orange-100">
+                  <div className="flex justify-between font-bold text-xl sm:text-2xl text-orange-900 dark:text-orange-100">
                     <span>{t('billing.partialPaymentModal.grandTotal')}:</span>
                     <span>{formatCurrency(totalAmount, i18n.language)}</span>
                   </div>

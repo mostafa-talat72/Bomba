@@ -21,6 +21,7 @@ interface Permission {
 interface FormData {
   name: string;
   email: string;
+  username: string;
   password: string;
   confirmPassword: string;
   role: string;
@@ -156,6 +157,23 @@ const UserFormModal: React.FC<UserFormModalProps> = ({
                   onChange={onInputChange}
                   required
                   placeholder="user@example.com"
+                  className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
+                  dir="ltr"
+                />
+              </div>
+
+              {/* Username */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                  <User className="w-4 h-4 text-blue-600" />
+                  {t('users.form.username')}
+                </label>
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={onInputChange}
+                  placeholder={t('users.form.usernamePlaceholder')}
                   className={`w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold ${getInputDirClass()}`}
                   dir="ltr"
                 />

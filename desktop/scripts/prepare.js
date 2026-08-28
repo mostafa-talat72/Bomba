@@ -92,8 +92,64 @@ function pruneServerDeps() {
   });
 }
 
-function writeEnv() {
+// Read a key from a dotenv-style file.
+function readDotEnvKey(filePath, key) {
+  try {
+    const text = fs.readFileSync(filePath, "utf8");
+    const line = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l && !l.startsWith("#") && l.startsWith(key + "="));
+    if (!line) return "";
+    const value = line.slice(key.length + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      return value.slice(1, -1);
+    }
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+async function writeEnv() {
   log("Generating production .env ...");
+
+  // Read the developer's email SMTP credentials from the source server/.env
+  // so the desktop build can send emails too. We encrypt them before storing
+  // (see server/utils/secret.js) so they are not readable directly from the
+  // .env file in the bundle.
+  let enc = null;
+  try {
+    enc = await import("../../server/utils/secret.js");
+  } catch (e) {
+    log("WARNING: could not load secret helper, email encryption disabled: " + e.message);
+  }
+  const srcEnv = path.join(srcServer, ".env");
+  const srcHost = readDotEnvKey(srcEnv, "EMAIL_HOST");
+  const srcPort = readDotEnvKey(srcEnv, "EMAIL_PORT");
+  const srcUser = readDotEnvKey(srcEnv, "EMAIL_USER");
+  const srcPass = readDotEnvKey(srcEnv, "EMAIL_PASS");
+  const hasSrc = srcHost && srcUser && srcPass;
+
+  let encHost = "";
+  let encUser = "";
+  let encPass = "";
+  if (enc && srcHost && srcUser && srcPass) {
+    encHost = enc.encryptSecret(srcHost);
+    encUser = enc.encryptSecret(srcUser);
+    encPass = enc.encryptSecret(srcPass);
+    log("Email credentials found in source .env and encrypted for production");
+  } else {
+    log(
+      hasSrc
+        ? "WARNING: email credentials found but secret helper unavailable; storing plaintext"
+        : "WARNING: email credentials not found in source .env; email disabled"
+    );
+  }
+
   const env = [
     "PORT=5000",
     "NODE_ENV=production",
@@ -110,10 +166,13 @@ function writeEnv() {
     "JWT_REFRESH_EXPIRE=30d",
     "FRONTEND_URL=http://127.0.0.1:5000",
     "APP_TIMEZONE=Africa/Cairo",
-    "EMAIL_HOST=",
-    "EMAIL_PORT=587",
-    "EMAIL_USER=",
-    "EMAIL_PASS=",
+    "EMAIL_HOST=" + (encHost ? "" : srcHost),
+    "EMAIL_PORT=" + (encHost ? "587" : srcPort || "587"),
+    "EMAIL_USER=" + (encUser ? "" : srcUser),
+    "EMAIL_PASS=" + (encPass ? "" : srcPass),
+    "EMAIL_HOST_ENC=" + encHost,
+    "EMAIL_USER_ENC=" + encUser,
+    "EMAIL_PASS_ENC=" + encPass,
     "MAX_FILE_SIZE=5242880",
     "UPLOAD_PATH=uploads",
     "RATE_LIMIT_WINDOW=60000",
@@ -200,7 +259,7 @@ function ensureBundledMongo() {
   log(`Bundled MongoDB -> ${path.join(prepared, "mongo", "bin")}`);
 }
 
-function main() {
+async function main() {
   const t0 = Date.now();
   cleanPrepared();
   buildFrontend();
@@ -208,9 +267,12 @@ function main() {
   copyServer();
   copyShared();
   pruneServerDeps();
-  writeEnv();
+  await writeEnv();
   ensureBundledMongo();
   log(`Done in ${((Date.now() - t0) / 1000).toFixed(1)}s -> ${prepared}`);
 }
 
-main();
+main().catch((err) => {
+  console.error("[prepare] FAILED:", err);
+  process.exit(1);
+});

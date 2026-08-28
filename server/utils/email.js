@@ -1,6 +1,7 @@
 import Logger from "../middleware/logger.js";
 import { emailTranslations } from "./emailTranslations.js";
 import { getCurrencySymbol, getLocaleFromLanguage } from "./localeHelper.js";
+import { readEnvSecret } from "./secret.js";
 
 // Dynamic import for nodemailer to handle ES modules properly
 let nodemailer;
@@ -12,45 +13,56 @@ try {
     Logger.error("Failed to import nodemailer:", error);
 }
 
+// Resolve the email SMTP configuration, decrypting values when they are
+// stored encrypted in the production bundle (see secret.js / prepare.js).
+const getEmailConfig = () => {
+    const host = readEnvSecret("EMAIL_HOST_ENC", "EMAIL_HOST");
+    const user = readEnvSecret("EMAIL_USER_ENC", "EMAIL_USER");
+    const pass = readEnvSecret("EMAIL_PASS_ENC", "EMAIL_PASS");
+    const port = parseInt(
+        readEnvSecret("EMAIL_PORT_ENC", "EMAIL_PORT") || "587",
+        10
+    );
+    return { host, user, pass, port };
+};
+
 // Create email transporter
 const createTransporter = () => {
     if (!nodemailer) {
         Logger.error("Nodemailer is not available");
         return null;
     }
-    
-    if (
-        !process.env.EMAIL_HOST ||
-        !process.env.EMAIL_USER ||
-        !process.env.EMAIL_PASS
-    ) {
+
+    const { host, user, pass, port } = getEmailConfig();
+
+    if (!host || !user || !pass) {
         Logger.warn(
             "Email configuration not found, email features will be disabled",
             {
-                EMAIL_HOST: process.env.EMAIL_HOST ? "set" : "not set",
-                EMAIL_USER: process.env.EMAIL_USER ? "set" : "not set",
-                EMAIL_PASS: process.env.EMAIL_PASS ? "set" : "not set",
+                EMAIL_HOST: host ? "set" : "not set",
+                EMAIL_USER: user ? "set" : "not set",
+                EMAIL_PASS: pass ? "set" : "not set",
             }
         );
         return null;
     }
 
     Logger.info("Email configuration found, creating transporter", {
-        EMAIL_HOST: process.env.EMAIL_HOST,
-        EMAIL_USER: process.env.EMAIL_USER,
-        EMAIL_PORT: process.env.EMAIL_PORT || 587,
+        EMAIL_HOST: host,
+        EMAIL_USER: user,
+        EMAIL_PORT: port,
     });
 
     // Create transporter with Gmail configuration
     try {
         const transporter = nodemailer.createTransport({
             service: "gmail",
-            host: process.env.EMAIL_HOST,
-            port: parseInt(process.env.EMAIL_PORT) || 587,
+            host,
+            port,
             secure: false,
             auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS,
+                user,
+                pass,
             },
             tls: {
                 rejectUnauthorized: false,
@@ -58,8 +70,8 @@ const createTransporter = () => {
         });
         
         Logger.info(`Email transporter created successfully`, {
-            host: process.env.EMAIL_HOST,
-            port: process.env.EMAIL_PORT || 587,
+            host,
+            port,
         });
         
         return transporter;
@@ -79,13 +91,14 @@ export const sendEmail = async (options) => {
     if (!transporter && nodemailer) {
         // Fallback: create simple transporter
         try {
+            const { host, user, pass, port } = getEmailConfig();
             transporter = nodemailer.createTransport({
-                host: "smtp.gmail.com",
-                port: 587,
+                host: host || "smtp.gmail.com",
+                port: port || 587,
                 secure: false,
                 auth: {
-                    user: process.env.EMAIL_USER,
-                    pass: process.env.EMAIL_PASS,
+                    user,
+                    pass,
                 },
             });
             Logger.info("Using fallback email transporter");
@@ -109,7 +122,7 @@ export const sendEmail = async (options) => {
         }
 
         const mailOptions = {
-            from: `"MTE Systems" <${process.env.EMAIL_USER}>`,
+            from: `"MTE Systems" <${getEmailConfig().user}>`,
             to: options.to,
             subject: options.subject,
             text: options.text,
@@ -854,7 +867,7 @@ export const sendDailyReport = async (reportData, adminEmails, pdfBuffer = null,
                 }
 
                 const mailOptions = {
-                    from: `"MTE Systems" <${process.env.EMAIL_USER}>`,
+                    from: `"MTE Systems" <${getEmailConfig().user}>`,
                     to: email,
                     subject: emailTemplate.subject,
                     html: emailTemplate.html,

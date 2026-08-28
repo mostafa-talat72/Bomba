@@ -76,10 +76,10 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
                 <DollarSign className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
                   {t('costs.modals.paymentAddition.title')}
                 </h2>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                <p className="text-base text-gray-600 dark:text-gray-400 mt-0.5">
                   {t('costs.modals.paymentAddition.subtitle')}
                 </p>
               </div>
@@ -98,26 +98,26 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
           {/* Cost Info */}
           <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 rounded-xl p-4 space-y-3 border-2 border-gray-200 dark:border-gray-600">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.paymentAddition.description')}</span>
-              <span className="text-sm font-bold text-gray-900 dark:text-white">
+              <span className="text-lg font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.paymentAddition.description')}</span>
+              <span className="text-lg font-bold text-gray-900 dark:text-white">
                 {cost.description}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.paymentAddition.totalAmount')}</span>
-              <span className="text-sm font-bold text-gray-900 dark:text-white">
+              <span className="text-lg font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.paymentAddition.totalAmount')}</span>
+              <span className="text-lg font-bold text-gray-900 dark:text-white">
                 {formatCurrency(cost.amount, i18n.language)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.paymentAddition.paid')}</span>
-              <span className="text-sm font-bold text-green-600 dark:text-green-400">
+              <span className="text-lg font-semibold text-gray-600 dark:text-gray-400">{t('costs.modals.paymentAddition.paid')}</span>
+              <span className="text-lg font-bold text-green-600 dark:text-green-400">
                 {formatCurrency(cost.paidAmount, i18n.language)}
               </span>
             </div>
             <div className="flex items-center justify-between border-t-2 border-gray-300 dark:border-gray-600 pt-3 mt-2">
-              <span className="text-base font-bold text-gray-900 dark:text-white">{t('costs.modals.paymentAddition.remaining')}</span>
-              <span className="text-2xl font-bold text-red-600 dark:text-red-400">
+              <span className="text-xl font-bold text-gray-900 dark:text-white">{t('costs.modals.paymentAddition.remaining')}</span>
+              <span className="text-4xl font-bold text-red-600 dark:text-red-400">
                 {formatCurrency(cost.remainingAmount, i18n.language)}
               </span>
             </div>
@@ -125,7 +125,7 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
 
           {/* Payment Amount */}
           <div>
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+            <label className="block text-lg font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-green-600" />
               {t('costs.modals.paymentAddition.paymentAmount')} <span className="text-red-500">*</span>
             </label>
@@ -138,7 +138,7 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 placeholder={t('costs.modals.paymentAddition.paymentAmountPlaceholder')}
-                className={`form-field w-full px-4 py-3 ${isRTL ? 'pl-12' : 'pr-12'} border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-lg font-semibold`}
+                className={`form-field w-full px-4 py-3 ${isRTL ? 'pl-12' : 'pr-12'} border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-2xl font-semibold`}
                 required
               />
               <div className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`}>
@@ -148,7 +148,7 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
             <button
               type="button"
               onClick={handlePayFull}
-              className="mt-2 text-sm font-semibold text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline transition-colors"
+              className="mt-2 text-lg font-semibold text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline transition-colors"
             >
               {t('costs.modals.paymentAddition.payFull', { amount: formatCurrency(cost.remainingAmount, i18n.language) })}
             </button>
@@ -156,7 +156,7 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
 
           {/* Payment Method */}
           <div>
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-lg font-bold text-gray-700 dark:text-gray-300 mb-2">
               {t('costs.modals.paymentAddition.paymentMethod')}
             </label>
             <select
@@ -173,8 +173,8 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
 
           {/* Notes */}
           <div>
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-              {t('costs.modals.paymentAddition.notes')} <span className="text-xs font-normal text-gray-500">({t('costs.modals.paymentAddition.notesOptional')})</span>
+            <label className="block text-lg font-bold text-gray-700 dark:text-gray-300 mb-2">
+              {t('costs.modals.paymentAddition.notes')} <span className="text-base font-normal text-gray-500">({t('costs.modals.paymentAddition.notesOptional')})</span>
             </label>
             <textarea
               value={notes}
@@ -191,7 +191,7 @@ const PaymentAdditionModal = ({ isOpen, onClose, onSave, cost }: PaymentAddition
               <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50">
                 <X className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
-              <p className="text-sm font-semibold text-red-700 dark:text-red-400 flex-1">{error}</p>
+              <p className="text-lg font-semibold text-red-700 dark:text-red-400 flex-1">{error}</p>
             </div>
           )}
 

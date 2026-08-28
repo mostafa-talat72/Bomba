@@ -20,7 +20,31 @@ const connectDB = async () => {
         const localUri = syncConfig.localUri || process.env.MONGODB_URI || "mongodb://localhost:27017/bomba";
 
         // Connect to local MongoDB (primary database) - CRITICAL
-        await dualDatabaseManager.connectLocal(localUri);
+        // On first boot the bundled MongoDB replica set needs time to elect a
+        // primary, so retry instead of dying on the first server-selection timeout.
+        const maxAttempts = parseInt(process.env.LOCAL_DB_MAX_ATTEMPTS || "6", 10);
+        const retryDelayMs = parseInt(process.env.LOCAL_DB_RETRY_DELAY_MS || "5000", 10);
+        let localConnected = false;
+        let lastError = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                await dualDatabaseManager.connectLocal(localUri);
+                localConnected = true;
+                lastError = null;
+                break;
+            } catch (err) {
+                lastError = err;
+                Logger.warn(
+                    `⚠️ Local MongoDB connection attempt ${attempt}/${maxAttempts} failed: ${err.message}`
+                );
+                if (attempt < maxAttempts) {
+                    await new Promise((r) => setTimeout(r, retryDelayMs));
+                }
+            }
+        }
+        if (!localConnected) {
+            throw lastError;
+        }
 
         // Connect to Atlas (backup database) - NON-CRITICAL
         if (syncConfig.enabled && syncConfig.atlasUri) {

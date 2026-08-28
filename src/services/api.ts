@@ -21,6 +21,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  username?: string;
   role: 'admin' | 'staff' | 'cashier' | 'kitchen';
   permissions: string[];
   status: 'active' | 'inactive' | 'suspended';
@@ -716,10 +717,10 @@ class ApiClient {
   }
 
   // Auth endpoints
-  async login(email: string, password: string): Promise<ApiResponse<{ user: User; token: string; refreshToken: string }>> {
+  async login(identifier: string, password: string): Promise<ApiResponse<{ user: User; token: string; refreshToken: string }>> {
     const response = await this.request<{ user: User; token: string; refreshToken: string }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, password }),
     });
 
     if (response.success && response.data?.token) {
@@ -1971,6 +1972,7 @@ class ApiClient {
     role: string;
     status: string;
     phone?: string;
+    username?: string;
     address?: string;
     permissions: string[];
     businessName?: string;

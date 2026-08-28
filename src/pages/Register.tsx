@@ -10,6 +10,8 @@ interface FormData {
   name: string;
   businessName: string;
   email: string;
+  username: string;
+  phone: string;
   password: string;
 }
 
@@ -17,6 +19,8 @@ interface FormErrors {
   name?: string;
   businessName?: string;
   email?: string;
+  username?: string;
+  phone?: string;
   password?: string;
 }
 
@@ -30,6 +34,8 @@ const Register: React.FC = () => {
     name: '',
     businessName: '',
     email: '',
+    username: '',
+    phone: '',
     password: ''
   });
   const [errors, setErrors] = useState<FormErrors>({});
@@ -40,6 +46,8 @@ const Register: React.FC = () => {
   // Refs
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
   // Clear form data
@@ -48,6 +56,8 @@ const Register: React.FC = () => {
       name: '',
       businessName: '',
       email: '',
+      username: '',
+      phone: '',
       password: ''
     });
     setErrors({});
@@ -84,6 +94,22 @@ const Register: React.FC = () => {
       }
     }
 
+    // Validate username if provided
+    if (formData.username.trim()) {
+      const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+      if (!usernameRegex.test(formData.username)) {
+        newErrors.username = t('auth.usernameInvalid');
+      }
+    }
+
+    // Validate phone if provided
+    if (formData.phone.trim()) {
+      const phoneRegex = /^(\+20|0)?1[0-9]{9}$/;
+      if (!phoneRegex.test(formData.phone)) {
+        newErrors.phone = t('auth.phoneInvalid');
+      }
+    }
+
     if (!formData.password.trim()) {
       newErrors.password = t('auth.passwordRequired');
     } else if (formData.password.length < 6) {
@@ -114,6 +140,8 @@ const Register: React.FC = () => {
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
+          username: formData.username || undefined,
+          phone: formData.phone || undefined,
           password: formData.password,
           role: 'owner',
           businessName: formData.businessName,
@@ -290,6 +318,52 @@ const Register: React.FC = () => {
               />
               {errors.email && (
                 <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.email}</p>
+              )}
+            </div>
+
+            {/* Username Field (Optional) */}
+            <div>
+              <label className={`block text-sm font-medium text-white/90 mb-3 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {t('auth.username')} <span className="text-white/50 text-xs">({t('common.optional')})</span>
+              </label>
+              <input
+                ref={usernameInputRef}
+                type="text"
+                value={formData.username}
+                onChange={(e) => handleInputChange('username', e.target.value)}
+                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all ${isRTL ? 'text-right' : 'text-left'} text-white placeholder-white/50 ${
+                  errors.username ? 'border-red-400' : 'border-white/20'
+                }`}
+                placeholder={t('auth.usernamePlaceholder')}
+                disabled={isSubmitting}
+                autoComplete="username"
+                dir="ltr"
+              />
+              {errors.username && (
+                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.username}</p>
+              )}
+            </div>
+
+            {/* Phone Field (Optional) */}
+            <div>
+              <label className={`block text-sm font-medium text-white/90 mb-3 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {t('auth.phone')} <span className="text-white/50 text-xs">({t('common.optional')})</span>
+              </label>
+              <input
+                ref={phoneInputRef}
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => handleInputChange('phone', e.target.value)}
+                className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all ${isRTL ? 'text-right' : 'text-left'} text-white placeholder-white/50 ${
+                  errors.phone ? 'border-red-400' : 'border-white/20'
+                }`}
+                placeholder={t('auth.phonePlaceholder')}
+                disabled={isSubmitting}
+                autoComplete="tel"
+                dir="ltr"
+              />
+              {errors.phone && (
+                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.phone}</p>
               )}
             </div>
 

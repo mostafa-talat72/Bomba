@@ -9,6 +9,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { OrganizationProvider } from './context/OrganizationContext';
+import { TablesHeaderProvider } from './context/TablesHeaderContext';
 import Layout from './components/Layout';
 import ToastManager from './components/ToastManager';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -290,11 +291,13 @@ const App = () => {
           <ThemeProvider>
             <AppProvider>
               <OrganizationProvider>
+                <TablesHeaderProvider>
                 <ToastManager>
                   <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-cairo container-responsive">
                     <RouteHandler />
                   </div>
                 </ToastManager>
+                </TablesHeaderProvider>
               </OrganizationProvider>
             </AppProvider>
           </ThemeProvider>

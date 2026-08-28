@@ -520,8 +520,9 @@ const corsOptions = {
             process.env.FRONTEND_URL, // desktop mode (127.0.0.1)
         ].filter(Boolean);
 
-        // رفض الطلبات بدون origin في الإنتاج
-        if (!origin) return callback(new Error("Not allowed by CORS"));
+        // السماح بالطلبات بدون origin (مثل فحص الصحة من سطح المكتب)
+        // في وضع سطح المكتب يرسل Electron طلبات health بدون Origin header
+        if (!origin) return callback(null, true);
 
         // التحقق مما إذا كان origin مسموحاً به
         if (

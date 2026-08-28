@@ -31,9 +31,10 @@ const Users = () => {
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error'>('success');
-  const [formData, setFormData] = useState({
+const [formData, setFormData] = useState({
     name: '',
     email: '',
+    username: '',
     password: '',
     confirmPassword: '',
     role: 'staff',
@@ -41,8 +42,8 @@ const Users = () => {
     phone: '',
     address: '',
     permissions: [] as string[],
-    businessName: '', // اسم المنشأة
-    businessType: '', // نوع المنشأة
+    businessName: '',
+    businessType: '',
     department: '',
     position: '',
     hireDate: '',
@@ -355,6 +356,7 @@ const Users = () => {
         address: string;
         permissions: string[];
         password?: string;
+        username?: string;
         businessName?: string;
         businessType?: string;
         department?: string;
@@ -365,6 +367,7 @@ const Users = () => {
       } = {
         name: formData.name,
         email: formData.email,
+        username: formData.username,
         role: formData.role,
         status: formData.status,
         phone: formData.phone,

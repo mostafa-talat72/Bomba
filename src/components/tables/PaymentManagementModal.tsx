@@ -158,18 +158,18 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                   <DollarSign className="h-4 w-4 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-white leading-tight">{t('billing.paymentManagementTitle')}</h3>
+                  <h3 className="text-lg font-bold text-white leading-tight">{t('billing.paymentManagementTitle')}</h3>
                   <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                    <span className="text-xs text-blue-200">فاتورة #{selectedBill?.billNumber || (selectedBill?.id || selectedBill?._id)?.toString().slice(-6)}</span>
-                    {selectedBill?.table && <span className="text-xs text-blue-200">• طاولة {getTableDisplay((selectedBill.table as any).number, i18n.language)}</span>}
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getStatusColor(selectedBill.status)}`}>{getStatusText(selectedBill.status)}</span>
+                    <span className="text-base text-blue-200">فاتورة #{selectedBill?.billNumber || (selectedBill?.id || selectedBill?._id)?.toString().slice(-6)}</span>
+                    {selectedBill?.table && <span className="text-base text-blue-200">• طاولة {getTableDisplay((selectedBill.table as any).number, i18n.language)}</span>}
+                    <span className={`text-base px-2 py-0.5 rounded-full font-bold ${getStatusColor(selectedBill.status)}`}>{getStatusText(selectedBill.status)}</span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {selectedBill?.table && (
                   <button onClick={() => { setShowPaymentModal(false); setActiveTab3('orders'); setActiveTab('orders'); }}
-                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-lg text-white text-xs font-medium transition-all border border-white/20">
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-lg text-white text-base font-medium transition-all border border-white/20">
                     <TableIcon className="h-3.5 w-3.5" />الطاولة
                   </button>
                 )}
@@ -193,7 +193,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                   ].map(item => (
                     <div key={item.label} className={`${item.bg} border rounded-xl px-3 py-1.5 text-center`}>
                       <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{item.label}</p>
-                      <p className={`text-sm font-bold ${item.cls}`}>{formatCurrency(item.value)}</p>
+                      <p className={`text-lg font-bold ${item.cls}`}>{formatCurrency(item.value)}</p>
                     </div>
                   ))}
                 </div>
@@ -211,7 +211,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                 )}
                 {selectedBill?.table && (
                   <button onClick={() => { setNewTableNumber((selectedBill.table as any)?._id || null); setShowChangeTableModal(true); }}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded-xl text-amber-600 dark:text-amber-400 text-xs font-bold transition-all border border-amber-200 dark:border-amber-700 flex-shrink-0">
+                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded-xl text-amber-600 dark:text-amber-400 text-base font-bold transition-all border border-amber-200 dark:border-amber-700 flex-shrink-0">
                     <TableIcon className="h-3.5 w-3.5" />{t('billing.changeTable')}
                   </button>
                 )}
@@ -259,11 +259,11 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                                 ? 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-400 cursor-not-allowed opacity-60'
                                 : 'border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md'
                             }`}>
-                            <span className="text-2xl flex-shrink-0">{opt.emoji}</span>
+                            <span className="text-4xl flex-shrink-0">{opt.emoji}</span>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">{opt.title}</p>
-                              {opt.sub && <p className="text-xs text-gray-500 mt-0.5">{opt.sub}</p>}
-                              {opt.disabled && <p className="text-xs text-red-500 mt-0.5">{t('billing.unavailableActiveSession')}</p>}
+                              <p className="text-lg font-bold text-gray-800 dark:text-gray-100 leading-tight">{opt.title}</p>
+                              {opt.sub && <p className="text-base text-gray-500 mt-0.5">{opt.sub}</p>}
+                              {opt.disabled && <p className="text-base text-red-500 mt-0.5">{t('billing.unavailableActiveSession')}</p>}
                             </div>
                           </button>
                         ))}
@@ -274,12 +274,12 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                         <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3 border border-gray-200 dark:border-gray-700 space-y-2.5 mt-1">
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.paymentAmount')}</label>
+                              <label className="text-base font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.paymentAmount')}</label>
                               <input type="text" value={formatCurrency(parseFloat(paymentAmount))}
-                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-bold" disabled />
+                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-bold" disabled />
                             </div>
                             <div>
-                              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.discountPercentageLabel')}</label>
+                              <label className="text-base font-semibold text-gray-500 dark:text-gray-400 block mb-1">{t('billing.discountPercentageLabel')}</label>
                               <input type="number" value={discountPercentage} min="0" max="100" step="0.01" placeholder="0%"
                                 onChange={e => {
                                   const v = e.target.value;
@@ -291,7 +291,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                                       setPaymentAmount(selectedBill.remaining.toString());
                                   }
                                 }}
-                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 outline-none" />
+                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 outline-none" />
                               {/* خصم سريع بأزرار جاهزة */}
                               <div className="grid grid-cols-3 gap-1 mt-1.5">
                                 {[5, 10, 15].map(pct => (
@@ -313,10 +313,10 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                           <div className="grid grid-cols-3 gap-2">
                             {(['cash', 'card', 'transfer'] as const).map(m => (
                               <button key={m} onClick={() => setPaymentMethod(m)}
-                                className={`py-2 rounded-xl border-2 text-center text-xs font-bold transition-all ${
+                                className={`py-2 rounded-xl border-2 text-center text-base font-bold transition-all ${
                                   paymentMethod === m ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-300'
                                 }`}>
-                                <div className="text-base mb-0.5">{m === 'cash' ? '💵' : m === 'card' ? '💳' : '📱'}</div>
+                                <div className="text-xl mb-0.5">{m === 'cash' ? '💵' : m === 'card' ? '💳' : '📱'}</div>
                                 {t(`billing.paymentMethod${m.charAt(0).toUpperCase() + m.slice(1)}`)}
                               </button>
                             ))}
@@ -341,7 +341,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                                   <input type="number" min="0" step="0.01" value={splitAmount2}
                                     onChange={e => setSplitAmount2(e.target.value)}
                                     placeholder="0.00"
-                                    className="w-full border border-gray-200 dark:border-gray-600 rounded-md px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-indigo-500" />
+                                    className="w-full border border-gray-200 dark:border-gray-600 rounded-md px-2 py-1 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-indigo-500" />
                                   <div className="col-span-2 grid grid-cols-3 gap-1">
                                     {(['cash', 'card', 'transfer'] as const).filter(m => m !== paymentMethod).map(m => (
                                       <button key={m} onClick={() => setSplitMethod2(m)}
@@ -363,7 +363,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                             return (
                               <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${willPaid ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
                                 <span>{willPaid ? '✅' : '💰'}</span>
-                                <p className={`text-xs font-bold ${willPaid ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                                <p className={`text-base font-bold ${willPaid ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
                                   {willPaid ? t('billing.remainingWillBeZero') : t('billing.remainingWillBe', { amount: formatCurrency(Math.max(0, effTotal - newPaid)) })}
                                 </p>
                               </div>
@@ -374,8 +374,8 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
 
                     </>) : (
                       <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
-                        <div className="text-4xl mb-2">✅</div>
-                        <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{t('billing.billFullyPaidMessage')}</p>
+                        <div className="text-6xl mb-2">✅</div>
+                        <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{t('billing.billFullyPaidMessage')}</p>
                       </div>
                     )}
                   </div>
@@ -385,24 +385,24 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                 <div className="flex-shrink-0 px-3 py-2.5 border-t border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-900 flex items-center justify-between gap-2">
                   {selectedBill?.status !== 'paid' ? (
                     <button onClick={() => { if (!canDeleteBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; } setShowCancelConfirmModal(true); }}
-                      className="px-3 py-1.5 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 rounded-lg text-xs font-medium transition-all border border-red-100 dark:border-red-800/50">
+                      className="px-3 py-1.5 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 rounded-lg text-base font-medium transition-all border border-red-100 dark:border-red-800/50">
                       {t('billing.deleteBill')}
                     </button>
                   ) : (
                     <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                       <CheckCircle className="h-3.5 w-3.5" />
-                      <span className="text-xs font-medium">{t('billing.billFullyPaid')}</span>
+                      <span className="text-base font-medium">{t('billing.billFullyPaid')}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-1.5">
                     <button onClick={handleClosePaymentModal}
-                      className="px-3 py-1.5 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 rounded-lg text-xs font-medium transition-all">
+                      className="px-3 py-1.5 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 rounded-lg text-base font-medium transition-all">
                       {t('common.close')}
                     </button>
                     {selectedBill?.status !== 'paid' && paymentAmount && (
                       <button onClick={() => { if (splitEnabled && onSplitSubmit) { void submitSplit(); } else { void handlePaymentSubmit(); } }}
                         disabled={hasActiveSession(selectedBill) || isProcessingPayment || (splitEnabled && !splitAmount2)}
-                        className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${
+                        className={`px-4 py-1.5 rounded-lg text-lg font-bold transition-all flex items-center gap-1.5 ${
                           hasActiveSession(selectedBill) || isProcessingPayment || (splitEnabled && !splitAmount2)
                             ? 'bg-gray-300 dark:bg-gray-600 text-gray-400 cursor-not-allowed'
                             : 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-sm'
@@ -440,7 +440,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                     ) : aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.itemPayments || [], selectedBill?.status, selectedBill?.paid, selectedBill?.total).map((item, i) => (
                       <div key={i} className="bg-white dark:bg-gray-800 rounded-lg px-2.5 py-2 border border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
                         <div className="flex items-start justify-between gap-1 mb-1">
-                          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{item.name}</p>
+                          <p className="text-base font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{item.name}</p>
                           <span className="text-[10px] text-gray-500 flex-shrink-0">{formatCurrency(item.price)}</span>
                         </div>
                         <div className="grid grid-cols-3 gap-1 text-center">
@@ -451,7 +451,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                           ].map(f => (
                             <div key={f.label} className="bg-gray-50 dark:bg-gray-700/40 rounded px-1 py-0.5">
                               <p className="text-[9px] text-gray-400 leading-tight">{f.label}</p>
-                              <p className={`text-xs font-bold leading-tight ${f.cls}`}>{f.value}</p>
+                              <p className={`text-base font-bold leading-tight ${f.cls}`}>{f.value}</p>
                             </div>
                           ))}
                         </div>
@@ -488,8 +488,8 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       return allPmts.map(({ ip, p, idx }, i) => (
                         <div key={i} className="bg-white dark:bg-gray-800 rounded-lg px-2.5 py-2 border border-blue-100 dark:border-blue-800/40 hover:border-blue-300 transition-colors">
                           <div className="flex items-start justify-between gap-1 mb-0.5">
-                            <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{ip.itemName || t('billing.unknownItem')}</p>
-                            <p className="text-xs font-bold text-blue-700 dark:text-blue-300 flex-shrink-0">{formatCurrency(p.amount)}</p>
+                            <p className="text-base font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{ip.itemName || t('billing.unknownItem')}</p>
+                            <p className="text-base font-bold text-blue-700 dark:text-blue-300 flex-shrink-0">{formatCurrency(p.amount)}</p>
                           </div>
                           <div className="flex items-center justify-between">
                             <p className="text-[10px] text-gray-400 truncate flex-1">
@@ -555,9 +555,9 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                           )}
                           <div className="px-2.5 py-2">
                             <div className="flex items-center gap-1.5 mb-1.5">
-                              <span className="text-base">{icon}</span>
+                              <span className="text-xl">{icon}</span>
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-gray-800 dark:text-gray-100 leading-tight truncate">{session.deviceName || `جهاز ${session.deviceNumber}`}</p>
+                                <p className="text-base font-bold text-gray-800 dark:text-gray-100 leading-tight truncate">{session.deviceName || `جهاز ${session.deviceNumber}`}</p>
                                 <p className={`text-[10px] ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
                                   {isActive ? '● نشطة' : '✓ منتهية'} · {durStr} · {startStr}
                                 </p>
@@ -630,7 +630,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                         { label: t('billing.sessionsCount'), value: `${selectedBill?.sessions?.length || 0}${hasActiveSession(selectedBill) ? ' ● نشطة' : ''}` },
                         { label: t('billing.creationDate'),  value: selectedBill?.createdAt ? formatDate(selectedBill.createdAt) : '-' },
                       ].map(row => (
-                        <div key={row.label} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                        <div key={row.label} className="flex items-center justify-between px-3 py-1.5 text-base">
                           <span className="text-gray-500 dark:text-gray-400">{row.label}</span>
                           <span className="font-semibold text-gray-800 dark:text-gray-100 text-right max-w-[100px] truncate">{row.value}</span>
                         </div>

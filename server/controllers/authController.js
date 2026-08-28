@@ -31,7 +31,7 @@ function normalizeEmail(email) {
 // @access  Public
 export const register = async (req, res) => {
     try {
-        const { name, email, password, role, businessName } = req.body;
+        const { name, email, password, role, businessName, username, phone } = req.body;
         const normalizedEmail = normalizeEmail(email);
         const userExists = await User.findOne({ email: normalizedEmail });
         if (userExists) {
@@ -39,19 +39,43 @@ export const register = async (req, res) => {
                 .status(400)
                 .json({ success: false, message: "المستخدم موجود بالفعل" });
         }
+        
+        // Validate username if provided
+        if (username) {
+            const usernameExists = await User.findOne({ username: username.trim().toLowerCase() });
+            if (usernameExists) {
+                return res.status(400).json({ success: false, message: "اسم المستخدم مستخدم بالفعل" });
+            }
+        }
+        
+        // Validate phone if provided
+        if (phone) {
+            const phoneExists = await User.findOne({ phone: phone.trim() });
+            if (phoneExists) {
+                return res.status(400).json({ success: false, message: "رقم الهاتف مستخدم بالفعل" });
+            }
+        }
+        
         let user = null;
         let organization = null;
         const verificationToken = crypto.randomBytes(32).toString("hex");
+        const normalizedUsername = username?.trim().toLowerCase() || undefined;
+        const normalizedPhone = phone?.trim() || undefined;
+        
         if (role === "owner") {
             Logger.info("Creating owner user", {
                 name,
                 email: normalizedEmail,
                 businessName,
+                username: normalizedUsername,
+                phone: normalizedPhone,
             });
 
             user = await User.create({
                 name,
                 email: normalizedEmail,
+                username: normalizedUsername,
+                phone: normalizedPhone,
                 password,
                 role: "admin",
                 permissions: ["all"],
@@ -140,9 +164,25 @@ export const register = async (req, res) => {
             };
             const autoPermissions = rolePermissionsMap[safeRole] || rolePermissionsMap.staff;
 
+            // Validate unique username/phone for employee if provided
+            if (username) {
+                const usernameExists = await User.findOne({ username: normalizedUsername });
+                if (usernameExists) {
+                    return res.status(400).json({ success: false, message: "اسم المستخدم مستخدم بالفعل" });
+                }
+            }
+            if (phone) {
+                const phoneExists = await User.findOne({ phone: normalizedPhone });
+                if (phoneExists) {
+                    return res.status(400).json({ success: false, message: "رقم الهاتف مستخدم بالفعل" });
+                }
+            }
+
             user = await User.create({
                 name,
                 email: normalizedEmail,
+                username: normalizedUsername,
+                phone: normalizedPhone,
                 password,
                 role: safeRole,
                 permissions: autoPermissions,
@@ -227,9 +267,18 @@ export const register = async (req, res) => {
 // @access  Public
 export const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
-        const normalizedLoginEmail = normalizeEmail(email);
-        let user = await User.findOne({ email: normalizedLoginEmail })
+        const { identifier, password } = req.body;
+        if (!identifier || !password) {
+            return res.status(400).json({ success: false, message: "مطلوب اسم مستخدم/إيميل/هاتف وكلمة مرور" });
+        }
+        const normalizedIdentifier = identifier.trim().toLowerCase();
+        let user = await User.findOne({
+            $or: [
+                { email: normalizedIdentifier },
+                { phone: normalizedIdentifier },
+                { username: normalizedIdentifier }
+            ]
+        })
             .select("+password")
             .populate('organization', 'name owner');
             

@@ -7,12 +7,12 @@ import { useLanguage } from '../context/LanguageContext';
 import { AUTH_ERROR_CODES, isValidErrorCode, getErrorMessageKey } from '../constants/errorCodes';
 
 interface FormData {
-  email: string;
+  identifier: string;
   password: string;
 }
 
 interface FormErrors {
-  email?: string;
+  identifier?: string;
   password?: string;
 }
 
@@ -24,7 +24,7 @@ const Login: React.FC = () => {
 
   // State management
   const [formData, setFormData] = useState<FormData>({
-    email: '',
+    identifier: '',
     password: ''
   });
   const [errors, setErrors] = useState<FormErrors>({});
@@ -33,13 +33,13 @@ const Login: React.FC = () => {
   const [showResendLink, setShowResendLink] = useState(false);
 
   // Refs
-  const emailInputRef = useRef<HTMLInputElement>(null);
+  const identifierInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
   // Clear form data
   const clearForm = useCallback(() => {
     setFormData({
-      email: '',
+      identifier: '',
       password: ''
     });
     setErrors({});
@@ -59,13 +59,8 @@ const Login: React.FC = () => {
   const validateForm = useCallback((): boolean => {
     const newErrors: FormErrors = {};
 
-    if (!formData.email.trim()) {
-      newErrors.email = t('auth.emailRequired');
-    } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        newErrors.email = t('auth.emailInvalid');
-      }
+    if (!formData.identifier.trim()) {
+      newErrors.identifier = t('auth.identifierRequired');
     }
 
     if (!formData.password.trim()) {
@@ -90,7 +85,7 @@ const Login: React.FC = () => {
     setErrors({});
 
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login(formData.identifier, formData.password);
 
       if (result.success) {
         clearForm();
@@ -112,7 +107,7 @@ const Login: React.FC = () => {
         if (isValidErrorCode(errorCode)) {
           // Use translation for error code
           const translatedError = t(getErrorMessageKey(errorCode));
-          setErrors({ email: translatedError });
+          setErrors({ identifier: translatedError });
           
           // Show resend link for NOT_VERIFIED error
           if (errorCode === AUTH_ERROR_CODES.NOT_VERIFIED) {
@@ -120,22 +115,22 @@ const Login: React.FC = () => {
           }
         } else {
           // Fallback: display the error message as-is (for backward compatibility)
-          setErrors({ email: errorCode || t('auth.loginErrorGeneric') });
+          setErrors({ identifier: errorCode || t('auth.loginErrorGeneric') });
         }
       }
     } catch {
       setErrors({
-        email: t('auth.loginErrorRetry')
+        identifier: t('auth.loginErrorRetry')
       });
     } finally {
       setIsSubmitting(false);
     }
   }, [formData, validateForm, login, navigate, clearForm, t]);
 
-  // Auto-focus email field on mount
+  // Auto-focus identifier field on mount
   useEffect(() => {
-    if (emailInputRef.current) {
-      setTimeout(() => emailInputRef.current?.focus(), 100);
+    if (identifierInputRef.current) {
+      setTimeout(() => identifierInputRef.current?.focus(), 100);
     }
   }, []);
 
@@ -169,26 +164,26 @@ const Login: React.FC = () => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Field */}
+            {/* Identifier Field (Email/Phone/Username) */}
             <div>
               <label className={`block text-sm font-medium text-white/90 mb-3 ${isRTL ? 'text-right' : 'text-left'}`}>
-                {t('common.email')}
+                {t('auth.identifier')}
               </label>
               <input
-                ref={emailInputRef}
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
+                ref={identifierInputRef}
+                type="text"
+                value={formData.identifier}
+                onChange={(e) => handleInputChange('identifier', e.target.value)}
                 className={`w-full px-4 py-4 bg-white/10 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all ${isRTL ? 'text-right' : 'text-left'} text-white placeholder-white/50 ${
-                  errors.email ? 'border-red-400' : 'border-white/20'
+                  errors.identifier ? 'border-red-400' : 'border-white/20'
                 }`}
-                placeholder={t('auth.emailPlaceholder')}
+                placeholder={t('auth.identifierPlaceholder')}
                 disabled={isSubmitting}
-                autoComplete="email"
+                autoComplete="username"
                 dir={isRTL ? 'rtl' : 'ltr'}
               />
-              {errors.email && (
-                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.email}</p>
+              {errors.identifier && (
+                <p className={`mt-2 text-sm text-red-300 ${isRTL ? 'text-right' : 'text-left'}`}>{errors.identifier}</p>
               )}
             </div>
 
