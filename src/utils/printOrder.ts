@@ -57,7 +57,8 @@ export const buildOrderPrintHTML = async (
   menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }> = new Map(),
   fallbackOrganizationName?: string,
   language: string = 'ar',
-  t: TFunction = ((key: string) => key) as TFunction
+  t: TFunction = ((key: string) => key) as TFunction,
+  tableSectionName?: string
 ): Promise<string> => {
   // Get establishment name from order data or use fallback
   let establishmentName = fallbackOrganizationName || t('orderPrint.defaultEstablishment') || 'Cafe Management System';
@@ -192,7 +193,7 @@ export const buildOrderPrintHTML = async (
   });
 
   // Print all sections on one page using iframe
-  return printAllSectionsInOnePage(order, sectionsArray, establishmentName, language, t);
+  return printAllSectionsInOnePage(order, sectionsArray, establishmentName, language, t, tableSectionName);
 };
 
 // Function to print all sections on one page using iframe
@@ -201,7 +202,8 @@ const printAllSectionsInOnePage = (
   sections: Array<{ sectionId: string; sectionName: string; items: OrderItem[] }>,
   establishmentName: string,
   language: string,
-  t: TFunction
+  t: TFunction,
+  tableSectionName?: string
 ) => {
   const now = new Date();
   const locale = language === 'ar' ? 'ar-EG' : language === 'fr' ? 'fr-FR' : 'en-US';
@@ -258,7 +260,7 @@ const printAllSectionsInOnePage = (
             <div style="font-size: 16px; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
               <div style="font-size: 16px; margin: 2px 0; text-align: center;">
-                ${t('orderPrint.table')}: <strong>${order.table.number}</strong>
+                ${t('orderPrint.table')}: <strong>${order.table.number}</strong>${tableSectionName ? ` — (${tableSectionName})` : ''}
               </div>
             ` : ''}
           </div>
@@ -515,9 +517,10 @@ export const printOrder = async (
   menuItemsMap: Map<string, { category?: { section?: string | MenuSection } }> = new Map(),
   fallbackOrganizationName?: string,
   language: string = 'ar',
-  t: TFunction = ((key: string) => key) as TFunction
+  t: TFunction = ((key: string) => key) as TFunction,
+  tableSectionName?: string
 ) => {
-  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t);
+  const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName);
 
   // Create a hidden iframe for printing
   const printFrame = document.createElement('iframe');

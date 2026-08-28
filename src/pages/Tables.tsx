@@ -206,6 +206,30 @@ const Tables: React.FC = () => {
     setTimeout(doScroll, 100);
   };
 
+  // اسم قسم الطاولة للطباعة (يميز الطاولات المكررة الرقم عبر الأقسام)
+  const getTableSectionName = (table: any): string => {
+    if (!table) return '';
+    const tid = String(table._id || table.id || '');
+    let t = table;
+    if (tid) {
+      const found = tables.find(x => String((x as any)._id || (x as any).id) === tid);
+      if (found) t = found;
+    }
+    const sec = typeof t.section === 'object'
+      ? (t.section as any)?.name
+      : tableSections.find((s: any) => s._id === t.section || s.id === t.section)?.name;
+    return sec || '';
+  };
+
+  // معرّف قسم الطاولة (للمقارنة مع activeSectionFilter — يطابق s.id)
+  const getTableSectionId = (table: any): string => {
+    if (!table) return '';
+    const raw = typeof table.section === 'object' ? (table.section as any)?._id || (table.section as any)?.id : table.section;
+    if (raw === undefined || raw === null || raw === '') return '';
+    const sec = tableSections.find((s: any) => s._id === raw || s.id === raw);
+    return sec ? String(sec.id) : String(raw);
+  };
+
   // #7 - Activity log tab
   const [activeTab3, setActiveTab3] = useState<'orders' | 'billing' | 'log' | 'sessions'>('orders');
   const [tableActivityLog, setTableActivityLog] = useState<Array<{type: string; message: string; time: Date; color: string}>>([]);
@@ -440,6 +464,9 @@ const Tables: React.FC = () => {
   // ── إدخال أرقام سريع (تحوّم على كارت ثم اكتب رقم) ──────────────────────
   const [quickDigits, setQuickDigits] = useState('');
   const quickDigitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quickDigitOpenRef = useRef<(digits: string) => void>(() => {});
+  const quickTryOpenRef = useRef<(digits: string) => boolean>(() => false);
+  const quickDigitDelayedRef = useRef(false);
   const [quickPickerTables, setQuickPickerTables] = useState<Table[] | null>(null);
 
   // ── شريط التراجع ─────────────────────────────────────────────────────────
@@ -605,6 +632,38 @@ const Tables: React.FC = () => {
     };
   }, []);
 
+  // ── فتح فوري عند رقم مكتمل يحدد طاولة واحدة فريدة (أو وحيدة في القسم الحالي) ──
+  // لا يفتح مبكراً إذا كان الرقم الحالي بادئة لرقم طاولة آخر (مثلاً "5" بينما يوجد "50")
+  function tryOpenUniqueQuick(digits: string): boolean {
+    const normF = (s: string) => s.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+    const q = normF(digits.trim().toLowerCase());
+    if (!q) return false;
+    quickDigitDelayedRef.current = false;
+
+    // إن كان الرقم الحالي بادئة لرقم طاولة أطول — لم يكتمل الرقم بعد، انتظر
+    const isPrefixOfOther = activeTables.some((tb: any) => {
+      const t = normF(String(tb.number || '')).trim().toLowerCase();
+      return t.length > q.length && t.startsWith(q);
+    });
+    if (isPrefixOfOther) return false;
+
+    const exact = activeTables.filter((tb: any) => normF(String(tb.number || '')).trim().toLowerCase() === q);
+    if (exact.length === 1) {
+      setQuickDigits(''); if (quickDigitTimer.current) clearTimeout(quickDigitTimer.current);
+      setQuickPickerTables(null); lastFocusedTableRef.current = exact[0]; handleTableClick(exact[0]);
+      return true;
+    }
+    if (exact.length > 1 && activeSectionFilter !== 'all') {
+      const inSection = exact.filter((tb: any) => getTableSectionId(tb) === activeSectionFilter);
+      if (inSection.length === 1) {
+        setQuickDigits(''); if (quickDigitTimer.current) clearTimeout(quickDigitTimer.current);
+        setQuickPickerTables(null); lastFocusedTableRef.current = inSection[0]; handleTableClick(inSection[0]);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ── اختصارات لوحة المفاتيح ───────────────────────────────────────────────
   // F2 = دفع سريع للطاولة الحالية · F3 = جلسة جديدة (تبويب الجلسات)
   // Esc = إغلاق أعلى نافذة · 0-9 = بناء رقم الطاولة (ثوانٍ تأخير ثم فتح)
@@ -653,9 +712,12 @@ const Tables: React.FC = () => {
         setQuickDigits(digits);
         if (quickDigitTimer.current) clearTimeout(quickDigitTimer.current);
 
+        // فتح فوري إن كان الرقم الحالي يحدّد طاولة واحدة فقط (فريدة كبادئة أو كرقم)
+        if (quickTryOpenRef.current(digits)) return;
+
         quickDigitTimer.current = setTimeout(() => {
-          setQuickDigitTimerRef(digits);
-        }, 700);
+          quickDigitOpenRef.current(digits);
+        }, 350);
       }
     };
     window.addEventListener('keydown', handler);
@@ -917,11 +979,43 @@ const Tables: React.FC = () => {
     const q = norm(digits.trim().toLowerCase());
     if (!q) { setQuickDigits(''); return; }
 
-    // 1) رقم مطابق — فتح مباشر إن كان فريداً، وإلا عرض اختيار بين المتكررة
+    // إن كان الرقم الحالي بادئة لرقم طاولة أطول (مثل "5" و"50") نمدد الانتظار
+    // مرة واحدة فقط حتى يتابع المستخدم الكتابة، ثم نتعامل مع الرقم كمكتمل
+    const prefixOfOther = activeTables.some((tb: any) => {
+      const t = norm(String(tb.number || '')).trim().toLowerCase();
+      return t.length > q.length && t.startsWith(q);
+    });
+    if (prefixOfOther && !quickDigitDelayedRef.current) {
+      quickDigitDelayedRef.current = true;
+      if (quickDigitTimer.current) clearTimeout(quickDigitTimer.current);
+      quickDigitTimer.current = setTimeout(() => {
+        quickDigitOpenRef.current(digits);
+      }, 500);
+      return;
+    }
+    quickDigitDelayedRef.current = false;
+
+    // 1) رقم مطابق — فتح مباشر للقسم الحالي إن وجد، وإلا عرض اختيار بين المتكررة
     const byNum = activeTables.filter(tb => {
       const raw = norm(String(tb.number || '')).trim().toLowerCase();
       return raw === q;
     });
+    // 1أ) ضمن القسم المحدد حالياً فقط (أولوية للقسم المعروض)
+    if (activeSectionFilter !== 'all') {
+      const inSection = byNum.filter((tb: any) => getTableSectionId(tb) === activeSectionFilter);
+      if (inSection.length === 1) {
+        setQuickDigits('');
+        setQuickPickerTables(null);
+        lastFocusedTableRef.current = inSection[0];
+        handleTableClick(inSection[0]);
+        return;
+      } else if (inSection.length > 1) {
+        setQuickDigits('');
+        setQuickPickerTables(inSection);
+        return;
+      }
+      // لا توجد طاولة بهذا الرقم في القسم الحالي — تابع البحث في كل الأقسام أدناه
+    }
     if (byNum.length === 1) {
       setQuickDigits('');
       setQuickPickerTables(null);
@@ -949,11 +1043,25 @@ const Tables: React.FC = () => {
       setQuickDigits('');
       setQuickPickerTables(byName);
     } else {
+      // لو الطاولات لسه بتتّحمّل (صفحة فُتحت للتو) نعيد المحاولة بعد لحظة بدل إظهار خطأ فوري
+      if (tables.length === 0) {
+        if (quickDigitTimer.current) clearTimeout(quickDigitTimer.current);
+        quickDigitTimer.current = setTimeout(() => {
+          quickDigitOpenRef.current(digits);
+        }, 400);
+        return;
+      }
       setQuickDigits('');
       setQuickPickerTables(null);
       showNotification(`⚠️ الطاولة ${digits} غير موجودة`, 'error');
     }
-  }, [activeTables, handleTableClick, showNotification]);
+  }, [activeTables, handleTableClick, showNotification, activeSectionFilter, tableSections, tables]);
+
+  // إبقاء أحدث نسخة من دوال الفتح في ref حتى يستدعي الـ handler والمؤقت الأحدث دائماً
+  useEffect(() => {
+    quickDigitOpenRef.current = setQuickDigitTimerRef;
+    quickTryOpenRef.current = tryOpenUniqueQuick;
+  }, [setQuickDigitTimerRef]);
 
   // ── buildActivityLog — دالة مستقلة قابلة لإعادة الاستخدام ─────────────
   const buildActivityLog = useCallback((tableId: string) => {
@@ -1190,7 +1298,7 @@ const Tables: React.FC = () => {
             <tr>
               <td>${i + 1}</td>
               <td>#${b.billNumber || b.id?.slice(-6)}</td>
-              <td>${b.table ? `طاولة ${(b.table as any).number || ''}` : '—'}</td>
+              <td>${b.table ? `طاولة ${(b.table as any).number || ''}${getTableSectionName(b.table) ? ` (${getTableSectionName(b.table)})` : ''}` : '—'}</td>
               <td>${fmt(b.total || 0)}</td>
               <td>${fmt(b.paid || 0)}</td>
               <td>${fmt(b.remaining || 0)}</td>
@@ -1306,7 +1414,7 @@ const Tables: React.FC = () => {
           setTimeout(async () => {
             const map = new Map();
             menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
-            await printOrder({ ...order, items: order.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t);
+            await printOrder({ ...order, items: order.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(selectedTable));
           }, 0);
         }
         // تحديث متفائل — createOrder في DataContext حدث orders+bills، نحدث tableOrders فقط
@@ -1338,7 +1446,7 @@ const Tables: React.FC = () => {
           setTimeout(async () => {
             const map = new Map();
             menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
-            await printOrder({ ...updated, items: updated.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : updated.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t);
+            await printOrder({ ...updated, items: updated.items?.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })) || [], createdAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : updated.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(selectedTable));
           }, 0);
         }
         if (selectedTable) setTableOrders(p => p.map(o => o.id === updated.id ? updated : o));
@@ -1357,7 +1465,7 @@ const Tables: React.FC = () => {
     if (!order.items || !Array.isArray(order.items)) { showNotification(t('cafe.notifications.orderHasNoItems'), 'error'); return; }
     const map = new Map();
     menuItems.forEach(mi => { map.set(mi.id, mi); map.set(mi._id, mi); });
-    await printOrder({ ...order, items: order.items.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })), createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t);
+    await printOrder({ ...order, items: order.items.map((item: any, idx: number) => ({ ...item, _id: item._id || item.id || `temp-${idx}` })), createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt } as any, menuSections, map, user?.organizationName || '', i18n.language, t, getTableSectionName(order.table));
   };
 
   const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText = 'تأكيد', cancelText = 'إلغاء', confirmColor = 'bg-red-600 hover:bg-red-700') => {
@@ -1800,7 +1908,7 @@ const Tables: React.FC = () => {
     if (unpaid.length === 0) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
     try {
       const r = await api.getBill(unpaid[0].id || unpaid[0]._id);
-      if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t);
+      if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t, getTableSectionName(tb));
     } catch { showNotification('خطأ في الطباعة', 'error'); }
   }, [tableCardData, user, i18n.language, t]);
 
@@ -1851,6 +1959,16 @@ const Tables: React.FC = () => {
       showNotification(`❌ ${error?.response?.data?.message || error?.message || t('billing.notifications.unexpectedError')}`, 'error');
     } finally { setIsChangingTable(false); }
   };
+
+  const handleQuickChangeTable = useCallback((tb: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
+    const unpaid = bills.filter((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
+    if (unpaid.length === 0) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
+    handleOpenChangeTableModal(unpaid[0]);
+  }, [tableCardData, handleOpenChangeTableModal]);
+
+  const stableQuickChangeTable = useCallback((tb: Table, e: React.MouseEvent) => { handleQuickChangeTable(tb, e); }, [handleQuickChangeTable]);
 
   const handleEditSessionTime = (session: Session) => {
     if (!canEditSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
@@ -2137,6 +2255,7 @@ const Tables: React.FC = () => {
                               onQuickOrder={stableQuickOrder}
                               onQuickBilling={stableQuickBilling}
                               onQuickPrint={stableQuickPrint}
+                              onQuickChangeTable={stableQuickChangeTable}
                               onEndAllSessions={handleEndAllSessions}
                               onHoverChange={stableHoverChange}
                             />
@@ -2654,7 +2773,7 @@ const Tables: React.FC = () => {
                                           <DollarSign className="h-3 w-3" />دفع
                                         </button>
                                       )}
-                                      <button onClick={async e => { e.stopPropagation(); try { const r = await api.getBill(bill.id || bill._id); if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t); } catch {} }}
+                                      <button onClick={async e => { e.stopPropagation(); try { const r = await api.getBill(bill.id || bill._id); if (r.success && r.data) await printBill(r.data, user?.organizationName, i18n.language, t, getTableSectionName(bill.table)); } catch {} }}
                                         className="w-7 h-7 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 rounded-lg flex items-center justify-center transition-all">
                                         <Printer className="h-3 w-3" />
                                       </button>
@@ -3118,8 +3237,8 @@ const Tables: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mx-2 sm:mx-0">
             <div className="p-3 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <div>
-                <h3 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">{t('billing.sessionPaymentModal.title')}</h3>
-                <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 mt-1">{t('billing.sessionPaymentModal.subtitle')}</p>
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">{t('billing.sessionPaymentModal.title')}</h3>
+                <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1">{t('billing.sessionPaymentModal.subtitle')}</p>
               </div>
             </div>
             <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
@@ -3139,44 +3258,44 @@ const Tables: React.FC = () => {
                           <span className="text-2xl">{session.deviceType === 'playstation' ? '🎮' : '💻'}</span>
                         </div>
                         <div>
-                          <h4 className="font-bold text-xl sm:text-2xl text-gray-900 dark:text-gray-100">{session.deviceName}</h4>
-                          <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400">{session.deviceType === 'playstation' ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}</p>
+                          <h4 className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100">{session.deviceName}</h4>
+                          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">{session.deviceType === 'playstation' ? t('billing.gamingDevices.playstation') : t('billing.gamingDevices.computer')}</p>
                         </div>
                       </div>
                       <div className="flex flex-col gap-1 items-end">
-                        {isFullyPaid && <span className="px-2 sm:px-3 py-1 bg-green-500 text-white text-base font-bold rounded-full">✓ {t('billing.sessionPaymentModal.fullyPaid')}</span>}
-                        {isActive && <span className="px-2 sm:px-3 py-1 bg-blue-500 text-white text-base font-bold rounded-full animate-pulse">⚡ {t('billing.sessionPaymentModal.activeSession')}</span>}
+                        {isFullyPaid && <span className="px-2 sm:px-3 py-1 bg-green-500 text-white text-xs sm:text-sm font-bold rounded-full">✓ {t('billing.sessionPaymentModal.fullyPaid')}</span>}
+                        {isActive && <span className="px-2 sm:px-3 py-1 bg-blue-500 text-white text-xs sm:text-sm font-bold rounded-full animate-pulse">⚡ {t('billing.sessionPaymentModal.activeSession')}</span>}
                         {session.status === 'completed' && !isFullyPaid && canEditSessionTime(user) && (
-                          <button onClick={() => handleEditSessionTime(session)} className="px-2 sm:px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-base font-bold rounded-lg flex items-center gap-1">
+                          <button onClick={() => handleEditSessionTime(session)} className="px-2 sm:px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs sm:text-sm font-bold rounded-lg flex items-center gap-1">
                             <Calendar className="h-3 w-3" /><span className="hidden sm:inline">{t('billing.editTime')}</span>
                           </button>
                         )}
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
-                      <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg"><p className="text-base text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.totalCost')}</p><p className="font-bold text-lg sm:text-xl text-gray-900 dark:text-gray-100">{formatCurrency(totalCost)}</p></div>
-                      <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg"><p className="text-base text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.paid')}</p><p className="font-bold text-lg sm:text-xl text-blue-600 dark:text-blue-400">{formatCurrency(paidAmt)}</p></div>
-                      <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg"><p className="text-base text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.remaining')}</p><p className="font-bold text-lg sm:text-xl text-red-600 dark:text-red-400">{formatCurrency(remainingAmt)}</p></div>
+                      <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg"><p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.totalCost')}</p><p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">{formatCurrency(totalCost)}</p></div>
+                      <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg"><p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.paid')}</p><p className="font-bold text-sm sm:text-base text-blue-600 dark:text-blue-400">{formatCurrency(paidAmt)}</p></div>
+                      <div className="text-center p-2 bg-white dark:bg-gray-700 rounded-lg"><p className="text-xs text-gray-600 dark:text-gray-400">{t('billing.sessionPaymentModal.remaining')}</p><p className="font-bold text-sm sm:text-base text-red-600 dark:text-red-400">{formatCurrency(remainingAmt)}</p></div>
                     </div>
                     {!isFullyPaid && (
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" inputMode="numeric" placeholder={t('billing.sessionPaymentModal.amountPlaceholder')}
                           value={selectedSession?._id === sid || selectedSession?.id === sid ? sessionPaymentAmount : ''}
                           onChange={e => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) { setSessionPaymentAmount(v); setSelectedSession(session); } }}
-                          className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-lg sm:text-xl" />
+                          className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base" />
                         <button onClick={async () => { await handlePaySessionPartial(session); }}
                           disabled={!canPartialPayment(user) || !sessionPaymentAmount || parseInt(sessionPaymentAmount) <= 0 || (selectedSession?._id !== sid && selectedSession?.id !== sid)}
-                          className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-lg sm:text-xl whitespace-nowrap">
+                          className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm sm:text-base whitespace-nowrap">
                           {t('billing.sessionPaymentModal.payButton')}
                         </button>
                       </div>
                     )}
                     {sp?.payments && sp.payments.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
-                        <p className="text-base font-medium text-gray-600 dark:text-gray-400 mb-2">{t('billing.sessionPaymentModal.previousPayments')}:</p>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">{t('billing.sessionPaymentModal.previousPayments')}:</p>
                         <div className="space-y-1">
                           {sp.payments.map((payment: any, idx: number) => (
-                            <div key={idx} className="flex justify-between items-center text-base bg-white dark:bg-gray-700 p-2 rounded gap-2">
+                            <div key={idx} className="flex justify-between items-center text-sm bg-white dark:bg-gray-700 p-2 rounded gap-2">
                               <span className="text-gray-600 dark:text-gray-400 truncate flex-1">{formatCurrency(payment.amount)} - {payment.method ? t(`billing.paymentMethod${payment.method.charAt(0).toUpperCase() + payment.method.slice(1)}`) : t('billing.paymentMethodCash')}</span>
                               {canEditPartialPayment(user) && (
                                 <button onClick={() => handleEditSessionPayment(session, payment, idx)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium whitespace-nowrap">{t('common.edit')}</button>
@@ -3192,7 +3311,7 @@ const Tables: React.FC = () => {
             </div>
             <div className="p-3 sm:p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
               <button onClick={() => { setShowSessionPaymentModal(false); setSelectedSession(null); setSessionPaymentAmount(''); }}
-                className="px-4 sm:px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-lg transition-colors text-lg sm:text-xl">
+                className="px-4 sm:px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-lg transition-colors text-sm sm:text-base">
                 {t('common.close')}
               </button>
             </div>
@@ -3208,7 +3327,7 @@ const Tables: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-3 sm:p-6 mx-2 sm:mx-0">
             <h3 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">{t('billing.changeTableTitle')}</h3>
             <div className="mb-4">
-              {newTableNumber && (() => { const st = tables.find((t: any) => t._id === newTableNumber); return st ? (<div className="mb-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/40 border border-blue-300 rounded-lg flex items-center justify-between"><span className="text-lg font-semibold text-blue-800 dark:text-blue-200">{t('billing.tableWithNumber', { number: getTableDisplay(st.number, i18n.language) })} ✓</span><button onClick={() => { setNewTableNumber(null); setTableChangeSearch(''); }} className="text-base text-blue-600 dark:text-blue-400 hover:underline font-semibold">{t('common.cancel')}</button></div>) : null; })()}
+              {newTableNumber && (() => { const st = tables.find((t: any) => t._id === newTableNumber); return st ? (<div className="mb-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/40 border border-blue-300 rounded-lg flex items-center justify-between"><span className="text-lg font-semibold text-blue-800 dark:text-blue-200">{t('billing.tableWithNumber', { number: getTableDisplay(st.number, i18n.language) })}{getTableSectionName(st) ? ` (${getTableSectionName(st)})` : ''} ✓</span><button onClick={() => { setNewTableNumber(null); setTableChangeSearch(''); }} className="text-base text-blue-600 dark:text-blue-400 hover:underline font-semibold">{t('common.cancel')}</button></div>) : null; })()}
               <div className="relative">
                 <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 ${isRTL ? 'right-3' : 'left-3'}`} />
                 <input type="text" value={tableChangeSearch} onChange={e => setTableChangeSearch(e.target.value)} placeholder={t('billing.searchTable') || 'بحث...'}
@@ -3220,8 +3339,14 @@ const Tables: React.FC = () => {
                   .sort((a: any, b: any) => String(a.number).localeCompare(String(b.number), 'ar', { numeric: true }))
                   .map((table: any) => (
                     <button key={table._id} onClick={() => { setNewTableNumber(table._id); setTableChangeSearch(''); }} disabled={isChangingTable}
-                      className={`w-full text-right px-3 py-2 text-lg transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30 border-b border-gray-100 dark:border-gray-800 last:border-b-0 ${newTableNumber === table._id ? 'bg-blue-100 dark:bg-blue-900/50 font-semibold text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300'}`}>
-                      {t('billing.tableWithNumber', { number: getTableDisplay(table.number, i18n.language) })}
+                      className={`w-full text-right px-3 py-2 text-lg transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30 border-b border-gray-100 dark:border-gray-800 last:border-b-0 flex items-center justify-between gap-2 ${newTableNumber === table._id ? 'bg-blue-100 dark:bg-blue-900/50 font-semibold text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <span>{t('billing.tableWithNumber', { number: getTableDisplay(table.number, i18n.language) })}</span>
+                      {(() => {
+                        const sn = typeof table.section === 'object'
+                          ? table.section?.name
+                          : tableSections.find((s: any) => s._id === table.section || s.id === table.section)?.name;
+                        return sn ? <span className="text-sm text-gray-400 dark:text-gray-500 text-right">{sn}</span> : null;
+                      })()}
                     </button>
                   ))}
               </div>

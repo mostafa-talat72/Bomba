@@ -75,7 +75,8 @@ export const buildBillPrintHTML = async (
   bill: Bill, 
   fallbackOrganizationName?: string,
   language: string = 'ar',
-  t: TFunction = ((key: string) => key) as TFunction
+  t: TFunction = ((key: string) => key) as TFunction,
+  tableSectionName?: string
 ): Promise<string> => {
   // Get establishment name from bill data or use fallback
   let organizationName = fallbackOrganizationName || t('billPrint.defaultEstablishment') || 'Cafe Management System';
@@ -650,7 +651,7 @@ export const buildBillPrintHTML = async (
         ${organizationName ? `<div class="org-name">${organizationName}</div>` : `<div class="org-name">${t('billPrint.defaultEstablishment')}</div>`}
         <div class="title" style="font-weight: 900; font-size: 22px;">${getDisplayNumber(bill.billNumber) || ''}</div>
         <div class="info">${formatDate(bill.createdAt || new Date())}</div>
-        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.2em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.4em;">${bill.table.number}</strong></div>` : (bill.customerName ? `<div class="info">${t('billPrint.customer')}: ${bill.customerName}</div>` : '')}
+        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.2em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.4em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (bill.customerName ? `<div class="info">${t('billPrint.customer')}: ${bill.customerName}</div>` : '')}
         ${bill.customerPhone ? `<div class="info">${t('billPrint.phone')}: ${bill.customerPhone}</div>` : ''}
       </div>
 
@@ -724,9 +725,10 @@ export const printBill = async (
   bill: Bill, 
   fallbackOrganizationName?: string,
   language: string = 'ar',
-  t: TFunction = ((key: string) => key) as TFunction
+  t: TFunction = ((key: string) => key) as TFunction,
+  tableSectionName?: string
 ) => {
-  const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t);
+  const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
 
   // A real popup window is preferred for printing: in Electron, printing an
   // iframe can print the dark parent page instead of the receipt (all black).

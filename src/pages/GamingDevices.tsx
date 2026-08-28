@@ -124,7 +124,16 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
   };
   const { isRTL } = useLanguage();
   const { timezone, formatDateTime } = useOrganization();
-  const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, fetchTables, fetchTableSections, fetchSessions } = useApp();
+  const { sessions, createSession, endSession, user, createDevice, updateDevice, deleteDevice, fetchBills, showNotification, tables, tableSections, fetchTables, fetchTableSections, fetchSessions } = useApp();
+
+  // اسم قسم الطاولة (يميز الطاولات المكررة الرقم عبر الأقسام)
+  const getTableSectionLabel = (table: any): string => {
+    if (!table) return '';
+    const sec = typeof table.section === 'object'
+      ? table.section?.name
+      : tableSections?.find((s: any) => s._id === table.section || s.id === table.section)?.name;
+    return sec || '';
+  };
   
   // Get currency from localStorage and format it based on language
   const organizationCurrency = localStorage.getItem('organizationCurrency') || 'EGP';
@@ -1192,12 +1201,17 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                           const billTable = bill ? (bill as any)?.table : null;
 
                           let billTableNumber = null;
+                          let billTableSection = '';
                           if (billTable) {
                             if (typeof billTable === 'object') {
                               billTableNumber = billTable.number || billTable.name;
+                              billTableSection = getTableSectionLabel(billTable);
                             } else {
                               const foundTable = tables.find(t => t._id === billTable || t.id === billTable);
-                              billTableNumber = foundTable?.number;
+                              if (foundTable) {
+                                billTableNumber = foundTable.number;
+                                billTableSection = getTableSectionLabel(foundTable);
+                              }
                             }
                           }
 
@@ -1206,7 +1220,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                               {billTableNumber ? (
                                 <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
                                   <TableIcon className={`h-4 w-4 ${isRTL ? 'mr-1' : 'ml-1'}`} />
-                                  {t('gaming.linkedToTable')}: {getTableDisplay(billTableNumber)}
+                                  {t('gaming.linkedToTable')}: {getTableDisplay(billTableNumber)}{billTableSection ? ` (${billTableSection})` : ''}
                                 </div>
                               ) : (
                                 <div className="flex items-center text-gray-500 dark:text-gray-400">
@@ -1766,7 +1780,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 return st ? (
                   <div className="mb-2 px-4 py-2 bg-purple-100 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 rounded-lg flex items-center justify-between">
                     <span className="text-sm font-bold text-purple-800 dark:text-purple-200">
-                      {t('gaming.table')} {st.number} ✓
+                      {t('gaming.table')} {st.number}{getTableSectionLabel(st) ? ` (${getTableSectionLabel(st)})` : ''} ✓
                     </span>
                     <button
                       onClick={() => { setSelectedTable(null); setTableSearch(''); }}
@@ -1812,9 +1826,10 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                     <button
                       key={table.id || table._id}
                       onClick={() => { setSelectedTable(table._id); setTableSearch(''); }}
-                      className={`w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 last:border-b-0 ${selectedTable === table._id ? 'bg-purple-100 dark:bg-purple-900/50 font-bold text-purple-800 dark:text-purple-200 ring-2 ring-purple-400 dark:ring-purple-600' : 'text-gray-700 dark:text-gray-300'}`}
+                      className={`w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 last:border-b-0 flex items-center justify-between gap-2 ${selectedTable === table._id ? 'bg-purple-100 dark:bg-purple-900/50 font-bold text-purple-800 dark:text-purple-200 ring-2 ring-purple-400 dark:ring-purple-600' : 'text-gray-700 dark:text-gray-300'}`}
                     >
-                      {t('gaming.table')} {table.number}
+                      <span>{t('gaming.table')} {table.number}</span>
+                      {getTableSectionLabel(table) ? <span className="text-xs opacity-70 text-right">{getTableSectionLabel(table)}</span> : null}
                     </button>
                   ))}
               </div>
@@ -1983,7 +1998,7 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                 return st ? (
                   <div className="mb-2 px-4 py-2 bg-purple-100 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 rounded-lg flex items-center justify-between">
                     <span className="text-sm font-bold text-purple-800 dark:text-purple-200">
-                      {t('gaming.currentTable')}: {t('gaming.table')} {st.number}
+                      {t('gaming.currentTable')}: {t('gaming.table')} {st.number}{getTableSectionLabel(st) ? ` (${getTableSectionLabel(st)})` : ''}
                     </span>
                     <button
                       onClick={() => setTableSearch('')}
@@ -2036,9 +2051,10 @@ const GamingDevices: React.FC<GamingDevicesProps> = ({ deviceType }) => {
                         key={table.id || table._id}
                         onClick={() => { handleLinkTableToSession(selectedSessionForLink, table._id); setTableSearch(''); }}
                         disabled={linkingTable}
-                        className={`w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 last:border-b-0 disabled:opacity-50 ${isSelected ? 'bg-purple-100 dark:bg-purple-900/50 font-bold text-purple-800 dark:text-purple-200 ring-2 ring-purple-400 dark:ring-purple-600' : 'text-gray-700 dark:text-gray-300'}`}
+                        className={`w-full text-right px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 last:border-b-0 disabled:opacity-50 flex items-center justify-between gap-2 ${isSelected ? 'bg-purple-100 dark:bg-purple-900/50 font-bold text-purple-800 dark:text-purple-200 ring-2 ring-purple-400 dark:ring-purple-600' : 'text-gray-700 dark:text-gray-300'}`}
                       >
-                        {t('gaming.table')} {table.number}
+                        <span>{t('gaming.table')} {table.number}</span>
+                        {getTableSectionLabel(table) ? <span className="text-xs opacity-70 text-right">{getTableSectionLabel(table)}</span> : null}
                       </button>
                     );
                   })}

@@ -248,22 +248,6 @@ const Layout = () => {
             {!sidebarCollapsed && <h1 className="text-lg sm:text-xl font-bold truncate ms-2">MTE Systems</h1>}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            {/* Collapse toggle - visible on desktop always, also on mobile */}
-            <button
-              onClick={() => setSidebarCollapsed(v => !v)}
-              className={"hidden lg:flex p-1.5 hover:bg-white/20 rounded-lg transition-colors " + (sidebarCollapsed ? "mx-auto" : "")}
-              title={sidebarCollapsed ? "????? ??????" : "?? ??????"}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5 text-white" /> : <PanelLeftClose className="h-5 w-5 text-white" />}
-            </button>
-            {/* Mobile collapse also */}
-            <button
-              onClick={() => setSidebarCollapsed(v => !v)}
-              className="lg:hidden p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-              title={sidebarCollapsed ? "?????" : "?? - ??????? ???"}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5 text-white" /> : <PanelLeftClose className="h-5 w-5 text-white" />}
-            </button>
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden flex-shrink-0 p-1 hover:bg-white/20 rounded-lg"

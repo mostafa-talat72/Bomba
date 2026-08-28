@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer } from 'lucide-react';
+import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight } from 'lucide-react';
 import { Table, Bill } from '../../services/api';
 import { formatCurrency as formatCurrencyUtil } from '../../utils/formatters';
 import { getTableDisplay, getAgeLabel, getTableAgeColor } from './tableHelpers';
@@ -21,12 +21,13 @@ export interface TableButtonProps {
   onQuickBilling: (table: Table, e: React.MouseEvent) => void;
   onEndAllSessions?: (table: Table, e: React.MouseEvent) => void;
   onQuickPrint?: (table: Table, e: React.MouseEvent) => void;
+  onQuickChangeTable?: (table: Table, e: React.MouseEvent) => void;
   onHoverChange?: (table: Table | null) => void;
   /** تكلفة إضافية حية للجلسات النشطة (delta كل 10 ثوانٍ) */
   liveExtra?: number;
 }
 
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onHoverChange, liveExtra = 0 }) => {
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onHoverChange, liveExtra = 0 }) => {
   const { t, i18n } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -161,6 +162,14 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
               <DollarSign className="h-3 w-3" />
               <span className="hidden sm:inline">دفع</span>
             </button>
+            {onQuickChangeTable && (
+              <button
+                onClick={(e) => onQuickChangeTable(table, e)}
+                className="py-1 px-2 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-purple-600 dark:text-purple-400 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-purple-200 dark:border-purple-800 transition-all"
+                title={t('billing.changeTableTitle', 'تغيير الطاولة')}>
+                <ArrowLeftRight className="h-3 w-3" />
+              </button>
+            )}
             {onQuickPrint && totalRemaining > 0 && (
               <button
                 onClick={(e) => onQuickPrint(table, e)}
