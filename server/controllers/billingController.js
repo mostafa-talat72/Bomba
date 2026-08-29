@@ -778,6 +778,25 @@ export const createBill = async (req, res) => {
 
         await bill.populate(["orders", "sessions", "createdBy"], "name");
 
+        // Immediate dual-write to Atlas for bill create
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const billObj = bill.toObject ? bill.toObject() : bill;
+                    await atlasConnection.collection('bills').updateOne(
+                        { _id: bill._id },
+                        { $set: billObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for bill create ${bill._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for bill create - will sync later");
+            }
+        }
+
         // Update table status if bill has a table (Requirement 2.3)
         if (bill.table) {
             await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
@@ -1161,6 +1180,25 @@ export const updateBill = async (req, res) => {
 
         const prevStatus = bill.status;
         const updatedBill = await bill.save();
+
+        // Immediate dual-write to Atlas for bill update
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const billObj = updatedBill.toObject ? updatedBill.toObject() : updatedBill;
+                    await atlasConnection.collection('bills').updateOne(
+                        { _id: updatedBill._id },
+                        { $set: billObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for bill update ${updatedBill._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for bill update - will sync later");
+            }
+        }
 
         // Update table status if bill status changed (Requirement 2.3, 2.4)
         if (bill.table && prevStatus !== updatedBill.status) {

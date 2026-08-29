@@ -8,6 +8,7 @@ import NotificationService from "../services/notificationService.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
 import mongoose from "mongoose";
 import performanceMetrics from "../utils/performanceMetrics.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import {
     convertQuantity,
     calculateTotalInventoryNeeded,
@@ -941,6 +942,25 @@ export const createOrder = async (req, res) => {
             seq++;
         }
 
+        // Immediate dual-write to Atlas for order create
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const orderObj = order.toObject ? order.toObject() : order;
+                    await atlasConnection.collection('orders').updateOne(
+                        { _id: order._id },
+                        { $set: orderObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for order create ${order._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for order create - will sync later");
+            }
+        }
+
         // خصم المخزون فوراً عند إنشاء الطلب
         try {
             let billNumber = null;
@@ -1359,6 +1379,25 @@ export const updateOrder = async (req, res) => {
         }
 
         await order.save();
+
+        // Immediate dual-write to Atlas for order update
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const orderObj = order.toObject ? order.toObject() : order;
+                    await atlasConnection.collection('orders').updateOne(
+                        { _id: order._id },
+                        { $set: orderObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for order update ${order._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for order update - will sync later");
+            }
+        }
 
         // Clean up invalid itemPayments and recalculate payments for this order's bill (if exists)
         if (order.bill) {

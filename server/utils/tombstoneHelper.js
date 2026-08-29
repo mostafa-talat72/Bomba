@@ -1,5 +1,6 @@
 import Tombstone from "../models/Tombstone.js";
 import Logger from "../middleware/logger.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 /**
  * إنشاء Tombstone لمنع إحياء السجل المحذوف أثناء المزامنة (لمدة سنة)
@@ -17,6 +18,21 @@ export const createTombstone = async (collectionName, documentId, organization, 
       { $set: { deletedAt: new Date(), deletedBy } },
       { upsert: true }
     );
+    // Immediate dual-write to Atlas
+    const atlasConnection = dualDatabaseManager.getAtlasConnection();
+    if (atlasConnection) {
+      try {
+        await atlasConnection.collection('tombstones').updateOne(
+          { collectionName, documentId, organization: orgId },
+          { $set: { deletedAt: new Date(), deletedBy } },
+          { upsert: true }
+        );
+      } catch (atlasErr) {
+        Logger.warn(`Atlas tombstone dual-write failed for ${collectionName} ${documentId}: ${atlasErr.message}`);
+      }
+    } else {
+      Logger.warn("Atlas not available for tombstone - will sync later");
+    }
   } catch (e) {
     // تجاهل خطأ duplicate أو غيره — لا نريد فشل الحذف الأصلي
     if (e.code !== 11000) Logger.warn(`Tombstone create failed for ${collectionName} ${documentId}: ${e.message}`);

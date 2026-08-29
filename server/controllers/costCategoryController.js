@@ -1,5 +1,7 @@
 import CostCategory from '../models/CostCategory.js';
 import { createTombstone } from '../utils/tombstoneHelper.js';
+import Logger from '../middleware/logger.js';
+import dualDatabaseManager from '../config/dualDatabaseManager.js';
 
 // @desc    Get all cost categories
 // @route   GET /api/cost-categories
@@ -85,6 +87,25 @@ export const createCostCategory = async (req, res) => {
             createdBy: req.user._id,
         });
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const categoryObj = category.toObject ? category.toObject() : category;
+                    await atlasConnection.collection('costcategories').updateOne(
+                        { _id: category._id },
+                        { $set: categoryObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for costCategory create ${category._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for costCategory create - will sync later");
+            }
+        }
+
         res.status(201).json({
             success: true,
             message: 'تم إنشاء القسم بنجاح',
@@ -143,6 +164,25 @@ export const updateCostCategory = async (req, res) => {
 
         await category.save();
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const categoryObj = category.toObject ? category.toObject() : category;
+                    await atlasConnection.collection('costcategories').updateOne(
+                        { _id: category._id },
+                        { $set: categoryObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for costCategory update ${category._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for costCategory update - will sync later");
+            }
+        }
+
         res.json({
             success: true,
             message: 'تم تحديث القسم بنجاح',
@@ -190,6 +230,19 @@ export const deleteCostCategory = async (req, res) => {
 
         const categoryId = category._id;
         await category.deleteOne();
+        // Immediate dual-write delete to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    await atlasConnection.collection('costcategories').deleteOne({ _id: categoryId });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for costCategory delete ${categoryId}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for costCategory delete - will sync later");
+            }
+        }
         try { await createTombstone('costcategories', categoryId, req.user.organization, req.user._id); } catch (e) {}
 
         res.json({

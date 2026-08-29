@@ -2,6 +2,8 @@ import MenuSection from "../models/MenuSection.js";
 import MenuCategory from "../models/MenuCategory.js";
 import MenuItem from "../models/MenuItem.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
+import Logger from "../middleware/logger.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 // Get all menu sections
 export const getAllMenuSections = async (req, res) => {
@@ -88,6 +90,25 @@ export const createMenuSection = async (req, res) => {
         const section = new MenuSection(sectionData);
         await section.save();
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const sectionObj = section.toObject ? section.toObject() : section;
+                    await atlasConnection.collection('menusections').updateOne(
+                        { _id: section._id },
+                        { $set: sectionObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for menuSection create ${section._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for menuSection create - will sync later");
+            }
+        }
+
         await section.populate("createdBy", "name");
 
         res.status(201).json({
@@ -134,6 +155,25 @@ export const updateMenuSection = async (req, res) => {
             });
         }
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const sectionObj = section.toObject ? section.toObject({ depopulate: true }) : section;
+                    await atlasConnection.collection('menusections').updateOne(
+                        { _id: section._id },
+                        { $set: sectionObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for menuSection update ${section._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for menuSection update - will sync later");
+            }
+        }
+
         res.json({
             success: true,
             message: "تم تحديث القسم بنجاح",
@@ -176,6 +216,20 @@ export const deleteMenuSection = async (req, res) => {
                 success: false,
                 message: "القسم غير موجود",
             });
+        }
+
+        // Immediate dual-write delete to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    await atlasConnection.collection('menusections').deleteOne({ _id: section._id });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for menuSection delete ${section._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for menuSection delete - will sync later");
+            }
         }
 
         try { await createTombstone('menusections', section._id, req.user.organization, req.user._id); } catch (e) {}

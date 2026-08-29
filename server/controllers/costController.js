@@ -1,5 +1,7 @@
 import Cost from "../models/Cost.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
+import Logger from "../middleware/logger.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 // @desc    Get all costs
 // @route   GET /api/costs
@@ -327,6 +329,25 @@ export const createCost = async (req, res) => {
         await cost.populate("category", "name icon color");
         await cost.populate("createdBy", "name");
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
+                    await atlasConnection.collection('costs').updateOne(
+                        { _id: cost._id },
+                        { $set: costObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for cost create ${cost._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for cost create - will sync later");
+            }
+        }
+
         if (req.io) {
             try { req.io.notifyCostUpdate("created", cost, req.user.organization); } catch (e) {}
         }
@@ -443,6 +464,25 @@ export const updateCost = async (req, res) => {
         // Save to trigger pre-save hook for automatic status calculation
         await cost.save();
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
+                    await atlasConnection.collection('costs').updateOne(
+                        { _id: cost._id },
+                        { $set: costObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for cost update ${cost._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for cost update - will sync later");
+            }
+        }
+
         // Reload with populated fields
         await cost.populate("category", "name icon color");
         await cost.populate("createdBy", "name");
@@ -497,6 +537,24 @@ export const approveCost = async (req, res) => {
         cost.status = "paid";
 
         await cost.save();
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
+                    await atlasConnection.collection('costs').updateOne(
+                        { _id: cost._id },
+                        { $set: costObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for cost approve ${cost._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for cost approve - will sync later");
+            }
+        }
         await cost.populate(["createdBy", "approvedBy"], "name");
 
         if (req.io) {
@@ -648,6 +706,25 @@ export const addCostPayment = async (req, res) => {
             reference || null
         );
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
+                    await atlasConnection.collection('costs').updateOne(
+                        { _id: cost._id },
+                        { $set: costObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for cost addPayment ${cost._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for cost addPayment - will sync later");
+            }
+        }
+
         // Reload with populated fields
         await cost.populate("category", "name icon color");
         await cost.populate("createdBy", "name");
@@ -713,6 +790,25 @@ export const increaseCostAmount = async (req, res) => {
             req.user._id,
             reason || null
         );
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
+                    await atlasConnection.collection('costs').updateOne(
+                        { _id: cost._id },
+                        { $set: costObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for cost increaseAmount ${cost._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for cost increaseAmount - will sync later");
+            }
+        }
 
         // Reload with populated fields
         await cost.populate("category", "name icon color");

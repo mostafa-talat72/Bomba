@@ -5,6 +5,8 @@ import {
     validateRequestData,
 } from "../middleware/validation.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
+import Logger from "../middleware/logger.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 // Get all menu items with optional filtering
 export const getAllMenuItems = async (req, res) => {
@@ -238,6 +240,25 @@ export const createMenuItem = async (req, res) => {
 
         const menuItem = new MenuItem(menuItemData);
         await menuItem.save();
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const menuItemObj = menuItem.toObject ? menuItem.toObject() : menuItem;
+                    await atlasConnection.collection('menuitems').updateOne(
+                        { _id: menuItem._id },
+                        { $set: menuItemObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for menuItem create ${menuItem._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for menuItem create - will sync later");
+            }
+        }
         
         // Sync category to inventory
         await syncCategoryToInventory(menuItem.category);
@@ -304,6 +325,25 @@ export const updateMenuItem = async (req, res) => {
                 success: false,
                 message: "عنصر القائمة غير موجود",
             });
+        }
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const menuItemObj = menuItem.toObject ? menuItem.toObject({ depopulate: true }) : menuItem;
+                    await atlasConnection.collection('menuitems').updateOne(
+                        { _id: menuItem._id },
+                        { $set: menuItemObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for menuItem update ${menuItem._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for menuItem update - will sync later");
+            }
         }
         
         // Sync category to inventory if category was updated
@@ -518,6 +558,25 @@ export const toggleMenuItemAvailability = async (req, res) => {
         menuItem.isAvailable = !menuItem.isAvailable;
         menuItem.updatedBy = req.user.id;
         await menuItem.save();
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const menuItemObj = menuItem.toObject ? menuItem.toObject() : menuItem;
+                    await atlasConnection.collection('menuitems').updateOne(
+                        { _id: menuItem._id },
+                        { $set: menuItemObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for menuItem toggle ${menuItem._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for menuItem toggle - will sync later");
+            }
+        }
 
         if (req.io) {
             try { req.io.notifyMenuUpdate("updated", menuItem, req.user.organization); } catch (e) {}

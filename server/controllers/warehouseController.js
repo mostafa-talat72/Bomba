@@ -4,6 +4,7 @@ import Cost from "../models/Cost.js";
 import CostCategory from "../models/CostCategory.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 export const getWarehouseItems = async (req, res) => {
     try {
@@ -106,6 +107,25 @@ export const createWarehouseItem = async (req, res) => {
             Logger.error("فشل في تسجيل التكلفة تلقائياً للمخزن الرئيسي", costError);
         }
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const itemObj = item.toObject ? item.toObject() : item;
+                    await atlasConnection.collection('warehouseitems').updateOne(
+                        { _id: item._id },
+                        { $set: itemObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouseItem create ${item._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for warehouseItem create - will sync later");
+            }
+        }
+
         if (item.isLowStock && req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
         }
@@ -158,6 +178,25 @@ export const updateWarehouseItem = async (req, res) => {
         if (isActive !== undefined) item.isActive = isActive;
 
         await item.save();
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const itemObj = item.toObject ? item.toObject() : item;
+                    await atlasConnection.collection('warehouseitems').updateOne(
+                        { _id: item._id },
+                        { $set: itemObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouseItem update ${item._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for warehouseItem update - will sync later");
+            }
+        }
 
         if (item.isLowStock && req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
@@ -245,6 +284,25 @@ export const updateWarehouseStock = async (req, res) => {
             Logger.error("Failed to create notification:", notificationError);
         }
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const itemObj = item.toObject ? item.toObject() : item;
+                    await atlasConnection.collection('warehouseitems').updateOne(
+                        { _id: item._id },
+                        { $set: itemObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouseItem stock update ${item._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for warehouseItem stock update - will sync later");
+            }
+        }
+
         if (req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
         }
@@ -305,6 +363,25 @@ export const deleteWarehouseItem = async (req, res) => {
 
         item.isActive = false;
         await item.save();
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const itemObj = item.toObject ? item.toObject() : item;
+                    await atlasConnection.collection('warehouseitems').updateOne(
+                        { _id: item._id },
+                        { $set: itemObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouseItem delete ${item._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for warehouseItem delete - will sync later");
+            }
+        }
 
         res.json({ success: true, message: "تم حذف المنتج من المخزن الرئيسي بنجاح" });
     } catch (error) {
@@ -395,6 +472,29 @@ export const transferToInventory = async (req, res) => {
             }
         }
 
+        // Immediate dual-write to Atlas for both items
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const wObj = warehouseItem.toObject ? warehouseItem.toObject() : warehouseItem;
+                    await atlasConnection.collection('warehouseitems').updateOne({ _id: warehouseItem._id }, { $set: wObj }, { upsert: true });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouse transfer warehouseItem ${warehouseItem._id}: ${atlasErr.message}`);
+                }
+                try {
+                    if (inventoryItem) {
+                        const invObj = inventoryItem.toObject ? inventoryItem.toObject() : inventoryItem;
+                        await atlasConnection.collection('inventoryitems').updateOne({ _id: inventoryItem._id }, { $set: invObj }, { upsert: true });
+                    }
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouse transfer inventoryItem ${inventoryItem?._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for warehouse transfer - will sync later");
+            }
+        }
+
         // Emit socket events
         if (req.io) {
             try {
@@ -460,6 +560,27 @@ export const returnToWarehouse = async (req, res) => {
             req.user._id, inventoryItem._id.toString(), null, returnPrice,
             date ? new Date(date) : null
         );
+
+        // Immediate dual-write to Atlas for both items
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const invObj = inventoryItem.toObject ? inventoryItem.toObject() : inventoryItem;
+                    await atlasConnection.collection('inventoryitems').updateOne({ _id: inventoryItem._id }, { $set: invObj }, { upsert: true });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for return inventoryItem ${inventoryItem._id}: ${atlasErr.message}`);
+                }
+                try {
+                    const wObj = warehouseItem.toObject ? warehouseItem.toObject() : warehouseItem;
+                    await atlasConnection.collection('warehouseitems').updateOne({ _id: warehouseItem._id }, { $set: wObj }, { upsert: true });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for return warehouseItem ${warehouseItem._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for return to warehouse - will sync later");
+            }
+        }
 
         if (req.io) {
             try {
@@ -557,6 +678,21 @@ export const deleteWarehouseStockMovement = async (req, res) => {
         }
 
         await item.save();
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const itemObj = item.toObject ? item.toObject() : item;
+                    await atlasConnection.collection('warehouseitems').updateOne({ _id: item._id }, { $set: itemObj }, { upsert: true });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouseItem deleteMovement ${item._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for warehouse deleteMovement - will sync later");
+            }
+        }
 
         if (req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
@@ -689,6 +825,21 @@ export const updateWarehouseStockMovement = async (req, res) => {
                 }
             } catch (linkError) {
                 Logger.error("خطأ في تحديث الحركة المرتبطة في المخزون", linkError);
+            }
+        }
+
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const itemObj = item.toObject ? item.toObject() : item;
+                    await atlasConnection.collection('warehouseitems').updateOne({ _id: item._id }, { $set: itemObj }, { upsert: true });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for warehouse updateMovement ${item._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for warehouse updateMovement - will sync later");
             }
         }
 

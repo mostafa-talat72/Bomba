@@ -2,6 +2,9 @@ import Device from "../models/Device.js";
 import Session from "../models/Session.js";
 import DeviceValidator from "../services/validation/deviceValidator.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
+import Logger from "../middleware/logger.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import mongoose from "mongoose";
 
 const deviceController = {
     // Get all devices with filtering and pagination
@@ -249,6 +252,25 @@ const deviceController = {
             const device = new Device(sanitizedData);
             await device.save();
 
+            // Immediate dual-write to Atlas
+            {
+                const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                if (atlasConnection) {
+                    try {
+                        const deviceObj = device.toObject ? device.toObject() : device;
+                        await atlasConnection.collection('devices').updateOne(
+                            { _id: device._id },
+                            { $set: deviceObj },
+                            { upsert: true }
+                        );
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for device create ${device._id}: ${atlasErr.message}`);
+                    }
+                } else {
+                    Logger.warn("Atlas not available for device create - will sync later");
+                }
+            }
+
             if (req.io) {
                 try { req.io.notifyDeviceUpdate("created", device, req.user.organization); } catch (e) {}
             }
@@ -427,6 +449,25 @@ const deviceController = {
                 }
             );
 
+            // Immediate dual-write to Atlas
+            if (device) {
+                const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                if (atlasConnection) {
+                    try {
+                        const deviceObj = device.toObject ? device.toObject({ depopulate: true }) : device;
+                        await atlasConnection.collection('devices').updateOne(
+                            { _id: device._id },
+                            { $set: deviceObj },
+                            { upsert: true }
+                        );
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for device update ${device._id}: ${atlasErr.message}`);
+                    }
+                } else {
+                    Logger.warn("Atlas not available for device update - will sync later");
+                }
+            }
+
             if (req.io) {
                 try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
             }
@@ -481,6 +522,25 @@ const deviceController = {
                     message: "الجهاز غير موجود",
                     error: "Device not found",
                 });
+            }
+
+            // Immediate dual-write to Atlas
+            {
+                const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                if (atlasConnection) {
+                    try {
+                        const deviceObj = device.toObject ? device.toObject({ depopulate: true }) : device;
+                        await atlasConnection.collection('devices').updateOne(
+                            { _id: device._id },
+                            { $set: deviceObj },
+                            { upsert: true }
+                        );
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for device status update ${device._id}: ${atlasErr.message}`);
+                    }
+                } else {
+                    Logger.warn("Atlas not available for device status update - will sync later");
+                }
             }
 
             if (req.io) {
@@ -560,7 +620,18 @@ const deviceController = {
                 organization: req.user.organization,
             });
 
+            // Immediate dual-write delete to Atlas
             if (deletedDevice) {
+                const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                if (atlasConnection) {
+                    try {
+                        await atlasConnection.collection('devices').deleteOne({ _id: deletedDevice._id });
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for device delete ${deletedDevice._id}: ${atlasErr.message}`);
+                    }
+                } else {
+                    Logger.warn("Atlas not available for device delete - will sync later");
+                }
                 try { await createTombstone('devices', deletedDevice._id, req.user.organization, req.user._id); } catch (e) {}
             }
 
@@ -687,6 +758,35 @@ const deviceController = {
                 updates,
                 { runValidators: true }
             );
+
+            // Immediate dual-write to Atlas
+            {
+                const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                if (atlasConnection) {
+                    try {
+                        const atlasIds = deviceIds.map(id => {
+                            try { return new mongoose.Types.ObjectId(id); } catch (e) { return id; }
+                        });
+                        let atlasOrgId = req.user.organization;
+                        try { atlasOrgId = new mongoose.Types.ObjectId(req.user.organization); } catch (e) {}
+                        await atlasConnection.collection('devices').updateMany(
+                            { _id: { $in: atlasIds }, organization: atlasOrgId },
+                            { $set: updates }
+                        );
+                    } catch (atlasErr) {
+                        try {
+                            for (const did of deviceIds) {
+                                const d = await Device.findById(did).lean();
+                                if (d) await atlasConnection.collection('devices').updateOne({ _id: d._id }, { $set: d }, { upsert: true });
+                            }
+                        } catch (e) {
+                            Logger.warn(`Atlas dual-write failed for device bulkUpdate: ${atlasErr.message}`);
+                        }
+                    }
+                } else {
+                    Logger.warn("Atlas not available for device bulkUpdate - will sync later");
+                }
+            }
 
             if (req.io) {
                 try { req.io.notifyDeviceUpdate("updated", null, req.user.organization); } catch (e) {}

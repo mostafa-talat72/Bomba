@@ -2,6 +2,8 @@ import Table from "../models/Table.js";
 import Order from "../models/Order.js";
 import Bill from "../models/Bill.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
+import Logger from "../middleware/logger.js";
+import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 // Get all tables
 export const getAllTables = async (req, res) => {
@@ -230,6 +232,24 @@ export const createTable = async (req, res) => {
         const table = new Table(tableData);
         await table.save();
         
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const tableObj = table.toObject ? table.toObject() : table;
+                    await atlasConnection.collection('tables').updateOne(
+                        { _id: table._id },
+                        { $set: tableObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for table create ${table._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for table create - will sync later");
+            }
+        }
 
         await table.populate("section", "name");
         await table.populate("createdBy", "name");
@@ -317,6 +337,25 @@ export const updateTable = async (req, res) => {
             });
         }
 
+        // Immediate dual-write to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    const tableObj = table.toObject ? table.toObject({ depopulate: true }) : table;
+                    await atlasConnection.collection('tables').updateOne(
+                        { _id: table._id },
+                        { $set: tableObj },
+                        { upsert: true }
+                    );
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for table update ${table._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for table update - will sync later");
+            }
+        }
+
         if (req.io) {
             try { req.io.notifyTableUpdate("updated", table, req.user.organization); } catch (e) {}
         }
@@ -372,6 +411,20 @@ export const deleteTable = async (req, res) => {
                 success: false,
                 message: "الطاولة غير موجودة",
             });
+        }
+
+        // Immediate dual-write delete to Atlas
+        {
+            const atlasConnection = dualDatabaseManager.getAtlasConnection();
+            if (atlasConnection) {
+                try {
+                    await atlasConnection.collection('tables').deleteOne({ _id: deletedTable._id });
+                } catch (atlasErr) {
+                    Logger.warn(`Atlas dual-write failed for table delete ${deletedTable._id}: ${atlasErr.message}`);
+                }
+            } else {
+                Logger.warn("Atlas not available for table delete - will sync later");
+            }
         }
 
         if (req.io) {

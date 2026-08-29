@@ -755,6 +755,35 @@ const sessionController = {
                 await bill.save();
                 await bill.populate(["sessions", "createdBy"], "name");
 
+                // Immediate dual-write to Atlas for session and bill
+                {
+                    const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                    if (atlasConnection) {
+                        try {
+                            const sessionObj = session.toObject ? session.toObject({ depopulate: true }) : session;
+                            await atlasConnection.collection('sessions').updateOne(
+                                { _id: session._id },
+                                { $set: sessionObj },
+                                { upsert: true }
+                            );
+                        } catch (atlasErr) {
+                            Logger.warn(`Atlas dual-write failed for session create ${session._id}: ${atlasErr.message}`);
+                        }
+                        try {
+                            const billObj = bill.toObject ? bill.toObject({ depopulate: true }) : bill;
+                            await atlasConnection.collection('bills').updateOne(
+                                { _id: bill._id },
+                                { $set: billObj },
+                                { upsert: true }
+                            );
+                        } catch (atlasErr) {
+                            Logger.warn(`Atlas dual-write failed for bill from session create ${bill._id}: ${atlasErr.message}`);
+                        }
+                    } else {
+                        Logger.warn("Atlas not available for session create - will sync later");
+                    }
+                }
+
                 // Create notification for session start
                 try {
                     // Get user language and organization currency
@@ -866,6 +895,24 @@ const sessionController = {
 
             // Save the session with updated controllersHistory
             await session.save();
+            // Immediate dual-write to Atlas
+            {
+                const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                if (atlasConnection) {
+                    try {
+                        const sessionObj = session.toObject ? session.toObject({ depopulate: true }) : session;
+                        await atlasConnection.collection('sessions').updateOne(
+                            { _id: session._id },
+                            { $set: sessionObj },
+                            { upsert: true }
+                        );
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for session updateControllers ${session._id}: ${atlasErr.message}`);
+                    }
+                } else {
+                    Logger.warn("Atlas not available for session updateControllers - will sync later");
+                }
+            }
             await session.populate(["createdBy", "updatedBy"], "name");
 
             // Log the controllersHistory for debugging
@@ -1662,6 +1709,50 @@ const sessionController = {
                 } catch (createBillError) {
                     Logger.error("❌ خطأ في إنشاء الفاتورة:", createBillError);
                     // Continue with session ending even if bill creation fails
+                }
+            }
+
+            // Immediate dual-write to Atlas for session and bill
+            {
+                const atlasConnection = dualDatabaseManager.getAtlasConnection();
+                if (atlasConnection) {
+                    try {
+                        const sessionObj = updatedSession.toObject ? updatedSession.toObject({ depopulate: true }) : updatedSession;
+                        await atlasConnection.collection('sessions').updateOne(
+                            { _id: updatedSession._id },
+                            { $set: sessionObj },
+                            { upsert: true }
+                        );
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for session end ${updatedSession._id}: ${atlasErr.message}`);
+                    }
+                    try {
+                        if (updatedBill) {
+                            const billObj = updatedBill.toObject ? updatedBill.toObject({ depopulate: true }) : updatedBill;
+                            await atlasConnection.collection('bills').updateOne(
+                                { _id: updatedBill._id },
+                                { $set: billObj },
+                                { upsert: true }
+                            );
+                        }
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for bill from session end ${updatedBill?._id}: ${atlasErr.message}`);
+                    }
+                    try {
+                        // Also sync device status change
+                        const deviceDoc = await Device.findById(session.deviceId).lean();
+                        if (deviceDoc) {
+                            await atlasConnection.collection('devices').updateOne(
+                                { _id: deviceDoc._id },
+                                { $set: deviceDoc },
+                                { upsert: true }
+                            );
+                        }
+                    } catch (atlasErr) {
+                        Logger.warn(`Atlas dual-write failed for device from session end ${session.deviceId}: ${atlasErr.message}`);
+                    }
+                } else {
+                    Logger.warn("Atlas not available for session end - will sync later");
                 }
             }
 
