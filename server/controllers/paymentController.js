@@ -5,6 +5,7 @@ import Advance from '../models/Advance.js';
 import Deduction from '../models/Deduction.js';
 import Bonus from '../models/Bonus.js';
 import Settings from '../models/Settings.js';
+import { createTombstone } from '../utils/tombstoneHelper.js';
 
 // Get employee salary summary (cumulative)
 export const getEmployeeSalarySummary = async (req, res) => {
@@ -569,6 +570,8 @@ export const deletePayment = async (req, res) => {
     if (!payment) {
       return res.status(404).json({ success: false, error: 'الدفعة غير موجودة' });
     }
+
+    try { await createTombstone('payments', payment._id, req.user.organization, req.user._id); } catch (e) {}
     
     res.json({ success: true, message: 'تم حذف الدفعة بنجاح' });
   } catch (error) {

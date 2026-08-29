@@ -1,4 +1,5 @@
 import CostCategory from '../models/CostCategory.js';
+import { createTombstone } from '../utils/tombstoneHelper.js';
 
 // @desc    Get all cost categories
 // @route   GET /api/cost-categories
@@ -187,7 +188,9 @@ export const deleteCostCategory = async (req, res) => {
             });
         }
 
+        const categoryId = category._id;
         await category.deleteOne();
+        try { await createTombstone('costcategories', categoryId, req.user.organization, req.user._id); } catch (e) {}
 
         res.json({
             success: true,

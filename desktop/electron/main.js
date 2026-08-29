@@ -12,6 +12,10 @@ const crypto = require("crypto");
 // built frontend in a BrowserWindow. Single instance per machine.
 // ============================================================
 
+// Atlas URI ثابت — يعمل مباشرة بدون الحاجة لـ atlas-import.txt أو تشفير
+// تحذير: الرابط يحتوي كلمة السر، لا تنشر المثبت خارج المؤسسة
+const HARDCODED_ATLAS_URI = "mongodb+srv://Bomba:t1fp995Bde03vPQY@cluster0.yl9w7jv.mongodb.net/bomba?retryWrites=true&w=majority&appName=Cluster0&serverSelectionTimeoutMS=60000&socketTimeoutMS=120000&connectTimeoutMS=60000&maxPoolSize=10&minPoolSize=2&maxIdleTimeMS=60000&heartbeatFrequencyMS=10000";
+
 const isDev = process.argv.includes("--dev");
 
 // Keep userData at a stable location across branding changes so all
@@ -164,7 +168,7 @@ function loadOrCreateConfig() {
   const secrets = {
     jwtSecret: decryptSecret(store.jwtSecret),
     jwtRefreshSecret: decryptSecret(store.jwtRefreshSecret),
-    atlasUri: decryptSecret(store.atlasUri),
+    atlasUri: decryptSecret(store.atlasUri) || HARDCODED_ATLAS_URI,
     emailPass: decryptSecret(store.emailPass),
   };
 
@@ -172,7 +176,8 @@ function loadOrCreateConfig() {
 }
 
 function buildServerEnv(config, secrets, distDir) {
-  const syncEnabled = config.syncEnabled === true && secrets.atlasUri;
+  const effectiveAtlasUri = secrets.atlasUri || HARDCODED_ATLAS_URI;
+  const syncEnabled = config.syncEnabled === true && effectiveAtlasUri;
 
   return {
     ...process.env,
@@ -180,7 +185,7 @@ function buildServerEnv(config, secrets, distDir) {
     PORT: String(config.port || 5000),
     MONGODB_LOCAL_URI: config.databaseUri,
     MONGODB_URI: config.databaseUri,
-    MONGODB_ATLAS_URI: secrets.atlasUri || "",
+    MONGODB_ATLAS_URI: effectiveAtlasUri || "",
     SYNC_ENABLED: syncEnabled ? "true" : "false",
     BIDIRECTIONAL_SYNC_ENABLED:
       config.bidirectionalSync === true && syncEnabled ? "true" : "false",

@@ -186,6 +186,14 @@ const employeeSchema = new mongoose.Schema({
 employeeSchema.index({ organizationId: 1, 'employment.status': 1 });
 employeeSchema.index({ 'personalInfo.name': 'text' });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+employeeSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+employeeSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(employeeSchema, 'Employee');
 

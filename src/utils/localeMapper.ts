@@ -12,7 +12,7 @@ export const getLocaleFromLanguage = (langCode: string): string => {
   // Map of language codes to their most common locale
   const localeMap: Record<string, string> = {
     // Major languages
-    ar: 'ar-SA',    // Arabic (Saudi Arabia)
+    ar: 'ar-EG',    // Arabic (Egypt) - Gregorian calendar by default (ar-SA uses Hijri)
     en: 'en-US',    // English (United States)
     fr: 'fr-FR',    // French (France)
     es: 'es-ES',    // Spanish (Spain)

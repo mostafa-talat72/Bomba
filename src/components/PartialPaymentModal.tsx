@@ -397,4 +397,4 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   );
 };
 
-export default PartialPaymentModal;
+export default React.memo(PartialPaymentModal);

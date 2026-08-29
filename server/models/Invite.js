@@ -57,4 +57,12 @@ const inviteSchema = new mongoose.Schema(
 
 inviteSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+inviteSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+inviteSchema.index({ isDeleted: 1 });
+
 export default mongoose.model("Invite", inviteSchema);

@@ -323,6 +323,14 @@ costSchema.index({ date: 1 });
 costSchema.index({ dueDate: 1 });
 costSchema.index({ createdBy: 1 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+costSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+costSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(costSchema, 'Cost');
 

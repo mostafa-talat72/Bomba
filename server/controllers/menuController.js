@@ -4,6 +4,7 @@ import {
     validateRequest,
     validateRequestData,
 } from "../middleware/validation.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 // Get all menu items with optional filtering
 export const getAllMenuItems = async (req, res) => {
@@ -241,6 +242,10 @@ export const createMenuItem = async (req, res) => {
         // Sync category to inventory
         await syncCategoryToInventory(menuItem.category);
 
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("created", menuItem, req.user.organization); } catch (e) {}
+        }
+
         res.status(201).json({
             success: true,
             message: "تم إنشاء عنصر القائمة بنجاح",
@@ -306,6 +311,10 @@ export const updateMenuItem = async (req, res) => {
             await syncCategoryToInventory(updateData.category);
         }
 
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("updated", menuItem, req.user.organization); } catch (e) {}
+        }
+
         res.json({
             success: true,
             message: "تم تحديث عنصر القائمة بنجاح",
@@ -347,6 +356,11 @@ export const deleteMenuItem = async (req, res) => {
         // Delete from both Local and Atlas
         const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
         await deleteFromBothDatabases(menuItem, 'menuitems', `menu item ${menuItem.name}`);
+        try { await createTombstone('menuitems', menuItem._id, req.user.organization, req.user._id); } catch (e) {}
+
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+        }
 
         res.json({
             success: true,
@@ -505,6 +519,10 @@ export const toggleMenuItemAvailability = async (req, res) => {
         menuItem.updatedBy = req.user.id;
         await menuItem.save();
 
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("updated", menuItem, req.user.organization); } catch (e) {}
+        }
+
         res.json({
             success: true,
             message: `تم ${
@@ -595,6 +613,10 @@ export const updateMenuItemsOrder = async (req, res) => {
         );
 
         await Promise.all(updatePromises);
+
+        if (req.io) {
+            try { req.io.notifyMenuUpdate("updated", null, req.user.organization); } catch (e) {}
+        }
 
         res.json({
             success: true,

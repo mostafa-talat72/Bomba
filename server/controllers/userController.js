@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 // bcrypt is not needed here as password hashing is handled in the User model
 
 // @desc    Get all users
@@ -412,7 +413,10 @@ export const deleteUser = async (req, res) => {
             }
         }
 
-        await User.findByIdAndDelete(req.params.id);
+        const deletedUser = await User.findByIdAndDelete(req.params.id);
+        if (deletedUser) {
+            try { await createTombstone('users', deletedUser._id, req.user.organization, req.user._id); } catch (e) {}
+        }
 
         res.json({
             success: true,

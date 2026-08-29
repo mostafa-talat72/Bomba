@@ -176,6 +176,14 @@ OrganizationSchema.pre('save', function (next) {
     next();
 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+OrganizationSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+OrganizationSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(OrganizationSchema, 'Organization');
 

@@ -1,4 +1,5 @@
 import Deduction from '../models/Deduction.js';
+import { createTombstone } from '../utils/tombstoneHelper.js';
 
 // Get all deductions
 export const getDeductions = async (req, res) => {
@@ -61,7 +62,9 @@ export const deleteDeduction = async (req, res) => {
       return res.status(404).json({ success: false, error: 'الخصم غير موجود' });
     }
     
+    const deductionId = deduction._id;
     await deduction.deleteOne();
+    try { await createTombstone('deductions', deductionId, req.user.organization, req.user._id); } catch (e) {}
     
     res.json({ success: true, message: 'تم حذف الخصم بنجاح' });
   } catch (error) {

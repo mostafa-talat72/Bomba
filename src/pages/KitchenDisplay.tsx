@@ -66,7 +66,8 @@ export function KitchenDisplay() {
     if (socketRef.current) return;
     const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
-    const socket = io(socketUrl, { transports: ['websocket', 'polling'], reconnection: true });
+    const socket = io(socketUrl, {
+        auth: { token: localStorage.getItem('token') || undefined }, transports: ['websocket', 'polling'], reconnection: true });
     socketRef.current = socket;
 
     socket.emit('join-role', 'kitchen');
@@ -245,7 +246,7 @@ export function KitchenDisplay() {
     return t('common.elapsedHours', { hours: formatNumber(hours), minutes: formatNumber(minutes) });
   };
 
-  const formatNumber = (num: number) => new Intl.NumberFormat(i18n.language === 'ar' ? 'ar-SA' : i18n.language).format(num);
+  const formatNumber = (num: number) => new Intl.NumberFormat(i18n.language === 'ar' ? 'ar-EG' : i18n.language).format(num);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -512,7 +513,7 @@ function GroupedItemsBySection({ order, sections, getSectionName, onItemToggle, 
   onSectionDeliver?: (orderId: string, sectionId: string) => void;
 }) {
   const { t, i18n } = useTranslation();
-  const formatNumber = (num: number) => new Intl.NumberFormat(i18n.language === 'ar' ? 'ar-SA' : i18n.language).format(num);
+  const formatNumber = (num: number) => new Intl.NumberFormat(i18n.language === 'ar' ? 'ar-EG' : i18n.language).format(num);
   const visibleItems = order.items.filter(item => (item.deliveredCount ?? 0) < (item.quantity ?? 0));
   const grouped = new Map<string, typeof order.items>();
   visibleItems.forEach(item => {

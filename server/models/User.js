@@ -341,6 +341,14 @@ userSchema.methods.canAccessPage = function (page) {
     return this.hasAnyPermission(requiredPermissions);
 };
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+userSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+userSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(userSchema, 'User');
 

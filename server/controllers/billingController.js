@@ -15,6 +15,7 @@ import { createFawryPayment } from "../services/fawryService.js";
 import performanceMetrics from "../utils/performanceMetrics.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import syncConfig from "../config/syncConfig.js";
+import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import { aggregateItemsWithPayments, expandAggregatedItemsForPayment } from "../utils/billAggregation.js";
 import { getUserLanguage } from "../utils/localeHelper.js";
 import { getTableName } from "../utils/translations.js";
@@ -784,7 +785,7 @@ export const createBill = async (req, res) => {
 
         // Notify via Socket.IO
         if (req.io) {
-            req.io.notifyBillUpdate("created", bill);
+            req.io.notifyBillUpdate("created", bill, req.user.organization);
         }
 
         // Create notification for new bill
@@ -1043,6 +1044,7 @@ export const updateBill = async (req, res) => {
                     // STEP 3: حذف الفاتورة القديمة (التي أصبحت فارغة)
                     const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                     await deleteFromBothDatabases(bill, 'bills', `bill ${oldBillNumber}`);
+                    try { await createTombstone('bills', oldBillId, req.user.organization, req.user._id); } catch (e) {}
                     Logger.info(`✅ STEP 3: تم حذف الفاتورة القديمة ${oldBillNumber}`);
                     
                     // تحديث حالة الطاولة القديمة
@@ -1060,8 +1062,8 @@ export const updateBill = async (req, res) => {
                     
                     // Emit Socket.IO events
                     if (req.io) {
-                        req.io.notifyBillUpdate("deleted", { _id: oldBillId, billNumber: oldBillNumber });
-                        req.io.notifyBillUpdate("updated", reloadedBill);
+                        req.io.notifyBillUpdate("deleted", { _id: oldBillId, billNumber: oldBillNumber }, req.user.organization);
+                        req.io.notifyBillUpdate("updated", reloadedBill, req.user.organization);
                     }
                     
                     Logger.info(`✅ تم دمج الفواتير بنجاح - الفاتورة النهائية: ${reloadedBill.billNumber}`);
@@ -1167,7 +1169,7 @@ export const updateBill = async (req, res) => {
 
         // Notify via Socket.IO (Requirement 8.1)
         if (req.io) {
-            req.io.notifyBillUpdate("updated", updatedBill);
+            req.io.notifyBillUpdate("updated", updatedBill, req.user.organization);
         }
 
         if (prevStatus !== "paid" && updatedBill.status === "paid") {
@@ -1492,7 +1494,7 @@ export const addPayment = async (req, res) => {
         // Notify via Socket.IO (non-blocking)
         if (req.io) {
             setImmediate(() => {
-                req.io.notifyBillUpdate("payment-received", bill);
+                req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
             });
         }
 
@@ -1677,6 +1679,7 @@ export const removeOrderFromBill = async (req, res) => {
             Logger.info(`🗑️ Deleting empty bill ${updatedBill.billNumber} after removing order`);
             const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
             await deleteFromBothDatabases(updatedBill, 'bills', `bill ${updatedBill.billNumber}`);
+            try { await createTombstone('bills', updatedBill._id, req.user.organization, req.user._id); } catch (e) {}
             
             // Update table status if bill had a table
             if (updatedBill.table) {
@@ -2044,6 +2047,11 @@ export const deleteBill = async (req, res) => {
             } else {
                 Logger.warn(`⚠️ Atlas connection not available - bill will be synced later`);
             }
+
+            // Tombstones لمنع الإحياء لمدة سنة (حتى لو الجهاز الآخر offline)
+            await createTombstone('bills', bill._id, organizationId, req.user._id);
+            if (orderIds.length) await createTombstones('orders', orderIds, organizationId, req.user._id);
+            if (sessionIds.length) await createTombstones('sessions', sessionIds, organizationId, req.user._id);
         } finally {
             // إعادة تفعيل المزامنة
             syncConfig.enabled = originalSyncEnabled;
@@ -2057,7 +2065,7 @@ export const deleteBill = async (req, res) => {
 
         // Emit bill-deleted event
         if (req.io) {
-            req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber });
+            req.io.notifyBillUpdate("deleted", { _id: bill._id, billNumber: bill.billNumber }, req.user.organization);
         }
 
         res.json({
@@ -3053,7 +3061,7 @@ export const payForItems = async (req, res) => {
 
             // Notify via Socket.IO
             if (req.io) {
-                req.io.notifyBillUpdate("payment-received", bill);
+                req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
             }
 
             // Create notification for item payment
@@ -3210,7 +3218,7 @@ export const paySessionPartial = async (req, res) => {
 
             // Notify via Socket.IO (Requirement 8.2)
             if (req.io) {
-                req.io.notifyBillUpdate("payment-received", bill);
+                req.io.notifyBillUpdate("payment-received", bill, req.user.organization);
             }
 
             // Create notification for session payment

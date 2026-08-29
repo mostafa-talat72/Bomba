@@ -1,5 +1,6 @@
 import Bonus from '../models/Bonus.js';
 import Employee from '../models/Employee.js';
+import { createTombstone } from '../utils/tombstoneHelper.js';
 
 // Get all bonuses
 export const getBonuses = async (req, res) => {
@@ -206,7 +207,9 @@ export const deleteBonus = async (req, res) => {
       });
     }
     
+    const bonusId = bonus._id;
     await bonus.deleteOne();
+    try { await createTombstone('bonuses', bonusId, req.user.organization, req.user._id); } catch (e) {}
     
     res.json({ 
       success: true,

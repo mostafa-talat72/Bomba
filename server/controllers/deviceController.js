@@ -1,6 +1,7 @@
 import Device from "../models/Device.js";
 import Session from "../models/Session.js";
 import DeviceValidator from "../services/validation/deviceValidator.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 const deviceController = {
     // Get all devices with filtering and pagination
@@ -248,6 +249,10 @@ const deviceController = {
             const device = new Device(sanitizedData);
             await device.save();
 
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("created", device, req.user.organization); } catch (e) {}
+            }
+
             res.status(201).json({
                 success: true,
                 message: "تم إضافة الجهاز بنجاح",
@@ -422,6 +427,10 @@ const deviceController = {
                 }
             );
 
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
+            }
+
             res.status(200).json({
                 success: true,
                 message: "تم تحديث بيانات الجهاز بنجاح",
@@ -472,6 +481,10 @@ const deviceController = {
                     message: "الجهاز غير موجود",
                     error: "Device not found",
                 });
+            }
+
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
             }
 
             res.json({
@@ -542,10 +555,18 @@ const deviceController = {
                 });
             }
 
-            await Device.findOneAndDelete({
+            const deletedDevice = await Device.findOneAndDelete({
                 _id: id,
                 organization: req.user.organization,
             });
+
+            if (deletedDevice) {
+                try { await createTombstone('devices', deletedDevice._id, req.user.organization, req.user._id); } catch (e) {}
+            }
+
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+            }
 
             res.json({
                 success: true,
@@ -666,6 +687,10 @@ const deviceController = {
                 updates,
                 { runValidators: true }
             );
+
+            if (req.io) {
+                try { req.io.notifyDeviceUpdate("updated", null, req.user.organization); } catch (e) {}
+            }
 
             res.json({
                 success: true,

@@ -1,4 +1,5 @@
 import Cost from "../models/Cost.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 // @desc    Get all costs
 // @route   GET /api/costs
@@ -326,6 +327,10 @@ export const createCost = async (req, res) => {
         await cost.populate("category", "name icon color");
         await cost.populate("createdBy", "name");
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("created", cost, req.user.organization); } catch (e) {}
+        }
+
         res.status(201).json({
             success: true,
             message: "تم إضافة التكلفة بنجاح",
@@ -443,6 +448,10 @@ export const updateCost = async (req, res) => {
         await cost.populate("createdBy", "name");
         await cost.populate("approvedBy", "name");
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
+
         res.json({
             success: true,
             message: "تم تحديث التكلفة بنجاح",
@@ -489,6 +498,10 @@ export const approveCost = async (req, res) => {
 
         await cost.save();
         await cost.populate(["createdBy", "approvedBy"], "name");
+
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
 
         res.json({
             success: true,
@@ -561,7 +574,13 @@ export const deleteCost = async (req, res) => {
             syncConfig.enabled = originalSyncEnabled;
             Logger.info(`🔓 Sync middleware re-enabled`);
         }
+
+        try { await createTombstone('costs', costId, req.user.organization, req.user._id); } catch (e) {}
         
+        if (req.io) {
+            try { req.io.notifyCostUpdate("deleted", { _id: req.params.id }, req.user.organization); } catch (e) {}
+        }
+
         res.json({
             success: true,
             message: "تم حذف التكلفة بنجاح",
@@ -635,6 +654,10 @@ export const addCostPayment = async (req, res) => {
         await cost.populate("amountHistory.addedBy", "name");
         await cost.populate("paymentHistory.paidBy", "name");
 
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
+
         res.json({
             success: true,
             message: "تم إضافة الدفعة بنجاح",
@@ -696,6 +719,10 @@ export const increaseCostAmount = async (req, res) => {
         await cost.populate("createdBy", "name");
         await cost.populate("amountHistory.addedBy", "name");
         await cost.populate("paymentHistory.paidBy", "name");
+
+        if (req.io) {
+            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+        }
 
         res.json({
             success: true,

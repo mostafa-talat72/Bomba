@@ -13,6 +13,7 @@ export const SocketConnectionStatus: React.FC = () => {
     // إنشاء اتصال Socket.IO
     if (!socket) {
       socket = io(API_BASE_URL, {
+        auth: { token: localStorage.getItem('token') || undefined },
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,

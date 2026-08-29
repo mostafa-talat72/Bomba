@@ -1,6 +1,7 @@
 import Table from "../models/Table.js";
 import Order from "../models/Order.js";
 import Bill from "../models/Bill.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 // Get all tables
 export const getAllTables = async (req, res) => {
@@ -233,6 +234,10 @@ export const createTable = async (req, res) => {
         await table.populate("section", "name");
         await table.populate("createdBy", "name");
 
+        if (req.io) {
+            try { req.io.notifyTableUpdate("created", table, req.user.organization); } catch (e) {}
+        }
+
         res.status(201).json({
             success: true,
             message: "تم إنشاء الطاولة بنجاح",
@@ -312,6 +317,10 @@ export const updateTable = async (req, res) => {
             });
         }
 
+        if (req.io) {
+            try { req.io.notifyTableUpdate("updated", table, req.user.organization); } catch (e) {}
+        }
+
         res.json({
             success: true,
             message: "تم تحديث الطاولة بنجاح",
@@ -364,6 +373,12 @@ export const deleteTable = async (req, res) => {
                 message: "الطاولة غير موجودة",
             });
         }
+
+        if (req.io) {
+            try { req.io.notifyTableUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+        }
+
+        try { await createTombstone('tables', id, req.user.organization, req.user._id); } catch(e) {}
 
         res.json({
             success: true,

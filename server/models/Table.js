@@ -48,6 +48,14 @@ tableSchema.index({ section: 1 });
 tableSchema.index({ organization: 1 });
 tableSchema.index({ isActive: 1 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+tableSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+tableSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(tableSchema, 'Table');
 

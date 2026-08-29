@@ -257,6 +257,14 @@ orderSchema.index({ organization: 1, table: 1, createdAt: -1 });
 orderSchema.index({ organization: 1, createdAt: -1 });
 orderSchema.index({ table: 1, status: 1 }); // Index for table-status queries
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+orderSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+orderSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware BEFORE creating the model
 applySyncMiddleware(orderSchema, 'Order');
 

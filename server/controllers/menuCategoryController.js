@@ -1,5 +1,6 @@
 import MenuCategory from "../models/MenuCategory.js";
 import MenuItem from "../models/MenuItem.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 // Get all menu categories
 export const getAllMenuCategories = async (req, res) => {
@@ -196,6 +197,8 @@ export const deleteMenuCategory = async (req, res) => {
                 message: "الفئة غير موجودة",
             });
         }
+
+        try { await createTombstone('menucategories', category._id, req.user.organization, req.user._id); } catch (e) {}
 
         res.json({
             success: true,

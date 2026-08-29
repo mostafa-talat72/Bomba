@@ -75,6 +75,14 @@ paymentSchema.pre('save', async function(next) {
   next();
 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+paymentSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+paymentSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(paymentSchema, 'Payment');
 

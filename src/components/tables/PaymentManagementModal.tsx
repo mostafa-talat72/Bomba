@@ -117,6 +117,15 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
     await onSplitSubmit(splitAmount2, splitMethod2);
   };
 
+  // تجميع الأصناف مع الدفعات مرة واحدة (كان يُحسب مرتين) — قبل early return لتجنب خرق Rules of Hooks
+  const aggregatedItems = React.useMemo(
+    () => {
+      if (!selectedBill) return [] as ReturnType<typeof aggregateItemsWithPayments>;
+      return aggregateItemsWithPayments(selectedBill.orders || [], selectedBill.itemPayments || [], selectedBill.status, selectedBill.paid, selectedBill.total);
+    },
+    [selectedBill?.orders, selectedBill?.itemPayments, selectedBill?.status, selectedBill?.paid, selectedBill?.total]
+  );
+
   if (!isOpen || !selectedBill) return null;
 
   const getStatusColor = (status: string) => {
@@ -427,7 +436,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       <Receipt className="h-3 w-3" />{t('billing.itemDetails')}
                       {(selectedBill?.orders?.length || 0) > 0 && (
                         <span className="mr-auto bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-[10px] font-bold rounded-full px-1.5 leading-5">
-                          {aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.itemPayments || [], selectedBill?.status, selectedBill?.paid, selectedBill?.total).length}
+                          {aggregatedItems.length}
                         </span>
                       )}
                     </p>
@@ -437,7 +446,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                       <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600">
                         <Receipt className="h-6 w-6 mb-1 opacity-40" /><p className="text-[10px]">لا توجد أصناف</p>
                       </div>
-                    ) : aggregateItemsWithPayments(selectedBill?.orders || [], selectedBill?.itemPayments || [], selectedBill?.status, selectedBill?.paid, selectedBill?.total).map((item, i) => (
+                    ) : aggregatedItems.map((item, i) => (
                       <div key={i} className="bg-white dark:bg-gray-800 rounded-lg px-2.5 py-2 border border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
                         <div className="flex items-start justify-between gap-1 mb-1">
                           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{item.name}</p>
@@ -657,4 +666,4 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
   );
 };
 
-export default PaymentManagementModal;
+export default React.memo(PaymentManagementModal);

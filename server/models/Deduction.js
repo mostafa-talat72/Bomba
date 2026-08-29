@@ -64,6 +64,14 @@ deductionSchema.index({ employeeId: 1, month: 1 });
 deductionSchema.index({ organizationId: 1, date: -1 });
 deductionSchema.index({ type: 1 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+deductionSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+deductionSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(deductionSchema, 'Deduction');
 

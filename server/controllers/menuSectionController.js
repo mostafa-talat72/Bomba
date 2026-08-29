@@ -1,6 +1,7 @@
 import MenuSection from "../models/MenuSection.js";
 import MenuCategory from "../models/MenuCategory.js";
 import MenuItem from "../models/MenuItem.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 // Get all menu sections
 export const getAllMenuSections = async (req, res) => {
@@ -176,6 +177,8 @@ export const deleteMenuSection = async (req, res) => {
                 message: "القسم غير موجود",
             });
         }
+
+        try { await createTombstone('menusections', section._id, req.user.organization, req.user._id); } catch (e) {}
 
         res.json({
             success: true,

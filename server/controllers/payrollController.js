@@ -6,6 +6,7 @@ import Payment from '../models/Payment.js';
 import Deduction from '../models/Deduction.js';
 import Bonus from '../models/Bonus.js';
 import mongoose from 'mongoose';
+import { createTombstone } from '../utils/tombstoneHelper.js';
 import { startOfMonth, endOfMonth, format, getDaysInMonth } from 'date-fns';
 
 // Helper: Calculate payroll
@@ -1493,7 +1494,9 @@ export const deletePayroll = async (req, res) => {
       return res.status(400).json({ success: false, error: 'لا يمكن حذف كشف راتب مدفوع أو مقفل' });
     }
     
+    const payrollId = payroll._id;
     await payroll.deleteOne();
+    try { await createTombstone('payrolls', payrollId, req.user.organization, req.user._id); } catch (e) {}
     
     res.json({ success: true, message: 'تم حذف كشف الراتب بنجاح' });
   } catch (error) {

@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../utils/apiBase';
 import api, { Session, Order, InventoryItem, WarehouseItem, Bill, Cost, Device, MenuItem, MenuSection, MenuCategory, BillItem, User } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -1574,6 +1576,109 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     await refreshData(0);
   };
+
+  // ── Global real-time sync — كل الـ schemas لحظياً (أولوية قصوى + ثانوية) ──
+  const globalSocketRef = useRef<Socket | null>(null);
+  const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const debouncedFetch = (key: string, fn: () => void | Promise<void>) => {
+    const existing = debounceTimersRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const id = setTimeout(() => {
+      debounceTimersRef.current.delete(key);
+      fn();
+    }, 300);
+    debounceTimersRef.current.set(key, id);
+  };
+  // Keep latest fetchers in ref to avoid stale closures
+  const fetchersRef = useRef({
+    fetchBills, fetchOrders, fetchSessions, fetchInventory, fetchInventoryItems,
+    fetchWarehouseItems, fetchMenuItems, fetchAvailableMenuItems, fetchMenuSections,
+    fetchMenuCategories, fetchCosts, fetchDevices, fetchTables, fetchTableSections,
+    fetchUsers, fetchSettings,
+  } as any);
+  useEffect(() => {
+    fetchersRef.current = {
+      fetchBills, fetchOrders, fetchSessions, fetchInventory, fetchInventoryItems,
+      fetchWarehouseItems, fetchMenuItems, fetchAvailableMenuItems, fetchMenuSections,
+      fetchMenuCategories, fetchCosts, fetchDevices, fetchTables, fetchTableSections,
+      fetchUsers, fetchSettings,
+    } as any;
+  });
+  useEffect(() => {
+    if (!user) {
+      if (globalSocketRef.current) {
+        globalSocketRef.current.disconnect();
+        globalSocketRef.current = null;
+      }
+      return;
+    }
+    if (globalSocketRef.current) return;
+    const socketUrl = API_BASE_URL.replace(/\/api\/?$/, '');
+    const token = localStorage.getItem('token') || undefined;
+    const socket: Socket = io(socketUrl, {
+      auth: { token },
+      path: '/socket.io/',
+      transports: ['websocket', 'polling'],
+      reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5,
+    });
+    globalSocketRef.current = socket;
+
+    // Helper to trigger fetch with debounce
+    const on = (event: string, key: string, fn: () => void | Promise<void>) => {
+      socket.on(event, () => debouncedFetch(key, fn));
+    };
+
+    // ── أولوية قصوى: فواتير / طلبات / جلسات / حالة طاولات ──
+    on('bill-update', 'bills', () => fetchersRef.current.fetchBills());
+    on('payment-received', 'bills', () => fetchersRef.current.fetchBills());
+    on('partial-payment-received', 'bills', () => fetchersRef.current.fetchBills());
+    on('order-update', 'orders', () => fetchersRef.current.fetchOrders());
+    on('new-order', 'orders', () => fetchersRef.current.fetchOrders());
+    on('order-ready', 'orders', () => fetchersRef.current.fetchOrders());
+    on('session-update', 'sessions', () => fetchersRef.current.fetchSessions());
+    on('table-status-update', 'tables', () => fetchersRef.current.fetchTables());
+    // المخزون — على كل تعديل (ليس فقط low-stock)
+    on('inventory-update', 'inventory', () => {
+      debouncedFetch('inventory', () => fetchersRef.current.fetchInventoryItems());
+      debouncedFetch('warehouse', () => fetchersRef.current.fetchWarehouseItems());
+    });
+    on('low-stock-alert', 'inventory', () => fetchersRef.current.fetchInventoryItems());
+
+    // ── ثانوية: أصناف / تكاليف / أجهزة / طاولات / أقسام / إعدادات ──
+    on('menu-update', 'menu', () => {
+      debouncedFetch('menuItems', () => fetchersRef.current.fetchMenuItems());
+      debouncedFetch('availableMenu', () => fetchersRef.current.fetchAvailableMenuItems());
+    });
+    on('cost-update', 'costs', () => fetchersRef.current.fetchCosts());
+    on('device-update', 'devices', () => fetchersRef.current.fetchDevices());
+    on('table-update', 'tables', () => fetchersRef.current.fetchTables());
+    on('table-section-update', 'tableSections', () => fetchersRef.current.fetchTableSections());
+    on('settings-update', 'settings', () => fetchersRef.current.fetchSettings());
+
+    socket.on('reconnect', () => {
+      // عند إعادة الاتصال — جلب كل شيء
+      debouncedFetch('reconnect', () => {
+        fetchersRef.current.fetchBills();
+        fetchersRef.current.fetchOrders();
+        fetchersRef.current.fetchSessions();
+        fetchersRef.current.fetchTables();
+      });
+    });
+
+    return () => {
+      debounceTimersRef.current.forEach(t => clearTimeout(t));
+      debounceTimersRef.current.clear();
+      socket.off('bill-update'); socket.off('payment-received'); socket.off('partial-payment-received');
+      socket.off('order-update'); socket.off('new-order'); socket.off('order-ready');
+      socket.off('session-update'); socket.off('table-status-update');
+      socket.off('inventory-update'); socket.off('low-stock-alert');
+      socket.off('menu-update'); socket.off('cost-update'); socket.off('device-update');
+      socket.off('table-update'); socket.off('table-section-update'); socket.off('settings-update');
+      socket.off('reconnect');
+      socket.disconnect();
+      globalSocketRef.current = null;
+    };
+  }, [user]);
 
   const getRecentActivity = async (limit?: number): Promise<any[]> => {
     try {

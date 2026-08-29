@@ -50,6 +50,14 @@ bonusSchema.index({ employeeId: 1, date: -1 });
 bonusSchema.index({ organizationId: 1, month: 1 });
 bonusSchema.index({ employeeId: 1, month: 1 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+bonusSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+bonusSchema.index({ isDeleted: 1 });
+
 const Bonus = mongoose.model('Bonus', bonusSchema);
 
 export default Bonus;

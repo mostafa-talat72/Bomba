@@ -1,6 +1,7 @@
 import Attendance from '../models/Attendance.js';
 import Employee from '../models/Employee.js';
 import Settings from '../models/Settings.js';
+import { createTombstone } from '../utils/tombstoneHelper.js';
 import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
 import { getDateFnsLocale } from '../utils/localeHelper.js';
 
@@ -474,7 +475,9 @@ export const deleteAttendance = async (req, res) => {
       });
     }
     
+    const attendanceId = attendance._id;
     await attendance.deleteOne();
+    try { await createTombstone('attendances', attendanceId, req.user.organization, req.user._id); } catch (e) {}
     
     res.json({ 
       success: true,

@@ -124,6 +124,14 @@ advanceSchema.pre('save', async function(next) {
   next();
 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+advanceSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+advanceSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(advanceSchema, 'Advance');
 

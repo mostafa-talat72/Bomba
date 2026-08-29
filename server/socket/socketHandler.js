@@ -134,35 +134,49 @@ export const setupSocketIO = (io) => {
         });
     });
 
+    // Helper: normalize organizationId (may be ObjectId or populated object)
+    const normalizeOrg = (orgId) => {
+        if (!orgId) return undefined;
+        if (typeof orgId === 'object' && orgId._id) return String(orgId._id);
+        return String(orgId);
+    };
     // Helper functions to emit events from controllers — scoped by organizationId
     io.notifySessionUpdate = (type, session, organizationId) => {
-        const target = organizationId ? `org-${organizationId}` : undefined;
-        io.to(target).emit("session-update", { type, session });
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("session-update", { type, session });
+        else io.emit("session-update", { type, session });
     };
 
     io.notifyOrderUpdate = (type, order, organizationId) => {
-        const target = organizationId ? `org-${organizationId}` : undefined;
-        io.to(target).emit("order-update", { type, order });
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        const emit = (event, data) => target ? io.to(target).emit(event, data) : io.emit(event, data);
+        emit("order-update", { type, order });
 
         if (type === "created") {
-            io.to(target).emit("new-order", order);
+            emit("new-order", order);
         } else if (order.status === "ready") {
-            io.to(target).emit("order-ready", order);
+            emit("order-ready", order);
         }
     };
 
     io.notifyInventoryUpdate = (item, organizationId) => {
-        const target = organizationId ? `org-${organizationId}` : undefined;
-        io.to(target).emit("inventory-update", item);
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        const emit = (event, data) => target ? io.to(target).emit(event, data) : io.emit(event, data);
+        emit("inventory-update", item);
 
         if (item.isLowStock) {
-            io.to(target).emit("low-stock-alert", item);
+            emit("low-stock-alert", item);
         }
     };
 
     io.notifyBillUpdate = (type, bill, organizationId) => {
-        const target = organizationId ? `org-${organizationId}` : undefined;
-        io.to(target).emit("bill-update", { type, bill });
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("bill-update", { type, bill });
+        else io.emit("bill-update", { type, bill });
     };
 
     io.sendNotification = (message, type = "info", targetRole = null, organizationId = null) => {
@@ -181,7 +195,47 @@ export const setupSocketIO = (io) => {
 
     // Debounced table status update to reduce event frequency
     io.notifyTableStatusUpdate = (data, organizationId) => {
-        const target = organizationId ? `org-${organizationId}` : undefined;
-        io.to(target).emit("table-status-update", data);
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("table-status-update", data);
+        else io.emit("table-status-update", data);
+    };
+
+    // ── Generic real-time sync for remaining schemas (ثانوية — لحظية) ──────
+    io.notifyMenuUpdate = (type, item, organizationId) => {
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("menu-update", { type, item });
+        else io.emit("menu-update", { type, item });
+    };
+    io.notifyCostUpdate = (type, cost, organizationId) => {
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("cost-update", { type, cost });
+        else io.emit("cost-update", { type, cost });
+    };
+    io.notifyDeviceUpdate = (type, device, organizationId) => {
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("device-update", { type, device });
+        else io.emit("device-update", { type, device });
+    };
+    io.notifyTableUpdate = (type, table, organizationId) => {
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("table-update", { type, table });
+        else io.emit("table-update", { type, table });
+    };
+    io.notifyTableSectionUpdate = (type, section, organizationId) => {
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("table-section-update", { type, section });
+        else io.emit("table-section-update", { type, section });
+    };
+    io.notifySettingsUpdate = (settings, organizationId) => {
+        const org = normalizeOrg(organizationId);
+        const target = org ? `org-${org}` : undefined;
+        if (target) io.to(target).emit("settings-update", settings);
+        else io.emit("settings-update", settings);
     };
 };

@@ -24,6 +24,14 @@ const SubscriptionSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+SubscriptionSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+SubscriptionSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(SubscriptionSchema, 'Subscription');
 

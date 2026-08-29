@@ -28,7 +28,6 @@ import {
 } from '../utils/permissionHelper';
 import PermissionDenied from '../components/PermissionDenied';
 import ConfirmModal from '../components/ConfirmModal';
-import PartialPaymentModal from '../components/PartialPaymentModal';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../utils/apiBase';
 import '../styles/billing-animations.css';
@@ -38,7 +37,6 @@ import { ItemCard, OrderItemRow } from '../components/tables/OrderItems';
 import { getTableDisplay, getAgeLabel, getTableAgeColor, formatCurrencyArabic } from '../components/tables/tableHelpers';
 import type { LocalOrderItem } from '../components/tables/tableHelpers';
 import ModalPortal from '../components/ModalPortal';
-import PaymentManagementModal from '../components/tables/PaymentManagementModal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
 import { playWarnBeep, playDangerBeep, isSoundEnabled, setSoundEnabled } from '../utils/sound';
 
@@ -46,6 +44,11 @@ import { playWarnBeep, playDangerBeep, isSoundEnabled, setSoundEnabled } from '.
 
 const EMPTY_BILLS: Bill[] = [];
 const EMPTY_ORDERS_COUNT = 0;
+
+// ─── تحميل متأخر لنوافذ الدفع الثقيلة (يقلل الحزمة الأولية ويسرّع فتح الصفحة) ──
+// ملفوفة بـ memo لتجنب إعادة الرسم بلا داعٍ عند كل render للصفحة
+const PartialPaymentModal = React.lazy(() => import('../components/PartialPaymentModal'));
+const PaymentManagementModal = React.lazy(() => import('../components/tables/PaymentManagementModal'));
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 const Tables: React.FC = () => {
@@ -499,7 +502,7 @@ const Tables: React.FC = () => {
       });
     });
     return m;
-  }, [bills, tick]);
+  }, [bills]);
 
   // تنبيه صوتي مرة واحدة عند دخول جلسة نطاق التحذير/الخطر
   const alertedSessionsRef = useRef<Set<string>>(new Set());
@@ -522,6 +525,7 @@ const Tables: React.FC = () => {
     if (socketRef.current) return;
     const socketUrl = API_BASE_URL.replace(/\/api\/?$/, '');
     const socket: Socket = io(socketUrl, {
+        auth: { token: localStorage.getItem('token') || undefined },
       path: '/socket.io/', transports: ['websocket', 'polling'],
       reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5,
     });
@@ -910,8 +914,7 @@ const Tables: React.FC = () => {
       }
     });
     return result;
-    // tick يعيد الحساب كل 10 ثوانٍ فقط للطاولات اللي فيها جلسات (liveExtra سيتغير)
-  }, [bills, orders, activeTables, tick, getSessionCost]);
+  }, [bills, orders, activeTables, getSessionCost]);
 
   // ── gamingDeviceData — بيانات الأجهزة محسوبة خارج JSX ──────────────────
   const gamingDeviceData = useMemo(() => {
@@ -1133,7 +1136,7 @@ const Tables: React.FC = () => {
 
     log.sort((a, b) => b.time.getTime() - a.time.getTime());
     setTableActivityLog(log.slice(0, 50));
-  }, [bills, orders, tick, getSessionCost]);
+  }, [bills, orders, getSessionCost]);
 
   // تحديث لحظي للسجل كل 10 ثوانٍ عند فتح مودال الطاولة (فقط للطاولة المفتوحة)
   useEffect(() => {
@@ -1141,7 +1144,7 @@ const Tables: React.FC = () => {
       const tableId = selectedTable._id || (selectedTable as any).id;
       buildActivityLog(tableId);
     }
-  }, [selectedTable?._id, showUnifiedTableModal, tick, buildActivityLog]);
+  }, [selectedTable?._id, showUnifiedTableModal, buildActivityLog]);
 
   // #1 Quick order from table card
   const handleQuickOrder = (table: Table, e: React.MouseEvent) => {
@@ -1626,6 +1629,16 @@ const Tables: React.FC = () => {
 
   // بيانات الجزء الثاني للدفع المقسوم — ref لتفادي re-render المودال
   const splitPartsRef = useRef<{ amount2: string; method2: 'cash' | 'card' | 'transfer' } | null>(null);
+
+  // ref لدالة processPayment الحية — يسمح بـ useCallback مستقر لا يتغير مرجعه
+  const processPaymentRef = useRef(processPayment);
+  useEffect(() => { processPaymentRef.current = processPayment; });
+
+  // onSplitSubmit مستقر — لا يتغير مرجعه في كل render (يقلل إعادة رسم نافذة الدفع)
+  const handleSplitSubmit = useCallback(async (amount2: string, method2: 'cash' | 'card' | 'transfer') => {
+    splitPartsRef.current = { amount2, method2 };
+    await processPaymentRef.current();
+  }, []);
 
   const handlePaymentSubmit = async () => {
     if (!selectedBill) return;
@@ -3069,6 +3082,7 @@ const Tables: React.FC = () => {
       })()}
 
       {/* ── Payment Modal — نفس شكل صفحة الفواتير ── */}
+      <React.Suspense fallback={null}>
       <PaymentManagementModal
         isOpen={showPaymentModal}
         selectedBill={liveSelectedBill || selectedBill}
@@ -3097,12 +3111,10 @@ const Tables: React.FC = () => {
         roundingLabel={roundingMode === 'none' ? 'بدون' : roundingMode === 'half' ? '0.5' : '1'}
         onToggleRounding={cycleRounding}
         applyRounding={applyRounding}
-        onSplitSubmit={async (amount2, method2) => {
-          splitPartsRef.current = { amount2, method2 };
-          await processPayment();
-        }}
+        onSplitSubmit={handleSplitSubmit}
         tick={tick}
       />
+      </React.Suspense>
 
       {/* ── شريط التراجع ── */}
       <UndoBar request={undoRequest} onExpire={() => setUndoRequest(null)} />
@@ -3167,10 +3179,12 @@ const Tables: React.FC = () => {
       />
 
       {/* ── Partial Payment Modal ── */}
+      <React.Suspense fallback={null}>
       <PartialPaymentModal
         key={`partial-${selectedBill?._id || selectedBill?.id}-${selectedBill?.itemPayments?.length || 0}-${selectedBill?.paid || 0}`}
         isOpen={showPartialPaymentModal} onClose={() => setShowPartialPaymentModal(false)}
         bill={selectedBill} onPaymentSubmit={handlePartialPaymentSubmit} isProcessing={isProcessingPartialPayment} />
+      </React.Suspense>
 
       {/* ── Cancel Bill Confirm Modal ── */}
       <ConfirmModal isOpen={showCancelConfirmModal} onClose={() => !isCancelingBill && setShowCancelConfirmModal(false)}

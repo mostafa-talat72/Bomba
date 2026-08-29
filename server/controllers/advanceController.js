@@ -1,5 +1,6 @@
 import Advance from '../models/Advance.js';
 import Employee from '../models/Employee.js';
+import { createTombstone } from '../utils/tombstoneHelper.js';
 
 // Get all advances
 export const getAdvances = async (req, res) => {
@@ -338,7 +339,9 @@ export const deleteAdvance = async (req, res) => {
       return res.status(400).json({ success: false, error: 'لا يمكن حذف سلفة مصروفة' });
     }
     
+    const advanceId = advance._id;
     await advance.deleteOne();
+    try { await createTombstone('advances', advanceId, req.user.organization, req.user._id); } catch (e) {}
     
     res.json({ success: true, message: 'تم حذف السلفة بنجاح' });
   } catch (error) {

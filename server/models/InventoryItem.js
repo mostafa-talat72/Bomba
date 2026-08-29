@@ -422,6 +422,14 @@ inventoryItemSchema.pre('save', function(next) {
     next();
 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+inventoryItemSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+inventoryItemSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(inventoryItemSchema, 'InventoryItem');
 

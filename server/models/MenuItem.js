@@ -127,6 +127,14 @@ menuItemSchema.index({ organization: 1, isAvailable: 1, sortOrder: 1 }); // لل
 menuItemSchema.index({ isPopular: 1, organization: 1 }); // للعناصر الشائعة
 menuItemSchema.index({ section: 1, organization: 1 }); // للبحث حسب القسم
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+menuItemSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+menuItemSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(menuItemSchema, 'MenuItem');
 

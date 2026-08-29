@@ -5,6 +5,7 @@ import Bill from "../models/Bill.js";
 import Table from "../models/Table.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 import mongoose from "mongoose";
 import performanceMetrics from "../utils/performanceMetrics.js";
 import {
@@ -959,7 +960,7 @@ export const createOrder = async (req, res) => {
                     orderId: order._id,
                     orderNumber: order.orderNumber,
                     timestamp: new Date()
-                });
+                }, req.user.organization);
             } else {
                 console.error('❌ req.io is not available in createOrder');
             }
@@ -1029,7 +1030,7 @@ export const createOrder = async (req, res) => {
             // Emit Socket.IO event for order creation
             if (req.io) {
                 try {
-                    req.io.notifyOrderUpdate("created", populatedOrder);
+                    req.io.notifyOrderUpdate("created", populatedOrder, req.user.organization);
                 } catch (socketError) {
                     Logger.error('فشل إرسال حدث Socket.IO', socketError);
                 }
@@ -1346,7 +1347,7 @@ export const updateOrder = async (req, res) => {
                         orderId: order._id,
                         orderNumber: order.orderNumber,
                         timestamp: new Date()
-                    });
+                    }, req.user.organization);
                     
                 } else {
                     console.error('❌ req.io is not available in updateOrder');
@@ -1675,7 +1676,7 @@ export const updateOrder = async (req, res) => {
         if (req.io) {
             setImmediate(() => {
                 try {
-                    req.io.notifyOrderUpdate("updated", updatedOrder);
+                    req.io.notifyOrderUpdate("updated", updatedOrder, req.user.organization);
                 } catch (socketError) {
                     Logger.error('فشل إرسال حدث Socket.IO', socketError);
                 }
@@ -1744,7 +1745,7 @@ export const deleteOrder = async (req, res) => {
                     orderId: order._id,
                     orderNumber: order.orderNumber,
                     timestamp: new Date()
-                });
+                }, req.user.organization);
                 
             } else {
                 console.error('❌ req.io is not available in deleteOrder');
@@ -1820,8 +1821,11 @@ export const deleteOrder = async (req, res) => {
                         
                         // Delete the bill from Local and Atlas
                         Logger.info(`🗑️ Deleting empty bill ${billDoc.billNumber}`);
+                        const billIdForTombstone = billDoc._id;
+                        const billOrgForTombstone = billDoc.organization || req.user.organization;
                         const { deleteFromBothDatabases } = await import('../utils/deleteHelper.js');
                         await deleteFromBothDatabases(billDoc, 'bills', `bill ${billDoc.billNumber}`);
+                        try { await createTombstone('bills', billIdForTombstone, billOrgForTombstone, req.user._id); } catch (e) {}
 
                         // Update table status to 'empty' if bill is deleted
                         if (tableIdToUpdate) {
@@ -1884,6 +1888,8 @@ export const deleteOrder = async (req, res) => {
             } else {
                 Logger.warn(`⚠️ Atlas connection not available - order will be synced later`);
             }
+            // Tombstone لمنع الإحياء لمدة سنة
+            try { await createTombstone('orders', orderId, req.user.organization, req.user._id); } catch(e) {}
         } finally {
             // إعادة تفعيل المزامنة
             syncConfig.enabled = originalSyncEnabled;
@@ -1893,7 +1899,7 @@ export const deleteOrder = async (req, res) => {
         // Emit Socket.IO event for order deletion
         if (req.io) {
             try {
-                req.io.notifyOrderUpdate("deleted", { _id: req.params.id });
+                req.io.notifyOrderUpdate("deleted", { _id: req.params.id }, req.user.organization);
             } catch (socketError) {
                 Logger.error('فشل إرسال حدث Socket.IO', socketError);
             }
@@ -2265,7 +2271,7 @@ export const updateOrderStatus = async (req, res) => {
         // Emit socket event for real-time updates
         if (req.io) {
             try {
-                req.io.notifyOrderUpdate("status-changed", updatedOrder);
+                req.io.notifyOrderUpdate("status-changed", updatedOrder, req.user.organization);
             } catch (socketError) {
                 Logger.error('فشل إرسال حدث Socket.IO', socketError);
             }
@@ -2767,7 +2773,7 @@ export const deliverItem = async (req, res) => {
 
         // Notify via Socket.IO
         if (req.io) {
-            req.io.notifyOrderUpdate("item-delivered", order);
+            req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
         }
 
         res.json({
@@ -2868,7 +2874,7 @@ export const deliverOrderSection = async (req, res) => {
         ], "name");
 
         if (req.io) {
-            req.io.notifyOrderUpdate("item-delivered", order);
+            req.io.notifyOrderUpdate("item-delivered", order, req.user.organization);
         }
 
         res.json({
@@ -2884,4 +2890,3 @@ export const deliverOrderSection = async (req, res) => {
         });
     }
 };
-

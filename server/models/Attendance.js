@@ -114,6 +114,14 @@ attendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });
 attendanceSchema.index({ organizationId: 1, date: 1 });
 attendanceSchema.index({ status: 1 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+attendanceSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+attendanceSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(attendanceSchema, 'Attendance');
 

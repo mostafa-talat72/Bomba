@@ -302,6 +302,7 @@ const BillView = () => {
 		const socketUrl = apiUrl.replace(/\/api\/?$/, '');
 		
 		const socket = io(socketUrl, {
+        auth: { token: localStorage.getItem('token') || undefined },
 			path: '/socket.io/',
 			transports: ['websocket', 'polling'],
 			reconnection: true,

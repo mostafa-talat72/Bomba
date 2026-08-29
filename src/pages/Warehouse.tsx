@@ -262,6 +262,7 @@ const Warehouse = () => {
     const apiUrl = API_BASE_URL;
     const socketUrl = apiUrl.replace(/\/api\/?$/, '');
     const socket = io(socketUrl, {
+        auth: { token: localStorage.getItem('token') || undefined },
       path: '/socket.io/', transports: ['websocket', 'polling'],
       reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5,
     });

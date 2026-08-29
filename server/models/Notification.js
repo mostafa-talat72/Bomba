@@ -513,6 +513,14 @@ notificationSchema.statics.cleanExpired = function (organization) {
     });
 };
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+notificationSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+notificationSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(notificationSchema, 'Notification');
 

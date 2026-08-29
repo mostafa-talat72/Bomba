@@ -1,5 +1,6 @@
 import TableSection from "../models/TableSection.js";
 import Table from "../models/Table.js";
+import { createTombstone } from "../utils/tombstoneHelper.js";
 
 // Get all table sections
 export const getAllTableSections = async (req, res) => {
@@ -88,6 +89,10 @@ export const createTableSection = async (req, res) => {
 
         await section.populate("createdBy", "name");
 
+        if (req.io) {
+            try { req.io.notifyTableSectionUpdate("created", section, req.user.organization); } catch (e) {}
+        }
+
         res.status(201).json({
             success: true,
             message: "تم إنشاء القسم بنجاح",
@@ -132,6 +137,10 @@ export const updateTableSection = async (req, res) => {
             });
         }
 
+        if (req.io) {
+            try { req.io.notifyTableSectionUpdate("updated", section, req.user.organization); } catch (e) {}
+        }
+
         res.json({
             success: true,
             message: "تم تحديث القسم بنجاح",
@@ -174,6 +183,12 @@ export const deleteTableSection = async (req, res) => {
                 success: false,
                 message: "القسم غير موجود",
             });
+        }
+
+        try { await createTombstone('tablesections', section._id, req.user.organization, req.user._id); } catch (e) {}
+
+        if (req.io) {
+            try { req.io.notifyTableSectionUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
         }
 
         res.json({

@@ -258,10 +258,10 @@ export const createInventoryItem = async (req, res) => {
             );
         }
 
-        // Check for low stock and notify
-        if (item.isLowStock && req.io) {
+        // Emit inventory update on every create (not only low-stock) — لحظية لكل الأجهزة
+        if (req.io) {
             try {
-                req.io.notifyInventoryUpdate(item);
+                req.io.notifyInventoryUpdate(item, req.user.organization);
             } catch (ioError) {
                 Logger.error("فشل في إرسال إشعار تحديث المخزون", {
                     error: ioError.message,
@@ -365,10 +365,10 @@ export const updateInventoryItem = async (req, res) => {
 
         await item.save();
 
-        // Notify if low stock
-        if (item.isLowStock && req.io) {
+        // Emit inventory update on every update (لحظية)
+        if (req.io) {
             try {
-                req.io.notifyInventoryUpdate(item);
+                req.io.notifyInventoryUpdate(item, req.user.organization);
             } catch (ioError) {
                 Logger.error("فشل في إرسال إشعار تحديث المخزون", {
                     error: ioError.message,
@@ -714,10 +714,10 @@ export const updateStock = async (req, res) => {
             );
         }
 
-        // Notify if low stock
-        if (item.isLowStock && req.io) {
+        // Emit inventory update on every stock change (لحظية — ليس فقط low-stock)
+        if (req.io) {
             try {
-                req.io.notifyInventoryUpdate(item);
+                req.io.notifyInventoryUpdate(item, req.user.organization);
             } catch (ioError) {
                 Logger.error("فشل في إرسال إشعار تحديث المخزون", {
                     error: ioError.message,
@@ -859,6 +859,16 @@ export const deleteInventoryItem = async (req, res) => {
         // Soft delete by setting isActive to false
         item.isActive = false;
         await item.save();
+
+        if (req.io) {
+            try {
+                req.io.notifyInventoryUpdate(item, req.user.organization);
+            } catch (ioError) {
+                Logger.error("فشل في إرسال إشعار تحديث المخزون عند الحذف", {
+                    error: ioError.message,
+                });
+            }
+        }
 
         res.json({
             success: true,

@@ -8,6 +8,7 @@ import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import { getUserLocale, getUserLanguage } from "../utils/localeHelper.js";
+import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import { getCustomerNameForDevice, getTableName, getSessionBillNote, getNewSessionBillNote, t } from "../utils/translations.js";
 
 /**
@@ -30,9 +31,17 @@ const deleteBillFromBothDatabases = async (billId) => {
         Logger.info(`🗑️ Deleting bill from both databases: ${billId}`);
         
         const atlasConnection = dualDatabaseManager.getAtlasConnection();
+        let orgForTombstone = null;
+        try {
+            const billDocForTomb = await Bill.findById(billId).select('organization');
+            if (billDocForTomb) orgForTombstone = billDocForTomb.organization;
+        } catch (e) {}
         
         // حذف من Local
         const localResult = await Bill.deleteOne({ _id: billId });
+        if (orgForTombstone) {
+            try { await createTombstone('bills', billId, orgForTombstone, null); } catch (e) {}
+        }
         Logger.info(`✓ Deleted from Local: ${localResult.deletedCount} bill(s)`);
         
         // حذف من Atlas مباشرة
@@ -189,7 +198,10 @@ const performCleanupHelper = async (organizationId) => {
                             }
                             
                             // Delete the empty bill
+                            const billIdForTomb = bill._id;
+                            const billOrgForTomb = bill.organization || orgId;
                             await bill.deleteOne();
+                            try { await createTombstone('bills', billIdForTomb, billOrgForTomb, null); } catch (e) {}
                             deletedBillsCount++;
                             Logger.info(`✅ Successfully processed empty bill ${bill.billNumber}`);
                             
@@ -301,9 +313,12 @@ const performSelectiveCleanup = async (sessionIds, organizationId) => {
                             Logger.info(`🔄 Bill ${bill.billNumber} is now empty, deleting...`);
                             
                             try {
+                                const billIdTomb = bill._id;
+                                const billOrgTomb = bill.organization || orgId;
                                 await bill.deleteOne();
+                                try { await createTombstone('bills', billIdTomb, billOrgTomb, null); } catch (e) {}
                                 deletedBillsCount++;
-                                affectedBillIds.delete(bill._id.toString());
+                                affectedBillIds.delete(billIdTomb.toString());
                                 Logger.info(`✅ Deleted empty bill ${bill.billNumber}`);
                             } catch (deleteError) {
                                 Logger.error(`❌ Failed to delete empty bill ${bill.billNumber}:`, deleteError);
@@ -778,6 +793,12 @@ const sessionController = {
                 { status: "active" }
             );
 
+            if (req.io) {
+                try { req.io.notifySessionUpdate("started", session, req.user.organization); } catch (e) {}
+                try { if (bill) req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch (e) {}
+                try { req.io.notifyTableStatusUpdate({ tableId: table || null }, req.user.organization); } catch (e) {}
+            }
+
             res.status(201).json({
                 success: true,
                 message: "تم بدء الجلسة وإنشاء الفاتورة بنجاح",
@@ -853,6 +874,10 @@ const sessionController = {
                 historyLength: session.controllersHistory.length,
                 latestPeriod: session.controllersHistory[session.controllersHistory.length - 1]
             });
+
+            if (req.io) {
+                try { req.io.notifySessionUpdate("controllers-changed", session, req.user.organization); } catch (e) {}
+            }
 
             res.json({
                 success: true,
@@ -1102,6 +1127,10 @@ const sessionController = {
                 newTotalCost: session.totalCost,
                 newFinalCost: session.finalCost
             });
+
+            if (req.io) {
+                try { req.io.notifySessionUpdate("updated", session, req.user.organization); } catch (e) {}
+            }
 
             res.json({
                 success: true,
@@ -1634,6 +1663,12 @@ const sessionController = {
                     Logger.error("❌ خطأ في إنشاء الفاتورة:", createBillError);
                     // Continue with session ending even if bill creation fails
                 }
+            }
+
+            if (req.io) {
+                try { req.io.notifySessionUpdate("ended", updatedSession, req.user.organization); } catch (e) {}
+                try { if (updatedBill) req.io.notifyBillUpdate("updated", updatedBill, req.user.organization); } catch (e) {}
+                try { req.io.notifyTableStatusUpdate({ tableId: updatedSession.table || null }, req.user.organization); } catch (e) {}
             }
 
             res.json({
@@ -2197,7 +2232,10 @@ const sessionController = {
                         if (updatedWrongBill) {
                             const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
+                                const delId = updatedWrongBill._id;
+                                const delOrg = updatedWrongBill.organization || req.user.organization;
                                 await updatedWrongBill.deleteOne();
+                                try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
                             }
                         }
@@ -2623,7 +2661,10 @@ const sessionController = {
                         if (updatedWrongBill) {
                             const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
+                                const delId = updatedWrongBill._id;
+                                const delOrg = updatedWrongBill.organization || req.user.organization;
                                 await updatedWrongBill.deleteOne();
+                                try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
                             }
                         }
@@ -3313,7 +3354,10 @@ const sessionController = {
                         if (updatedWrongBill) {
                             const ordersCount = updatedWrongBill.orders ? updatedWrongBill.orders.length : 0;
                             if (updatedWrongBill.sessions.length === 0 && ordersCount === 0) {
+                                const delId = updatedWrongBill._id;
+                                const delOrg = updatedWrongBill.organization || req.user.organization;
                                 await updatedWrongBill.deleteOne();
+                                try { await createTombstone('bills', delId, delOrg, req.user._id); } catch (e) {}
                                 Logger.info(`🗑️ Deleted empty bill ${wrongBill.billNumber} during emergency cleanup`);
                             }
                         }
@@ -3793,10 +3837,15 @@ async function mergeBills(sourceBill, targetBill, session, userId) {
         );
 
         // Delete source bill
-        await Bill.findByIdAndDelete(sourceBill._id);
+        const srcBillId = sourceBill._id;
+        const srcBillOrg = sourceBill.organization;
+        const deletedBill = await Bill.findByIdAndDelete(sourceBill._id);
+        if (deletedBill) {
+            try { await createTombstone('bills', srcBillId, srcBillOrg, null); } catch (e) {}
+        }
 
         Logger.info(`✅ Bill merge completed successfully:`, {
-            deletedBillId: sourceBill._id,
+            deletedBillId: srcBillId,
             deletedBillNumber: sourceBill.billNumber,
             finalBillId: targetBill._id,
             finalBillNumber: targetBill.billNumber,
@@ -3918,6 +3967,12 @@ async function mergeBills(sourceBill, targetBill, session, userId) {
                         Logger.warn(`⚠️ Failed to delete bill from Atlas: ${atlasError.message}`);
                     }
                 }
+                // Tombstones لمنع الإحياء
+                try {
+                    await createTombstone('bills', bill._id, organizationId, null);
+                    if (orderIds.length) await createTombstones('orders', orderIds, organizationId, null);
+                    if (sessionIds.length) await createTombstones('sessions', sessionIds, organizationId, null);
+                } catch (e) {}
             } finally {
                 // إعادة تفعيل المزامنة
                 syncConfig.enabled = originalSyncEnabled;

@@ -1948,6 +1948,14 @@ billSchema.post("deleteOne", { document: true, query: false }, async function (d
     }
 });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+billSchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+billSchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(billSchema, 'Bill');
 

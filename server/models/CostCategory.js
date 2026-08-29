@@ -51,6 +51,14 @@ costCategorySchema.index({ organization: 1, isActive: 1, sortOrder: 1 });
 // Unique index for organization + name combination (Requirement 1.3)
 costCategorySchema.index({ organization: 1, name: 1 }, { unique: true });
 
+// Soft delete fields - isDeleted, deletedAt, deletedBy
+costCategorySchema.add({
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+});
+costCategorySchema.index({ isDeleted: 1 });
+
 // Apply sync middleware
 applySyncMiddleware(costCategorySchema, 'CostCategory');
 

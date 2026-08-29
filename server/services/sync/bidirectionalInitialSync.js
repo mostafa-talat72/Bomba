@@ -131,7 +131,22 @@ class BidirectionalInitialSync {
         let synced = 0;
         let updated = 0;
 
-        // Step 3: Sync missing documents
+        // Step 3: Sync missing documents — مع فحص Tombstone (منع الإحياء لمدة سنة)
+        if (collectionName !== 'tombstones' && missingInLocal.length > 0) {
+            try {
+                const localTombIds = await localConnection.db.collection('tombstones').distinct('documentId', { collectionName });
+                const localTombSet = new Set(localTombIds.map(id => id.toString()));
+                const toDeleteFromAtlas = missingInLocal.filter(id => localTombSet.has(id.toString()));
+                if (toDeleteFromAtlas.length > 0) {
+                    for (const id of toDeleteFromAtlas) {
+                        try { await atlasCollection.deleteOne({ _id: id }); } catch (e) {}
+                    }
+                    Logger.info(`   🗑️ ${collectionName}: ${toDeleteFromAtlas.length} tombstoned — deleted from Atlas (propagated)`);
+                }
+                // لا تعيد إدراج المحذوفات
+                missingInLocal = missingInLocal.filter(id => !localTombSet.has(id.toString()));
+            } catch (e) {}
+        }
         if (missingInLocal.length > 0) {
             const missingDocs = await atlasCollection.find({ _id: { $in: missingInLocal } }).toArray();
             
@@ -225,7 +240,21 @@ class BidirectionalInitialSync {
         let synced = 0;
         let updated = 0;
 
-        // Step 3: Sync missing documents
+        // Step 3: Sync missing documents — مع فحص Tombstone
+        if (collectionName !== 'tombstones' && missingInAtlas.length > 0) {
+            try {
+                const atlasTombIds = await atlasConnection.db.collection('tombstones').distinct('documentId', { collectionName });
+                const atlasTombSet = new Set(atlasTombIds.map(id => id.toString()));
+                const toDeleteFromLocal = missingInAtlas.filter(id => atlasTombSet.has(id.toString()));
+                if (toDeleteFromLocal.length > 0) {
+                    for (const id of toDeleteFromLocal) {
+                        try { await localCollection.deleteOne({ _id: id }); } catch (e) {}
+                    }
+                    Logger.info(`   🗑️ ${collectionName}: ${toDeleteFromLocal.length} tombstoned — deleted from Local (propagated)`);
+                }
+                missingInAtlas = missingInAtlas.filter(id => !atlasTombSet.has(id.toString()));
+            } catch (e) {}
+        }
         if (missingInAtlas.length > 0) {
             const missingDocs = await localCollection.find({ _id: { $in: missingInAtlas } }).toArray();
             
