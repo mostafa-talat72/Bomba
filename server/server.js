@@ -586,15 +586,14 @@ app.use(cors(corsOptions));
 // معالجة تلقائية لطلبات preflight OPTIONS
 app.options("*", cors(corsOptions));
 
-// Compression middleware - يضغط الاستجابات لتقليل حجم البيانات
+// Compression - مستوى 4 + threshold 10KB لتقليل CPU بلا قص بيانات
 app.use(compression({
     filter: (req, res) => {
-        if (req.headers['x-no-compression']) {
-            return false;
-        }
+        if (req.headers['x-no-compression']) return false;
         return compression.filter(req, res);
     },
-    level: 6 // مستوى الضغط (0-9)
+    level: 4,
+    threshold: 10240
 }));
 
 // Security middleware

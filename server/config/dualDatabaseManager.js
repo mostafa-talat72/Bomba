@@ -34,8 +34,8 @@ class DualDatabaseManager {
             Logger.info("🔄 Connecting to Local MongoDB...");
 
             const options = {
-                maxPoolSize: 10,
-                serverSelectionTimeoutMS: 10000,
+                maxPoolSize: 50,
+                serverSelectionTimeoutMS: 5000,
                 socketTimeoutMS: 45000,
                 family: 4,
                 retryWrites: true,
@@ -89,9 +89,9 @@ class DualDatabaseManager {
             Logger.info("🔄 Connecting to MongoDB Atlas (Backup)...");
 
             const options = {
-                maxPoolSize: 5, // Smaller pool for backup connection
-                serverSelectionTimeoutMS: 10000, // Reduced from 30s to 10s
-                socketTimeoutMS: 15000, // Reduced timeout
+                maxPoolSize: 20,
+                serverSelectionTimeoutMS: 5000,
+                socketTimeoutMS: 15000,
                 family: 4,
                 retryWrites: true,
                 w: "majority",

@@ -282,12 +282,17 @@ const Tables: React.FC = () => {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchTableSections(), fetchTables(), fetchBills(),
-        fetchAvailableMenuItems(), fetchMenuSections(), fetchMenuCategories(),
-      ]);
+      // المرحلة 1 — الطاولات فقط (30ms) → رسم فوري
+      await Promise.all([fetchTableSections(), fetchTables()]);
       setLoading(false);
-      fetchOrders().catch(() => {});
+      // المرحلة 2 — باقي البيانات في الخلفية بلا حاجز، الطاولات تُصحح تلقائياً عبر tableDataMap عند وصول bills
+      Promise.all([
+        fetchBills(),
+        fetchOrders().catch(() => {}),
+        fetchAvailableMenuItems(),
+        fetchMenuSections(),
+        fetchMenuCategories(),
+      ]).catch(() => {});
     } catch {
       showNotification(t('cafe.notifications.loadingDataError'), 'error');
       setLoading(false);
@@ -323,7 +328,9 @@ const Tables: React.FC = () => {
     tables.forEach((table: Table) => {
       const tid = (table._id || (table as any).id).toString();
       const tBills = tidToBills.get(tid) || [];
-      const hasUnpaid = tBills.some(b => !['paid', 'cancelled'].includes(b.status));
+      const billHasUnpaid = tBills.some(b => !['paid', 'cancelled'].includes(b.status));
+      // تفاؤلي: قبل وصول bills استخدم Table.status (empty/occupied) ليظهر مشغول فوراً، بعد وصول bills اعتمد الفواتير
+      const hasUnpaid = tBills.length > 0 ? billHasUnpaid : (table as any).status === 'occupied' || (table as any).status === 'reserved';
       statusMap[tid] = { hasUnpaid, orders: [] };
       billsMap[tid] = { hasUnpaid, bills: tBills };
     });
@@ -436,7 +443,7 @@ const Tables: React.FC = () => {
   const fetchersRef = useRef({ fetchBills, fetchOrders });
   useEffect(() => { fetchersRef.current = { fetchBills, fetchOrders }; });
 
-  // ── إعادة جلب موثقة (Throttle) — أحداث Socket المتلاحقة → فتش واحد ──────
+  // ── إعادة جلب موثقة — 250ms فقط (كان 800ms يسبب بطء ظهور التحديث على الطاولة)
   const pendingRefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleBackgroundRefetch = useCallback((includeOrders = false) => {
     if (pendingRefetchRef.current) return;
@@ -445,20 +452,18 @@ const Tables: React.FC = () => {
       const jobs: Promise<void>[] = [fetchersRef.current.fetchBills()];
       if (includeOrders) jobs.push(fetchersRef.current.fetchOrders());
       Promise.all(jobs).then(() => fetchAllTableStatuses()).catch(() => {});
-    }, 800);
+    }, 250);
   }, []);
 
-  // ── tick لحظي كل 10 ثوانٍ — يعمل فقط لو فيه جلسات نشطة ──────────────────
-  // السيرفر يحسب الفاتورة حية، نحدّث tick للجلسات + نطلب fetch كل 10 ثوانٍ
+  // ── tick لحظي كل 10 ثوانٍ — يعمل فقط لو فيه جلسات نشطة (بلا fetch لتجنب الفيضان، السوكت هو المصدر الفوري)
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!hasAnyActiveSession) return;
     const id = setInterval(() => {
       setTick(t => t + 1);
-      scheduleBackgroundRefetch();
     }, 10000);
     return () => clearInterval(id);
-  }, [hasAnyActiveSession, scheduleBackgroundRefetch]);
+  }, [hasAnyActiveSession]);
 
   // السيرفر يحسب الفاتورة حية — لا نضيف delta هنا
   const liveSelectedBill = selectedBill;
@@ -541,12 +546,9 @@ const Tables: React.FC = () => {
       Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
     });
 
-    // ── تحديث الطلبات ────────────────────────────────────────────────────
+    // ── تحديث الطلبات — DataContext هو المصدر الفوري بلا fetch مزدوج ──
     socket.on('order-update', (data: any) => {
       if (!['created', 'updated', 'deleted'].includes(data.type)) return;
-
-      // تحديث فوري للطلبات والفواتير وحالة الكروت
-      scheduleBackgroundRefetch(true);
 
       // تحديث tableOrders إذا كان مودال الطاولة مفتوحاً
       const cur = selectedTableRef.current;
@@ -580,14 +582,11 @@ const Tables: React.FC = () => {
             setOriginalAmount(data.bill.remaining.toString());
           }
         }
-        // تحديث table status — tableStatuses الآن useMemo يتحدث تلقائياً
-        // لا حاجة لاستدعاء setTableStatuses يدوياً
+        // tableStatuses useMemo يتحدث تلقائياً عبر DataContext بلا fetch مزدوج
       }
-      // جلب في الخلفية للتأكيد
-      scheduleBackgroundRefetch();
     });
 
-    // ── دفعة مستلمة ──────────────────────────────────────────────────────
+    // ── دفعة مستلمة — تحديث فوري للـ selectedBill فقط، DataContext يحدّث القائمة ──
     socket.on('payment-received', (data: any) => {
       const cur = selectedBillRef.current;
       if (cur && data.bill && (data.bill._id === cur._id || data.bill.id === cur.id)) {
@@ -597,21 +596,18 @@ const Tables: React.FC = () => {
           setOriginalAmount(data.bill.remaining.toString());
         }
       }
-      scheduleBackgroundRefetch();
     });
 
-    // ── دفعة جزئية ───────────────────────────────────────────────────────
+    // ── دفعة جزئية ──
     socket.on('partial-payment-received', (data: any) => {
       const cur = selectedBillRef.current;
       if (cur && data.bill && (data.bill._id === cur._id || data.bill.id === cur.id)) {
         setSelectedBill({ ...data.bill });
       }
-      scheduleBackgroundRefetch();
     });
 
-    // ── تحديث الجلسات ────────────────────────────────────────────────────
+    // ── تحديث الجلسات — DataContext هو المصدر ──
     socket.on('session-update', (data: any) => {
-      scheduleBackgroundRefetch();
       // تحديث selectedBill إذا كانت تحتوي هذه الجلسة
       const cur = selectedBillRef.current;
       if (cur && data.session) {
@@ -1363,17 +1359,17 @@ const Tables: React.FC = () => {
   const toggleSection = (id: string) => setExpandedSections(p => ({ ...p, [id]: !p[id] }));
   const toggleCategory = (id: string) => setExpandedCategories(p => ({ ...p, [id]: !p[id] }));
 
-  const getCategoriesForSection = (sectionId: string) =>
+  const getCategoriesForSection = useCallback((sectionId: string) =>
     menuCategories.filter(c => {
       const s = typeof c.section === 'string' ? c.section : (c.section as MenuSection)?._id || (c.section as MenuSection)?.id;
       return s === sectionId && c.isActive;
-    }).sort((a, b) => a.sortOrder - b.sortOrder);
+    }).sort((a, b) => a.sortOrder - b.sortOrder), [menuCategories]);
 
-  const getItemsForCategory = (categoryId: string) =>
+  const getItemsForCategory = useCallback((categoryId: string) =>
     menuItems.filter(item => {
       const c = typeof item.category === 'string' ? item.category : (item.category as MenuCategory)?._id || (item.category as MenuCategory)?.id;
       return c === categoryId && item.isAvailable;
-    });
+    }), [menuItems]);
 
   const addItemToOrder = (menuItem: MenuItem) => {
     const existing = currentOrderItems.find(i => i.menuItem === menuItem.id);

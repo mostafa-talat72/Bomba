@@ -45,68 +45,37 @@ const convertQuantity = (quantity, fromUnit, toUnit) => {
     return quantity;
 };
 
-// دالة مساعدة لحساب المخزون المطلوب لجميع الأصناف
+// دالة مساعدة لحساب المخزون المطلوب لجميع الأصناف — مجمعة بلا N+1
 const calculateTotalInventoryNeeded = async (orderItems) => {
-    const inventoryNeeded = new Map(); // Map<inventoryItemId, { quantity, unit }>
+    const inventoryNeeded = new Map();
 
-    // تجميع جميع المكونات المطلوبة أولاً
-    const allIngredients = [];
-
-    for (const item of orderItems) {
-        if (item.menuItem) {
-            const menuItem = await MenuItem.findById(item.menuItem);
-            if (menuItem && menuItem.ingredients) {
-                for (const ingredient of menuItem.ingredients) {
-                    allIngredients.push({
-                        inventoryItemId: ingredient.item,
-                        quantity: ingredient.quantity * item.quantity,
-                        unit: ingredient.unit,
-                        itemName: item.name,
-                    });
-                }
-            }
-        }
+    const menuItemIds = [...new Set(orderItems.filter(i => i.menuItem).map(i => String(i.menuItem)).filter(Boolean))];
+    const menuMap = new Map();
+    if (menuItemIds.length > 0) {
+        const docs = await MenuItem.find({ _id: { $in: menuItemIds } }).lean();
+        docs.forEach(d => menuMap.set(String(d._id), d));
     }
 
     for (const item of orderItems) {
         if (item.menuItem) {
-            const menuItem = await MenuItem.findById(item.menuItem);
-            if (!menuItem) {
-                throw new Error(`عنصر القائمة غير موجود: ${item.menuItem}`);
-            }
-            if (!menuItem.isAvailable) {
-                throw new Error(`العنصر غير متاح: ${menuItem.name}`);
-            }
-
+            const menuItem = menuMap.get(String(item.menuItem));
+            if (!menuItem) throw new Error(`عنصر القائمة غير موجود: ${item.menuItem}`);
+            if (!menuItem.isAvailable) throw new Error(`العنصر غير متاح: ${menuItem.name}`);
             if (menuItem.ingredients && menuItem.ingredients.length > 0) {
                 for (const ingredient of menuItem.ingredients) {
-                    const requiredQuantityForItem =
-                        ingredient.quantity * item.quantity;
+                    const requiredQuantityForItem = ingredient.quantity * item.quantity;
                     const existing = inventoryNeeded.get(ingredient.item);
                     if (existing) {
                         let totalQuantity;
                         if (existing.unit !== ingredient.unit) {
-                            const existingConverted = convertQuantity(
-                                existing.quantity,
-                                existing.unit,
-                                ingredient.unit
-                            );
-                            totalQuantity =
-                                existingConverted + requiredQuantityForItem;
+                            const existingConverted = convertQuantity(existing.quantity, existing.unit, ingredient.unit);
+                            totalQuantity = existingConverted + requiredQuantityForItem;
                         } else {
-                            totalQuantity =
-                                existing.quantity + requiredQuantityForItem;
+                            totalQuantity = existing.quantity + requiredQuantityForItem;
                         }
-
-                        inventoryNeeded.set(ingredient.item, {
-                            quantity: totalQuantity,
-                            unit: ingredient.unit,
-                        });
+                        inventoryNeeded.set(ingredient.item, { quantity: totalQuantity, unit: ingredient.unit });
                     } else {
-                        inventoryNeeded.set(ingredient.item, {
-                            quantity: requiredQuantityForItem,
-                            unit: ingredient.unit,
-                        });
+                        inventoryNeeded.set(ingredient.item, { quantity: requiredQuantityForItem, unit: ingredient.unit });
                     }
                 }
             }
@@ -192,17 +161,22 @@ const calculateTotalInventoryNeeded = async (orderItems) => {
     return finalInventoryNeeded;
 };
 
-// دالة مساعدة للتحقق من توفر المخزون
+// دالة مساعدة للتحقق من توفر المخزون — مجمعة
 const validateInventoryAvailability = async (inventoryNeeded) => {
     const validationErrors = [];
     const details = [];
-    const EPSILON = 0.0001; // للتسامح مع أخطاء الفاصلة العائمة
+    const EPSILON = 0.0001;
+
+    const ids = [...inventoryNeeded.keys()].map(id => String(id)).filter(Boolean);
+    const invMap = new Map();
+    if (ids.length > 0) {
+        const docs = await InventoryItem.find({ _id: { $in: ids } }).lean();
+        docs.forEach(d => invMap.set(String(d._id), d));
+    }
 
     for (const [inventoryItemId, { quantity, unit }] of inventoryNeeded) {
-        // تجاهل الكميات الصفرية أو السالبة
         if (quantity <= EPSILON) continue;
-
-        const inventoryItem = await InventoryItem.findById(inventoryItemId);
+        const inventoryItem = invMap.get(String(inventoryItemId));
         if (!inventoryItem) {
             validationErrors.push(
                 `الخامة ${inventoryItemId} غير موجودة في المخزون`
@@ -237,38 +211,32 @@ const validateInventoryAvailability = async (inventoryNeeded) => {
     return { errors: validationErrors, details };
 };
 
-// دالة مساعدة لحساب التكلفة الإجمالية للطلب
+// دالة مساعدة لحساب التكلفة الإجمالية — مجمعة بلا N+1
 const calculateOrderTotalCost = async (orderItems) => {
     let totalCost = 0;
-
+    const menuIds = [...new Set(orderItems.filter(i => i.menuItem).map(i => String(i.menuItem)).filter(Boolean))];
+    const menuMap = new Map();
+    if (menuIds.length > 0) {
+        const docs = await MenuItem.find({ _id: { $in: menuIds } }).lean();
+        docs.forEach(d => menuMap.set(String(d._id), d));
+    }
+    const allIngIds = [...new Set([...menuMap.values()].flatMap(m => (m.ingredients || []).map(ing => String(ing.item)).filter(Boolean)))];
+    const invMap = new Map();
+    if (allIngIds.length > 0) {
+        const invDocs = await InventoryItem.find({ _id: { $in: allIngIds } }).lean();
+        invDocs.forEach(d => invMap.set(String(d._id), d));
+    }
     for (const item of orderItems) {
         if (item.menuItem) {
-            const menuItem = await MenuItem.findById(item.menuItem);
-            if (!menuItem) {
-                continue;
-            }
-
-            if (menuItem.ingredients && menuItem.ingredients.length > 0) {
-                for (const ingredient of menuItem.ingredients) {
-                    const inventoryItem = await InventoryItem.findById(
-                        ingredient.item
-                    );
-                    if (!inventoryItem) {
-                        continue;
-                    }
-
-                    // حساب التكلفة لهذا المكون
-                    const ingredientCost =
-                        inventoryItem.cost *
-                        ingredient.quantity *
-                        item.quantity;
-
-                    totalCost += ingredientCost;
-                }
+            const menuItem = menuMap.get(String(item.menuItem));
+            if (!menuItem || !menuItem.ingredients) continue;
+            for (const ingredient of menuItem.ingredients) {
+                const inventoryItem = invMap.get(String(ingredient.item));
+                if (!inventoryItem) continue;
+                totalCost += inventoryItem.cost * ingredient.quantity * item.quantity;
             }
         }
     }
-
     return totalCost;
 };
 
@@ -322,13 +290,18 @@ const processOrderItems = async (items, operation = "create") => {
         // حساب التكلفة الإجمالية
         const totalCost = await calculateOrderTotalCost(items);
 
-        // معالجة العناصر وحساب المجاميع
+        // معالجة العناصر — مجمعة
         const processedItems = [];
         let subtotal = 0;
-
+        const pMenuIds = [...new Set(items.filter(i => i.menuItem).map(i => String(i.menuItem)).filter(Boolean))];
+        const pMenuMap = new Map();
+        if (pMenuIds.length > 0) {
+            const pDocs = await MenuItem.find({ _id: { $in: pMenuIds } }).lean();
+            pDocs.forEach(d => pMenuMap.set(String(d._id), d));
+        }
         for (const item of items) {
             if (item.menuItem) {
-                const menuItem = await MenuItem.findById(item.menuItem);
+                const menuItem = pMenuMap.get(String(item.menuItem));
                 if (!menuItem) {
                     return {
                         success: false,

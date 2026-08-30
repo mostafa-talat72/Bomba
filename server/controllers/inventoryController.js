@@ -32,10 +32,12 @@ export const getInventoryItems = async (req, res) => {
         }
         query.organization = req.user.organization;
 
-        // إذا لم يتم تحديد limit، جلب جميع العناصر
+        // جلب كل العناصر بلا limit مع projection لتقليل الحمولة (stockMovements تُجلب في التفاصيل فقط)
         let itemsQuery = InventoryItem.find(query)
+            .select('-stockMovements')
             .populate("recipe.ingredient", "name unit")
-            .sort({ name: 1 });
+            .sort({ name: 1 })
+            .lean();
 
         // تطبيق pagination فقط إذا تم تحديد limit
         if (limit) {

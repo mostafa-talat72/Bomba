@@ -26,15 +26,13 @@ export const performanceMonitor = (req, res, next) => {
         const statusCode = res.statusCode;
         const compressed = res.get("Content-Encoding") === "gzip";
 
-        // Calculate response size
+        // حجم الاستجابة بلا JSON.stringify مزدوج (يعتمد على Content-Length)
         if (body) {
-            if (typeof body === "string") {
-                responseSize = Buffer.byteLength(body, "utf8");
-            } else if (Buffer.isBuffer(body)) {
-                responseSize = body.length;
-            } else if (typeof body === "object") {
-                responseSize = Buffer.byteLength(JSON.stringify(body), "utf8");
-            }
+            const hdrLen = res.get("Content-Length") || res.getHeader("Content-Length");
+            if (hdrLen) responseSize = parseInt(hdrLen, 10) || 0;
+            else if (typeof body === "string") responseSize = Buffer.byteLength(body, "utf8");
+            else if (Buffer.isBuffer(body)) responseSize = body.length;
+            else if (typeof body === "object") responseSize = 0;
         }
 
         // Calculate compression ratio if compressed
@@ -88,22 +86,21 @@ export const performanceMonitor = (req, res, next) => {
         }
     };
 
-    // Override res.send
+    // Override res.send/json/end — سجل بعد الإرسال لتقرأ Content-Length بلا stringify مزدوج
     res.send = function (body) {
+        const r = originalSend.call(this, body);
         logPerformance(body);
-        return originalSend.call(this, body);
+        return r;
     };
-
-    // Override res.json
     res.json = function (body) {
+        const r = originalJson.call(this, body);
         logPerformance(body);
-        return originalJson.call(this, body);
+        return r;
     };
-
-    // Override res.end
     res.end = function (chunk, encoding) {
+        const r = originalEnd.call(this, chunk, encoding);
         logPerformance(chunk);
-        return originalEnd.call(this, chunk, encoding);
+        return r;
     };
 
     next();

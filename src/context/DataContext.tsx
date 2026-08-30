@@ -665,7 +665,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setOrders(prev => [...prev, newOrder]);
 
         if (newOrder.bill) {
-          await fetchBills();
+          fetchBills().catch(() => {});
         }
 
         showNotification(t('toast.order.created', { orderNumber: newOrder.orderNumber }), 'success');

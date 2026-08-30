@@ -1461,46 +1461,7 @@ export const addPayment = async (req, res) => {
             }
         }
 
-        // Generate QR code if it doesn't exist or regenerate with current domain
-        Logger.info(`🔧 [addPayment] Generating QR code for bill: ${bill.billNumber}`);
-        
-        // استخراج الدومين من الـ request وتحويله للفرونت إند
-        const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
-        const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
-        
-        // تحويل port الباك إند للفرونت إند
-        let frontendHost = host;
-        if (host.includes(':5000')) {
-            frontendHost = host.replace(':5000', ':3000');
-        } else if (host.includes('5000')) {
-            // للحالات اللي فيها port في subdomain أو path
-            frontendHost = host.replace('5000', '3000');
-        }
-        
-        const baseUrl = process.env.FRONTEND_URL || `${protocol}://${frontendHost}`;
-        
-        // إعادة إنشاء QR code دائماً بناءً على الدومين الحالي
-        await bill.generateQRCode(baseUrl, true);
-        Logger.info(`✅ [addPayment] QR code generated:`, {
-            hasQrCode: !!bill.qrCode,
-            qrCodeLength: bill.qrCode?.length,
-            qrCodeUrl: bill.qrCodeUrl,
-            baseUrl: baseUrl
-        });
-        // Save the QR code
-        await Bill.updateOne(
-            { _id: bill._id },
-            {
-                $set: {
-                    qrCode: bill.qrCode,
-                    qrCodeUrl: bill.qrCodeUrl,
-                }
-            },
-            { timestamps: false }
-        );
-        Logger.info(`💾 [addPayment] QR code saved to database`);
-
-        // Populate only essential fields for response
+        // Populate only essential fields for response (QR يُنشأ في الخلفية بلا حجب)
         await bill.populate([
             { path: "table", select: "number name" }
         ]);
@@ -1553,6 +1514,20 @@ export const addPayment = async (req, res) => {
             success: true,
             message: "تم تسجيل الدفع بنجاح",
             data: bill,
+        });
+
+        // QR في الخلفية — لا يحجب الاستجابة (كان 80-150ms)
+        setImmediate(async () => {
+            try {
+                const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+                const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
+                let frontendHost = host;
+                if (host.includes(':5000')) frontendHost = host.replace(':5000', ':3000');
+                else if (host.includes('5000')) frontendHost = host.replace('5000', '3000');
+                const baseUrl = process.env.FRONTEND_URL || `${protocol}://${frontendHost}`;
+                await bill.generateQRCode(baseUrl, true);
+                await Bill.updateOne({ _id: bill._id }, { $set: { qrCode: bill.qrCode, qrCodeUrl: bill.qrCodeUrl } }, { timestamps: false });
+            } catch (qrErr) { Logger.warn(`QR background failed for ${bill.billNumber}: ${qrErr.message}`); }
         });
     } catch (error) {
         Logger.error("خطأ في تسجيل الدفع", error);
@@ -3708,14 +3683,19 @@ export const updateBillAggregatedItems = async (req, res) => {
             }
         }
 
-        // Inventory adjustment (delta) - reuse FIFO logic from adjustInventoryForOrderUpdate
-        // Build maps for all ingredientIds
+        // Inventory adjustment — مجمع بلا حلقة تسلسلية (كان يحجب 1-3ث)
         const allIngredientIds = new Set([...oldInventoryNeeded.keys(), ...newInventoryNeeded.keys()]);
-        // For each ingredient, compute difference and apply movement
+        const invIds = [...allIngredientIds].map(id => String(id)).filter(Boolean);
+        const invMap = new Map();
+        if (invIds.length > 0) {
+            const invDocs = await InventoryItem.find({ _id: { $in: invIds } });
+            invDocs.forEach(d => invMap.set(String(d._id), d));
+        }
+        const inventoryPromises = [];
         for (const ingId of allIngredientIds) {
             const oldData = oldInventoryNeeded.get(ingId) || { quantity: 0, unit: "" };
             const newData = newInventoryNeeded.get(ingId) || { quantity: 0, unit: "" };
-            const invItem = await InventoryItem.findById(ingId);
+            const invItem = invMap.get(String(ingId));
             if (!invItem) continue;
             const oldConverted = oldData.quantity ? convertQuantity(oldData.quantity, oldData.unit, invItem.unit) : 0;
             const newConverted = newData.quantity ? convertQuantity(newData.quantity, newData.unit, invItem.unit) : 0;
@@ -3761,11 +3741,9 @@ export const updateBillAggregatedItems = async (req, res) => {
                 const finalTotalCost = Math.round(totalCost * 100) / 100;
                 const finalPrice = Math.abs(diff) > 0 && finalTotalCost > 0 ? Math.round((finalTotalCost / Math.abs(diff)) * 100) / 100 : null;
                 const reason = `تعديل أصناف الفاتورة ${bill.billNumber} (زيادة)`;
-                // Find a reference order id (use first order or bill id)
                 const refId = (bill.orders && bill.orders[0] ? bill.orders[0]._id : bill._id).toString();
-                await invItem.addStockMovement("out", Math.abs(diff), reason, req.user._id, refId, finalPrice, null, finalTotalCost);
+                inventoryPromises.push(invItem.addStockMovement("out", Math.abs(diff), reason, req.user._id, refId, finalPrice, null, finalTotalCost));
             } else {
-                // Restore
                 const lastDeduct = invItem.stockMovements
                     .filter((m) => m.type === "out" && m.reference)
                     .sort((a, b) => new Date(b.timestamp || b.date).getTime() - new Date(a.timestamp || a.date).getTime())[0];
@@ -3773,9 +3751,10 @@ export const updateBillAggregatedItems = async (req, res) => {
                 const totalCostToRestore = lastDeduct?.totalCost ? Math.round((lastDeduct.totalCost / lastDeduct.quantity) * Math.abs(diff) * 100) / 100 : null;
                 const reason = `تعديل أصناف الفاتورة ${bill.billNumber} (نقصان)`;
                 const refId = (bill.orders && bill.orders[0] ? bill.orders[0]._id : bill._id).toString();
-                await invItem.addStockMovement("in", Math.abs(diff), reason, req.user._id, refId, priceToRestore, null, totalCostToRestore);
+                inventoryPromises.push(invItem.addStockMovement("in", Math.abs(diff), reason, req.user._id, refId, priceToRestore, null, totalCostToRestore));
             }
         }
+        if (inventoryPromises.length > 0) await Promise.all(inventoryPromises);
 
         // Orders restructuring: consolidate into single order
         const totalCost = await calculateOrderTotalCost(processedItems);

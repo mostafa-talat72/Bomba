@@ -62,79 +62,45 @@ export const getAllMenuItems = async (req, res) => {
         // Get total count for pagination
         const total = await MenuItem.countDocuments(filter);
 
-        // التحقق من توفر المخزون فقط إذا كان معامل checkStock موجود
+        // التحقق من توفر المخزون — مجمع بلا حلقات تسلسلية (يجلب كل الخامات مرة واحدة بلا limit)
         if (checkStock === "true") {
-            // دالة للتحقق من توفر المخزون لعنصر القائمة
-            const checkMenuItemStockAvailability = async (menuItem) => {
-                if (
-                    !menuItem.ingredients ||
-                    menuItem.ingredients.length === 0
-                ) {
-                    return true; // إذا لم تكن هناك خامات، يعتبر متاح
-                }
+            const InventoryItem = (await import("../models/InventoryItem.js")).default;
 
-                const InventoryItem = (
-                    await import("../models/InventoryItem.js")
-                ).default;
-
-                // دالة لتحويل الوحدات
-                const convertQuantity = (quantity, fromUnit, toUnit) => {
-                    const conversions = {
-                        // تحويلات الحجم
-                        لتر: { مل: 1000, لتر: 1 },
-                        مل: { لتر: 0.001, مل: 1 },
-                        // تحويلات الوزن
-                        كيلو: { جرام: 1000, كيلو: 1 },
-                        جرام: { كيلو: 0.001, جرام: 1 },
-                        // الوحدات الأخرى
-                        قطعة: { قطعة: 1 },
-                        علبة: { علبة: 1 },
-                        كيس: { كيس: 1 },
-                        زجاجة: { زجاجة: 1 },
-                    };
-
-                    const conversionRate = conversions[fromUnit]?.[toUnit];
-                    return conversionRate
-                        ? quantity * conversionRate
-                        : quantity;
+            const convertQuantity = (quantity, fromUnit, toUnit) => {
+                const conversions = {
+                    لتر: { مل: 1000, لتر: 1 },
+                    مل: { لتر: 0.001, مل: 1 },
+                    كيلو: { جرام: 1000, كيلو: 1 },
+                    جرام: { كيلو: 0.001, جرام: 1 },
+                    قطعة: { قطعة: 1 },
+                    علبة: { علبة: 1 },
+                    كيس: { كيس: 1 },
+                    زجاجة: { زجاجة: 1 },
                 };
-
-                for (const ingredient of menuItem.ingredients) {
-                    const inventoryItem = await InventoryItem.findById(
-                        ingredient.item
-                    );
-                    if (!inventoryItem) {
-                        return false; // إذا لم توجد الخامة، غير متاح
-                    }
-
-                    // تحويل الكمية المطلوبة إلى وحدة المخزون
-                    const requiredQuantityInStockUnit = convertQuantity(
-                        ingredient.quantity,
-                        ingredient.unit,
-                        inventoryItem.unit
-                    );
-
-                    // التحقق من توفر المخزون بعد التحويل
-                    if (
-                        inventoryItem.currentStock < requiredQuantityInStockUnit
-                    ) {
-                        return false; // المخزون غير كافي
-                    }
-                }
-
-                return true; // جميع الخامات متوفرة
+                const rate = conversions[fromUnit]?.[toUnit];
+                return rate ? quantity * rate : quantity;
             };
 
-            // التحقق من توفر المخزون لكل عنصر
-            const availableMenuItems = [];
-            for (const menuItem of menuItems) {
-                const isStockAvailable = await checkMenuItemStockAvailability(
-                    menuItem
-                );
-                if (isStockAvailable) {
-                    availableMenuItems.push(menuItem);
-                }
+            // جلب كل الخامات المطلوبة مرة واحدة
+            const allIds = [...new Set(menuItems.flatMap(mi => (mi.ingredients || []).map(ing => String(ing.item)).filter(Boolean)))];
+            const inventoryMap = new Map();
+            if (allIds.length > 0) {
+                const docs = await InventoryItem.find({ _id: { $in: allIds } }).lean();
+                docs.forEach(d => inventoryMap.set(String(d._id), d));
             }
+
+            const isAvailable = (menuItem) => {
+                if (!menuItem.ingredients || menuItem.ingredients.length === 0) return true;
+                for (const ing of menuItem.ingredients) {
+                    const doc = inventoryMap.get(String(ing.item));
+                    if (!doc) return false;
+                    const need = convertQuantity(ing.quantity, ing.unit, doc.unit);
+                    if (doc.currentStock < need) return false;
+                }
+                return true;
+            };
+
+            const availableMenuItems = menuItems.filter(isAvailable);
 
             res.json({
                 success: true,

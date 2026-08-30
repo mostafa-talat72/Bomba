@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, ReactNode, useRef, useMemo } from 'react';
 import { User } from '../services/api';
 import { AuthProvider, useAuth } from './AuthContext';
 import { DataProvider, useData, Filter } from './DataContext';
@@ -183,7 +183,7 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
   const auth = useAuth();
   const data = useData();
 
-  const value: AppContextType = {
+  const value: AppContextType = useMemo(() => ({
     // Auth state
     user: auth.user,
     isAuthenticated: auth.isAuthenticated,
@@ -340,7 +340,10 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     sendReportNow: data.sendReportNow,
     canManagePayroll: data.canManagePayroll,
     updatePayrollPermissions: data.updatePayrollPermissions,
-  };
+  }), [
+    auth.user, auth.isAuthenticated, auth.isLoading, auth.isLoggingOut, auth.error, auth.notification, auth.subscriptionStatus,
+    data.sessions, data.orders, data.inventory, data.bills, data.costs, data.devices, data.menuItems, data.menuSections, data.menuCategories, data.tableSections, data.tables, data.settings, data.inventoryItems, data.warehouseItems, data.users, data.notifications
+  ]);
 
   return (
     <AppContext.Provider value={value}>

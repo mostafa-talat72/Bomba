@@ -1350,44 +1350,25 @@ export const updateOrder = async (req, res) => {
             }
         }
 
-        // تعديل المخزون إذا تم تغيير العناصر
-        if (items && Array.isArray(items) && items.length > 0) {
-            try {
-                // استخدام العناصر القديمة المحفوظة
-                const oldOrderData = {
-                    _id: order._id,
-                    orderNumber: order.orderNumber,
-                    items: oldOrderItems
-                };
-                
-                // الآن order.items تحتوي على العناصر الجديدة بعد التعديل
-                await adjustInventoryForOrderUpdate(oldOrderData, order, req.user._id);
-                Logger.info(`✓ تم تعديل المخزون للطلب ${order.orderNumber}`);
-                
-                // إطلاق حدث تحديث المخزون عبر Socket.IO
-                if (req.io) {
-                    
-                    // استخدام الدالة المخصصة من socketHandler
-                    req.io.notifyInventoryUpdate({
-                        type: 'adjusted',
-                        orderId: order._id,
-                        orderNumber: order.orderNumber,
-                        timestamp: new Date()
-                    }, req.user.organization);
-                    
-                } else {
-                    console.error('❌ req.io is not available in updateOrder');
-                }
-            } catch (inventoryError) {
-                Logger.error('خطأ في تعديل المخزون:', inventoryError);
-                // نستمر في حفظ الطلب حتى لو فشل تعديل المخزون
-            }
-        }
+        const oldOrderDataForInventory = (items && Array.isArray(items) && items.length > 0) ? { _id: order._id, orderNumber: order.orderNumber, items: oldOrderItems } : null;
 
         await order.save();
 
         // Fire-and-forget Atlas write
         writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
+
+        // تعديل المخزون في الخلفية — لا يحجب الاستجابة
+        if (oldOrderDataForInventory) {
+            setImmediate(async () => {
+                try {
+                    await adjustInventoryForOrderUpdate(oldOrderDataForInventory, order, req.user._id);
+                    Logger.info(`✓ تم تعديل المخزون للطلب ${order.orderNumber}`);
+                    if (req.io) req.io.notifyInventoryUpdate({ type: 'adjusted', orderId: order._id, orderNumber: order.orderNumber, timestamp: new Date() }, req.user.organization);
+                } catch (inventoryError) {
+                    Logger.error('خطأ في تعديل المخزون:', inventoryError);
+                }
+            });
+        }
 
         // Clean up invalid itemPayments and recalculate payments for this order's bill (if exists)
         if (order.bill) {
