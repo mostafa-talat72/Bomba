@@ -19,6 +19,16 @@ import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import { aggregateItemsWithPayments, expandAggregatedItemsForPayment } from "../utils/billAggregation.js";
 import { getUserLanguage } from "../utils/localeHelper.js";
 import { getTableName } from "../utils/translations.js";
+import { getInstanceId } from "../utils/instanceId.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
+import MenuItem from "../models/MenuItem.js";
+import InventoryItem from "../models/InventoryItem.js";
+import {
+    convertQuantity,
+    calculateTotalInventoryNeeded,
+    validateInventoryAvailability,
+    calculateOrderTotalCost,
+} from "../utils/orderUtils.js";
 
 const FAWRY_MERCHANT_CODE = process.env.FAWRY_MERCHANT_CODE || "YOUR_MERCHANT_CODE";
 const FAWRY_SECURE_KEY = process.env.FAWRY_SECURE_KEY || "YOUR_SECURE_KEY";
@@ -97,10 +107,10 @@ export const getBills = async (req, res) => {
             endDate,    // IGNORED - Date filtering removed per requirements
             customerName,
             q,  // Search by bill number or ID - bypasses the default visibility filter
+            all, // if all=true fetch all bills (paginated), otherwise unpaid only
         } = req.query;
 
         const query = {};
-        if (status) query.status = status;
         
         // Support both table ObjectId and legacy tableNumber filtering
         // Priority: table parameter > tableNumber parameter
@@ -128,41 +138,35 @@ export const getBills = async (req, res) => {
             query.customerName = { $regex: customerName, $options: "i" };
         }
         
-        // Default visibility filter: unpaid bills (draft/partial/overdue) or
-        // bills younger than 120 days (4 months) are always returned.
-        // Fully-paid bills older than 4 months are hidden from the default
-        // list and only retrievable through search (q) by bill number or ID.
-        // An explicit status filter takes priority over the default filter.
-        const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
-
+        // Default: fetch ONLY unpaid bills for Tables page logic
+        // status: { $in: ['draft','partial','overdue'] }
+        // Keep ability to fetch all if query ?all=true or ?status=paid is passed
+        const isAll = all === 'true' || all === true;
+        const unpaidStatuses = ['draft', 'partial', 'overdue'];
         if (q && q.trim()) {
             const qOr = [{ billNumber: { $regex: q.trim(), $options: "i" } }];
             if (mongoose.Types.ObjectId.isValid(q.trim())) {
                 qOr.push({ _id: q.trim() });
             }
             query.$or = qOr;
-        } else if (!status) {
-            query.$and = [
-                {
-                    $or: [
-                        { status: { $in: ["draft", "partial", "overdue"] } },
-                        { createdAt: { $gte: fourMonthsAgo } },
-                    ],
-                },
-            ];
+            if (status) query.status = status;
+        } else if (status) {
+            query.status = status;
+        } else if (isAll) {
+            // no status filter - fetch all
+        } else {
+            query.status = { $in: unpaidStatuses };
         }
 
         query.organization = req.user.organization;
 
-        // إزالة الحد - جلب جميع الفواتير بدون pagination
-        // تم إزالة effectiveLimit لعرض جميع الفواتير القديمة والجديدة
+        // Pagination: default no limit for unpaid (<200), if all=true then paginate with limit 50
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+        const shouldPaginate = isAll;
 
-        const bills = await Bill.find({
-            organization: req.user.organization,
-            ...query,
-        })
-            // جلب الحقول الضرورية بما في ذلك sessions و billType
-            .select('billNumber customerName customerPhone table status total paid remaining createdAt discount tax billType sessions orders itemPayments partialPayments sessionPayments paymentHistory')
+        let billQuery = Bill.find(query)
+            .select('billNumber table status total remaining paid subtotal billType sessions orders createdAt')
             .populate({
                 path: "table",
                 select: "number name",
@@ -170,29 +174,58 @@ export const getBills = async (req, res) => {
             .populate({
                 path: "sessions",
                 select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
-                populate: {
-                    path: "deviceId",
-                    select: "type hourlyRate playstationRates",
-                },
             })
             .populate({
                 path: "orders",
                 select: "totalAmount finalAmount status",
             })
             .sort({ createdAt: -1 })
-            .lean(); // تحسين الأداء بنسبة 40-50%
+            .lean();
 
-        // ── حساب حي للفواتير التي بها جلسات نشطة (بدون حفظ في DB) ──
+        if (shouldPaginate) {
+            billQuery = billQuery.skip((pageNum - 1) * limitNum).limit(limitNum);
+        }
+
+        const bills = await billQuery;
+
+        // ── حساب حي فقط للفواتير غير المدفوعة التي بها جلسة نشطة ──
+        // ONLY calculate for bills where status is unpaid AND sessions contains active
         const now = new Date();
+        // Batch fetch Device rates only for bills needing liveCost to avoid heavy populate
+        const billsNeedingLive = bills.filter(
+            (b) => unpaidStatuses.includes(b.status) && Array.isArray(b.sessions) && b.sessions.some((s) => s.status === 'active')
+        );
+        let deviceMap = new Map();
+        if (billsNeedingLive.length > 0) {
+            const deviceIds = [
+                ...new Set(
+                    billsNeedingLive
+                        .flatMap((b) => b.sessions.filter((s) => s.status === 'active' && s.deviceId).map((s) => String(s.deviceId)))
+                        .filter(Boolean)
+                ),
+            ];
+            if (deviceIds.length > 0) {
+                try {
+                    const devices = await Device.find({ _id: { $in: deviceIds } })
+                        .select('type hourlyRate playstationRates')
+                        .lean();
+                    devices.forEach((d) => deviceMap.set(String(d._id), d));
+                } catch (e) {
+                    // fallback: no device rates available, live calc will use 0 rates
+                }
+            }
+        }
+
         for (const bill of bills) {
-            const hasActive = bill.sessions && bill.sessions.some((s) => s.status === 'active');
-            if (!hasActive) continue;
+            if (!unpaidStatuses.includes(bill.status)) continue;
+            if (!bill.sessions || !bill.sessions.some((s) => s.status === 'active')) continue;
             let liveSessionsTotal = 0;
             for (const s of bill.sessions) {
                 if (s.status !== 'active') {
                     liveSessionsTotal += Number(s.finalCost) || Number(s.totalCost) || 0;
                 } else {
-                    const device = s.deviceId;
+                    // device may be ObjectId (not populated) - lookup from deviceMap
+                    const device = s.deviceId && typeof s.deviceId === 'object' && s.deviceId.type ? s.deviceId : deviceMap.get(String(s.deviceId)) || null;
                     const getRate = (controllers) => {
                         if (device && device.type === 'playstation' && device.playstationRates) {
                             return device.playstationRates[String(controllers)] || 0;
@@ -226,7 +259,6 @@ export const getBills = async (req, res) => {
             const ordersTotal = Array.isArray(bill.orders)
                 ? bill.orders.reduce((sum, o) => sum + (Number(o.finalAmount) || Number(o.totalAmount) || 0), 0)
                 : 0;
-            // إذا كانت orders غير مأهولة (ids فقط) نعتمد على subtotal القديم ناقص الجلسات الثابتة
             let liveSubtotal;
             if (ordersTotal > 0 || (Array.isArray(bill.orders) && bill.orders.length > 0 && typeof bill.orders[0] === 'object' && 'totalAmount' in bill.orders[0])) {
                 liveSubtotal = ordersTotal + liveSessionsTotal;
@@ -250,46 +282,40 @@ export const getBills = async (req, res) => {
             if (bill.discountPercentage) bill.discount = discountAmt;
         }
 
-        // Update bills that have orders but zero total
-        // Note: Since we're using .lean(), we need to update the database directly
-        const billsToUpdate = bills.filter(
-            bill => bill.orders && bill.orders.length > 0 && bill.total === 0
-        );
-        
-        if (billsToUpdate.length > 0) {
-            // Update these bills in the background without blocking the response
-            Promise.all(
-                billsToUpdate.map(bill => 
-                    Bill.findById(bill._id).then(b => b && b.calculateSubtotal())
-                )
-            ).catch(err => Logger.error("خطأ في تحديث الفواتير", err));
-        }
-
         const total = await Bill.countDocuments(query);
 
         const queryExecutionTime = Date.now() - queryStartTime;
 
-        // Log query performance - بدون pagination
         Logger.queryPerformance('/api/bills', queryExecutionTime, bills.length, {
-            filters: { status, table, tableNumber, customerName },
+            filters: { status, table, tableNumber, customerName, all },
             totalRecords: total
         });
 
-        // Record query metrics - بدون pagination
         performanceMetrics.recordQuery({
             endpoint: '/api/bills',
             executionTime: queryExecutionTime,
             recordCount: bills.length,
-            filters: { status, table, tableNumber, customerName },
+            filters: { status, table, tableNumber, customerName, all },
         });
 
-        // Response بدون pagination metadata
-        res.json({
-            success: true,
-            count: bills.length,
-            total,
-            data: bills
-        });
+        if (shouldPaginate) {
+            res.json({
+                success: true,
+                count: bills.length,
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
+                data: bills
+            });
+        } else {
+            res.json({
+                success: true,
+                count: bills.length,
+                total,
+                data: bills
+            });
+        }
     } catch (error) {
         Logger.error("خطأ في جلب الفواتير", {
             error: error.message,
@@ -390,7 +416,26 @@ export const getBill = async (req, res) => {
                     "المستخدم غير مصرح أو لا يوجد منشأة مرتبطة به. يرجى إعادة تسجيل الدخول.",
             });
         }
-        // جلب الفاتورة للمستخدم المسجل والمنشأة
+
+        // Background upgrade only if explicitly requested via ?upgrade=1 (non-blocking)
+        if (req.query.upgrade === '1') {
+            setImmediate(async () => {
+                try {
+                    const fresh = await Bill.findOne({ _id: req.params.id, organization: req.user.organization });
+                    if (fresh && typeof fresh.upgradeItemPaymentsToNewFormat === 'function') {
+                        const r = await fresh.upgradeItemPaymentsToNewFormat();
+                        if (r?.upgraded) {
+                            await fresh.save();
+                            Logger.info(`🔄 [Background Upgrade] Bill ${fresh.billNumber} upgraded`);
+                        }
+                    }
+                } catch (e) {
+                    Logger.warn('Background upgrade failed', e);
+                }
+            });
+        }
+
+        // READ-ONLY fetch with lean() and minimal populate - no writes
         const bill = await Bill.findOne({
             _id: req.params.id,
             organization: req.user.organization,
@@ -410,29 +455,19 @@ export const getBill = async (req, res) => {
             })
             .populate({
                 path: "sessions",
+                select: "deviceName deviceNumber deviceType status startTime endTime controllers controllersHistory discount totalCost finalCost deviceId",
                 populate: [
-                    {
-                        path: "createdBy",
-                        select: "name",
-                    },
-                    {
-                        path: "table",
-                        select: "number name",
-                    },
                     {
                         path: "deviceId",
                         select: "type hourlyRate playstationRates",
                     },
                 ],
             })
-            .populate("organization", "name") // إضافة populate للمنشأة
+            .populate("organization", "name")
             .populate("table", "number name")
             .populate("createdBy", "name")
             .populate("updatedBy", "name")
-            .populate("payments.user", "name")
-            .populate("partialPayments.items.paidBy", "name")
-            .populate("itemPayments.paidBy", "name")
-            .populate("sessionPayments.payments.paidBy", "name");
+            .lean();
         if (!bill) {
             return res.status(404).json({
                 success: false,
@@ -440,22 +475,7 @@ export const getBill = async (req, res) => {
             });
         }
 
-        // Auto-upgrade old bills to new format when accessed (Lazy Migration)
-        try {
-            const upgradeResult = await bill.upgradeItemPaymentsToNewFormat();
-            if (upgradeResult.upgraded) {
-                Logger.info(`🔄 [Auto-Upgrade] Bill ${bill.billNumber} upgraded: ${upgradeResult.upgradedCount} items`, {
-                    billId: bill._id,
-                    upgradedCount: upgradeResult.upgradedCount,
-                    failedCount: upgradeResult.failedCount
-                });
-            }
-        } catch (upgradeError) {
-            // Don't fail the request if upgrade fails, just log it
-            Logger.warn(`⚠️ [Auto-Upgrade] Failed to upgrade bill ${bill.billNumber}:`, upgradeError);
-        }
-
-        // ── حساب حي للفاتورة التي بها جلسات نشطة (بدون حفظ) ──
+        // ── حساب حي للفاتورة التي بها جلسات نشطة (بدون حفظ) ── READ-ONLY liveCost
         try {
             const hasActive = bill.sessions && bill.sessions.some((s) => s.status === 'active');
             if (hasActive) {
@@ -524,131 +544,9 @@ export const getBill = async (req, res) => {
             Logger.warn('live calc failed for getBill', e);
         }
 
-        // Generate QR code if it doesn't exist or regenerate with current domain
-        Logger.info(`🔧 [getBill] Generating QR code for bill: ${bill.billNumber}`);
-        
-        // استخراج الدومين من الـ request وتحويله للفرونت إند
-        const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
-        const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
-        
-        // تحويل port الباك إند للفرونت إند
-        let frontendHost = host;
-        if (host.includes(':5000')) {
-            frontendHost = host.replace(':5000', ':3000');
-        } else if (host.includes('5000')) {
-            // للحالات اللي فيها port في subdomain أو path
-            frontendHost = host.replace('5000', '3000');
-        }
-        
-        const baseUrl = process.env.FRONTEND_URL || `${protocol}://${frontendHost}`;
-        
-        // إعادة إنشاء QR code دائماً بناءً على الدومين الحالي
-        await bill.generateQRCode(baseUrl, true);
-        Logger.info(`✅ [getBill] QR code generated:`, {
-            hasQrCode: !!bill.qrCode,
-            qrCodeLength: bill.qrCode?.length,
-            qrCodeUrl: bill.qrCodeUrl,
-            baseUrl: baseUrl
-        });
-        // Save the QR code
-        await Bill.updateOne(
-            { _id: bill._id },
-            {
-                $set: {
-                    qrCode: bill.qrCode,
-                    qrCodeUrl: bill.qrCodeUrl,
-                }
-            },
-            { timestamps: false }
-        );
-        Logger.info(`💾 [getBill] QR code saved to database`);
-
-        // إصلاح sessionPayments وحساب السعر الحالي للجلسات النشطة
-        if (bill.sessions && bill.sessions.length > 0 && bill.sessionPayments && bill.sessionPayments.length > 0) {
-            let needsUpdate = false;
-            
-            for (const session of bill.sessions) {
-                const sessionPayment = bill.sessionPayments.find(
-                    sp => sp.sessionId?.toString() === session._id?.toString()
-                );
-                
-                if (sessionPayment) {
-                    let sessionCost = session.finalCost || session.totalCost || 0;
-                    
-                    // للجلسات النشطة، نحسب السعر الحالي
-                    if (session.status === 'active' && typeof session.calculateCurrentCost === 'function') {
-                        try {
-                            sessionCost = await session.calculateCurrentCost();
-                            Logger.info(`✓ تم حساب السعر الحالي للجلسة ${session.deviceName}: ${sessionCost}`);
-                        } catch (error) {
-                            Logger.error(`خطأ في حساب السعر الحالي للجلسة ${session.deviceName}:`, error);
-                        }
-                    }
-                    
-                    const correctRemaining = sessionCost - (sessionPayment.paidAmount || 0);
-                    
-                    // إذا كان remainingAmount أو sessionCost خاطئ، نصلحه
-                    if (sessionPayment.remainingAmount !== correctRemaining || sessionPayment.sessionCost !== sessionCost) {
-                        sessionPayment.sessionCost = sessionCost;
-                        sessionPayment.remainingAmount = correctRemaining;
-                        needsUpdate = true;
-                    }
-                }
-            }
-            
-            // حفظ التحديثات إذا لزم الأمر
-            if (needsUpdate) {
-                // Depopulate sessionPayments.payments.paidBy before saving
-                // to prevent populated objects from being persisted
-                if (bill.sessionPayments) {
-                    bill.sessionPayments.forEach(sp => {
-                        if (sp.payments) {
-                            sp.payments.forEach(p => {
-                                if (p.paidBy && typeof p.paidBy === 'object' && p.paidBy._id) {
-                                    p.paidBy = p.paidBy._id;
-                                }
-                            });
-                        }
-                    });
-                }
-                await bill.save();
-                Logger.info(`✓ تم تحديث sessionPayments للفاتورة ${bill.billNumber}`);
-            }
-        }
-
-        // تحويل bill إلى object أولاً
-        const billObj = bill.toObject();
-
-        // إضافة controllersHistoryBreakdown لكل جلسة بلايستيشن
-        if (bill.sessions && bill.sessions.length > 0) {
-            const sessionsWithBreakdown = await Promise.all(
-                bill.sessions.map(async (session) => {
-                    // حساب breakdown قبل تحويل إلى object
-                    let breakdownData = null;
-                    if (session.deviceType === 'playstation' && typeof session.getCostBreakdownAsync === 'function') {
-                        try {
-                            breakdownData = await session.getCostBreakdownAsync();
-                        } catch (error) {
-                            }
-                    }
-                    
-                    // تحويل إلى object بعد حساب breakdown
-                    const sessionObj = session.toObject ? session.toObject() : session;
-                    
-                    // إضافة breakdown إذا كان موجوداً
-                    if (breakdownData && breakdownData.breakdown) {
-                        sessionObj.controllersHistoryBreakdown = breakdownData.breakdown;
-                    }
-                    
-                    return sessionObj;
-                })
-            );
-            billObj.sessions = sessionsWithBreakdown;
-        }
-
         return res.json({
             success: true,
-            data: billObj,
+            data: bill,
         });
     } catch (error) {
         Logger.error("خطأ في جلب الفاتورة", error);
@@ -729,6 +627,48 @@ export const createBill = async (req, res) => {
             }
         }
 
+        // Determine deviceNumber from sessions
+        let deviceNumber = 'UNKNOWN';
+        if (sessions && sessions.length > 0) {
+            // Get deviceNumber from the first session
+            const sessionDoc = await Session.findById(sessions[0]).select('deviceNumber deviceId');
+            if (sessionDoc && sessionDoc.deviceNumber) {
+                deviceNumber = sessionDoc.deviceNumber;
+            } else if (sessionDoc && sessionDoc.deviceId) {
+                const Device = (await import("../models/Device.js")).default;
+                const deviceDoc = await Device.findById(sessionDoc.deviceId).select('number');
+                if (deviceDoc && deviceDoc.number) {
+                    deviceNumber = deviceDoc.number;
+                }
+            }
+        } else if (orders && orders.length > 0) {
+            // If no sessions but there are orders, check if the bill is linked to a table with active session
+            const firstOrder = await Order.findById(orders[0]).populate('table').select('table');
+            if (firstOrder && firstOrder.table) {
+                const Session = (await import("../models/Session.js")).default;
+                const activeSession = await Session.findOne({
+                    table: firstOrder.table._id,
+                    status: 'active',
+                    organization: req.user.organization
+                }).select('deviceNumber deviceId');
+                if (activeSession && activeSession.deviceNumber) {
+                    deviceNumber = activeSession.deviceNumber;
+                } else if (activeSession && activeSession.deviceId) {
+                    const Device = (await import("../models/Device.js")).default;
+                    const deviceDoc = await Device.findById(activeSession.deviceId).select('number');
+                    if (deviceDoc && deviceDoc.number) {
+                        deviceNumber = deviceDoc.number;
+                    }
+                }
+            }
+        }
+
+        // Get instanceId from header (web) or generate (desktop)
+        let instanceId = req.headers['x-instance-id'];
+        if (!instanceId) {
+            instanceId = await getInstanceId();
+        }
+
         let bill;
         for (let attempt = 0; attempt < 10; attempt++) {
             try {
@@ -746,6 +686,7 @@ export const createBill = async (req, res) => {
                     dueDate,
                     createdBy: req.user._id,
                     organization: req.user.organization,
+                    instanceId: instanceId,
                 });
                 break;
             } catch (billErr) {
@@ -776,62 +717,93 @@ export const createBill = async (req, res) => {
             );
         }
 
-        await bill.populate(["orders", "sessions", "createdBy"], "name");
+        // Fire-and-forget Atlas write
+        writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
 
-        // Immediate dual-write to Atlas for bill create
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const billObj = bill.toObject ? bill.toObject() : bill;
-                    await atlasConnection.collection('bills').updateOne(
-                        { _id: bill._id },
-                        { $set: billObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for bill create ${bill._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for bill create - will sync later");
-            }
-        }
+        // Prepare minimal response data immediately
+        const responseData = {
+            _id: bill._id,
+            billNumber: bill.billNumber,
+            customerName: bill.customerName,
+            customerPhone: bill.customerPhone,
+            table: bill.table,
+            orders: bill.orders,
+            sessions: bill.sessions,
+            subtotal: bill.subtotal,
+            total: bill.total,
+            discount: bill.discount,
+            tax: bill.tax,
+            paid: bill.paid,
+            remaining: bill.remaining,
+            status: bill.status,
+            billType: bill.billType,
+            createdBy: bill.createdBy,
+            organization: bill.organization,
+            createdAt: bill.createdAt,
+        };
 
-        // Update table status if bill has a table (Requirement 2.3)
-        if (bill.table) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
-        }
-
-        // Notify via Socket.IO
-        if (req.io) {
-            req.io.notifyBillUpdate("created", bill, req.user.organization);
-        }
-
-        // Create notification for new bill
-        try {
-            // Get user language and organization currency
-            const userLanguage = req.user.preferences?.language || 'ar';
-            const organization = await Organization.findById(req.user.organization).select('currency');
-            const currency = organization?.currency || 'EGP';
-            
-            await NotificationService.createBillingNotification(
-                "created",
-                bill,
-                req.user._id,
-                userLanguage,
-                currency
-            );
-        } catch (notificationError) {
-            Logger.error(
-                "Failed to create bill notification:",
-                notificationError
-            );
-        }
-
+        // Return response IMMEDIATELY after local save
         res.status(201).json({
             success: true,
             message: "تم إنشاء الفاتورة بنجاح",
-            data: bill,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                // 1. Calculate subtotal from orders and sessions
+                if (
+                    (orders && orders.length > 0) ||
+                    (sessions && sessions.length > 0)
+                ) {
+                    await bill.calculateSubtotal();
+                }
+
+                // 2. Update orders and sessions to reference this bill
+                if (orders && orders.length > 0) {
+                    await Order.updateMany(
+                        { _id: { $in: orders } },
+                        { bill: bill._id }
+                    );
+                }
+
+                if (sessions && sessions.length > 0) {
+                    await Session.updateMany(
+                        { _id: { $in: sessions } },
+                        { bill: bill._id }
+                    );
+                }
+
+                // 3. Update table status if bill has a table
+                if (bill.table) {
+                    await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+                }
+
+                // 4. Notify via Socket.IO
+                if (req.io) {
+                    req.io.notifyBillUpdate("created", bill, req.user.organization);
+                }
+
+                // 5. Create notification for new bill
+                try {
+                    const userLanguage = req.user.preferences?.language || 'ar';
+                    const organization = await Organization.findById(req.user.organization).select('currency');
+                    const currency = organization?.currency || 'EGP';
+
+                    await NotificationService.createBillingNotification(
+                        "created",
+                        bill,
+                        req.user._id,
+                        userLanguage,
+                        currency
+                    );
+                } catch (notificationError) {
+                    Logger.error("Failed to create bill notification:", notificationError);
+                }
+            } catch (bgError) {
+                Logger.error("Background work failed for bill create:", bgError);
+            }
         });
     } catch (error) {
         Logger.error("خطأ في إنشاء الفاتورة", error);
@@ -1177,64 +1149,75 @@ export const updateBill = async (req, res) => {
             { path: "updatedBy", select: "name" },
             { path: "table", select: "number name" }
         ]);
-
         const prevStatus = bill.status;
         const updatedBill = await bill.save();
 
-        // Immediate dual-write to Atlas for bill update
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const billObj = updatedBill.toObject ? updatedBill.toObject() : updatedBill;
-                    await atlasConnection.collection('bills').updateOne(
-                        { _id: updatedBill._id },
-                        { $set: billObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for bill update ${updatedBill._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for bill update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
 
-        // Update table status if bill status changed (Requirement 2.3, 2.4)
-        if (bill.table && prevStatus !== updatedBill.status) {
-            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: updatedBill._id,
+            billNumber: updatedBill.billNumber,
+            customerName: updatedBill.customerName,
+            customerPhone: updatedBill.customerPhone,
+            table: updatedBill.table,
+            orders: updatedBill.orders,
+            sessions: updatedBill.sessions,
+            subtotal: updatedBill.subtotal,
+            total: updatedBill.total,
+            discount: updatedBill.discount,
+            tax: updatedBill.tax,
+            paid: updatedBill.paid,
+            remaining: updatedBill.remaining,
+            status: updatedBill.status,
+            billType: updatedBill.billType,
+            createdBy: updatedBill.createdBy,
+            organization: updatedBill.organization,
+            createdAt: updatedBill.createdAt,
+            updatedAt: updatedBill.updatedAt,
+        };
 
-        // Notify via Socket.IO (Requirement 8.1)
-        if (req.io) {
-            req.io.notifyBillUpdate("updated", updatedBill, req.user.organization);
-        }
-
-        if (prevStatus !== "paid" && updatedBill.status === "paid") {
-            try {
-                const userLanguage = req.user.preferences?.language || 'ar';
-                const organization = await Organization.findById(req.user.organization).select('currency');
-                const currency = organization?.currency || 'EGP';
-                
-                await NotificationService.createBillingNotification(
-                    "paid",
-                    updatedBill,
-                    req.user._id,
-                    userLanguage,
-                    currency
-                );
-            } catch (notificationError) {
-                Logger.error(
-                    "Failed to create bill paid notification:",
-                    notificationError
-                );
-            }
-        }
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث الفاتورة بنجاح",
-            data: bill,
+            data: responseData,
+        });
+
+        // Background work
+        setImmediate(async () => {
+            try {
+                // Update table status if bill status changed
+                if (bill.table && prevStatus !== updatedBill.status) {
+                    await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+                }
+
+                // Notify via Socket.IO
+                if (req.io) {
+                    req.io.notifyBillUpdate("updated", updatedBill, req.user.organization);
+                }
+
+                if (prevStatus !== "paid" && updatedBill.status === "paid") {
+                    try {
+                        const userLanguage = req.user.preferences?.language || 'ar';
+                        const organization = await Organization.findById(req.user.organization).select('currency');
+                        const currency = organization?.currency || 'EGP';
+
+                        await NotificationService.createBillingNotification(
+                            "paid",
+                            updatedBill,
+                            req.user._id,
+                            userLanguage,
+                            currency
+                        );
+                    } catch (notificationError) {
+                        Logger.error("Failed to create bill paid notification:", notificationError);
+                    }
+                }
+            } catch (bgError) {
+                Logger.error("Background work failed for bill update:", bgError);
+            }
         });
     } catch (error) {
         Logger.error("خطأ في تحديث الفاتورة", error);
@@ -2025,17 +2008,14 @@ export const deleteBill = async (req, res) => {
                 const deleteResult = await Order.deleteMany({ _id: { $in: orderIds } });
                 Logger.info(`✓ Deleted ${deleteResult.deletedCount} orders from Local MongoDB`);
                 
-                // حذف من Atlas مباشرة
+                // حذف من Atlas مباشرة (non-blocking)
                 if (atlasConnection) {
-                    try {
-                        const atlasOrdersCollection = atlasConnection.collection('orders');
-                        const atlasDeleteResult = await atlasOrdersCollection.deleteMany({ 
-                            _id: { $in: orderIds } 
-                        });
-                        Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} orders from Atlas MongoDB`);
-                    } catch (atlasError) {
+                    const atlasOrdersCollection = atlasConnection.collection('orders');
+                    atlasOrdersCollection.deleteMany({ 
+                        _id: { $in: orderIds } 
+                    }).catch(atlasError => {
                         Logger.error(`❌ Failed to delete orders from Atlas: ${atlasError.message}`);
-                    }
+                    });
                 } else {
                     Logger.warn(`⚠️ Atlas connection not available - orders will be synced for deletion later`);
                 }
@@ -2051,17 +2031,14 @@ export const deleteBill = async (req, res) => {
                 const sessionDeleteResult = await Session.deleteMany({ _id: { $in: sessionIds } });
                 Logger.info(`✓ Deleted ${sessionDeleteResult.deletedCount} sessions from Local MongoDB`);
                 
-                // حذف من Atlas مباشرة
+                // حذف من Atlas مباشرة (non-blocking)
                 if (atlasConnection) {
-                    try {
-                        const atlasSessionsCollection = atlasConnection.collection('sessions');
-                        const atlasDeleteResult = await atlasSessionsCollection.deleteMany({ 
-                            _id: { $in: sessionIds } 
-                        });
-                        Logger.info(`✓ Deleted ${atlasDeleteResult.deletedCount} sessions from Atlas MongoDB`);
-                    } catch (atlasError) {
+                    const atlasSessionsCollection = atlasConnection.collection('sessions');
+                    atlasSessionsCollection.deleteMany({ 
+                        _id: { $in: sessionIds } 
+                    }).catch(atlasError => {
                         Logger.error(`❌ Failed to delete sessions from Atlas: ${atlasError.message}`);
-                    }
+                    });
                 } else {
                     Logger.warn(`⚠️ Atlas connection not available - sessions will be synced for deletion later`);
                 }
@@ -2073,15 +2050,12 @@ export const deleteBill = async (req, res) => {
             await bill.deleteOne();
             Logger.info(`✓ Deleted bill ${bill.billNumber} from Local`);
             
-            // Delete the bill from Atlas MongoDB مباشرة
+            // Delete the bill from Atlas MongoDB مباشرة (non-blocking)
             if (atlasConnection) {
-                try {
-                    const atlasBillsCollection = atlasConnection.collection('bills');
-                    const atlasDeleteResult = await atlasBillsCollection.deleteOne({ _id: bill._id });
-                    Logger.info(`✓ Deleted bill ${bill.billNumber} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
-                } catch (atlasError) {
+                const atlasBillsCollection = atlasConnection.collection('bills');
+                atlasBillsCollection.deleteOne({ _id: bill._id }).catch(atlasError => {
                     Logger.warn(`⚠️ Failed to delete bill from Atlas: ${atlasError.message}`);
-                }
+                });
             } else {
                 Logger.warn(`⚠️ Atlas connection not available - bill will be synced later`);
             }
@@ -3605,5 +3579,417 @@ export const addPartialPaymentAggregated = async (req, res) => {
             message: "خطأ في إضافة الدفع الجزئي المجمع",
             error: error.message,
         });
+    }
+};
+
+// @desc    Update bill items aggregated (unified bill edit)
+// @route   PUT /api/bills/:id/items-aggregated
+// @access  Private - billing/tables/all
+export const updateBillAggregatedItems = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { items } = req.body; // final aggregated items: [{menuItem?, name, price, quantity, notes, addons}]
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: "معرف الفاتورة غير صحيح" });
+        }
+
+        const bill = await Bill.findOne({ _id: id, organization: req.user.organization }).populate("orders");
+        if (!bill) {
+            return res.status(404).json({ success: false, message: "الفاتورة غير موجودة" });
+        }
+
+        if (bill.status === "cancelled") {
+            return res.status(400).json({ success: false, message: "لا يمكن تعديل فاتورة ملغاة" });
+        }
+
+        // Validate items array (allow empty = clear bill)
+        if (items !== undefined && !Array.isArray(items)) {
+            return res.status(400).json({ success: false, message: "صيغة الأصناف غير صحيحة" });
+        }
+        const finalRaw = Array.isArray(items) ? items : [];
+
+        // Build old items list for inventory calc (all orders items)
+        const allOldItems = [];
+        (bill.orders || []).forEach((order) => {
+            (order.items || []).forEach((it) => {
+                allOldItems.push({ menuItem: it.menuItem, name: it.name, price: it.price, quantity: it.quantity });
+            });
+        });
+
+        // Process final items: resolve menuItem details, validate, build processedItems
+        const processedItems = [];
+        let subtotal = 0;
+        const menuItemIds = finalRaw.filter((it) => it.menuItem).map((it) => it.menuItem);
+        const menuItemsMap = new Map();
+        if (menuItemIds.length > 0) {
+            const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, organization: req.user.organization }).lean();
+            menuItems.forEach((mi) => menuItemsMap.set(mi._id.toString(), mi));
+        }
+
+        for (const raw of finalRaw) {
+            const qty = parseInt(raw.quantity);
+            if (!qty || qty < 1) {
+                return res.status(400).json({ success: false, message: `كمية غير صحيحة للصنف ${raw.name || raw.menuItem}` });
+            }
+            if (raw.menuItem) {
+                if (!mongoose.Types.ObjectId.isValid(raw.menuItem)) {
+                    return res.status(400).json({ success: false, message: `معرف الصنف غير صحيح: ${raw.menuItem}` });
+                }
+                const mi = menuItemsMap.get(raw.menuItem.toString());
+                if (!mi) {
+                    return res.status(400).json({ success: false, message: `الصنف غير موجود: ${raw.menuItem}` });
+                }
+                if (!mi.isAvailable) {
+                    return res.status(400).json({ success: false, message: `الصنف غير متاح: ${mi.name}` });
+                }
+                const price = mi.price || 0;
+                const itemTotal = price * qty;
+                subtotal += itemTotal;
+                processedItems.push({
+                    menuItem: mi._id,
+                    name: mi.name,
+                    arabicName: mi.arabicName || mi.name,
+                    price,
+                    quantity: qty,
+                    itemTotal,
+                    notes: raw.notes || null,
+                    preparationTime: mi.preparationTime || 5,
+                    section: mi.category ? null : null,
+                });
+            } else {
+                if (!raw.name || raw.price === undefined || raw.price === null) {
+                    return res.status(400).json({ success: false, message: "اسم وسعر الصنف مطلوبان للأصناف الحرة" });
+                }
+                const price = parseFloat(raw.price);
+                if (isNaN(price) || price < 0) {
+                    return res.status(400).json({ success: false, message: `سعر غير صحيح للصنف ${raw.name}` });
+                }
+                const itemTotal = price * qty;
+                subtotal += itemTotal;
+                processedItems.push({
+                    name: raw.name,
+                    price,
+                    quantity: qty,
+                    itemTotal,
+                    notes: raw.notes || null,
+                    preparationTime: raw.preparationTime || 5,
+                });
+            }
+        }
+
+        // Inventory validation: calculate delta
+        const newInventoryNeeded = await calculateTotalInventoryNeeded(processedItems);
+        const oldInventoryNeeded = await calculateTotalInventoryNeeded(allOldItems);
+
+        const additionalNeeded = new Map();
+        const EPSILON = 0.0001;
+        for (const [invId, newData] of newInventoryNeeded) {
+            const oldData = oldInventoryNeeded.get(invId);
+            const oldQty = oldData ? oldData.quantity : 0;
+            const oldUnit = oldData ? oldData.unit : newData.unit;
+            const convertedOld = convertQuantity(oldQty, oldUnit, newData.unit);
+            const diff = Math.round((newData.quantity - convertedOld) * 1000000) / 1000000;
+            if (diff > EPSILON) {
+                additionalNeeded.set(invId, { quantity: diff, unit: newData.unit });
+            }
+        }
+
+        if (additionalNeeded.size > 0) {
+            const { errors, details } = await validateInventoryAvailability(additionalNeeded);
+            if (errors.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "المخزون غير كافي لتعديل الفاتورة",
+                    errors,
+                    details,
+                    inventoryErrors: errors,
+                });
+            }
+        }
+
+        // Inventory adjustment (delta) - reuse FIFO logic from adjustInventoryForOrderUpdate
+        // Build maps for all ingredientIds
+        const allIngredientIds = new Set([...oldInventoryNeeded.keys(), ...newInventoryNeeded.keys()]);
+        // For each ingredient, compute difference and apply movement
+        for (const ingId of allIngredientIds) {
+            const oldData = oldInventoryNeeded.get(ingId) || { quantity: 0, unit: "" };
+            const newData = newInventoryNeeded.get(ingId) || { quantity: 0, unit: "" };
+            const invItem = await InventoryItem.findById(ingId);
+            if (!invItem) continue;
+            const oldConverted = oldData.quantity ? convertQuantity(oldData.quantity, oldData.unit, invItem.unit) : 0;
+            const newConverted = newData.quantity ? convertQuantity(newData.quantity, newData.unit, invItem.unit) : 0;
+            const diff = Math.round((newConverted - oldConverted) * 1000000) / 1000000;
+            if (Math.abs(diff) < EPSILON) continue;
+
+            if (diff > 0) {
+                // Need to deduct more
+                const movementDate = new Date();
+                const allMovements = invItem.stockMovements
+                    .map((m) => ({ type: m.type, quantity: m.quantity, price: m.price, timestamp: new Date(m.timestamp || m.date) }))
+                    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                const batches = [];
+                for (const mv of allMovements) {
+                    if (mv.timestamp >= movementDate) break;
+                    if (mv.type === "in" && mv.price) {
+                        batches.push({ quantity: mv.quantity, price: mv.price, remaining: mv.quantity });
+                    } else if (mv.type === "out") {
+                        let toDeduct = mv.quantity;
+                        for (const b of batches) {
+                            if (toDeduct <= 0) break;
+                            const d = Math.min(b.remaining, toDeduct);
+                            b.remaining -= d;
+                            toDeduct -= d;
+                        }
+                    } else if (mv.type === "adjustment") {
+                        const totalRem = batches.reduce((s, b) => s + b.remaining, 0);
+                        if (totalRem > 0) {
+                            const ratio = mv.quantity / totalRem;
+                            batches.forEach((b) => (b.remaining = b.remaining * ratio));
+                        }
+                    }
+                }
+                let remain = Math.abs(diff);
+                let totalCost = 0;
+                for (const b of batches) {
+                    if (remain <= 0) break;
+                    if (b.remaining <= 0) continue;
+                    const q = Math.min(remain, b.remaining);
+                    totalCost += q * b.price;
+                    remain -= q;
+                }
+                const finalTotalCost = Math.round(totalCost * 100) / 100;
+                const finalPrice = Math.abs(diff) > 0 && finalTotalCost > 0 ? Math.round((finalTotalCost / Math.abs(diff)) * 100) / 100 : null;
+                const reason = `تعديل أصناف الفاتورة ${bill.billNumber} (زيادة)`;
+                // Find a reference order id (use first order or bill id)
+                const refId = (bill.orders && bill.orders[0] ? bill.orders[0]._id : bill._id).toString();
+                await invItem.addStockMovement("out", Math.abs(diff), reason, req.user._id, refId, finalPrice, null, finalTotalCost);
+            } else {
+                // Restore
+                const lastDeduct = invItem.stockMovements
+                    .filter((m) => m.type === "out" && m.reference)
+                    .sort((a, b) => new Date(b.timestamp || b.date).getTime() - new Date(a.timestamp || a.date).getTime())[0];
+                const priceToRestore = lastDeduct?.price || null;
+                const totalCostToRestore = lastDeduct?.totalCost ? Math.round((lastDeduct.totalCost / lastDeduct.quantity) * Math.abs(diff) * 100) / 100 : null;
+                const reason = `تعديل أصناف الفاتورة ${bill.billNumber} (نقصان)`;
+                const refId = (bill.orders && bill.orders[0] ? bill.orders[0]._id : bill._id).toString();
+                await invItem.addStockMovement("in", Math.abs(diff), reason, req.user._id, refId, priceToRestore, null, totalCostToRestore);
+            }
+        }
+
+        // Orders restructuring: consolidate into single order
+        const totalCost = await calculateOrderTotalCost(processedItems);
+        const existingOrders = bill.orders || [];
+
+        if (processedItems.length === 0) {
+            // Clear all orders
+            for (const ord of existingOrders) {
+                await Order.deleteOne({ _id: ord._id });
+                try { await createTombstone("Order", ord._id, req.user.organization, ord.table); } catch {}
+            }
+            bill.orders = [];
+        } else if (existingOrders.length === 0) {
+            // Create new order
+            let instanceId = req.headers["x-instance-id"];
+            if (!instanceId) instanceId = await getInstanceId();
+            const tableId = bill.table && bill.table._id ? bill.table._id : bill.table;
+            const newOrder = new Order({
+                table: tableId,
+                items: processedItems,
+                subtotal,
+                finalAmount: subtotal,
+                totalCost,
+                organization: req.user.organization,
+                createdBy: req.user._id,
+                status: "pending",
+                instanceId,
+                bill: bill._id,
+            });
+            await newOrder.save();
+            bill.orders = [newOrder._id];
+        } else {
+            // Update primary order, delete others
+            const sorted = [...existingOrders].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            const primary = await Order.findById(sorted[0]._id);
+            if (!primary) {
+                return res.status(404).json({ success: false, message: "الطلب الأساسي غير موجود" });
+            }
+            primary.items = processedItems;
+            primary.subtotal = subtotal;
+            primary.finalAmount = subtotal;
+            primary.totalCost = totalCost;
+            // Keep table/bill linkage
+            primary.bill = bill._id;
+            await primary.save();
+            // Delete other orders (inventory already adjusted via delta, so no extra restore)
+            for (let i = 1; i < sorted.length; i++) {
+                await Order.deleteOne({ _id: sorted[i]._id });
+                try { await createTombstone("Order", sorted[i]._id, req.user.organization, sorted[i].table); } catch {}
+            }
+            bill.orders = [primary._id];
+        }
+
+        // Refresh bill with populated orders for calculations
+        await bill.populate("orders");
+
+        // Recalculate bill subtotal/total and clean itemPayments
+        // Use same logic as orderController after updateOrder
+        if (bill.itemPayments && bill.itemPayments.length > 0) {
+            const validItemIds = new Set();
+            const currentOrderItems = new Map();
+            const itemsByType = new Map();
+            (bill.orders || []).forEach((ord) => {
+                (ord.items || []).forEach((it, idx) => {
+                    const itemId = `${ord._id}-${idx}`;
+                    validItemIds.add(itemId);
+                    currentOrderItems.set(itemId, { name: it.name, price: it.price, quantity: it.quantity, orderId: ord._id });
+                    const key = `${it.name}|${it.price}`;
+                    if (!itemsByType.has(key)) itemsByType.set(key, []);
+                    itemsByType.get(key).push(itemId);
+                });
+            });
+
+            const existingIds = new Set(bill.itemPayments.map((ip) => ip.itemId));
+            const paymentsToRedistribute = new Map();
+            bill.itemPayments = bill.itemPayments.filter((payment) => {
+                if (!validItemIds.has(payment.itemId)) {
+                    const key = payment.menuItemId ? payment.menuItemId.toString() : `${payment.itemName}|${payment.pricePerUnit}`;
+                    const amt = payment.paidAmount || 0;
+                    if (amt > 0) {
+                        if (!paymentsToRedistribute.has(key)) paymentsToRedistribute.set(key, 0);
+                        paymentsToRedistribute.set(key, paymentsToRedistribute.get(key) + amt);
+                    }
+                    return false;
+                }
+                const cur = currentOrderItems.get(payment.itemId);
+                if (cur) {
+                    if (cur.name !== payment.itemName || cur.price !== payment.pricePerUnit || cur.quantity !== payment.quantity) {
+                        payment.itemName = cur.name;
+                        payment.pricePerUnit = cur.price;
+                        payment.quantity = cur.quantity;
+                        payment.totalPrice = cur.price * cur.quantity;
+                        if (payment.paidQuantity > cur.quantity) {
+                            payment.paidQuantity = cur.quantity;
+                            payment.paidAmount = cur.quantity * cur.price;
+                        }
+                    }
+                    if (payment.paidQuantity > payment.quantity) {
+                        payment.paidQuantity = payment.quantity;
+                        payment.paidAmount = payment.quantity * payment.pricePerUnit;
+                    }
+                    payment.isPaid = (payment.paidQuantity || 0) >= (payment.quantity || 0);
+                }
+                return true;
+            });
+
+            // Create itemPayments for new items
+            for (const [itemId, details] of currentOrderItems) {
+                if (!existingIds.has(itemId)) {
+                    let menuItemId = null;
+                    const mi = await MenuItem.findOne({ name: details.name, organization: req.user.organization }).select("_id");
+                    if (mi) menuItemId = mi._id;
+                    bill.itemPayments.push({
+                        orderId: details.orderId,
+                        itemId,
+                        menuItemId,
+                        itemName: details.name,
+                        quantity: details.quantity,
+                        paidQuantity: 0,
+                        pricePerUnit: details.price,
+                        totalPrice: details.price * details.quantity,
+                        paidAmount: 0,
+                        isPaid: false,
+                        addons: [],
+                        paymentHistory: [],
+                    });
+                }
+            }
+
+            // Redistribute payments from deleted items
+            let totalUnredistributed = 0;
+            const unredistributedList = [];
+            for (const [key, totalAmt] of paymentsToRedistribute) {
+                if (totalAmt <= 0) continue;
+                const remainingIds = itemsByType.get(key) || [];
+                // Try name|price fallback if menuItemId key has no match
+                let targetIds = remainingIds;
+                if (targetIds.length === 0 && key.includes("|")) {
+                    targetIds = itemsByType.get(key) || [];
+                }
+                if (targetIds.length === 0) {
+                    totalUnredistributed += totalAmt;
+                    unredistributedList.push(key);
+                    continue;
+                }
+                const unitPrice = parseFloat(key.split("|").pop()) || 0;
+                // If key is menuItemId, find price from first matching item
+                let price = unitPrice;
+                if (!key.includes("|")) {
+                    const first = currentOrderItems.get(targetIds[0]);
+                    price = first ? first.price : 0;
+                }
+                const totalQtyPaid = price > 0 ? Math.round(totalAmt / price) : 0;
+                let remainingQty = totalQtyPaid;
+                for (const tid of targetIds) {
+                    if (remainingQty <= 0) break;
+                    const ip = bill.itemPayments.find((p) => p.itemId === tid);
+                    if (!ip) continue;
+                    const avail = ip.quantity - (ip.paidQuantity || 0);
+                    if (avail <= 0) continue;
+                    const q = Math.min(remainingQty, avail);
+                    ip.paidQuantity = (ip.paidQuantity || 0) + q;
+                    ip.paidAmount = ip.paidQuantity * ip.pricePerUnit;
+                    ip.isPaid = ip.paidQuantity >= ip.quantity;
+                    remainingQty -= q;
+                }
+                if (remainingQty > 0 && price > 0) {
+                    totalUnredistributed += remainingQty * price;
+                }
+            }
+            if (totalUnredistributed > 0) {
+                bill.payments.push({
+                    amount: totalUnredistributed,
+                    method: "cash",
+                    reference: `رصيد من أصناف محذوفة - فاتورة ${bill.billNumber}`,
+                    user: req.user._id,
+                    timestamp: new Date(),
+                    type: "credit-from-deleted-items",
+                });
+                Logger.info(`💳 [updateBillAggregatedItems] Added ${totalUnredistributed} EGP as credit for bill ${bill.billNumber}`);
+            }
+        }
+
+        // Recalculate bill totals
+        await bill.calculateSubtotal();
+        bill.calculateRemainingAmount();
+        await bill.save();
+
+        // Populate for response
+        await bill.populate([
+            { path: "orders", populate: { path: "items.menuItem", select: "name price" } },
+            { path: "sessions" },
+            { path: "table", select: "number name section" },
+            { path: "createdBy", select: "name" },
+        ]);
+
+        // Socket notify
+        if (req.io) {
+            try {
+                req.io.emit("bill-update", { type: "updated", bill });
+                req.io.notifyBillUpdate?.("updated", bill, req.user.organization);
+            } catch {}
+        }
+
+        // Sync to Atlas if enabled
+        try {
+            if (syncConfig?.isAtlasEnabled?.()) {
+                await writeToAtlas("bills", bill._id, bill.toObject());
+            }
+        } catch {}
+
+        res.json({ success: true, message: "تم تحديث أصناف الفاتورة بنجاح", data: bill });
+    } catch (error) {
+        Logger.error("خطأ في تحديث أصناف الفاتورة المجمعة", error);
+        res.status(500).json({ success: false, message: "خطأ في تحديث أصناف الفاتورة", error: error.message });
     }
 };

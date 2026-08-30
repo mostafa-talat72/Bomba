@@ -70,6 +70,10 @@ function loadOrCreateConfig() {
     databaseUri: "mongodb://localhost:27017/bomba?replicaSet=rs0",
     syncEnabled: true,
     bidirectionalSync: true,
+    lanSyncEnabled: true,
+    lanDiscoveryPort: 41234,
+    lanHeartbeatInterval: 3000,
+    lanElectionTimeout: 10000,
     timezone: "Africa/Cairo",
     appUrl: "",
     emailHost: "smtp.gmail.com",
@@ -191,6 +195,11 @@ function buildServerEnv(config, secrets, distDir) {
       config.bidirectionalSync === true && syncEnabled ? "true" : "false",
     INITIAL_SYNC_ENABLED: syncEnabled ? "true" : "false",
     SKIP_ATLAS_WHEN_OFFLINE: "true",
+    // LAN sync (B+C) - enabled by default for desktop, works with or without Atlas
+    LAN_SYNC_ENABLED: String(config.lanSyncEnabled !== false ? "true" : "false"),
+    LAN_DISCOVERY_PORT: String(config.lanDiscoveryPort || 41234),
+    LAN_HEARTBEAT_INTERVAL: String(config.lanHeartbeatInterval || 3000),
+    LAN_ELECTION_TIMEOUT: String(config.lanElectionTimeout || 10000),
     JWT_SECRET: secrets.jwtSecret,
     JWT_REFRESH_SECRET: secrets.jwtRefreshSecret,
     FRONTEND_URL: `http://127.0.0.1:${config.port || 5000}`,
@@ -203,6 +212,7 @@ function buildServerEnv(config, secrets, distDir) {
     DESKTOP_BACKUP_DIR: path.join(dataDir, "backups"),
     DESKTOP_DIST_PATH: distDir,
     SYNC_QUEUE_PATH: path.join(dataDir, "sync-queue.json"),
+    LAN_SYNC_QUEUE_PATH: path.join(dataDir, "lan-queue.json"),
   };
 }
 

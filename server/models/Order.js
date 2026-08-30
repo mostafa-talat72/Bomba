@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { getInstanceId } from "../utils/instanceId.js";
 
 const orderItemSchema = new mongoose.Schema({
     menuItem: {
@@ -179,12 +180,25 @@ orderSchema.pre("save", async function (next) {
             const month = String(now.getMonth() + 1).padStart(2, "0");
             const day = String(now.getDate()).padStart(2, "0");
             const dateStr = `${year}${month}${day}`;
-            const prefix = `ORD-${dateStr}-`;
-            const lastOrder = await this.constructor.findOne({ orderNumber: { $regex: `^${prefix}` } })
-                .sort({ orderNumber: -1 })
-                .select('orderNumber');
-            const nextSeq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
-            this.orderNumber = `${prefix}${nextSeq}`;
+
+            // Always use instanceId (set by controller) or call getInstanceId() directly
+            let identifier = this.instanceId;
+            if (!identifier) {
+                identifier = await getInstanceId();
+            }
+            if (!identifier) {
+                identifier = 'UNKNOWN';
+            }
+            const prefix = `ORD-${identifier}-${dateStr}-`;
+
+            // Find max sequence for this identifier and date using aggregation
+            const result = await this.constructor.aggregate([
+                { $match: { orderNumber: { $regex: `^${prefix}` } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$orderNumber", "-"] }, 3] } } } },
+                { $group: { _id: null, maxSeq: { $max: "$seq" } } }
+            ]);
+            const nextSeq = (result[0]?.maxSeq || 0) + 1;
+            this.orderNumber = `${prefix}${String(nextSeq).padStart(3, '0')}`;
         }
 
         // Calculate item totals and subtotal

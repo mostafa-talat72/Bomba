@@ -22,6 +22,7 @@ import {
     paySessionPartial,
     getBillAggregatedItems,
     addPartialPaymentAggregated,
+    updateBillAggregatedItems,
 } from "../controllers/billingController.js";
 import { protect, authorize, adminOnly } from "../middleware/auth.js";
 
@@ -66,6 +67,7 @@ router.post(
 // Backend aggregated partial payment (NEW)
 router.get("/:id/aggregated-items", authorize("billing", "tables", "all"), getBillAggregatedItems);
 router.post("/:id/partial-payment-aggregated", authorize("billing", "tables", "all"), addPartialPaymentAggregated);
+router.put("/:id/items-aggregated", authorize("billing", "tables", "all"), updateBillAggregatedItems);
 // تنظيف دفعات الأصناف المحذوفة
 router.post("/:id/cleanup-payments", authorize("billing", "tables", "all"), cleanupBillPayments);
 // دفع أصناف محددة من الفاتورة

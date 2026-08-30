@@ -1,6 +1,6 @@
 import MenuCategory from "../models/MenuCategory.js";
 import MenuItem from "../models/MenuItem.js";
-import { createTombstone } from "../utils/tombstoneHelper.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
@@ -107,32 +107,34 @@ export const createMenuCategory = async (req, res) => {
         const category = new MenuCategory(categoryData);
         await category.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const categoryObj = category.toObject ? category.toObject() : category;
-                    await atlasConnection.collection('menucategories').updateOne(
-                        { _id: category._id },
-                        { $set: categoryObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for menuCategory create ${category._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for menuCategory create - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('menucategories', 'upsert', category.toObject ? category.toObject() : category, { _id: category._id });
 
-        await category.populate("section", "name");
-        await category.populate("createdBy", "name");
+        // Prepare minimal response data
+        const responseData = {
+            _id: category._id,
+            name: category.name,
+            description: category.description,
+            section: category.section,
+            sortOrder: category.sortOrder,
+            createdAt: category.createdAt,
+        };
 
+        // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
             message: "تم إنشاء الفئة بنجاح",
-            data: category,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await category.populate("section", "name");
+                await category.populate("createdBy", "name");
+            } catch (bgError) {
+                Logger.error('Background tasks failed for createMenuCategory:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -163,10 +165,7 @@ export const updateMenuCategory = async (req, res) => {
             { _id: id, organization: req.user.organization },
             updateData,
             { new: true, runValidators: true }
-        )
-            .populate("section", "name")
-            .populate("createdBy", "name")
-            .populate("updatedBy", "name");
+        );
 
         if (!category) {
             return res.status(404).json({
@@ -175,29 +174,36 @@ export const updateMenuCategory = async (req, res) => {
             });
         }
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const categoryObj = category.toObject ? category.toObject({ depopulate: true }) : category;
-                    await atlasConnection.collection('menucategories').updateOne(
-                        { _id: category._id },
-                        { $set: categoryObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for menuCategory update ${category._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for menuCategory update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('menucategories', 'upsert', category.toObject ? category.toObject() : category, { _id: category._id });
 
+        // Prepare minimal response data
+        const responseData = {
+            _id: category._id,
+            name: category.name,
+            description: category.description,
+            section: category.section,
+            sortOrder: category.sortOrder,
+            isActive: category.isActive,
+            updatedAt: category.updatedAt,
+        };
+
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث الفئة بنجاح",
-            data: category,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await category.populate("section", "name");
+                await category.populate("createdBy", "name");
+                await category.populate("updatedBy", "name");
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateMenuCategory:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -238,25 +244,22 @@ export const deleteMenuCategory = async (req, res) => {
             });
         }
 
-        // Immediate dual-write delete to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    await atlasConnection.collection('menucategories').deleteOne({ _id: category._id });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for menuCategory delete ${category._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for menuCategory delete - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write for delete
+        writeToAtlas('menucategories', 'delete', null, { _id: category._id });
 
-        try { await createTombstone('menucategories', category._id, req.user.organization, req.user._id); } catch (e) {}
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف الفئة بنجاح",
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                // Background cleanup if needed
+            } catch (bgError) {
+                Logger.error('Background tasks failed for deleteMenuCategory:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({

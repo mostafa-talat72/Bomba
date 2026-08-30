@@ -1,9 +1,8 @@
 import Device from "../models/Device.js";
 import Session from "../models/Session.js";
 import DeviceValidator from "../services/validation/deviceValidator.js";
-import { createTombstone } from "../utils/tombstoneHelper.js";
+import { writeToAtlas, writeBatchToAtlas } from "../utils/atlasWrite.js";
 import Logger from "../middleware/logger.js";
-import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import mongoose from "mongoose";
 
 const deviceController = {
@@ -252,33 +251,36 @@ const deviceController = {
             const device = new Device(sanitizedData);
             await device.save();
 
-            // Immediate dual-write to Atlas
-            {
-                const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                if (atlasConnection) {
-                    try {
-                        const deviceObj = device.toObject ? device.toObject() : device;
-                        await atlasConnection.collection('devices').updateOne(
-                            { _id: device._id },
-                            { $set: deviceObj },
-                            { upsert: true }
-                        );
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for device create ${device._id}: ${atlasErr.message}`);
-                    }
-                } else {
-                    Logger.warn("Atlas not available for device create - will sync later");
-                }
-            }
+            // Fire-and-forget Atlas write
+            writeToAtlas('devices', 'upsert', device.toObject ? device.toObject() : device, { _id: device._id });
 
-            if (req.io) {
-                try { req.io.notifyDeviceUpdate("created", device, req.user.organization); } catch (e) {}
-            }
+            // Prepare minimal response data
+            const responseData = {
+                _id: device._id,
+                name: device.name,
+                number: device.number,
+                type: device.type,
+                status: device.status,
+                controllers: device.controllers,
+                createdAt: device.createdAt,
+            };
 
+            // Return response IMMEDIATELY
             res.status(201).json({
                 success: true,
                 message: "تم إضافة الجهاز بنجاح",
-                data: device,
+                data: responseData,
+            });
+
+            // All background work in setImmediate - non-blocking
+            setImmediate(async () => {
+                try {
+                    if (req.io) {
+                        try { req.io.notifyDeviceUpdate("created", device, req.user.organization); } catch (e) {}
+                    }
+                } catch (bgError) {
+                    Logger.error('Background tasks failed for createDevice:', bgError);
+                }
             });
         } catch (err) {
             
@@ -440,42 +442,45 @@ const deviceController = {
                 updateData.playstationRates = playstationRates;
             }
 
-            const device = await Device.findOneAndUpdate(
-                { _id: id, organization: req.user.organization },
-                updateData,
-                {
-                    new: true,
-                    runValidators: true,
-                }
-            );
-
-            // Immediate dual-write to Atlas
-            if (device) {
-                const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                if (atlasConnection) {
-                    try {
-                        const deviceObj = device.toObject ? device.toObject({ depopulate: true }) : device;
-                        await atlasConnection.collection('devices').updateOne(
-                            { _id: device._id },
-                            { $set: deviceObj },
-                            { upsert: true }
-                        );
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for device update ${device._id}: ${atlasErr.message}`);
-                    }
-                } else {
-                    Logger.warn("Atlas not available for device update - will sync later");
-                }
+const device = await Device.findOneAndUpdate(
+            { _id: id, organization: req.user.organization },
+            updateData,
+            {
+                new: true,
+                runValidators: true,
             }
+        );
 
-            if (req.io) {
-                try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
-            }
+            // Fire-and-forget Atlas write
+            writeToAtlas('devices', 'upsert', device.toObject ? device.toObject() : device, { _id: device._id });
 
+            // Prepare minimal response data
+            const responseData = {
+                _id: device._id,
+                name: device.name,
+                number: device.number,
+                type: device.type,
+                status: device.status,
+                controllers: device.controllers,
+                updatedAt: device.updatedAt,
+            };
+
+            // Return response IMMEDIATELY
             res.status(200).json({
                 success: true,
                 message: "تم تحديث بيانات الجهاز بنجاح",
-                data: device,
+                data: responseData,
+            });
+
+            // All background work in setImmediate - non-blocking
+            setImmediate(async () => {
+                try {
+                    if (req.io) {
+                        try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
+                    }
+                } catch (bgError) {
+                    Logger.error('Background tasks failed for updateDevice:', bgError);
+                }
             });
         } catch (err) {
             res.status(400).json({
@@ -510,49 +515,51 @@ const deviceController = {
                 });
             }
 
-            const device = await Device.findOneAndUpdate(
-                { _id: id, organization: req.user.organization },
-                { status },
-                { new: true, runValidators: true }
-            );
+const device = await Device.findOneAndUpdate(
+            { _id: id, organization: req.user.organization },
+            { status },
+            { new: true, runValidators: true }
+        );
 
-            if (!device) {
-                return res.status(404).json({
-                    success: false,
-                    message: "الجهاز غير موجود",
-                    error: "Device not found",
-                });
-            }
-
-            // Immediate dual-write to Atlas
-            {
-                const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                if (atlasConnection) {
-                    try {
-                        const deviceObj = device.toObject ? device.toObject({ depopulate: true }) : device;
-                        await atlasConnection.collection('devices').updateOne(
-                            { _id: device._id },
-                            { $set: deviceObj },
-                            { upsert: true }
-                        );
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for device status update ${device._id}: ${atlasErr.message}`);
-                    }
-                } else {
-                    Logger.warn("Atlas not available for device status update - will sync later");
-                }
-            }
-
-            if (req.io) {
-                try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
-            }
-
-            res.json({
-                success: true,
-                message: "تم تحديث حالة الجهاز بنجاح",
-                data: device,
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                message: "الجهاز غير موجود",
+                error: "Device not found",
             });
-        } catch (err) {
+        }
+
+        // Fire-and-forget Atlas write
+        writeToAtlas('devices', 'upsert', device.toObject ? device.toObject() : device, { _id: device._id });
+
+        // Prepare minimal response data
+        const responseData = {
+            _id: device._id,
+            name: device.name,
+            number: device.number,
+            type: device.type,
+            status: device.status,
+            updatedAt: device.updatedAt,
+        };
+
+        // Return response IMMEDIATELY
+        res.json({
+            success: true,
+            message: "تم تحديث حالة الجهاز بنجاح",
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                if (req.io) {
+                    try { req.io.notifyDeviceUpdate("updated", device, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateDeviceStatus:', bgError);
+            }
+        });
+    } catch (err) {
             res.status(400).json({
                 success: false,
                 message: "خطأ في تحديث حالة الجهاز",
@@ -615,38 +622,34 @@ const deviceController = {
                 });
             }
 
-            const deletedDevice = await Device.findOneAndDelete({
-                _id: id,
-                organization: req.user.organization,
-            });
+const deletedDevice = await Device.findOneAndDelete({
+            _id: id,
+            organization: req.user.organization,
+        });
 
-            // Immediate dual-write delete to Atlas
-            if (deletedDevice) {
-                const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                if (atlasConnection) {
-                    try {
-                        await atlasConnection.collection('devices').deleteOne({ _id: deletedDevice._id });
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for device delete ${deletedDevice._id}: ${atlasErr.message}`);
-                    }
-                } else {
-                    Logger.warn("Atlas not available for device delete - will sync later");
-                }
-                try { await createTombstone('devices', deletedDevice._id, req.user.organization, req.user._id); } catch (e) {}
-            }
+            // Fire-and-forget Atlas write for delete
+            writeToAtlas('devices', 'delete', null, { _id: deletedDevice._id });
 
-            if (req.io) {
-                try { req.io.notifyDeviceUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
-            }
-
+            // Return response IMMEDIATELY
             res.json({
                 success: true,
                 message: "تم حذف الجهاز بنجاح",
                 data: {
-                    id: device._id,
-                    name: device.name,
-                    number: device.number,
+                    id: deletedDevice._id,
+                    name: deletedDevice.name,
+                    number: deletedDevice.number,
                 },
+            });
+
+            // All background work in setImmediate - non-blocking
+            setImmediate(async () => {
+                try {
+                    if (req.io) {
+                        try { req.io.notifyDeviceUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+                    }
+                } catch (bgError) {
+                    Logger.error('Background tasks failed for deleteDevice:', bgError);
+                }
             });
         } catch (err) {
             res.status(400).json({
@@ -750,48 +753,25 @@ const deviceController = {
                 });
             }
 
-            const result = await Device.updateMany(
-                {
-                    _id: { $in: deviceIds },
-                    organization: req.user.organization,
-                },
-                updates,
-                { runValidators: true }
-            );
-
-            // Immediate dual-write to Atlas
+const result = await Device.updateMany(
             {
-                const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                if (atlasConnection) {
-                    try {
-                        const atlasIds = deviceIds.map(id => {
-                            try { return new mongoose.Types.ObjectId(id); } catch (e) { return id; }
-                        });
-                        let atlasOrgId = req.user.organization;
-                        try { atlasOrgId = new mongoose.Types.ObjectId(req.user.organization); } catch (e) {}
-                        await atlasConnection.collection('devices').updateMany(
-                            { _id: { $in: atlasIds }, organization: atlasOrgId },
-                            { $set: updates }
-                        );
-                    } catch (atlasErr) {
-                        try {
-                            for (const did of deviceIds) {
-                                const d = await Device.findById(did).lean();
-                                if (d) await atlasConnection.collection('devices').updateOne({ _id: d._id }, { $set: d }, { upsert: true });
-                            }
-                        } catch (e) {
-                            Logger.warn(`Atlas dual-write failed for device bulkUpdate: ${atlasErr.message}`);
-                        }
-                    }
-                } else {
-                    Logger.warn("Atlas not available for device bulkUpdate - will sync later");
-                }
-            }
+                _id: { $in: deviceIds },
+                organization: req.user.organization,
+            },
+            updates,
+            { runValidators: true }
+        );
 
-            if (req.io) {
-                try { req.io.notifyDeviceUpdate("updated", null, req.user.organization); } catch (e) {}
-            }
+            // Fire-and-forget batch Atlas write
+            const devices = await Device.find({ _id: { $in: deviceIds } }).lean();
+            const operations = devices.map(d => ({
+                type: 'upsert',
+                filter: { _id: d._id },
+                data: d,
+            }));
+            writeBatchToAtlas('devices', operations);
 
+            // Return response IMMEDIATELY
             res.json({
                 success: true,
                 message: `تم تحديث ${result.modifiedCount} جهاز بنجاح`,
@@ -799,6 +779,17 @@ const deviceController = {
                     matched: result.matchedCount,
                     modified: result.modifiedCount,
                 },
+            });
+
+            // All background work in setImmediate - non-blocking
+            setImmediate(async () => {
+                try {
+                    if (req.io) {
+                        try { req.io.notifyDeviceUpdate("updated", null, req.user.organization); } catch (e) {}
+                    }
+                } catch (bgError) {
+                    Logger.error('Background tasks failed for bulkUpdateDevices:', bgError);
+                }
             });
         } catch (err) {
             res.status(400).json({

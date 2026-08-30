@@ -4,7 +4,7 @@ import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
 import Cost from "../models/Cost.js";
 import CostCategory from "../models/CostCategory.js";
-import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
 
 // @desc    Get all inventory items
 // @route   GET /api/inventory
@@ -259,40 +259,44 @@ export const createInventoryItem = async (req, res) => {
             );
         }
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('inventoryitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for inventoryItem create ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for inventoryItem create - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('inventoryitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
-        // Emit inventory update on every create (not only low-stock) — لحظية لكل الأجهزة
-        if (req.io) {
-            try {
-                req.io.notifyInventoryUpdate(item, req.user.organization);
-            } catch (ioError) {
-                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                    error: ioError.message,
-                });
-            }
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: item._id,
+            name: item.name,
+            category: item.category,
+            currentStock: item.currentStock,
+            minStock: item.minStock,
+            unit: item.unit,
+            price: item.price,
+            createdAt: item.createdAt,
+        };
 
+        // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
             message: "تم إضافة المنتج بنجاح",
-            data: item,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                // Emit inventory update on every create (not only low-stock) — لحظية لكل الأجهزة
+                if (req.io) {
+                    try {
+                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                    } catch (ioError) {
+                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                            error: ioError.message,
+                        });
+                    }
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for createInventoryItem:', bgError);
+            }
         });
     } catch (error) {
         Logger.error("خطأ في إضافة المنتج", {
@@ -385,40 +389,45 @@ export const updateInventoryItem = async (req, res) => {
 
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('inventoryitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for inventoryItem update ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for inventoryItem update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('inventoryitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
-        // Emit inventory update on every update (لحظية)
-        if (req.io) {
-            try {
-                req.io.notifyInventoryUpdate(item, req.user.organization);
-            } catch (ioError) {
-                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                    error: ioError.message,
-                });
-            }
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: item._id,
+            name: item.name,
+            category: item.category,
+            minStock: item.minStock,
+            maxStock: item.maxStock,
+            unit: item.unit,
+            price: item.price,
+            isActive: item.isActive,
+            updatedAt: item.updatedAt,
+        };
 
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث المنتج بنجاح",
-            data: item,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                // Emit inventory update on every update (لحظية)
+                if (req.io) {
+                    try {
+                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                    } catch (ioError) {
+                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                            error: ioError.message,
+                        });
+                    }
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateInventoryItem:', bgError);
+            }
         });
     } catch (error) {
         Logger.error("خطأ في تحديث المنتج", {
@@ -687,106 +696,107 @@ export const updateStock = async (req, res) => {
 
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('inventoryitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for inventoryItem updateStock ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for inventoryItem updateStock - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('inventoryitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
-        // تسجيل تكلفة الشراء إذا كانت إضافة للمخزون (شراء)
-        if (type === "in" && quantity > 0 && finalPrice) {
-            try {
-                // Find inventory cost category
-                const inventoryCategoryName = "مخزون";
-                const inventoryCategory = await CostCategory.findOne({
-                    name: inventoryCategoryName,
-                    organization: req.user.organization,
-                });
+        // Prepare minimal response data
+        const responseData = {
+            _id: item._id,
+            name: item.name,
+            currentStock: item.currentStock,
+            price: item.price,
+            updatedAt: item.updatedAt,
+        };
 
-                // Only create cost if category exists
-                if (inventoryCategory) {
-                    const totalCost = finalPrice * quantity;
-                    // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
-                    const validatedPaidAmount = Math.min(paidAmount, totalCost);
-
-                    await Cost.create({
-                        category: inventoryCategory._id,
-                        subcategory: item.category,
-                        description: `شراء كمية جديدة: ${item.name}`,
-                        amount: totalCost,
-                        paidAmount: validatedPaidAmount,
-                        currency: "EGP",
-                        date: date || new Date(),
-                        vendor: supplier || item.supplier || "",
-                        createdBy: req.user._id,
-                        organization: req.user.organization,
-                        notes: reason || "",
-                        status: costStatus,
-                    });
-                }
-            } catch (costError) {
-                Logger.error(
-                    "فشل في تسجيل التكلفة تلقائياً عند إضافة كمية للمخزون",
-                    costError
-                );
-            }
-        }
-
-        // Create notification for low stock or out of stock
-        try {
-            // Get user language
-            const userLanguage = req.user.preferences?.language || 'ar';
-            
-            if (item.currentStock === 0) {
-                await NotificationService.createInventoryNotification(
-                    "out_of_stock",
-                    item,
-                    req.user._id,
-                    userLanguage
-                );
-            } else if (item.isLowStock) {
-                await NotificationService.createInventoryNotification(
-                    "low_stock",
-                    item,
-                    req.user._id,
-                    userLanguage
-                );
-            }
-        } catch (notificationError) {
-            Logger.error(
-                "Failed to create inventory notification:",
-                notificationError
-            );
-        }
-
-        // Emit inventory update on every stock change (لحظية — ليس فقط low-stock)
-        if (req.io) {
-            try {
-                req.io.notifyInventoryUpdate(item, req.user.organization);
-            } catch (ioError) {
-                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                    error: ioError.message,
-                });
-            }
-        }
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث المخزون بنجاح",
-            data: item,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                // تسجيل تكلفة الشراء إذا كانت إضافة للمخزون (شراء)
+                if (type === "in" && quantity > 0 && finalPrice) {
+                    try {
+                        // Find inventory cost category
+                        const inventoryCategoryName = "مخزون";
+                        const inventoryCategory = await CostCategory.findOne({
+                            name: inventoryCategoryName,
+                            organization: req.user.organization,
+                        });
+
+                        // Only create cost if category exists
+                        if (inventoryCategory) {
+                            const totalCost = finalPrice * quantity;
+                            // التأكد من أن المبلغ المدفوع لا يتجاوز المبلغ الكلي
+                            const validatedPaidAmount = Math.min(paidAmount, totalCost);
+
+                            await Cost.create({
+                                category: inventoryCategory._id,
+                                subcategory: item.category,
+                                description: `شراء كمية جديدة: ${item.name}`,
+                                amount: totalCost,
+                                paidAmount: validatedPaidAmount,
+                                currency: "EGP",
+                                date: date || new Date(),
+                                vendor: supplier || item.supplier || "",
+                                createdBy: req.user._id,
+                                organization: req.user.organization,
+                                notes: reason || "",
+                                status: costStatus,
+                            });
+                        }
+                    } catch (costError) {
+                        Logger.error(
+                            "فشل في تسجيل التكلفة تلقائياً عند إضافة كمية للمخزون",
+                            costError
+                        );
+                    }
+                }
+
+                // Create notification for low stock or out of stock
+                try {
+                    // Get user language
+                    const userLanguage = req.user.preferences?.language || 'ar';
+                    
+                    if (item.currentStock === 0) {
+                        await NotificationService.createInventoryNotification(
+                            "out_of_stock",
+                            item,
+                            req.user._id,
+                            userLanguage
+                        );
+                    } else if (item.isLowStock) {
+                        await NotificationService.createInventoryNotification(
+                            "low_stock",
+                            item,
+                            req.user._id,
+                            userLanguage
+                        );
+                    }
+                } catch (notificationError) {
+                    Logger.error(
+                        "Failed to create inventory notification:",
+                        notificationError
+                    );
+                }
+
+                // Emit inventory update on every stock change (لحظية — ليس فقط low-stock)
+                if (req.io) {
+                    try {
+                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                    } catch (ioError) {
+                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                            error: ioError.message,
+                        });
+                    }
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateStock:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -918,38 +928,30 @@ export const deleteInventoryItem = async (req, res) => {
         item.isActive = false;
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('inventoryitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for inventoryItem delete ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for inventoryItem delete - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('inventoryitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
-        if (req.io) {
-            try {
-                req.io.notifyInventoryUpdate(item, req.user.organization);
-            } catch (ioError) {
-                Logger.error("فشل في إرسال إشعار تحديث المخزون عند الحذف", {
-                    error: ioError.message,
-                });
-            }
-        }
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف المنتج بنجاح",
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                if (req.io) {
+                    try {
+                        req.io.notifyInventoryUpdate(item, req.user.organization);
+                    } catch (ioError) {
+                        Logger.error("فشل في إرسال إشعار تحديث المخزون عند الحذف", {
+                            error: ioError.message,
+                        });
+                    }
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for deleteInventoryItem:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -1100,36 +1102,40 @@ export const deleteStockMovement = async (req, res) => {
 
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('inventoryitems').updateOne({ _id: item._id }, { $set: itemObj }, { upsert: true });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for inventory deleteMovement ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for inventory deleteMovement - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('inventoryitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
-        // Emit Socket.IO event for inventory update
-        if (req.io) {
-            try {
-                req.io.notifyInventoryUpdate(item);
-            } catch (ioError) {
-                Logger.error("فشل في إرسال إشعار تحديث المخزون", {
-                    error: ioError.message,
-                });
-            }
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: item._id,
+            currentStock: item.currentStock,
+            price: item.price,
+            updatedAt: item.updatedAt,
+        };
 
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف الحركة بنجاح",
-            data: item,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                // Emit Socket.IO event for inventory update
+                if (req.io) {
+                    try {
+                        req.io.notifyInventoryUpdate(item);
+                    } catch (ioError) {
+                        Logger.error("فشل في إرسال إشعار تحديث المخزون", {
+                            error: ioError.message,
+                        });
+                    }
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for deleteStockMovement:', bgError);
+            }
         });
     } catch (error) {
         Logger.error("خطأ في حذف الحركة", error);
@@ -1371,20 +1377,8 @@ export const updateStockMovement = async (req, res) => {
 
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('inventoryitems').updateOne({ _id: item._id }, { $set: itemObj }, { upsert: true });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for inventory updateMovement ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for inventory updateMovement - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('inventoryitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
         // Sync linked warehouse movement for transfer/return movements
         if (movement.reference && (movement.type === "in" || movement.type === "out")) {

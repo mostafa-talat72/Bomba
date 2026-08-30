@@ -1,7 +1,7 @@
 import Table from "../models/Table.js";
 import Order from "../models/Order.js";
 import Bill from "../models/Bill.js";
-import { createTombstone } from "../utils/tombstoneHelper.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
@@ -231,37 +231,38 @@ export const createTable = async (req, res) => {
 
         const table = new Table(tableData);
         await table.save();
-        
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const tableObj = table.toObject ? table.toObject() : table;
-                    await atlasConnection.collection('tables').updateOne(
-                        { _id: table._id },
-                        { $set: tableObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for table create ${table._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for table create - will sync later");
-            }
-        }
 
-        await table.populate("section", "name");
-        await table.populate("createdBy", "name");
+        // Fire-and-forget Atlas write
+        writeToAtlas('tables', 'upsert', table.toObject ? table.toObject() : table, { _id: table._id });
 
-        if (req.io) {
-            try { req.io.notifyTableUpdate("created", table, req.user.organization); } catch (e) {}
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: table._id,
+            number: table.number,
+            section: table.section,
+            status: table.status,
+            createdAt: table.createdAt,
+        };
 
+        // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
             message: "تم إنشاء الطاولة بنجاح",
-            data: table,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await table.populate("section", "name");
+                await table.populate("createdBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyTableUpdate("created", table, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for createTable:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -325,10 +326,7 @@ export const updateTable = async (req, res) => {
             { _id: id, organization: req.user.organization },
             updateData,
             { new: true, runValidators: true }
-        )
-            .populate("section", "name")
-            .populate("createdBy", "name")
-            .populate("updatedBy", "name");
+        );
 
         if (!table) {
             return res.status(404).json({
@@ -337,33 +335,39 @@ export const updateTable = async (req, res) => {
             });
         }
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const tableObj = table.toObject ? table.toObject({ depopulate: true }) : table;
-                    await atlasConnection.collection('tables').updateOne(
-                        { _id: table._id },
-                        { $set: tableObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for table update ${table._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for table update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('tables', 'upsert', table.toObject ? table.toObject() : table, { _id: table._id });
 
-        if (req.io) {
-            try { req.io.notifyTableUpdate("updated", table, req.user.organization); } catch (e) {}
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: table._id,
+            number: table.number,
+            section: table.section,
+            status: table.status,
+            isActive: table.isActive,
+            updatedAt: table.updatedAt,
+        };
 
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث الطاولة بنجاح",
-            data: table,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await table.populate("section", "name");
+                await table.populate("createdBy", "name");
+                await table.populate("updatedBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyTableUpdate("updated", table, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateTable:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -413,29 +417,24 @@ export const deleteTable = async (req, res) => {
             });
         }
 
-        // Immediate dual-write delete to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    await atlasConnection.collection('tables').deleteOne({ _id: deletedTable._id });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for table delete ${deletedTable._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for table delete - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write for delete
+        writeToAtlas('tables', 'delete', null, { _id: deletedTable._id });
 
-        if (req.io) {
-            try { req.io.notifyTableUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
-        }
-
-        try { await createTombstone('tables', id, req.user.organization, req.user._id); } catch(e) {}
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف الطاولة بنجاح",
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                if (req.io) {
+                    try { req.io.notifyTableUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for deleteTable:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({

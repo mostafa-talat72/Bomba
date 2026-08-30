@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import QRCode from "qrcode";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { getInstanceId } from "../utils/instanceId.js";
 
 // Helper function to get item redistribution key
 // Uses menuItem ID if available, falls back to name|price for backward compatibility
@@ -505,7 +506,7 @@ billSchema.pre("validate", function (next) {
     next();
 });
 
-// Generate bill number with full timestamp
+// Generate bill number with instance-specific numbering
 billSchema.pre("save", async function (next) {
     if (this.isNew && !this.billNumber) {
         try {
@@ -517,16 +518,25 @@ billSchema.pre("save", async function (next) {
             const day = String(now.getDate()).padStart(2, "0");
             const dateStr = `${year}${month}${day}`;
 
-            // Find the highest sequence number for today using numeric extraction
-            const todayPrefix = `BILL-${dateStr}-`;
+            // Always use instanceId (set by controller) or call getInstanceId() directly
+            let identifier = this.instanceId;
+            if (!identifier) {
+                identifier = await getInstanceId();
+            }
+            if (!identifier) {
+                identifier = 'UNKNOWN';
+            }
+            const todayPrefix = `BILL-${identifier}-${dateStr}-`;
+
+            // Find the highest sequence number for this identifier and date
             const result = await this.constructor.aggregate([
                 { $match: { billNumber: { $regex: `^${todayPrefix}` } } },
-                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 2] } } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$billNumber", "-"] }, 3] } } } },
                 { $group: { _id: null, maxSeq: { $max: "$seq" } } }
             ]);
             let nextSeq = (result[0]?.maxSeq || 0) + 1;
 
-            this.billNumber = `${todayPrefix}${nextSeq}`;
+            this.billNumber = `${todayPrefix}${String(nextSeq).padStart(3, '0')}`;
         } catch (error) {
             // Fallback bill number
             this.billNumber = `INV-${Date.now()}`;

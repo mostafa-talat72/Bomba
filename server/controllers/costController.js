@@ -1,7 +1,6 @@
 import Cost from "../models/Cost.js";
-import { createTombstone } from "../utils/tombstoneHelper.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
 import Logger from "../middleware/logger.js";
-import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
 // @desc    Get all costs
 // @route   GET /api/costs
@@ -326,36 +325,41 @@ export const createCost = async (req, res) => {
             await cost.save();
         }
 
-        await cost.populate("category", "name icon color");
-        await cost.populate("createdBy", "name");
+        // Fire-and-forget Atlas write
+        writeToAtlas('costs', 'upsert', cost.toObject ? cost.toObject() : cost, { _id: cost._id });
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
-                    await atlasConnection.collection('costs').updateOne(
-                        { _id: cost._id },
-                        { $set: costObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for cost create ${cost._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for cost create - will sync later");
-            }
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: cost._id,
+            category: cost.category,
+            description: cost.description,
+            amount: cost.amount,
+            paidAmount: cost.paidAmount,
+            currency: cost.currency,
+            date: cost.date,
+            status: cost.status,
+            createdAt: cost.createdAt,
+        };
 
-        if (req.io) {
-            try { req.io.notifyCostUpdate("created", cost, req.user.organization); } catch (e) {}
-        }
-
+        // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
             message: "تم إضافة التكلفة بنجاح",
-            data: cost,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await cost.populate("category", "name icon color");
+                await cost.populate("createdBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyCostUpdate("created", cost, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for createCost:', bgError);
+            }
         });
     } catch (error) {
         // Handle validation errors from Mongoose
@@ -456,7 +460,7 @@ export const updateCost = async (req, res) => {
         if (tags) cost.tags = tags;
         if (notes !== undefined) cost.notes = notes;
 
-        // Recalculate next due date if recurring settings changed
+// Recalculate next due date if recurring settings changed
         if (cost.isRecurring && cost.recurringPeriod) {
             cost.calculateNextDueDate();
         }
@@ -464,38 +468,42 @@ export const updateCost = async (req, res) => {
         // Save to trigger pre-save hook for automatic status calculation
         await cost.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
-                    await atlasConnection.collection('costs').updateOne(
-                        { _id: cost._id },
-                        { $set: costObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for cost update ${cost._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for cost update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('costs', 'upsert', cost.toObject ? cost.toObject() : cost, { _id: cost._id });
 
-        // Reload with populated fields
-        await cost.populate("category", "name icon color");
-        await cost.populate("createdBy", "name");
-        await cost.populate("approvedBy", "name");
+        // Prepare minimal response data
+        const responseData = {
+            _id: cost._id,
+            category: cost.category,
+            description: cost.description,
+            amount: cost.amount,
+            paidAmount: cost.paidAmount,
+            currency: cost.currency,
+            date: cost.date,
+            status: cost.status,
+            updatedAt: cost.updatedAt,
+        };
 
-        if (req.io) {
-            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-        }
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث التكلفة بنجاح",
-            data: cost,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await cost.populate("category", "name icon color");
+                await cost.populate("createdBy", "name");
+                await cost.populate("approvedBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateCost:', bgError);
+            }
         });
     } catch (error) {
         // Handle validation errors from Mongoose
@@ -537,34 +545,37 @@ export const approveCost = async (req, res) => {
         cost.status = "paid";
 
         await cost.save();
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
-                    await atlasConnection.collection('costs').updateOne(
-                        { _id: cost._id },
-                        { $set: costObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for cost approve ${cost._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for cost approve - will sync later");
-            }
-        }
-        await cost.populate(["createdBy", "approvedBy"], "name");
 
-        if (req.io) {
-            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('costs', 'upsert', cost.toObject ? cost.toObject() : cost, { _id: cost._id });
 
+        // Prepare minimal response data
+        const responseData = {
+            _id: cost._id,
+            status: cost.status,
+            approvedBy: cost.approvedBy,
+            approvedAt: cost.approvedAt,
+            updatedAt: cost.updatedAt,
+        };
+
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم اعتماد التكلفة بنجاح",
-            data: cost,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await cost.populate(["createdBy", "approvedBy"], "name");
+
+                if (req.io) {
+                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for approveCost:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -600,48 +611,27 @@ export const deleteCost = async (req, res) => {
             });
         }
 
-        // Delete from Local and Atlas
         const costId = cost._id;
-        
-        // Import required modules
-        const syncConfig = (await import('../config/syncConfig.js')).default;
-        const dualDatabaseManager = (await import('../config/dualDatabaseManager.js')).default;
-        const Logger = (await import('../middleware/logger.js')).default;
-        const originalSyncEnabled = syncConfig.enabled;
-        
-        try {
-            syncConfig.enabled = false;
-            Logger.info(`🔒 Sync middleware disabled for direct delete operation`);
-            
-            // حذف من Local
-            await cost.deleteOne();
-            Logger.info(`✓ Deleted cost from Local MongoDB`);
-            
-            // حذف من Atlas
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const atlasCollection = atlasConnection.collection('costs');
-                    const atlasDeleteResult = await atlasCollection.deleteOne({ _id: costId });
-                    Logger.info(`✓ Deleted cost from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
-                } catch (atlasError) {
-                    Logger.warn(`⚠️ Failed to delete cost from Atlas: ${atlasError.message}`);
-                }
-            }
-        } finally {
-            syncConfig.enabled = originalSyncEnabled;
-            Logger.info(`🔓 Sync middleware re-enabled`);
-        }
+        await cost.deleteOne();
 
-        try { await createTombstone('costs', costId, req.user.organization, req.user._id); } catch (e) {}
-        
-        if (req.io) {
-            try { req.io.notifyCostUpdate("deleted", { _id: req.params.id }, req.user.organization); } catch (e) {}
-        }
+        // Fire-and-forget Atlas write for delete
+        writeToAtlas('costs', 'delete', null, { _id: costId });
 
+        // Return response IMMEDIATELY
         res.json({
             success: true,
-            message: "تم حذف التكلفة بنجاح",
+            message: "تم حذف التكلفة بن成功",
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                if (req.io) {
+                    try { req.io.notifyCostUpdate("deleted", { _id: req.params.id }, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for deleteCost:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -696,7 +686,7 @@ export const addCostPayment = async (req, res) => {
             });
         }
 
-        // Add payment using the method from the model
+// Add payment using the method from the model
         // This will automatically update paidAmount, remainingAmount, and status
         // Pass user ID and reference as notes
         await cost.addPayment(
@@ -706,39 +696,39 @@ export const addCostPayment = async (req, res) => {
             reference || null
         );
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
-                    await atlasConnection.collection('costs').updateOne(
-                        { _id: cost._id },
-                        { $set: costObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for cost addPayment ${cost._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for cost addPayment - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('costs', 'upsert', cost.toObject ? cost.toObject() : cost, { _id: cost._id });
 
-        // Reload with populated fields
-        await cost.populate("category", "name icon color");
-        await cost.populate("createdBy", "name");
-        await cost.populate("amountHistory.addedBy", "name");
-        await cost.populate("paymentHistory.paidBy", "name");
+        // Prepare minimal response data
+        const responseData = {
+            _id: cost._id,
+            paidAmount: cost.paidAmount,
+            remainingAmount: cost.remainingAmount,
+            status: cost.status,
+            updatedAt: cost.updatedAt,
+        };
 
-        if (req.io) {
-            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-        }
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم إضافة الدفعة بنجاح",
-            data: cost,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await cost.populate("category", "name icon color");
+                await cost.populate("createdBy", "name");
+                await cost.populate("amountHistory.addedBy", "name");
+                await cost.populate("paymentHistory.paidBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for addCostPayment:', bgError);
+            }
         });
     } catch (error) {
         // Handle specific errors from addPayment method
@@ -784,46 +774,45 @@ export const increaseCostAmount = async (req, res) => {
             });
         }
 
-        // Increase amount using the method from the model
+// Increase amount using the method from the model
         await cost.increaseAmount(
             additionalAmount,
             req.user._id,
             reason || null
         );
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const costObj = cost.toObject ? cost.toObject({ depopulate: true }) : cost;
-                    await atlasConnection.collection('costs').updateOne(
-                        { _id: cost._id },
-                        { $set: costObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for cost increaseAmount ${cost._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for cost increaseAmount - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('costs', 'upsert', cost.toObject ? cost.toObject() : cost, { _id: cost._id });
 
-        // Reload with populated fields
-        await cost.populate("category", "name icon color");
-        await cost.populate("createdBy", "name");
-        await cost.populate("amountHistory.addedBy", "name");
-        await cost.populate("paymentHistory.paidBy", "name");
+        // Prepare minimal response data
+        const responseData = {
+            _id: cost._id,
+            amount: cost.amount,
+            amountHistory: cost.amountHistory,
+            updatedAt: cost.updatedAt,
+        };
 
-        if (req.io) {
-            try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
-        }
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
-            message: "تم زيادة المبلغ بنجاح",
-            data: cost,
+            message: "تم زيادة المبلغ بن成功",
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await cost.populate("category", "name icon color");
+                await cost.populate("createdBy", "name");
+                await cost.populate("amountHistory.addedBy", "name");
+                await cost.populate("paymentHistory.paidBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyCostUpdate("updated", cost, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for increaseCostAmount:', bgError);
+            }
         });
     } catch (error) {
         if (error.message.includes('Additional amount')) {

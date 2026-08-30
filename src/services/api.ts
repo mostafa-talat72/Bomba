@@ -1,4 +1,5 @@
 import { API_BASE_URL as RESOLVED_API_BASE_URL, isDesktopApp } from '../utils/apiBase';
+import { getInstanceId } from '../utils/instanceId';
 
 // Desktop app: use the page origin (127.0.0.1) - Chromium cannot reach
 // 'localhost' (resolves to ::1) when the server binds 127.0.0.1
@@ -458,6 +459,7 @@ class ApiClient {
       const config: RequestInit = {
         headers: {
           'Content-Type': 'application/json',
+          'x-instance-id': getInstanceId(),
           ...options.headers,
         },
         ...options,
@@ -590,6 +592,7 @@ class ApiClient {
       const config: RequestInit = {
         headers: {
           'Content-Type': 'application/json',
+          'x-instance-id': getInstanceId(),
           ...options.headers,
         },
         ...options,
@@ -1599,6 +1602,28 @@ class ApiClient {
     const response = await this.request<Bill>(`/billing/${id}/partial-payment-aggregated`, {
       method: 'POST',
       body: JSON.stringify(paymentData),
+    });
+    if (response.success && response.data) {
+      response.data = this.normalizeData(response.data);
+    }
+    return response;
+  }
+
+  /**
+   * Update bill items aggregated (unified bill edit)
+   */
+  async updateBillAggregatedItems(id: string, data: {
+    items: Array<{
+      menuItem?: string;
+      name?: string;
+      price?: number;
+      quantity: number;
+      notes?: string | null;
+    }>;
+  }): Promise<ApiResponse<Bill>> {
+    const response = await this.request<Bill>(`/billing/${id}/items-aggregated`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     });
     if (response.success && response.data) {
       response.data = this.normalizeData(response.data);

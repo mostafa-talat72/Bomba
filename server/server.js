@@ -27,6 +27,8 @@ import applySyncToAllModels from "./config/applySync.js";
 import syncWorker from "./services/sync/syncWorker.js";
 import syncQueueManager from "./services/sync/syncQueueManager.js";
 import syncMonitor from "./services/sync/syncMonitor.js";
+import lanSyncService from "./services/sync/lanSyncService.js";
+import lanDiscovery from "./services/sync/lanDiscovery.js";
 
 // Bidirectional sync imports
 import OriginTracker from "./services/sync/originTracker.js";
@@ -186,31 +188,39 @@ mongoose.connection.once("open", async () => {
         Logger.error("❌ Error in automatic bill fix:", error.message);
     }
     
-    // Initialize sync system
-    if (syncConfig.enabled) {
+    // Initialize sync system (Atlas and/or LAN)
+    const shouldInitSync = syncConfig.enabled || syncConfig.lanSync?.enabled;
+    if (shouldInitSync) {
         Logger.info("🔄 Initializing sync system...");
         
-        // Apply sync middleware to all models
+        // Apply sync middleware to all models (works for Atlas, LAN, or both)
         applySyncToAllModels();
-        
-        // Load persisted queue if exists
-        try {
-            const loadedCount = await syncQueueManager.loadFromDisk();
-            if (loadedCount > 0) {
-                Logger.info(`📂 Loaded ${loadedCount} operations from persisted queue`);
+
+        // Atlas-specific queue/worker (only if Atlas sync enabled)
+        if (syncConfig.enabled) {
+            // Load persisted queue if exists
+            try {
+                const loadedCount = await syncQueueManager.loadFromDisk();
+                if (loadedCount > 0) {
+                    Logger.info(`📂 Loaded ${loadedCount} operations from persisted queue`);
+                }
+            } catch (error) {
+                Logger.error("❌ Failed to load persisted queue:", error.message);
             }
-        } catch (error) {
-            Logger.error("❌ Failed to load persisted queue:", error.message);
+            
+            // Start sync worker
+            syncWorker.start();
+            
+            // Log initial status
+            syncMonitor.logStatus();
+            
+            Logger.info("✅ Sync system initialized successfully");
+        } else {
+            Logger.info("✅ Sync middleware applied for LAN sync");
         }
         
-        // Start sync worker
-        syncWorker.start();
-        
-        // Log initial status
-        syncMonitor.logStatus();
-        
-        Logger.info("✅ Sync system initialized successfully");
-        
+        // Atlas-specific monitors and full sync (only if Atlas enabled)
+        if (syncConfig.enabled) {
         // بدء مراقب المزامنة اللحظية
         // المراقب يطبع فقط عند حدوث تغييرات في المزامنة
         // checkInterval: كم مرة يفحص التغييرات (بالميلي ثانية)
@@ -334,6 +344,7 @@ mongoose.connection.once("open", async () => {
                 }
             }, 3000); // Wait 3 seconds for Atlas to connect
         }
+        } // end if (syncConfig.enabled) for Atlas monitors
     } else {
         Logger.info("ℹ️  Sync system is disabled");
     }
@@ -474,13 +485,33 @@ async function initializeBidirectionalSync() {
 
 const app = express();
 const server = createServer(app);
+const isLanOrigin = (origin) => {
+    if (!origin) return true;
+    try {
+        const url = new URL(origin);
+        const host = url.hostname;
+        // Allow localhost, private LAN ranges, and vercel
+        if (host === "localhost" || host === "127.0.0.1") return true;
+        if (/^192\.168\.\d+\.\d+$/.test(host)) return true;
+        if (/^10\.\d+\.\d+\.\d+$/.test(host)) return true;
+        if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host)) return true;
+    } catch {}
+    return false;
+};
+
 const io = new Server(server, {
     cors: {
-        origin: [
-            "http://localhost:3000",
-            "https://localhost:3000",
-            process.env.FRONTEND_URL || "http://localhost:3000",
-        ],
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+            if (isLanOrigin(origin)) return callback(null, true);
+            const allowed = [
+                "http://localhost:3000",
+                "https://localhost:3000",
+                process.env.FRONTEND_URL || "http://localhost:3000",
+            ];
+            if (allowed.includes(origin) || /\.vercel\.app$/.test(origin)) return callback(null, true);
+            return callback(null, true); // Allow all for LAN sync namespace (device auth handles security)
+        },
         methods: ["GET", "POST", "PUT", "DELETE"],
         credentials: true,
     },
@@ -506,6 +537,8 @@ io.use((socket, next) => {
 // إعدادات CORS مبسطة
 const corsOptions = {
     origin: function (origin, callback) {
+        // السماح بالـ LAN دائما (للأجهزة على نفس الشبكة)
+        if (isLanOrigin(origin)) return callback(null, true);
         // السماح بجميع المنشآت في وضع التطوير
         if (process.env.NODE_ENV === "development") {
             return callback(null, true);
@@ -597,6 +630,25 @@ app.get("/health", (req, res) => {
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || "development",
     });
+});
+
+// LAN sync health (public, for peer discovery over LAN)
+app.get("/api/lan/health", (req, res) => {
+    try {
+        const lanStatus = global.lanSyncService ? global.lanSyncService.getStatus() : { enabled: !!syncConfig.lanSync?.enabled, isRunning: false };
+        const discStatus = global.lanDiscovery ? global.lanDiscovery.getStatus() : null;
+        res.json({ success: true, lan: lanStatus, discovery: discStatus, timestamp: new Date().toISOString() });
+    } catch (e) {
+        res.json({ success: true, lan: { enabled: !!syncConfig.lanSync?.enabled }, error: e.message });
+    }
+});
+app.get("/api/lan/status", (req, res) => {
+    try {
+        const s = global.lanSyncService ? global.lanSyncService.getStatus() : { enabled: !!syncConfig.lanSync?.enabled };
+        res.json({ success: true, ...s });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 // Request logging
@@ -716,7 +768,7 @@ app.use("/api/orders", (req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
     Logger.info(`Server started on port ${PORT}`, {
         environment: process.env.NODE_ENV,
         port: PORT,
@@ -741,6 +793,31 @@ server.listen(PORT, () => {
         initializeScheduler();
         Logger.info("✅ Scheduler initialized in development mode");
     }
+
+    // Initialize LAN sync (B+C) after server is listening
+    if (syncConfig.lanSync?.enabled) {
+        try {
+            Logger.info("🔄 Initializing LAN sync (B+C)...");
+            // Wait a bit for DB to be ready
+            const waitForDB = async () => {
+                for (let i = 0; i < 10; i++) {
+                    if (mongoose.connection.readyState === 1) return true;
+                    await new Promise(r => setTimeout(r, 500));
+                }
+                return false;
+            };
+            const dbReady = await waitForDB();
+            if (!dbReady) Logger.warn("⚠️  LAN sync: DB not ready, starting anyway");
+            await lanSyncService.start(server, io);
+            global.lanSyncService = lanSyncService;
+            global.lanDiscovery = lanDiscovery;
+            Logger.info("✅ LAN sync initialized");
+        } catch (e) {
+            Logger.error("❌ LAN sync failed to start:", e.message);
+        }
+    } else {
+        Logger.info("ℹ️  LAN sync disabled (set LAN_SYNC_ENABLED=true to enable)");
+    }
 });
 
 // Graceful shutdown
@@ -752,6 +829,21 @@ const gracefulShutdown = async (signal) => {
         syncStatusMonitor.stop();
     }
     
+    // Stop LAN sync if enabled
+    if (syncConfig.lanSync?.enabled) {
+        try {
+            Logger.info("🛑 Stopping LAN sync...");
+            if (global.lanSyncService) await global.lanSyncService.stop();
+            else {
+                const { default: lanSvc } = await import("./services/sync/lanSyncService.js");
+                await lanSvc.stop();
+            }
+            Logger.info("✅ LAN sync stopped");
+        } catch (e) {
+            Logger.error("❌ Error stopping LAN sync:", e.message);
+        }
+    }
+
     // Stop bidirectional sync components if enabled
     if (syncConfig.enabled && syncConfig.bidirectionalSync.enabled) {
         Logger.info("🛑 Stopping bidirectional sync...");

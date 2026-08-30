@@ -1,9 +1,14 @@
 import mongoose from "mongoose";
 import Device from "./Device.js";
 import { applySyncMiddleware } from "../middleware/sync/syncMiddleware.js";
+import { getInstanceId } from "../utils/instanceId.js";
 
 const sessionSchema = new mongoose.Schema(
     {
+        sessionNumber: {
+            type: String,
+            required: false,
+        },
         deviceNumber: {
             type: String,
             required: [true, "رقم الجهاز مطلوب"],
@@ -118,6 +123,7 @@ sessionSchema.index({ startTime: -1 });
 sessionSchema.index({ bill: 1 }); // للربط مع الفواتير
 sessionSchema.index({ table: 1 }); // للربط مع الطاولات
 sessionSchema.index({ organization: 1, createdAt: -1 }); // للتقارير
+sessionSchema.index({ sessionNumber: 1 }, { unique: true, sparse: true });
 
 // Middleware to initialize controllersHistory on new session
 sessionSchema.pre("save", function (next) {
@@ -127,6 +133,40 @@ sessionSchema.pre("save", function (next) {
             from: this.startTime,
             to: null,
         });
+    }
+    next();
+});
+
+// Generate sessionNumber for new sessions
+sessionSchema.pre("save", async function (next) {
+    if (this.isNew && !this.sessionNumber) {
+        try {
+            const now = new Date();
+            const year = now.getFullYear().toString().slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, "0");
+            const day = String(now.getDate()).padStart(2, "0");
+            const dateStr = `${year}${month}${day}`;
+
+            // Always use instanceId (set by controller) or call getInstanceId() directly
+            let identifier = this.instanceId;
+            if (!identifier) {
+                identifier = await getInstanceId();
+            }
+            if (!identifier) {
+                identifier = 'UNKNOWN';
+            }
+            const prefix = `SES-${identifier}-${dateStr}-`;
+
+            const result = await this.constructor.aggregate([
+                { $match: { sessionNumber: { $regex: `^${prefix}` } } },
+                { $addFields: { seq: { $toInt: { $arrayElemAt: [{ $split: ["$sessionNumber", "-"] }, 3] } } } },
+                { $group: { _id: null, maxSeq: { $max: "$seq" } } }
+            ]);
+            const nextSeq = (result[0]?.maxSeq || 0) + 1;
+            this.sessionNumber = `${prefix}${String(nextSeq).padStart(3, '0')}`;
+        } catch (error) {
+            this.sessionNumber = `SES-${Date.now()}`;
+        }
     }
     next();
 });

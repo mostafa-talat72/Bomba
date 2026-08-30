@@ -10,6 +10,8 @@ import dualDatabaseManager from "../config/dualDatabaseManager.js";
 import { getUserLocale, getUserLanguage } from "../utils/localeHelper.js";
 import { createTombstone, createTombstones } from "../utils/tombstoneHelper.js";
 import { getCustomerNameForDevice, getTableName, getSessionBillNote, getNewSessionBillNote, t } from "../utils/translations.js";
+import { getInstanceId } from "../utils/instanceId.js";
+import { writeToAtlas, writeBatchToAtlas } from "../utils/atlasWrite.js";
 
 /**
  * Helper function to translate text based on user language
@@ -649,6 +651,13 @@ const sessionController = {
                 organization: req.user.organization,
             });
 
+            // Get instanceId from header (web) or generate (desktop)
+            let instanceId = req.headers['x-instance-id'];
+            if (!instanceId) {
+                instanceId = await getInstanceId();
+            }
+            session.instanceId = instanceId;
+
             // البحث عن فاتورة موجودة للطاولة أو إنشاء فاتورة جديدة
             let bill = null;
             try {
@@ -717,6 +726,7 @@ const sessionController = {
                         status: "draft", // فاتورة مسودة حتى تنتهي الجلسة
                         createdBy: req.user._id,
                         organization: req.user.organization,
+                        instanceId: instanceId,
                     };
 
                     // إضافة table فقط إذا تم تحديده صراحة
@@ -743,7 +753,9 @@ const sessionController = {
 
                 // Save session with bill reference
                 await session.save();
-                await session.populate(["createdBy", "bill"], "name");
+
+                // Fire-and-forget Atlas write for session
+                writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
 
                 // Add session to bill (تأكد من عدم التكرار)
                 if (!bill.sessions.includes(session._id)) {
@@ -753,62 +765,9 @@ const sessionController = {
                     Logger.info(`ℹ️ الجلسة موجودة بالفعل في الفاتورة ${bill.billNumber}`);
                 }
                 await bill.save();
-                await bill.populate(["sessions", "createdBy"], "name");
 
-                // Immediate dual-write to Atlas for session and bill
-                {
-                    const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                    if (atlasConnection) {
-                        try {
-                            const sessionObj = session.toObject ? session.toObject({ depopulate: true }) : session;
-                            await atlasConnection.collection('sessions').updateOne(
-                                { _id: session._id },
-                                { $set: sessionObj },
-                                { upsert: true }
-                            );
-                        } catch (atlasErr) {
-                            Logger.warn(`Atlas dual-write failed for session create ${session._id}: ${atlasErr.message}`);
-                        }
-                        try {
-                            const billObj = bill.toObject ? bill.toObject({ depopulate: true }) : bill;
-                            await atlasConnection.collection('bills').updateOne(
-                                { _id: bill._id },
-                                { $set: billObj },
-                                { upsert: true }
-                            );
-                        } catch (atlasErr) {
-                            Logger.warn(`Atlas dual-write failed for bill from session create ${bill._id}: ${atlasErr.message}`);
-                        }
-                    } else {
-                        Logger.warn("Atlas not available for session create - will sync later");
-                    }
-                }
-
-                // Create notification for session start
-                try {
-                    // Get user language and organization currency
-                    const userLanguage = req.user.preferences?.language || 'ar';
-                    const organization = await Organization.findById(req.user.organization).select('currency');
-                    const currency = organization?.currency || 'EGP';
-                    
-                    await NotificationService.createSessionNotification(
-                        "started",
-                        session,
-                        req.user._id,
-                        userLanguage,
-                        currency
-                    );
-                } catch (notificationError) {
-                    Logger.error(
-                        "Failed to create session start notification:",
-                        notificationError
-                    );
-                }
-
-                // Verify the link was created successfully
-                if (!session.bill) {
-                    Logger.error("❌ Session bill reference not set properly");
-                }
+                // Fire-and-forget Atlas write for bill
+                writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
             } catch (billError) {
                 Logger.error("❌ خطأ في إنشاء الفاتورة التلقائية:", billError);
                 // Save session without bill if bill creation fails
@@ -816,34 +775,88 @@ const sessionController = {
                 await session.populate("createdBy", "name");
             }
 
-            // Update device status to active
-            await Device.findOneAndUpdate(
-                { _id: deviceId, organization: req.user.organization, status: { $ne: "active" } },
-                { status: "active" }
-            );
+            // Prepare minimal response data immediately
+                const responseSession = {
+                    _id: session._id,
+                    deviceNumber: session.deviceNumber,
+                    deviceName: session.deviceName,
+                    deviceType: session.deviceType,
+                    status: session.status,
+                    startTime: session.startTime,
+                    customerName: session.customerName,
+                    controllers: session.controllers,
+                    table: session.table,
+                    bill: session.bill,
+                    createdAt: session.createdAt,
+                };
 
-            if (req.io) {
-                try { req.io.notifySessionUpdate("started", session, req.user.organization); } catch (e) {}
-                try { if (bill) req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch (e) {}
-                try { req.io.notifyTableStatusUpdate({ tableId: table || null }, req.user.organization); } catch (e) {}
-            }
+                const responseBill = bill
+                    ? {
+                          _id: bill._id,
+                          billNumber: bill.billNumber,
+                          customerName: bill.customerName,
+                          status: bill.status,
+                          billType: bill.billType,
+                      }
+                    : null;
 
-            res.status(201).json({
-                success: true,
-                message: "تم بدء الجلسة وإنشاء الفاتورة بنجاح",
-                data: {
-                    session,
-                    bill: bill
-                        ? {
-                              id: bill._id,
-                              billNumber: bill.billNumber,
-                              customerName: bill.customerName,
-                              status: bill.status,
-                              billType: bill.billType,
-                          }
-                        : null,
-                },
-            });
+                // Return response IMMEDIATELY after local save
+                res.status(201).json({
+                    success: true,
+                    message: "تم بدء الجلسة وإنشاء الفاتورة بنجاح",
+                    data: {
+                        session: responseSession,
+                        bill: responseBill,
+                    },
+                });
+
+                // All background work in setImmediate - non-blocking
+                setImmediate(async () => {
+                    try {
+                        // Populate for socket/notification
+                        await session.populate(["createdBy", "bill"], "name");
+                        await bill.populate(["sessions", "createdBy"], "name");
+
+                        // Create notification for session start
+                        try {
+                            const userLanguage = req.user.preferences?.language || 'ar';
+                            const organization = await Organization.findById(req.user.organization).select('currency');
+                            const currency = organization?.currency || 'EGP';
+                            
+                            await NotificationService.createSessionNotification(
+                                "started",
+                                session,
+                                req.user._id,
+                                userLanguage,
+                                currency
+                            );
+                        } catch (notificationError) {
+                            Logger.error(
+                                "Failed to create session start notification:",
+                                notificationError
+                            );
+                        }
+
+                        // Update device status to active
+                        await Device.findOneAndUpdate(
+                            { _id: deviceId, organization: req.user.organization, status: { $ne: "active" } },
+                            { status: "active" }
+                        );
+
+                        // Verify the link was created successfully
+                        if (!session.bill) {
+                            Logger.error("❌ Session bill reference not set properly");
+                        }
+
+                        if (req.io) {
+                            try { req.io.notifySessionUpdate("started", session, req.user.organization); } catch (e) {}
+                            try { if (bill) req.io.notifyBillUpdate("updated", bill, req.user.organization); } catch (e) {}
+                            try { req.io.notifyTableStatusUpdate({ tableId: table || null }, req.user.organization); } catch (e) {}
+                        }
+                    } catch (bgError) {
+                        Logger.error('Background tasks failed for createSession:', bgError);
+                    }
+                });
         } catch (err) {
             Logger.error("createSession error:", err);
             res.status(400).json({
@@ -895,41 +908,50 @@ const sessionController = {
 
             // Save the session with updated controllersHistory
             await session.save();
-            // Immediate dual-write to Atlas
-            {
-                const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                if (atlasConnection) {
-                    try {
-                        const sessionObj = session.toObject ? session.toObject({ depopulate: true }) : session;
-                        await atlasConnection.collection('sessions').updateOne(
-                            { _id: session._id },
-                            { $set: sessionObj },
-                            { upsert: true }
-                        );
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for session updateControllers ${session._id}: ${atlasErr.message}`);
-                    }
-                } else {
-                    Logger.warn("Atlas not available for session updateControllers - will sync later");
-                }
-            }
-            await session.populate(["createdBy", "updatedBy"], "name");
 
-            // Log the controllersHistory for debugging
-            Logger.info(`Controllers updated for session ${sessionId}:`, {
-                newControllers: controllers,
-                historyLength: session.controllersHistory.length,
-                latestPeriod: session.controllersHistory[session.controllersHistory.length - 1]
-            });
+            // Fire-and-forget Atlas write
+            writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
 
-            if (req.io) {
-                try { req.io.notifySessionUpdate("controllers-changed", session, req.user.organization); } catch (e) {}
-            }
+            // Prepare minimal response data
+            const responseData = {
+                _id: session._id,
+                deviceNumber: session.deviceNumber,
+                deviceName: session.deviceName,
+                deviceType: session.deviceType,
+                status: session.status,
+                controllers: session.controllers,
+                controllersHistory: session.controllersHistory,
+                startTime: session.startTime,
+                totalCost: session.totalCost,
+                finalCost: session.finalCost,
+                updatedAt: session.updatedAt,
+            };
 
+            // Return response IMMEDIATELY
             res.json({
                 success: true,
                 message: "تم تحديث عدد الدراعات بنجاح",
-                data: session,
+                data: responseData,
+            });
+
+            // All background work in setImmediate - non-blocking
+            setImmediate(async () => {
+                try {
+                    await session.populate(["createdBy", "updatedBy"], "name");
+
+                    // Log the controllersHistory for debugging
+                    Logger.info(`Controllers updated for session ${sessionId}:`, {
+                        newControllers: controllers,
+                        historyLength: session.controllersHistory.length,
+                        latestPeriod: session.controllersHistory[session.controllersHistory.length - 1]
+                    });
+
+                    if (req.io) {
+                        try { req.io.notifySessionUpdate("controllers-changed", session, req.user.organization); } catch (e) {}
+                    }
+                } catch (bgError) {
+                    Logger.error('Background tasks failed for updateControllers:', bgError);
+                }
             });
         } catch (err) {
             Logger.error("updateControllers error:", err);
@@ -1341,13 +1363,11 @@ const sessionController = {
             // حساب التكلفة الحالية باستخدام calculateCurrentCost
             const currentCost = await session.calculateCurrentCost();
             
-            // تحديث totalCost و finalCost بدون حفظ (للعرض فقط)
+            // تحديث totalCost و finalCost
             session.totalCost = currentCost;
             session.finalCost = currentCost - (session.discount || 0);
 
             // تحديث الفاتورة المرتبطة إذا وجدت
-            // calculateSubtotal يحفظ داخلياً — لا نستدعي save مرة ثانية
-            // مع retry عند VersionError (طلبات متزامنة لجلسات متعددة على نفس الفاتورة)
             let billUpdated = false;
             if (session.bill) {
                 const billId = session.bill._id || session.bill;
@@ -1357,6 +1377,9 @@ const sessionController = {
                         if (bill) {
                             await bill.calculateSubtotal();
                             billUpdated = true;
+                            
+                            // Fire-and-forget Atlas write for bill
+                            writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
                         }
                     } catch (billError) {
                         if (attempt < 2 && (billError?.name === 'VersionError' || String(billError?.message || '').includes('No matching document'))) {
@@ -1369,23 +1392,32 @@ const sessionController = {
                 }
             }
 
+            // Save session and fire-and-forget Atlas write
+            await session.save();
+            writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
+
+            // Prepare minimal response data
+            const responseData = {
+                sessionId: session._id,
+                currentCost: session.finalCost,
+                totalCost: session.totalCost,
+                billUpdated: billUpdated,
+                duration: session.startTime
+                    ? Math.floor(
+                          (new Date() - new Date(session.startTime)) /
+                              (1000 * 60)
+                      )
+                    : 0,
+                controllersHistory: session.controllersHistory,
+            };
+
+            // Return response IMMEDIATELY
             res.json({
                 success: true,
                 message: "تم تحديث تكلفة الجلسة بنجاح",
-                data: {
-                    sessionId: session._id,
-                    currentCost: session.finalCost,
-                    totalCost: session.totalCost,
-                    billUpdated: billUpdated,
-                    duration: session.startTime
-                        ? Math.floor(
-                              (new Date() - new Date(session.startTime)) /
-                                  (1000 * 60)
-                          )
-                        : 0,
-                    controllersHistory: session.controllersHistory,
-                },
+                data: responseData,
             });
+
         } catch (err) {
             Logger.error("❌ updateSessionCost error:", err);
             res.status(500).json({
@@ -1542,7 +1574,10 @@ const sessionController = {
                 finalCost: session.finalCost
             });
             
-            // Reload session to get updated data
+            // Fire-and-forget Atlas write for session
+            writeToAtlas('sessions', 'upsert', session.toObject ? session.toObject() : session, { _id: session._id });
+
+            // Reload session to get updated data (for response)
             const updatedSession = await Session.findById(session._id).populate(["createdBy", "updatedBy", "bill"], "name");
             if (!updatedSession) {
                 Logger.error("❌ Failed to reload session after save");
@@ -1552,33 +1587,6 @@ const sessionController = {
                     error: "Failed to reload session",
                 });
             }
-
-            // Create notification for session end
-            try {
-                // Get user language and organization currency
-                const userLanguage = req.user.preferences?.language || 'ar';
-                const organization = await Organization.findById(req.user.organization).select('currency');
-                const currency = organization?.currency || 'EGP';
-                
-                await NotificationService.createSessionNotification(
-                    "ended",
-                    session,
-                    req.user._id,
-                    userLanguage,
-                    currency
-                );
-            } catch (notificationError) {
-                Logger.error(
-                    "Failed to create session end notification:",
-                    notificationError
-                );
-            }
-
-            // Update device status to available
-            await Device.findOneAndUpdate(
-                { _id: session.deviceId },
-                { status: "available" }
-            );
 
             // Update existing bill with final cost OR create new bill if missing
             let updatedBill = null;
@@ -1628,6 +1636,9 @@ const sessionController = {
                         await updatedBill.save();
                         await updatedBill.calculateSubtotal();
                         await updatedBill.populate(["sessions", "createdBy"], "name");
+
+                        // Fire-and-forget Atlas write for bill
+                        writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
 
                         Logger.info(`✓ Bill updated successfully: ${updatedBill.billNumber}, Customer: ${updatedBill.customerName}`);
                     } else {
@@ -1690,6 +1701,7 @@ const sessionController = {
                         status: "partial",
                         createdBy: req.user._id,
                         organization: req.user.organization,
+                        deviceNumber: updatedSession.deviceNumber, // Pass deviceNumber for bill number generation
                     };
 
                     updatedBill = await Bill.create(billData);
@@ -1700,6 +1712,9 @@ const sessionController = {
                     
                     await updatedBill.populate(["sessions", "createdBy"], "name");
                     
+                    // Fire-and-forget Atlas write for new bill
+                    writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
+
                     Logger.info("✅ Created new bill for session:", {
                         sessionId: updatedSession._id,
                         billId: updatedBill._id,
@@ -1712,71 +1727,86 @@ const sessionController = {
                 }
             }
 
-            // Immediate dual-write to Atlas for session and bill
-            {
-                const atlasConnection = dualDatabaseManager.getAtlasConnection();
-                if (atlasConnection) {
-                    try {
-                        const sessionObj = updatedSession.toObject ? updatedSession.toObject({ depopulate: true }) : updatedSession;
-                        await atlasConnection.collection('sessions').updateOne(
-                            { _id: updatedSession._id },
-                            { $set: sessionObj },
-                            { upsert: true }
-                        );
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for session end ${updatedSession._id}: ${atlasErr.message}`);
-                    }
-                    try {
-                        if (updatedBill) {
-                            const billObj = updatedBill.toObject ? updatedBill.toObject({ depopulate: true }) : updatedBill;
-                            await atlasConnection.collection('bills').updateOne(
-                                { _id: updatedBill._id },
-                                { $set: billObj },
-                                { upsert: true }
-                            );
-                        }
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for bill from session end ${updatedBill?._id}: ${atlasErr.message}`);
-                    }
-                    try {
-                        // Also sync device status change
-                        const deviceDoc = await Device.findById(session.deviceId).lean();
-                        if (deviceDoc) {
-                            await atlasConnection.collection('devices').updateOne(
-                                { _id: deviceDoc._id },
-                                { $set: deviceDoc },
-                                { upsert: true }
-                            );
-                        }
-                    } catch (atlasErr) {
-                        Logger.warn(`Atlas dual-write failed for device from session end ${session.deviceId}: ${atlasErr.message}`);
-                    }
-                } else {
-                    Logger.warn("Atlas not available for session end - will sync later");
+            // Update device status to available
+            await Device.findOneAndUpdate(
+                { _id: session.deviceId },
+                { status: "available" }
+            );
+
+            // Fire-and-forget Atlas write for device
+            writeToAtlas('devices', 'upsert', 
+                { status: "available" }, 
+                { _id: session.deviceId }
+            );
+
+            // Prepare minimal response data immediately
+            const responseSession = {
+                _id: updatedSession._id,
+                deviceNumber: updatedSession.deviceNumber,
+                deviceName: updatedSession.deviceName,
+                deviceType: updatedSession.deviceType,
+                status: updatedSession.status,
+                startTime: updatedSession.startTime,
+                endTime: updatedSession.endTime,
+                totalCost: updatedSession.totalCost,
+                finalCost: updatedSession.finalCost,
+                discount: updatedSession.discount,
+                customerName: updatedSession.customerName,
+                table: updatedSession.table,
+                bill: updatedSession.bill,
+            };
+
+            const responseBill = updatedBill
+                ? {
+                    _id: updatedBill._id,
+                    billNumber: updatedBill.billNumber,
+                    customerName: updatedBill.customerName,
+                    total: updatedBill.total,
+                    status: updatedBill.status,
                 }
-            }
+                : null;
 
-            if (req.io) {
-                try { req.io.notifySessionUpdate("ended", updatedSession, req.user.organization); } catch (e) {}
-                try { if (updatedBill) req.io.notifyBillUpdate("updated", updatedBill, req.user.organization); } catch (e) {}
-                try { req.io.notifyTableStatusUpdate({ tableId: updatedSession.table || null }, req.user.organization); } catch (e) {}
-            }
-
+            // Return response IMMEDIATELY
             res.json({
                 success: true,
                 message: "تم إنهاء الجلسة وتحديث الفاتورة بنجاح",
                 data: {
-                    session: updatedSession,
-                    bill: updatedBill
-                        ? {
-                              id: updatedBill._id,
-                              billNumber: updatedBill.billNumber,
-                              customerName: updatedBill.customerName,
-                              total: updatedBill.total,
-                              status: updatedBill.status,
-                          }
-                        : null,
+                    session: responseSession,
+                    bill: responseBill,
                 },
+            });
+
+            // All background work in setImmediate - non-blocking
+            setImmediate(async () => {
+                try {
+                    // Create notification for session end
+                    try {
+                        const userLanguage = req.user.preferences?.language || 'ar';
+                        const organization = await Organization.findById(req.user.organization).select('currency');
+                        const currency = organization?.currency || 'EGP';
+                        
+                        await NotificationService.createSessionNotification(
+                            "ended",
+                            updatedSession,
+                            req.user._id,
+                            userLanguage,
+                            currency
+                        );
+                    } catch (notificationError) {
+                        Logger.error(
+                            "Failed to create session end notification:",
+                            notificationError
+                        );
+                    }
+
+                    if (req.io) {
+                        try { req.io.notifySessionUpdate("ended", updatedSession, req.user.organization); } catch (e) {}
+                        try { if (updatedBill) req.io.notifyBillUpdate("updated", updatedBill, req.user.organization); } catch (e) {}
+                        try { req.io.notifyTableStatusUpdate({ tableId: updatedSession.table || null }, req.user.organization); } catch (e) {}
+                    }
+                } catch (bgError) {
+                    Logger.error('Background tasks failed for endSession:', bgError);
+                }
             });
         } catch (err) {
             Logger.error("❌ endSession error:", err);
@@ -2077,6 +2107,7 @@ const sessionController = {
                     status: "draft",
                     createdBy: req.user._id,
                     organization: req.user.organization,
+                    deviceNumber: session.deviceNumber, // Pass deviceNumber for bill number generation
                 });
 
                 // نقل الدفعات الجزئية المرتبطة بهذه الجلسة إلى الفاتورة الجديدة
@@ -3867,13 +3898,12 @@ const sessionController = {
                 message: "خطأ في تعديل أوقات الجلسة",
                 error: err.message,
             });
-        }
+}
     },
-};
 
-// Helper function to merge two bills
-async function mergeBills(sourceBill, targetBill, session, userId) {
-    try {
+    // Helper function to merge two bills
+    mergeBills: async function(sourceBill, targetBill, session, userId) {
+        try {
         Logger.info(`🔄 Starting bill merge:`, {
             sourceBillId: sourceBill._id,
             sourceBillNumber: sourceBill.billNumber,
@@ -3951,7 +3981,8 @@ async function mergeBills(sourceBill, targetBill, session, userId) {
     } catch (error) {
         Logger.error("❌ Bill merge failed:", error);
         throw error;
-    }
+        }
+    },
     // Helper function to properly delete a bill (similar to billingController.deleteBill)
     deleteBillProperly: async (bill) => {
         try {
@@ -4078,11 +4109,13 @@ async function mergeBills(sourceBill, targetBill, session, userId) {
             Logger.info(`✅ Successfully deleted bill ${bill.billNumber} properly`);
             
         } catch (error) {
+            // Ensure sync is re-enabled even on error
+            syncConfig.enabled = originalSyncEnabled;
             Logger.error(`❌ Error in deleteBillProperly for bill ${bill.billNumber}:`, error);
             throw error;
         }
-    }
+    },
 
-}
+};
 
 export default sessionController;

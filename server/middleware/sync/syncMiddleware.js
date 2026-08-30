@@ -10,19 +10,16 @@ import OriginTracker from "../../services/sync/originTracker.js";
  * Enhanced with origin tracking for bidirectional sync support
  */
 
-// Create a singleton instance of OriginTracker
-let originTracker = null;
-
-/**
- * Get or create the OriginTracker instance
- * @returns {OriginTracker}
- */
+// Use shared singleton OriginTracker (also used by LAN sync and bidirectional sync)
 function getOriginTracker() {
-    if (!originTracker) {
-        originTracker = new OriginTracker();
-    }
-    return originTracker;
+    if (global.__originTracker) return global.__originTracker;
+    // Fallback: create via singleton accessor
+    try {
+        if (OriginTracker.getInstance) return OriginTracker.getInstance();
+    } catch {}
+    return new OriginTracker();
 }
+let originTracker = getOriginTracker();
 
 /**
  * Check if a collection should be synced
@@ -41,6 +38,24 @@ function shouldSync(collectionName) {
     }
 
     return true;
+}
+
+function shouldLanSync(collectionName) {
+    if (!syncConfig.lanSync?.enabled) return false;
+    if (syncConfig.excludedCollections.includes(collectionName)) return false;
+    if (syncConfig.lanSync?.excludedCollections?.includes(collectionName)) return false;
+    return true;
+}
+
+function broadcastToLan(operation) {
+    if (!shouldLanSync(operation.collection)) return;
+    // Non-blocking, lazy import to avoid circular deps
+    import("../../services/sync/lanSyncService.js")
+        .then((mod) => {
+            const svc = mod.default;
+            if (svc?.handleLocalOperation) svc.handleLocalOperation(operation).catch(() => {});
+        })
+        .catch(() => {});
 }
 
 /**
@@ -140,7 +155,9 @@ function postSaveHook(doc, next) {
         // 🔍 DEBUG: Log that middleware was triggered
         Logger.info(`🔍 [MIDDLEWARE] postSaveHook triggered for ${collectionName} (${doc._id})`);
 
-        if (!shouldSync(collectionName)) {
+        const needsAtlas = shouldSync(collectionName);
+        const needsLan = shouldLanSync(collectionName);
+        if (!needsAtlas && !needsLan) {
             Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
@@ -167,11 +184,12 @@ function postSaveHook(doc, next) {
             instanceId: tracker.instanceId,
         };
 
-        syncQueueManager.enqueue(operation);
-        
-        // 🔍 DEBUG: Confirm operation was queued
-        Logger.info(`✅ [MIDDLEWARE] Operation queued: insert on ${collectionName} (${doc._id})`);
-        Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
+        if (needsAtlas) {
+            syncQueueManager.enqueue(operation);
+            Logger.info(`✅ [MIDDLEWARE] Operation queued: insert on ${collectionName} (${doc._id})`);
+            Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
+        }
+        if (needsLan) broadcastToLan(operation);
     } catch (error) {
         // Log error but don't block the operation
         Logger.error("❌ Sync middleware error (post-save):", error.message);
@@ -191,7 +209,9 @@ function postUpdateHook(result, next) {
         // 🔍 DEBUG: Log that middleware was triggered
         Logger.info(`🔍 [MIDDLEWARE] postUpdateHook triggered for ${collectionName}`);
 
-        if (!shouldSync(collectionName)) {
+        const needsAtlas = shouldSync(collectionName);
+        const needsLan = shouldLanSync(collectionName);
+        if (!needsAtlas && !needsLan) {
             Logger.info(`⏭️  [MIDDLEWARE] Skipping sync for ${collectionName} (not in sync list)`);
             return next();
         }
@@ -233,11 +253,12 @@ function postUpdateHook(result, next) {
             instanceId: tracker.instanceId,
         };
 
-        syncQueueManager.enqueue(operation);
-        
-        // 🔍 DEBUG: Confirm operation was queued
-        Logger.info(`✅ [MIDDLEWARE] Operation queued: update on ${collectionName}`);
-        Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
+        if (needsAtlas) {
+            syncQueueManager.enqueue(operation);
+            Logger.info(`✅ [MIDDLEWARE] Operation queued: update on ${collectionName}`);
+            Logger.info(`📊 [MIDDLEWARE] Queue size now: ${syncQueueManager.size()}`);
+        }
+        if (needsLan) broadcastToLan(operation);
     } catch (error) {
         Logger.error("❌ Sync middleware error (post-update):", error.message);
     }
@@ -257,9 +278,9 @@ function postFindOneAndUpdateHook(doc, next) {
 
         const collectionName = this.model.collection.name;
 
-        if (!shouldSync(collectionName)) {
-            return next();
-        }
+        const needsAtlas = shouldSync(collectionName);
+        const needsLan = shouldLanSync(collectionName);
+        if (!needsAtlas && !needsLan) return next();
 
         const tracker = getOriginTracker();
 
@@ -280,7 +301,8 @@ function postFindOneAndUpdateHook(doc, next) {
             instanceId: tracker.instanceId,
         };
 
-        syncQueueManager.enqueue(operation);
+        if (needsAtlas) syncQueueManager.enqueue(operation);
+        if (needsLan) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-findOneAndUpdate):",
@@ -299,9 +321,9 @@ function postRemoveHook(doc, next) {
     try {
         const collectionName = this.collection.name;
 
-        if (!shouldSync(collectionName)) {
-            return next();
-        }
+        const needsAtlas = shouldSync(collectionName);
+        const needsLan = shouldLanSync(collectionName);
+        if (!needsAtlas && !needsLan) return next();
 
         const tracker = getOriginTracker();
 
@@ -318,7 +340,8 @@ function postRemoveHook(doc, next) {
             instanceId: tracker.instanceId,
         };
 
-        syncQueueManager.enqueue(operation);
+        if (needsAtlas) syncQueueManager.enqueue(operation);
+        if (needsLan) broadcastToLan(operation);
     } catch (error) {
         Logger.error("❌ Sync middleware error (post-remove):", error.message);
     }
@@ -338,9 +361,9 @@ function postFindOneAndDeleteHook(doc, next) {
 
         const collectionName = this.model.collection.name;
 
-        if (!shouldSync(collectionName)) {
-            return next();
-        }
+        const needsAtlas = shouldSync(collectionName);
+        const needsLan = shouldLanSync(collectionName);
+        if (!needsAtlas && !needsLan) return next();
 
         const tracker = getOriginTracker();
 
@@ -357,7 +380,8 @@ function postFindOneAndDeleteHook(doc, next) {
             instanceId: tracker.instanceId,
         };
 
-        syncQueueManager.enqueue(operation);
+        if (needsAtlas) syncQueueManager.enqueue(operation);
+        if (needsLan) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-findOneAndDelete):",
@@ -376,9 +400,9 @@ function postDeleteOneHook(result, next) {
     try {
         const collectionName = this.model.collection.name;
 
-        if (!shouldSync(collectionName)) {
-            return next();
-        }
+        const needsAtlas = shouldSync(collectionName);
+        const needsLan = shouldLanSync(collectionName);
+        if (!needsAtlas && !needsLan) return next();
 
         const tracker = getOriginTracker();
 
@@ -400,7 +424,8 @@ function postDeleteOneHook(result, next) {
             instanceId: tracker.instanceId,
         };
 
-        syncQueueManager.enqueue(operation);
+        if (needsAtlas) syncQueueManager.enqueue(operation);
+        if (needsLan) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-deleteOne):",
@@ -419,9 +444,9 @@ function postDeleteManyHook(result, next) {
     try {
         const collectionName = this.model.collection.name;
 
-        if (!shouldSync(collectionName)) {
-            return next();
-        }
+        const needsAtlas = shouldSync(collectionName);
+        const needsLan = shouldLanSync(collectionName);
+        if (!needsAtlas && !needsLan) return next();
 
         const tracker = getOriginTracker();
 
@@ -443,7 +468,8 @@ function postDeleteManyHook(result, next) {
             instanceId: tracker.instanceId,
         };
 
-        syncQueueManager.enqueue(operation);
+        if (needsAtlas) syncQueueManager.enqueue(operation);
+        if (needsLan) broadcastToLan(operation);
     } catch (error) {
         Logger.error(
             "❌ Sync middleware error (post-deleteMany):",
@@ -460,8 +486,8 @@ function postDeleteManyHook(result, next) {
  * @param {string} collectionName - Name of the collection (optional, for logging)
  */
 export function applySyncMiddleware(schema, collectionName = 'Unknown') {
-    if (!syncConfig.enabled) {
-        Logger.info(`ℹ️  [MIDDLEWARE] Sync disabled, not applying to ${collectionName}`);
+    if (!syncConfig.enabled && !syncConfig.lanSync?.enabled) {
+        Logger.info(`ℹ️  [MIDDLEWARE] Sync disabled (Atlas and LAN off), not applying to ${collectionName}`);
         return;
     }
 

@@ -71,6 +71,27 @@ class OriginTracker {
         }
     }
 
+    markLanChange(documentId) {
+        try {
+            if (!documentId) return;
+            const id = documentId.toString();
+            this.recentChanges.set(id, { origin: 'lan', timestamp: Date.now() });
+        } catch (error) {
+            console.error('[OriginTracker] Error marking LAN change:', error);
+        }
+    }
+
+    isLanChange(documentId) {
+        try {
+            if (!documentId) return false;
+            const id = documentId.toString();
+            const change = this.recentChanges.get(id);
+            return change && change.origin === 'lan';
+        } catch {
+            return false;
+        }
+    }
+
     /**
      * Mark a change as originating from Atlas
      * Requirements: 7.1, 9.2, 9.3
@@ -155,7 +176,7 @@ class OriginTracker {
                 return false; // Allow sync on error
             }
 
-            if (!origin || (origin !== 'local' && origin !== 'atlas')) {
+            if (!origin || (origin !== 'local' && origin !== 'atlas' && origin !== 'lan')) {
                 console.warn('[OriginTracker] Invalid origin:', origin);
                 return false; // Allow sync on invalid origin
             }
@@ -263,6 +284,16 @@ class OriginTracker {
     }
 
     /**
+     * Get shared singleton instance
+     */
+    static getInstance() {
+        if (!global.__originTracker) {
+            global.__originTracker = new OriginTracker();
+        }
+        return global.__originTracker;
+    }
+
+    /**
      * Clear all tracking data
      */
     clear() {
@@ -278,4 +309,7 @@ class OriginTracker {
     }
 }
 
+// Singleton instance for shared usage
+const singleton = OriginTracker.getInstance();
+export { singleton as originTrackerSingleton };
 export default OriginTracker;

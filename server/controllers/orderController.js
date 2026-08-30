@@ -8,7 +8,8 @@ import NotificationService from "../services/notificationService.js";
 import { createTombstone } from "../utils/tombstoneHelper.js";
 import mongoose from "mongoose";
 import performanceMetrics from "../utils/performanceMetrics.js";
-import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import { getInstanceId } from "../utils/instanceId.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
 import {
     convertQuantity,
     calculateTotalInventoryNeeded,
@@ -695,7 +696,7 @@ export const calculateOrderRequirements = async (req, res) => {
 // @access  Private
 export const createOrder = async (req, res) => {
     try {
-        const { table, customerName, customerPhone, items, notes, bill, status } =
+        const { table, customerName, customerPhone, items, notes, bill, status, session } =
             req.body;
 
         // Validate items
@@ -809,6 +810,41 @@ export const createOrder = async (req, res) => {
             }
         }
 
+        // Determine deviceNumber from session or table's active session
+        let deviceNumber = 'UNKNOWN';
+        
+        if (session) {
+            // If session ID is provided, get deviceNumber from session
+            const Session = (await import("../models/Session.js")).default;
+            const sessionDoc = await Session.findById(session).select('deviceNumber deviceId');
+            if (sessionDoc && sessionDoc.deviceNumber) {
+                deviceNumber = sessionDoc.deviceNumber;
+            } else if (sessionDoc && sessionDoc.deviceId) {
+                const Device = (await import("../models/Device.js")).default;
+                const deviceDoc = await Device.findById(sessionDoc.deviceId).select('number');
+                if (deviceDoc && deviceDoc.number) {
+                    deviceNumber = deviceDoc.number;
+                }
+            }
+        } else if (table) {
+            // If from table without session, try to get from table's active session
+            const Session = (await import("../models/Session.js")).default;
+            const activeSession = await Session.findOne({
+                table: table,
+                status: 'active',
+                organization: req.user.organization
+            }).select('deviceNumber deviceId');
+            if (activeSession && activeSession.deviceNumber) {
+                deviceNumber = activeSession.deviceNumber;
+            } else if (activeSession && activeSession.deviceId) {
+                const Device = (await import("../models/Device.js")).default;
+                const deviceDoc = await Device.findById(activeSession.deviceId).select('number');
+                if (deviceDoc && deviceDoc.number) {
+                    deviceNumber = deviceDoc.number;
+                }
+            }
+        }
+
         // Create order
         const orderData = {
             ...req.body,
@@ -829,13 +865,15 @@ export const createOrder = async (req, res) => {
         const totalCost = await calculateOrderTotalCost(processedItems);
         orderData.totalCost = totalCost;
 
-        // Generate order number and retry if duplicate
-        const today = new Date();
-        const year = today.getFullYear().toString().slice(-2);
-        const month = String(today.getMonth() + 1).padStart(2, "0");
-        const day = String(today.getDate()).padStart(2, "0");
-        const dateStr = `${year}${month}${day}`;
-        const prefix = `ORD-${dateStr}-`;
+        // Pass deviceNumber as temporary property for order number generation
+        orderData.deviceNumber = deviceNumber;
+
+        // Get instanceId from header (web) or generate (desktop)
+        let instanceId = req.headers['x-instance-id'];
+        if (!instanceId) {
+            instanceId = await getInstanceId();
+        }
+        orderData.instanceId = instanceId;
 
         // البحث عن فاتورة غير مدفوعة للطاولة أو إنشاء فاتورة جديدة
         let billToUse = bill;
@@ -919,153 +957,121 @@ export const createOrder = async (req, res) => {
             orderData.bill = billToUse;
         }
 
-        // Find a unique order number (keep incrementing until free)
-        const lastOrder = await Order.findOne({ orderNumber: { $regex: `^${prefix}` } })
-            .sort({ orderNumber: -1 })
-            .select('orderNumber');
-        let seq = lastOrder ? parseInt(lastOrder.orderNumber.split('-')[2]) + 1 : 1;
-
         let order;
         while (true) {
-            const orderNum = `${prefix}${seq}`;
-            const existing = await Order.findOne({ orderNumber: orderNum }).select('_id');
-            if (!existing) {
-                try {
-                    const orderDataCopy = { ...orderData, orderNumber: orderNum };
-                    order = new Order(orderDataCopy);
-                    await order.save();
-                    break;
-                } catch (err) {
-                    if (err.code !== 11000) throw err;
-                }
-            }
-            seq++;
-        }
-
-        // Immediate dual-write to Atlas for order create
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const orderObj = order.toObject ? order.toObject() : order;
-                    await atlasConnection.collection('orders').updateOne(
-                        { _id: order._id },
-                        { $set: orderObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for order create ${order._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for order create - will sync later");
+            try {
+                const orderDataCopy = { ...orderData };
+                order = new Order(orderDataCopy);
+                await order.save();
+                break;
+            } catch (err) {
+                if (err.code !== 11000) throw err;
+                // Duplicate orderNumber - retry (pre-save hook will generate new one)
             }
         }
 
-        // خصم المخزون فوراً عند إنشاء الطلب
-        try {
-            let billNumber = null;
-            if (order.bill) {
-                const Bill = (await import("../models/Bill.js")).default;
-                const billDoc = await Bill.findById(order.bill).select('billNumber');
-                if (billDoc) {
-                    billNumber = billDoc.billNumber;
-                }
-            }
-            await deductInventoryForOrder(order, req.user._id, billNumber);
-            Logger.info(`✓ تم خصم المخزون للطلب ${order.orderNumber}`);
+        // Fire-and-forget Atlas write
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
 
-            if (req.io) {
-                req.io.notifyInventoryUpdate({
-                    type: 'deducted',
-                    orderId: order._id,
-                    orderNumber: order.orderNumber,
-                    timestamp: new Date()
-                }, req.user.organization);
-            } else {
-                console.error('❌ req.io is not available in createOrder');
-            }
-        } catch (inventoryError) {
-            Logger.error('خطأ في خصم المخزون:', inventoryError);
-            // لا نفشل الطلب، لكن نسجل الخطأ
+        // Prepare minimal response data immediately
+        const responseData = {
+            _id: order._id,
+            orderNumber: order.orderNumber,
+            status: order.status,
+            items: order.items,
+            subtotal: order.subtotal,
+            finalAmount: order.finalAmount,
+            table: order.table,
+            organization: order.organization,
+            createdAt: order.createdAt,
+        };
+
+        // Populate table for response if needed
+        if (table) {
+            const tableDoc = await Table.findById(table).select('number name').lean();
+            responseData.table = tableDoc;
         }
 
-        // Populate only essential fields for response - OPTIMIZED
-        const populatedOrder = await Order.findById(order._id)
-            .select('orderNumber status items subtotal finalAmount table organization createdAt')
-            .populate("table", "number name")
-            .lean(); // استخدام lean() لتحسين الأداء بنسبة 40%
-
-        // إرسال الاستجابة فوراً قبل العمليات الإضافية
+        // Return response IMMEDIATELY after local save
         res.status(201).json({
             success: true,
             message: "تم إنشاء الطلب بنجاح",
-            data: populatedOrder,
+            data: responseData,
         });
 
-        // تنفيذ العمليات الإضافية في الخلفية (non-blocking)
+        // All background work in setImmediate - non-blocking
         setImmediate(async () => {
-            // Add order to bill if bill exists
-            if (billToUse) {
-                try {
-                    const billDoc = await Bill.findById(billToUse);
-                    if (billDoc) {
-                        // التأكد من أن الطلب غير موجود بالفعل في الفاتورة
-                        if (!billDoc.orders.includes(order._id)) {
-                            Logger.info(`✓ إضافة الطلب ${order.orderNumber} إلى الفاتورة ${billDoc.billNumber}`);
-                            billDoc.orders.push(order._id);
-                            
-                            // Mark orders as modified to trigger pre-save hook
-                            billDoc.markModified('orders');
-                            
-                            // حفظ الفاتورة - سيُشغل pre-save hook لتحديث itemPayments
-                            await billDoc.save();
-                            Logger.info(`✓ تم حفظ الفاتورة وتحديث itemPayments`);
-                        } else {
-                            Logger.info(`⚠️ الطلب ${order.orderNumber} موجود بالفعل في الفاتورة ${billDoc.billNumber}`);
-                        }
-
-                        // Recalculate bill totals
-                        await billDoc.calculateSubtotal();
-                    }
-                } catch (error) {
-                    Logger.error('خطأ في إضافة الطلب للفاتورة:', error);
-                }
-            }
-
-            // Create notification for new order
             try {
-                // Get user language
-                const userLanguage = req.user.preferences?.language || 'ar';
-                
-                await NotificationService.createOrderNotification(
-                    "created",
-                    populatedOrder,
-                    req.user._id,
-                    userLanguage
-                );
-            } catch (notificationError) {
-                //
-            }
-
-            // Emit Socket.IO event for order creation
-            if (req.io) {
-                try {
-                    req.io.notifyOrderUpdate("created", populatedOrder, req.user.organization);
-                } catch (socketError) {
-                    Logger.error('فشل إرسال حدث Socket.IO', socketError);
+                // 1. Deduct inventory
+                let billNumber = null;
+                if (order.bill) {
+                    const Bill = (await import("../models/Bill.js")).default;
+                    const billDoc = await Bill.findById(order.bill).select('billNumber');
+                    if (billDoc) billNumber = billDoc.billNumber;
                 }
-            }
+                await deductInventoryForOrder(order, req.user._id, billNumber);
+                Logger.info(`✓ تم خصم المخزون للطلب ${order.orderNumber}`);
 
-            // Emit table status update event if table is linked
-            if (table && req.io) {
-                try {
-                    req.io.emit('table-status-update', { 
-                        tableId: table, 
-                        status: 'occupied' 
-                    });
-                } catch (socketError) {
-                    Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
+                if (req.io) {
+                    req.io.notifyInventoryUpdate({
+                        type: 'deducted',
+                        orderId: order._id,
+                        orderNumber: order.orderNumber,
+                        timestamp: new Date()
+                    }, req.user.organization);
                 }
+
+                // 2. Add order to bill if bill exists
+                if (billToUse) {
+                    try {
+                        const billDoc = await Bill.findById(billToUse);
+                        if (billDoc) {
+                            if (!billDoc.orders.includes(order._id)) {
+                                Logger.info(`✓ إضافة الطلب ${order.orderNumber} إلى الفاتورة ${billDoc.billNumber}`);
+                                billDoc.orders.push(order._id);
+                                billDoc.markModified('orders');
+                                await billDoc.save();
+                                Logger.info(`✓ تم حفظ الفاتورة وتحديث itemPayments`);
+                            } else {
+                                Logger.info(`⚠️ الطلب ${order.orderNumber} موجود بالفعل في الفاتورة ${billDoc.billNumber}`);
+                            }
+                            await billDoc.calculateSubtotal();
+                        }
+                    } catch (error) {
+                        Logger.error('خطأ في إضافة الطلب للفاتورة:', error);
+                    }
+                }
+
+                // 3. Create notification for new order
+                try {
+                    const userLanguage = req.user.preferences?.language || 'ar';
+                    await NotificationService.createOrderNotification(
+                        "created",
+                        responseData,
+                        req.user._id,
+                        userLanguage
+                    );
+                } catch (notificationError) {
+                    // Ignore notification errors
+                }
+
+                // 4. Emit Socket.IO events
+                if (req.io) {
+                    try {
+                        req.io.notifyOrderUpdate("created", responseData, req.user.organization);
+                    } catch (socketError) {
+                        Logger.error('فشل إرسال حدث Socket.IO', socketError);
+                    }
+                    if (table) {
+                        try {
+                            req.io.emit('table-status-update', { tableId: table, status: 'occupied' });
+                        } catch (socketError) {
+                            Logger.error('فشل إرسال حدث تحديث حالة الطاولة', socketError);
+                        }
+                    }
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for createOrder:', bgError);
             }
         });
     } catch (error) {
@@ -1380,24 +1386,8 @@ export const updateOrder = async (req, res) => {
 
         await order.save();
 
-        // Immediate dual-write to Atlas for order update
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const orderObj = order.toObject ? order.toObject() : order;
-                    await atlasConnection.collection('orders').updateOne(
-                        { _id: order._id },
-                        { $set: orderObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for order update ${order._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for order update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('orders', 'upsert', order.toObject ? order.toObject() : order, { _id: order._id });
 
         // Clean up invalid itemPayments and recalculate payments for this order's bill (if exists)
         if (order.bill) {
@@ -1914,16 +1904,13 @@ export const deleteOrder = async (req, res) => {
             await order.deleteOne();
             Logger.info(`✓ Deleted order ${orderNumber} from Local MongoDB`);
             
-            // حذف من Atlas مباشرة
+            // حذف من Atlas مباشرة (non-blocking)
             const atlasConnection = dualDatabaseManager.getAtlasConnection();
             if (atlasConnection) {
-                try {
-                    const atlasOrdersCollection = atlasConnection.collection('orders');
-                    const atlasDeleteResult = await atlasOrdersCollection.deleteOne({ _id: orderId });
-                    Logger.info(`✓ Deleted order ${orderNumber} from Atlas (deletedCount: ${atlasDeleteResult.deletedCount})`);
-                } catch (atlasError) {
+                const atlasOrdersCollection = atlasConnection.collection('orders');
+                atlasOrdersCollection.deleteOne({ _id: orderId }).catch(atlasError => {
                     Logger.warn(`⚠️ Failed to delete order from Atlas: ${atlasError.message}`);
-                }
+                });
             } else {
                 Logger.warn(`⚠️ Atlas connection not available - order will be synced later`);
             }

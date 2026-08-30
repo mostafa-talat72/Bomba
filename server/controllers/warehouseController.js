@@ -4,7 +4,7 @@ import Cost from "../models/Cost.js";
 import CostCategory from "../models/CostCategory.js";
 import Logger from "../middleware/logger.js";
 import NotificationService from "../services/notificationService.js";
-import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
 
 export const getWarehouseItems = async (req, res) => {
     try {
@@ -107,30 +107,34 @@ export const createWarehouseItem = async (req, res) => {
             Logger.error("فشل في تسجيل التكلفة تلقائياً للمخزن الرئيسي", costError);
         }
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('warehouseitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouseItem create ${item._id}: ${atlasErr.message}`);
+        // Fire-and-forget Atlas write
+        writeToAtlas('warehouseitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
+
+        // Prepare minimal response data
+        const responseData = {
+            _id: item._id,
+            name: item.name,
+            category: item.category,
+            currentStock: item.currentStock,
+            minStock: item.minStock,
+            unit: item.unit,
+            price: item.price,
+            createdAt: item.createdAt,
+        };
+
+        // Return response IMMEDIATELY
+        res.status(201).json({ success: true, message: "تم إضافة المنتج للمخزن الرئيسي بنجاح", data: responseData });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                if (item.isLowStock && req.io) {
+                    try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
                 }
-            } else {
-                Logger.warn("Atlas not available for warehouseItem create - will sync later");
+            } catch (bgError) {
+                Logger.error('Background tasks failed for createWarehouseItem:', bgError);
             }
-        }
-
-        if (item.isLowStock && req.io) {
-            try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
-        }
-
-        res.status(201).json({ success: true, message: "تم إضافة المنتج للمخزن الرئيسي بنجاح", data: item });
+        });
     } catch (error) {
         Logger.error("خطأ في إضافة المنتج للمخزن الرئيسي", { error: error.message, stack: error.stack });
 
@@ -179,30 +183,35 @@ export const updateWarehouseItem = async (req, res) => {
 
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('warehouseitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouseItem update ${item._id}: ${atlasErr.message}`);
+        // Fire-and-forget Atlas write
+        writeToAtlas('warehouseitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
+
+        // Prepare minimal response data
+        const responseData = {
+            _id: item._id,
+            name: item.name,
+            category: item.category,
+            minStock: item.minStock,
+            maxStock: item.maxStock,
+            unit: item.unit,
+            price: item.price,
+            isActive: item.isActive,
+            updatedAt: item.updatedAt,
+        };
+
+        // Return response IMMEDIATELY
+        res.json({ success: true, message: "تم تحديث المنتج في المخزن الرئيسي بنجاح", data: responseData });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                if (item.isLowStock && req.io) {
+                    try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
                 }
-            } else {
-                Logger.warn("Atlas not available for warehouseItem update - will sync later");
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateWarehouseItem:', bgError);
             }
-        }
-
-        if (item.isLowStock && req.io) {
-            try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
-        }
-
-        res.json({ success: true, message: "تم تحديث المنتج في المخزن الرئيسي بنجاح", data: item });
+        });
     } catch (error) {
         Logger.error("خطأ في تحديث المنتج في المخزن الرئيسي", { error: error.message });
 
@@ -284,24 +293,8 @@ export const updateWarehouseStock = async (req, res) => {
             Logger.error("Failed to create notification:", notificationError);
         }
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('warehouseitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouseItem stock update ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for warehouseItem stock update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('warehouseitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
         if (req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
@@ -364,26 +357,20 @@ export const deleteWarehouseItem = async (req, res) => {
         item.isActive = false;
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('warehouseitems').updateOne(
-                        { _id: item._id },
-                        { $set: itemObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouseItem delete ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for warehouseItem delete - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('warehouseitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
+        // Return response IMMEDIATELY
         res.json({ success: true, message: "تم حذف المنتج من المخزن الرئيسي بنجاح" });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                // Background cleanup if needed
+            } catch (bgError) {
+                Logger.error('Background tasks failed for deleteWarehouseItem:', bgError);
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: "خطأ في حذف المنتج", error: error.message });
     }
@@ -472,27 +459,10 @@ export const transferToInventory = async (req, res) => {
             }
         }
 
-        // Immediate dual-write to Atlas for both items
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const wObj = warehouseItem.toObject ? warehouseItem.toObject() : warehouseItem;
-                    await atlasConnection.collection('warehouseitems').updateOne({ _id: warehouseItem._id }, { $set: wObj }, { upsert: true });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouse transfer warehouseItem ${warehouseItem._id}: ${atlasErr.message}`);
-                }
-                try {
-                    if (inventoryItem) {
-                        const invObj = inventoryItem.toObject ? inventoryItem.toObject() : inventoryItem;
-                        await atlasConnection.collection('inventoryitems').updateOne({ _id: inventoryItem._id }, { $set: invObj }, { upsert: true });
-                    }
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouse transfer inventoryItem ${inventoryItem?._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for warehouse transfer - will sync later");
-            }
+        // Fire-and-forget Atlas writes for both items
+        writeToAtlas('warehouseitems', 'upsert', warehouseItem.toObject ? warehouseItem.toObject() : warehouseItem, { _id: warehouseItem._id });
+        if (inventoryItem) {
+            writeToAtlas('inventoryitems', 'upsert', inventoryItem.toObject ? inventoryItem.toObject() : inventoryItem, { _id: inventoryItem._id });
         }
 
         // Emit socket events
@@ -561,26 +531,9 @@ export const returnToWarehouse = async (req, res) => {
             date ? new Date(date) : null
         );
 
-        // Immediate dual-write to Atlas for both items
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const invObj = inventoryItem.toObject ? inventoryItem.toObject() : inventoryItem;
-                    await atlasConnection.collection('inventoryitems').updateOne({ _id: inventoryItem._id }, { $set: invObj }, { upsert: true });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for return inventoryItem ${inventoryItem._id}: ${atlasErr.message}`);
-                }
-                try {
-                    const wObj = warehouseItem.toObject ? warehouseItem.toObject() : warehouseItem;
-                    await atlasConnection.collection('warehouseitems').updateOne({ _id: warehouseItem._id }, { $set: wObj }, { upsert: true });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for return warehouseItem ${warehouseItem._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for return to warehouse - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas writes for both items
+        writeToAtlas('inventoryitems', 'upsert', inventoryItem.toObject ? inventoryItem.toObject() : inventoryItem, { _id: inventoryItem._id });
+        writeToAtlas('warehouseitems', 'upsert', warehouseItem.toObject ? warehouseItem.toObject() : warehouseItem, { _id: warehouseItem._id });
 
         if (req.io) {
             try {
@@ -679,20 +632,8 @@ export const deleteWarehouseStockMovement = async (req, res) => {
 
         await item.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('warehouseitems').updateOne({ _id: item._id }, { $set: itemObj }, { upsert: true });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouseItem deleteMovement ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for warehouse deleteMovement - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('warehouseitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
         if (req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }
@@ -828,20 +769,8 @@ export const updateWarehouseStockMovement = async (req, res) => {
             }
         }
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const itemObj = item.toObject ? item.toObject() : item;
-                    await atlasConnection.collection('warehouseitems').updateOne({ _id: item._id }, { $set: itemObj }, { upsert: true });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for warehouse updateMovement ${item._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for warehouse updateMovement - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('warehouseitems', 'upsert', item.toObject ? item.toObject() : item, { _id: item._id });
 
         if (req.io) {
             try { req.io.notifyInventoryUpdate(item); } catch (ioError) { Logger.error("فشل في إرسال إشعار", ioError); }

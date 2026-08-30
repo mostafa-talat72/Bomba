@@ -1,5 +1,6 @@
 import Organization from "../models/Organization.js";
 import User from "../models/User.js";
+import Logger from "../middleware/logger.js";
 import organizationWebsiteService from "../services/organizationWebsiteService.js";
 import { getUserLocale } from "../utils/localeHelper.js";
 

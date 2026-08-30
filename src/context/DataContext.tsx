@@ -1552,6 +1552,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         fetchCosts(),
         fetchDevices(),
         fetchMenuItems(),
+        fetchAvailableMenuItems(),
+        fetchMenuSections(),
+        fetchMenuCategories(),
         fetchInventoryItems(),
         fetchUsers(),
         fetchSettings(),
@@ -1648,6 +1651,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     on('menu-update', 'menu', () => {
       debouncedFetch('menuItems', () => fetchersRef.current.fetchMenuItems());
       debouncedFetch('availableMenu', () => fetchersRef.current.fetchAvailableMenuItems());
+      debouncedFetch('menuSections', () => fetchersRef.current.fetchMenuSections());
+      debouncedFetch('menuCategories', () => fetchersRef.current.fetchMenuCategories());
     });
     on('cost-update', 'costs', () => fetchersRef.current.fetchCosts());
     on('device-update', 'devices', () => fetchersRef.current.fetchDevices());

@@ -39,6 +39,7 @@ import type { LocalOrderItem } from '../components/tables/tableHelpers';
 import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
 import { playWarnBeep, playDangerBeep, isSoundEnabled, setSoundEnabled } from '../utils/sound';
+import BillItemsEditModal from '../components/tables/BillItemsEditModal';
 
 // ─── Memoized sub-components مستخرجة إلى src/components/tables/ ─────────────
 
@@ -247,6 +248,10 @@ const Tables: React.FC = () => {
   const [showDailyReportModal, setShowDailyReportModal] = useState(false);
   const [isPrintingReport, setIsPrintingReport] = useState(false);
 
+  // Bill aggregated edit modal
+  const [showBillItemsEditModal, setShowBillItemsEditModal] = useState(false);
+  const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
+
   // ── useBillAggregation ───────────────────────────────────────────────────
   const { aggregatedItems: backendAggregatedItems, loading: aggregationLoading, refetch: refetchAggregatedItems } = useBillAggregation(selectedBill?.id || selectedBill?._id || null);
 
@@ -260,10 +265,10 @@ const Tables: React.FC = () => {
     showOrderModal || showEditOrderModal || showManagementModal ||
     showSectionModal || showTableModal || showConfirmModal || showUnifiedTableModal ||
     showPaymentModal || showPartialPaymentModal || showSessionPaymentModal ||
-    showQuickAddModal || showDailyReportModal,
+    showQuickAddModal || showDailyReportModal || showBillItemsEditModal,
   [showOrderModal, showEditOrderModal, showManagementModal, showSectionModal, showTableModal,
-   showConfirmModal, showUnifiedTableModal, showPaymentModal, showPartialPaymentModal,
-   showSessionPaymentModal, showQuickAddModal, showDailyReportModal]);
+    showConfirmModal, showUnifiedTableModal, showPaymentModal, showPartialPaymentModal,
+    showSessionPaymentModal, showQuickAddModal, showDailyReportModal, showBillItemsEditModal]);
   useBodyScrollLock(anyModalOpen);
 
   // ── Permission check — useMemo لتجنب إعادة حساب في كل render ───────────
@@ -2780,6 +2785,13 @@ const Tables: React.FC = () => {
                                       </div>
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                                      {/* تعديل أصناف الفاتورة مجمعة */}
+                                      {canEditOrder(user) && ['draft','partial','overdue'].includes(bill.status) && (
+                                        <button onClick={e => { e.stopPropagation(); setBillToEdit(bill); setShowBillItemsEditModal(true); }}
+                                          className="w-7 h-7 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-300 rounded-lg flex items-center justify-center transition-all" title="تعديل الأصناف">
+                                          <Edit className="h-3 w-3" />
+                                        </button>
+                                      )}
                                       {isUnpaid && (
                                         <button onClick={e => { e.stopPropagation(); handlePayFullBill(bill); }}
                                           className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold rounded-lg flex items-center gap-1 transition-all whitespace-nowrap">
@@ -3639,6 +3651,28 @@ const Tables: React.FC = () => {
         />
       )}
 
+      {/* ── Bill Aggregated Edit Modal ── */}
+      <BillItemsEditModal
+        isOpen={showBillItemsEditModal}
+        onClose={() => { setShowBillItemsEditModal(false); setBillToEdit(null); }}
+        bill={billToEdit}
+        menuItems={menuItems}
+        menuSections={menuSections}
+        menuCategories={menuCategories}
+        getCategoriesForSection={getCategoriesForSection}
+        getItemsForCategory={getItemsForCategory}
+        onSuccess={async (updatedBill) => {
+          // refresh bills and orders
+          try { await fetchBills(); } catch {}
+          try { await fetchOrders(); } catch {}
+          // update selectedBill if open
+          if (selectedBill && (selectedBill as any)._id === (updatedBill as any)._id) {
+            setSelectedBill(updatedBill as any);
+          }
+          showNotification('تم تحديث أصناف الفاتورة بنجاح', 'success');
+        }}
+      />
+
     </div>
   );
 };
@@ -3661,9 +3695,9 @@ const QuickAddModal: React.FC<{
   const cur = localStorage.getItem('organizationCurrency') || 'EGP';
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return menuItems.filter(m => m.isAvailable).slice(0, 30);
+    if (!search.trim()) return menuItems.filter(m => m.isAvailable);
     const q = search.toLowerCase();
-    return menuItems.filter(m => m.isAvailable && m.name.toLowerCase().includes(q)).slice(0, 30);
+    return menuItems.filter(m => m.isAvailable && m.name.toLowerCase().includes(q));
   }, [menuItems, search]);
 
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -3940,21 +3974,31 @@ const OrderModal: React.FC<OrderModalProps> = ({
   );
   const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
   useEffect(() => { setActiveCategoryId('all'); }, [activeSectionId]);
+  // لو المنيو لسه بيحمل أو activeSectionId فاضي، اختار أول قسم متاح تلقائياً (يضمن التوزيع يظهر في الإضافة والتعديل)
+  useEffect(() => {
+    if (!activeSectionId && activeSections.length > 0) {
+      const firstId = (activeSections[0] as any).id || activeSections[0]._id;
+      setActiveSectionId(String(firstId));
+    }
+  }, [activeSections, activeSectionId]);
 
   const activeSectionCategories = useMemo(() => {
     if (!activeSectionId) return [];
     return getCategoriesForSection(activeSectionId);
   }, [activeSectionId, menuCategories]);
 
-  // ── الأصناف المعروضة — dependencies دقيقة ──────────────────────────
+  // ── الأصناف المعروضة — توزيع كامل: أقسام → فئات → أصناف + بحث + fallback للمنيو الكامل ──
   const displayedItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q) return menuItems.filter(i => i.isAvailable && i.name.toLowerCase().includes(q));
-    if (!activeSectionId) return [];
+    if (!activeSectionId) return menuItems.filter(i => i.isAvailable);
     const cats = activeCategoryId === 'all'
       ? getCategoriesForSection(activeSectionId)
       : getCategoriesForSection(activeSectionId).filter(c => c._id === activeCategoryId || c.id === activeCategoryId);
-    return cats.flatMap(cat => getItemsForCategory(cat.id));
+    const items = cats.flatMap(cat => getItemsForCategory(cat.id));
+    // لو القسم/الفئة فاضية لكن المنيو موجود، اعرض المنيو الكامل موزعاً بدل قائمة فاضية
+    if (items.length === 0) return menuItems.filter(i => i.isAvailable);
+    return items;
   }, [searchQuery, activeSectionId, activeCategoryId, menuItems]);
   // ملاحظة: getCategoriesForSection/getItemsForCategory محذوفتان من deps
   // لأنهما دوال خارجية مستقرة (لا تتغير reference)

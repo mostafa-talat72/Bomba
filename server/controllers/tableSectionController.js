@@ -1,6 +1,6 @@
 import TableSection from "../models/TableSection.js";
 import Table from "../models/Table.js";
-import { createTombstone } from "../utils/tombstoneHelper.js";
+import { writeToAtlas } from "../utils/atlasWrite.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
 
@@ -89,35 +89,36 @@ export const createTableSection = async (req, res) => {
         const section = new TableSection(sectionData);
         await section.save();
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const sectionObj = section.toObject ? section.toObject() : section;
-                    await atlasConnection.collection('tablesections').updateOne(
-                        { _id: section._id },
-                        { $set: sectionObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for tablesection create ${section._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for tablesection create - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('tablesections', 'upsert', section.toObject ? section.toObject() : section, { _id: section._id });
 
-        await section.populate("createdBy", "name");
+        // Prepare minimal response data
+        const responseData = {
+            _id: section._id,
+            name: section.name,
+            description: section.description,
+            sortOrder: section.sortOrder,
+            createdAt: section.createdAt,
+        };
 
-        if (req.io) {
-            try { req.io.notifyTableSectionUpdate("created", section, req.user.organization); } catch (e) {}
-        }
-
+        // Return response IMMEDIATELY
         res.status(201).json({
             success: true,
             message: "تم إنشاء القسم بنجاح",
-            data: section,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await section.populate("createdBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyTableSectionUpdate("created", section, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for createTableSection:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -147,9 +148,7 @@ export const updateTableSection = async (req, res) => {
             { _id: id, organization: req.user.organization },
             updateData,
             { new: true, runValidators: true }
-        )
-            .populate("createdBy", "name")
-            .populate("updatedBy", "name");
+        );
 
         if (!section) {
             return res.status(404).json({
@@ -158,33 +157,38 @@ export const updateTableSection = async (req, res) => {
             });
         }
 
-        // Immediate dual-write to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    const sectionObj = section.toObject ? section.toObject({ depopulate: true }) : section;
-                    await atlasConnection.collection('tablesections').updateOne(
-                        { _id: section._id },
-                        { $set: sectionObj },
-                        { upsert: true }
-                    );
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for tablesection update ${section._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for tablesection update - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write
+        writeToAtlas('tablesections', 'upsert', section.toObject ? section.toObject() : section, { _id: section._id });
 
-        if (req.io) {
-            try { req.io.notifyTableSectionUpdate("updated", section, req.user.organization); } catch (e) {}
-        }
+        // Prepare minimal response data
+        const responseData = {
+            _id: section._id,
+            name: section.name,
+            description: section.description,
+            sortOrder: section.sortOrder,
+            isActive: section.isActive,
+            updatedAt: section.updatedAt,
+        };
 
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم تحديث القسم بنجاح",
-            data: section,
+            data: responseData,
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                await section.populate("createdBy", "name");
+                await section.populate("updatedBy", "name");
+
+                if (req.io) {
+                    try { req.io.notifyTableSectionUpdate("updated", section, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for updateTableSection:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -225,29 +229,24 @@ export const deleteTableSection = async (req, res) => {
             });
         }
 
-        // Immediate dual-write delete to Atlas
-        {
-            const atlasConnection = dualDatabaseManager.getAtlasConnection();
-            if (atlasConnection) {
-                try {
-                    await atlasConnection.collection('tablesections').deleteOne({ _id: section._id });
-                } catch (atlasErr) {
-                    Logger.warn(`Atlas dual-write failed for tablesection delete ${section._id}: ${atlasErr.message}`);
-                }
-            } else {
-                Logger.warn("Atlas not available for tablesection delete - will sync later");
-            }
-        }
+        // Fire-and-forget Atlas write for delete
+        writeToAtlas('tablesections', 'delete', null, { _id: section._id });
 
-        try { await createTombstone('tablesections', section._id, req.user.organization, req.user._id); } catch (e) {}
-
-        if (req.io) {
-            try { req.io.notifyTableSectionUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
-        }
-
+        // Return response IMMEDIATELY
         res.json({
             success: true,
             message: "تم حذف القسم بنجاح",
+        });
+
+        // All background work in setImmediate - non-blocking
+        setImmediate(async () => {
+            try {
+                if (req.io) {
+                    try { req.io.notifyTableSectionUpdate("deleted", { _id: id }, req.user.organization); } catch (e) {}
+                }
+            } catch (bgError) {
+                Logger.error('Background tasks failed for deleteTableSection:', bgError);
+            }
         });
     } catch (error) {
         res.status(500).json({

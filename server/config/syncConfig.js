@@ -39,6 +39,18 @@ const syncConfig = {
     queueWarningThreshold: parseInt(process.env.SYNC_QUEUE_WARNING_THRESHOLD) || 5000,
     lagWarningThreshold: parseInt(process.env.SYNC_LAG_WARNING_THRESHOLD) || 60000, // ms
 
+    // LAN sync configuration (hybrid Local + Atlas + LAN)
+    lanSync: {
+        enabled: process.env.LAN_SYNC_ENABLED === "true",
+        discoveryPort: parseInt(process.env.LAN_DISCOVERY_PORT || "41234", 10),
+        heartbeatInterval: parseInt(process.env.LAN_HEARTBEAT_INTERVAL || "3000", 10),
+        electionTimeout: parseInt(process.env.LAN_ELECTION_TIMEOUT || "10000", 10),
+        syncPort: parseInt(process.env.PORT || "5000", 10),
+        broadcastAddress: process.env.LAN_BROADCAST_ADDRESS || "255.255.255.255",
+        persistQueue: process.env.LAN_SYNC_PERSIST_QUEUE !== "false",
+        queuePath: process.env.LAN_SYNC_QUEUE_PATH || "./data/lan-queue.json",
+    },
+
     // Bidirectional sync configuration
     bidirectionalSync: {
         // Enable/disable bidirectional sync (Atlas → Local)
