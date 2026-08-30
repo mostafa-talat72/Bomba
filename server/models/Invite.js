@@ -63,6 +63,4 @@ inviteSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-inviteSchema.index({ isDeleted: 1 });
-
 export default mongoose.model("Invite", inviteSchema);

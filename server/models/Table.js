@@ -54,8 +54,6 @@ tableSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-tableSchema.index({ isDeleted: 1 });
-
 // Apply sync middleware
 applySyncMiddleware(tableSchema, 'Table');
 

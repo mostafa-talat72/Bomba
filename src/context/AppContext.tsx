@@ -60,6 +60,7 @@ interface AppContextType {
   fetchInventoryItems: () => Promise<void>;
   fetchUsers: () => Promise<void>;
   fetchSettings: () => Promise<void>;
+  fetchDashboardData: () => Promise<void>;
 
   // CRUD methods
   createSession: (sessionData: any) => Promise<any>;
@@ -237,6 +238,7 @@ const AppContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     fetchInventoryItems: data.fetchInventoryItems,
     fetchUsers: data.fetchUsers,
     fetchSettings: data.fetchSettings,
+    fetchDashboardData: data.fetchDashboardData,
 
     // CRUD methods
     createSession: data.createSession,

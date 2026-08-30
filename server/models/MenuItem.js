@@ -133,8 +133,6 @@ menuItemSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-menuItemSchema.index({ isDeleted: 1 });
-
 // Apply sync middleware
 applySyncMiddleware(menuItemSchema, 'MenuItem');
 

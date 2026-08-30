@@ -278,26 +278,59 @@ const Tables: React.FC = () => {
     return false;
   }, [user?.role, user?.permissions]);
 
-  // ── Load initial data ────────────────────────────────────────────────────
-  const loadInitialData = async () => {
-    setLoading(true);
-    try {
-      // المرحلة 1 — الطاولات فقط (30ms) → رسم فوري
-      await Promise.all([fetchTableSections(), fetchTables()]);
-      setLoading(false);
-      // المرحلة 2 — باقي البيانات في الخلفية بلا حاجز، الطاولات تُصحح تلقائياً عبر tableDataMap عند وصول bills
-      Promise.all([
-        fetchBills(),
-        fetchOrders().catch(() => {}),
-        fetchAvailableMenuItems(),
-        fetchMenuSections(),
-        fetchMenuCategories(),
-      ]).catch(() => {});
-    } catch {
-      showNotification(t('cafe.notifications.loadingDataError'), 'error');
+  // ── Cache constants ──────────────────────────────────────────────────────────
+const TABLES_CACHE_KEY = 'tables_cache_v2';
+const TABLES_CACHE_TTL = 10000; // 10 ثانية
+
+function readTablesCache() {
+  try {
+    const raw = localStorage.getItem(TABLES_CACHE_KEY);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > TABLES_CACHE_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
+function writeTablesCache(tables: any[], sections: any[]) {
+  try {
+    localStorage.setItem(TABLES_CACHE_KEY, JSON.stringify({ data: { tables, sections }, ts: Date.now() }));
+  } catch {}
+}
+
+function invalidateTablesCache() {
+  try { localStorage.removeItem(TABLES_CACHE_KEY); } catch {}
+}
+
+// ── Load initial data ────────────────────────────────────────────────────
+const loadInitialData = async () => {
+  setLoading(true);
+  try {
+    // قراءة الكاش فوراً للرسم الأولي (<50ms)
+    const cached = readTablesCache();
+    if (cached?.tables?.length) {
+      setTables(cached.tables);
+      setTableSections(cached.sections || []);
       setLoading(false);
     }
-  };
+    // المرحلة 1 — الطاولات من السيرفر (30ms)
+    await Promise.all([fetchTableSections(), fetchTables()]);
+    setLoading(false);
+    // تحديث الكاش بعد نجاح الجلب
+    writeTablesCache(tables, tableSections);
+    // المرحلة 2 — باقي البيانات في الخلفية
+    Promise.all([
+      fetchBills(),
+      fetchOrders().catch(() => {}),
+      fetchAvailableMenuItems(),
+      fetchMenuSections(),
+      fetchMenuCategories(),
+    ]).catch(() => {});
+  } catch {
+    showNotification(t('cafe.notifications.loadingDataError'), 'error');
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     if (!hasLoadedDataRef.current) {
@@ -543,6 +576,7 @@ const Tables: React.FC = () => {
 
     // إعادة الاتصال — جلب كل شيء من جديد
     socket.on('reconnect', () => {
+      invalidateTablesCache();
       Promise.all([fetchBills(), fetchTables(), fetchOrders()]).then(() => fetchAllTableStatuses()).catch(() => {});
     });
 
@@ -1423,6 +1457,8 @@ const Tables: React.FC = () => {
         }
         // تحديث متفائل — createOrder في DataContext حدث orders+bills، نحدث tableOrders فقط
         setTableOrders(p => [...p, order]);
+        // إبطال كاش الطاولات لضمان إعادة الرسم الفوري
+        invalidateTablesCache();
         // لا حاجة لـ fetchBills/fetchOrders المكرر — scheduleBackgroundRefetch للتأكيد فقط
         scheduleBackgroundRefetch(true);
       }
@@ -1491,6 +1527,7 @@ const Tables: React.FC = () => {
             showNotification(t('cafe.orderDeletedSuccess'), 'success');
             fetchAvailableMenuItems();
             setTableOrders(prev => prev.filter(o => (o as any).id !== order.id && (o as any)._id !== order.id));
+            invalidateTablesCache();
             scheduleBackgroundRefetch(true);
           } else {
             showNotification(t('cafe.orderDeletedError'), 'error');
@@ -1609,6 +1646,7 @@ const Tables: React.FC = () => {
         await paySinglePart(updatedAfterFirst || { ...selectedBill, paid: (selectedBill.paid || 0) + a1 }, a2, method2, effectiveTotal, discountAmount, discountPercentage);
         handleClosePaymentModal();
         showNotification(t('billing.notifications.paymentSuccess'), 'success');
+        invalidateTablesCache();
         scheduleBackgroundRefetch(true);
         return;
       }
@@ -1623,6 +1661,7 @@ const Tables: React.FC = () => {
       await paySinglePart(selectedBill, payVal, paymentMethod, effectiveTotal, discountAmount, discountPercentage);
       handleClosePaymentModal();
       showNotification(t('billing.notifications.paymentSuccess'), 'success');
+      invalidateTablesCache();
       scheduleBackgroundRefetch(true);
     } catch { showNotification(t('billing.notifications.paymentError'), 'error'); }
     finally { setIsProcessingPayment(false); splitPartsRef.current = null; }
@@ -1682,6 +1721,7 @@ const Tables: React.FC = () => {
         setIsProcessingPayment(false);
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
+        invalidateTablesCache();
         scheduleBackgroundRefetch(true);
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
       }
@@ -1708,6 +1748,7 @@ const Tables: React.FC = () => {
         if (response.data) {
           setBills(prev => prev.map(b => String(b._id || b.id) === String(selectedBill._id || selectedBill.id) ? response.data : b));
           setSelectedBill(response.data as Bill);
+          invalidateTablesCache();
           scheduleBackgroundRefetch(true);
           if ((response.data as Bill).status === 'paid') {
             setShowPartialPaymentModal(false);
@@ -1832,8 +1873,9 @@ const Tables: React.FC = () => {
             },
           });
         }
+const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBill?.id || selectedBill?._id;
 
-        const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBill?.id || selectedBill?._id;
+        invalidateTablesCache();
         scheduleBackgroundRefetch(true);
         if (billId) {
           api.getBill(billId as string).then(r => { if (r?.data) setSelectedBill(r.data); }).catch(() => {});

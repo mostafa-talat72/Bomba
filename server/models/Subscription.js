@@ -30,8 +30,6 @@ SubscriptionSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-SubscriptionSchema.index({ isDeleted: 1 });
-
 // Apply sync middleware
 applySyncMiddleware(SubscriptionSchema, 'Subscription');
 

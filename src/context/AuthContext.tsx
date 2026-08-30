@@ -269,10 +269,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success && loginUser && token) {
         localStorage.setItem('token', token);
         api.setToken(token);
+        setUser(loginUser);
+        setIsAuthenticated(true);
+        if (firstLoginRef.current) {
+          showNotification(t('auth.welcome', { name: loginUser.name }), 'success');
+          firstLoginRef.current = false;
+        }
 
-        // Apply language from DB immediately before rendering
-        try {
-          const settingsRes = await api.getGeneralSettings();
+        // لغة — في الخلفية بلا حجب
+        api.getGeneralSettings().then(async (settingsRes) => {
           if (settingsRes.success && settingsRes.data?.language && window.i18n) {
             const lang = settingsRes.data.language;
             localStorage.setItem('language', lang);
@@ -283,25 +288,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             document.body.dir = isRTL ? 'rtl' : 'ltr';
             document.documentElement.lang = lang;
           }
-        } catch {
-          // fallback to localStorage
+        }).catch(async () => {
           const savedLanguage = localStorage.getItem('language') || 'ar';
           if (window.i18n) await window.i18n.changeLanguage(savedLanguage);
-        }
+        });
 
-        setUser(loginUser);
-        setIsAuthenticated(true);
+        // طابعة — في الخلفية (المسار الصحيح /print/auto-detect بدون /api مكرر)
+        api.post('/print/auto-detect', { deviceId: 'default' }).then((printerRes: any) => {
+          if (printerRes.data?.success && printerRes.data?.printer) {
+            showNotification(`تم اكتشاف الطابعة تلقائيًا: ${printerRes.data.printer.name || printerRes.data.printer.path}`, 'success');
+          } else if (printerRes.data?.printers && printerRes.data.printers.length > 1) {
+            showNotification(`تم العثور على ${printerRes.data.printers.length} طابعات متصلة، يرجى اختيار واحدة من الإعدادات`, 'info');
+          }
+        }).catch((printerError) => { console.error('Auto-detect printer error:', printerError); });
 
-        if (firstLoginRef.current) {
-          showNotification(t('auth.welcome', { name: loginUser.name }), 'success');
-          firstLoginRef.current = false;
-        }
         return { success: true };
+      } else {
+        const errorMessage = response.message || 'فشل تسجيل الدخول';
+        setError(errorMessage);
+        showNotification(errorMessage, 'error');
+        return { success: false, message: errorMessage };
       }
-      return { success: false, message: response.message || 'بيانات الدخول غير صحيحة' };
-    } catch (error: unknown) {
-      const err = error as { message?: string };
-      return { success: false, message: err.message || 'فشل في تسجيل الدخول' };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ أثناء تسجيل الدخول';
+      setError(errorMessage);
+      showNotification(errorMessage, 'error');
+      return { success: false, message: errorMessage };
     }
   };
 

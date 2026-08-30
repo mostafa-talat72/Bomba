@@ -57,7 +57,8 @@ const ProtectedRoute = ({ children, requiredPermissions = [], requiredRole }: {
   requiredPermissions?: string[];
   requiredRole?: string;
 }) => {
-  const { user, isAuthenticated } = useApp();
+  const { user, isAuthenticated, isLoading } = useApp();
+  if (isLoading) return <PageLoader />;
 
   // السماح دائماً بصفحة إعادة تعيين كلمة المرور
   if (window.location.pathname.startsWith('/reset-password')) {
@@ -182,9 +183,7 @@ const RouteHandler = () => {
               <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/email-actions" element={<EmailActions />} />
-        <Route path="/" element={<Login />} />
-      {/* صفحات النظام المحمية فقط إذا كان المستخدم مسجل دخول */}
-      {isAuthenticated && (
+        {/* صفحات النظام — محمية عبر ProtectedRoute */}
         <Route path="/" element={<Layout />}>
           <Route index element={<HomeRedirect />} />
           <Route path="dashboard" element={
@@ -269,9 +268,8 @@ const RouteHandler = () => {
           } />
           <Route path="/subscription" element={<Subscription />} />
         </Route>
-      )}
-      {/* fallback */}
-              <Route path="*" element={<Login />} />
+      {/* fallback — يوجه حسب حالة الدخول */}
+              <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
     </Routes>
     </Suspense>
     </ConfigProvider>

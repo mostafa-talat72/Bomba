@@ -118,11 +118,13 @@ const Dashboard = () => {
     try {
       setLoading(true);
 
-      // تحميل البيانات الأساسية أولاً
-      await refreshData();
-
-      // انتظار قليل لضمان تحديث البيانات
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Dashboard فقط يحتاج bills, orders, sessions, tables — الباقي عند الطلب
+      await Promise.all([
+        fetchBills(),
+        fetchOrders(),
+        fetchSessions(),
+        fetchTables(),
+      ]);
 
       const [statsResponse, activityData] = await Promise.all([
         api.getDashboardStats('today'),

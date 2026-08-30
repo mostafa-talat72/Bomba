@@ -479,31 +479,42 @@ export const buildBillPrintHTML = async (
         }
         .items-table .item-name {
           text-align: center;
-          font-weight: 700;
+          font-weight: 800;
+          font-size: 1.1em;
           padding-${dir === 'rtl' ? 'right' : 'left'}: 5px;
           width: 50% !important;
         }
         .items-table .item-quantity {
           width: 16.67% !important;
+          font-weight: 900;
+          font-size: 1.15em;
         }
         .items-table .item-paid-qty {
           width: 16.67% !important;
-          color: #4caf50;
-          font-weight: 700;
+          color: #2e7d32;
+          font-weight: 900;
+          font-size: 1.15em;
         }
         .items-table .item-total {
           width: 16.66% !important;
+          font-weight: 900;
+          font-size: 1.15em;
         }
         .items-table.sessions-table .item-quantity {
           width: 20% !important;
+          font-weight: 900;
+          font-size: 1.15em;
         }
         .items-table.sessions-table .item-paid {
           width: 20% !important;
-          color: #4caf50;
-          font-weight: 700;
+          color: #2e7d32;
+          font-weight: 900;
+          font-size: 1.15em;
         }
         .items-table.sessions-table .item-total {
           width: 20% !important;
+          font-weight: 900;
+          font-size: 1.15em;
         }
         .items-table th:first-child {
           text-align: center;
@@ -512,44 +523,44 @@ export const buildBillPrintHTML = async (
         .total-section { 
           margin-top: 12px;
           text-align: center;
-          font-weight: 800;
+          font-weight: 900;
         }
         .total-row {
           text-align: center;
-          padding: 6px 8px;
-          margin-bottom: 4px;
-          font-size: 1.1em;
-          font-weight: 700;
+          padding: 8px 10px;
+          margin-bottom: 6px;
+          font-size: 1.2em;
+          font-weight: 800;
         }
         .total-row.grand-total {
-          font-size: 1.4em;
+          font-size: 1.6em;
           font-weight: 900;
           background: #000;
           color: #fff;
           border-radius: 4px;
-          margin-top: 8px;
-          margin-bottom: 8px;
-          padding: 8px;
+          margin-top: 10px;
+          margin-bottom: 10px;
+          padding: 10px;
         }
         .total-row.paid {
-          font-size: 1.3em;
+          font-size: 1.4em;
           font-weight: 900;
-          color: #4caf50;
+          color: #2e7d32;
         }
         .total-row.remaining {
-          font-size: 1.3em;
+          font-size: 1.4em;
           font-weight: 900;
-          color: #ff9800;
+          color: #e65100;
         }
         .footer { 
           margin-top: 12px; 
           text-align: center; 
-          font-size: 1.1em; 
+          font-size: 1.2em; 
           color: #000;
           border-top: 2px dashed #000;
-          padding-top: 10px;
-          padding-bottom: 10px;
-          font-weight: 800;
+          padding-top: 12px;
+          padding-bottom: 12px;
+          font-weight: 900;
         }
         .qr-section {
           margin: 10px 0;
@@ -570,17 +581,17 @@ export const buildBillPrintHTML = async (
           height: auto;
         }
         .qr-text {
-          font-size: 0.9em;
+          font-size: 0.95em;
           color: #333;
           margin-top: 5px;
-          font-weight: 700;
+          font-weight: 800;
           line-height: 1.2;
         }
         .qr-subtitle {
-          font-size: 0.8em;
+          font-size: 0.85em;
           color: #666;
           margin-top: 2px;
-          font-weight: 600;
+          font-weight: 700;
         }
         
         @media print {
@@ -650,9 +661,9 @@ export const buildBillPrintHTML = async (
       <div class="header">
         ${organizationName ? `<div class="org-name">${organizationName}</div>` : `<div class="org-name">${t('billPrint.defaultEstablishment')}</div>`}
         <div class="title" style="font-weight: 900; font-size: 22px;">${getDisplayNumber(bill.billNumber) || ''}</div>
-        <div class="info">${formatDate(bill.createdAt || new Date())}</div>
-        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.2em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.4em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (bill.customerName ? `<div class="info">${t('billPrint.customer')}: ${bill.customerName}</div>` : '')}
-        ${bill.customerPhone ? `<div class="info">${t('billPrint.phone')}: ${bill.customerPhone}</div>` : ''}
+        <div class="info" style="font-weight: 900; font-size: 1.15em;">${formatDate(bill.createdAt || new Date())}</div>
+        ${bill.table?.number ? `<div class="info" style="font-weight: 900; font-size: 1.25em; color: #000; margin: 8px 0;"><span style="background: #000; color: #fff; padding: 2px 8px; border-radius: 3px;">${t('billPrint.table')}</span> <strong style="font-size: 1.5em;">${bill.table.number}${tableSectionName ? ` — (${tableSectionName})` : ''}</strong></div>` : (bill.customerName ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.customer')}: ${bill.customerName}</div>` : '')}
+        ${bill.customerPhone ? `<div class="info" style="font-weight: 900; font-size: 1.15em;">${t('billPrint.phone')}: ${bill.customerPhone}</div>` : ''}
       </div>
 
       ${bill.orders && bill.orders.length > 0 ? generateOrderItemsTable(bill.orders, bill.itemPayments, bill.status, bill.paid, bill.total) : ''}
@@ -728,6 +739,33 @@ export const printBill = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string
 ) => {
+  try {
+    // محاولة الطباعة المباشرة عبر API
+    const response = await api.printBill({
+      bill,
+      organization: bill.organization,
+      language,
+      tableSectionName
+    });
+
+    if (response.success) {
+      const successMsg = language === 'ar' 
+        ? 'تمت طباعة الفاتورة بنجاح' + (response.cashDrawerOpened ? ' وتم فتح درج الكاشير' : '')
+        : language === 'fr'
+        ? 'Facture imprimée avec succès' + (response.cashDrawerOpened ? ' et tiroir-caisse ouvert' : '')
+        : 'Bill printed successfully' + (response.cashDrawerOpened ? ' and cash drawer opened' : '');
+      
+      // إظهار إشعار نجاح
+      if (typeof window !== 'undefined' && (window as any).showNotification) {
+        (window as any).showNotification(successMsg, 'success');
+      }
+      return;
+    }
+  } catch (error) {
+    console.error('Direct print failed, falling back to window print:', error);
+  }
+
+  // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
   const receiptHTML = await buildBillPrintHTML(bill, fallbackOrganizationName, language, t, tableSectionName);
 
   // A real popup window is preferred for printing: in Electron, printing an

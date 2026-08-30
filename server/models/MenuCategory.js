@@ -58,8 +58,6 @@ menuCategorySchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-menuCategorySchema.index({ isDeleted: 1 });
-
 // Apply sync middleware
 applySyncMiddleware(menuCategorySchema, 'MenuCategory');
 

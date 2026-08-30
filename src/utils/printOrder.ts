@@ -256,18 +256,18 @@ const printAllSectionsInOnePage = (
         <!-- Order info for each section -->
         <div class="order-info">
           <div style="margin-bottom: 2px;">
-            <div style="font-size: 20px; font-weight: bold; margin: 2px 0;"><strong>${getDisplayNumber(order.orderNumber)}</strong></div>
-            <div style="font-size: 16px; color: #333; margin: 2px 0;">${dateTimeString}</div>
+            <div style="font-size: 22px; font-weight: 900; margin: 2px 0;"><strong>${getDisplayNumber(order.orderNumber)}</strong></div>
+            <div style="font-size: 1.15em; font-weight: 900; color: #333; margin: 2px 0;">${dateTimeString}</div>
             ${order.table?.number ? `
-              <div style="font-size: 16px; margin: 2px 0; text-align: center;">
-                ${t('orderPrint.table')}: <strong>${order.table.number}</strong>${tableSectionName ? ` — (${tableSectionName})` : ''}
+              <div style="font-size: 1.15em; font-weight: 900; margin: 2px 0; text-align: center;">
+                ${t('orderPrint.table')}: <strong style="font-size: 1.3em;">${order.table.number}</strong>${tableSectionName ? ` — (${tableSectionName})` : ''}
               </div>
             ` : ''}
           </div>
         </div>
 
         <!-- Section name -->
-        <div class="section-name">
+        <div class="section-name" style="font-size: 1.15em; font-weight: 800;">
           ${t('orderPrint.section')}: ${sectionName}
         </div>
 
@@ -313,9 +313,9 @@ const printAllSectionsInOnePage = (
         ` : ''}
 
         <!-- Footer for each section -->
-        <div class="footer">
+        <div class="footer" style="font-size: 1.1em; font-weight: 900;">
           ${t('orderPrint.thankYou')}<br>
-          <strong style="font-weight: 900; font-size: 14px;">${t('orderPrint.footer')}</strong>
+          <strong style="font-weight: 900; font-size: 1.15em;">${t('orderPrint.footer')}</strong>
         </div>
       </div>
     `;
@@ -410,13 +410,13 @@ body {
   table-layout: fixed;
   text-align: center;
   direction: ${dir};
-  border: 1px solid #000;
+  border: 1.5px solid #000;
 }
 
 .items th,
 .items td {
-  padding: 4px 2px;
-  font-size: 15px;
+  padding: 5px 3px;
+  font-size: 1.05em;
   border: 1px solid #000;
   text-align: center;
   vertical-align: middle;
@@ -428,13 +428,17 @@ body {
 .item-name {
   width: 70%;
   text-align: center;
-  padding: 3px;
+  padding: 4px;
+  font-weight: 800;
+  font-size: 1.05em;
 }
 
 .item-qty {
   width: 30%;
   text-align: center;
-  padding: 3px;
+  padding: 4px;
+  font-weight: 900;
+  font-size: 1.15em;
 }
 
 /* ===== HIDE PRICE COLUMN ONLY ===== */
@@ -444,7 +448,7 @@ body {
 
 /* ===== ITEM NOTES ===== */
 .item-notes {
-  font-size: 8px;
+  font-size: 0.85em;
   color: #666;
   margin: 2px auto 0;
   padding: 0 4px;
@@ -455,10 +459,10 @@ body {
 
 /* ===== TOTAL (Section Total) ===== */
 .total {
-  margin: 1px auto 0;
-  padding: 1px 0;
-  font-size: 18px;
-  font-weight: bold;
+  margin: 2px auto 0;
+  padding: 2px 0;
+  font-size: 1.2em;
+  font-weight: 900;
   text-align: center;
   background-color: #f9f9f9;
   border-radius: 4px;
@@ -520,6 +524,32 @@ export const printOrder = async (
   t: TFunction = ((key: string) => key) as TFunction,
   tableSectionName?: string
 ) => {
+  try {
+    // محاولة الطباعة المباشرة عبر API
+    const response = await api.printOrder({
+      order,
+      organization: order.organization,
+      language
+    });
+
+    if (response.success) {
+      const successMsg = language === 'ar' 
+        ? 'تمت طباعة الطلب بنجاح'
+        : language === 'fr'
+        ? 'Commande imprimée avec succès'
+        : 'Order printed successfully';
+      
+      // إظهار إشعار نجاح
+      if (typeof window !== 'undefined' && (window as any).showNotification) {
+        (window as any).showNotification(successMsg, 'success');
+      }
+      return;
+    }
+  } catch (error) {
+    console.error('Direct print failed, falling back to window print:', error);
+  }
+
+  // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
   const printContent = await buildOrderPrintHTML(order, menuSections, menuItemsMap, fallbackOrganizationName, language, t, tableSectionName);
 
   // Create a hidden iframe for printing

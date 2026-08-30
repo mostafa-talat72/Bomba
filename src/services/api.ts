@@ -443,17 +443,27 @@ class ApiClient {
   private baseURL: string;
   private token: string | null = null;
   private refreshPromise: Promise<boolean> | null = null;
+  private pendingRequests: Map<string, Promise<ApiResponse<any>>> = new Map();
 
   constructor(baseURL: string) {
-    this.baseURL = `${baseURL}/api`; // Add /api prefix to all API calls
+    this.baseURL = `${baseURL}/api`;
     this.token = localStorage.getItem('token');
   }
 
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    retryOn401: boolean = true // إضافة متغير للتحكم في إعادة المحاولة بعد التحديث
+    retryOn401: boolean = true
   ): Promise<ApiResponse<T>> {
+    // Deduplication مع الأخذ في الاعتبار التوكن (يمنع إرجاع 401 مكاش للطلب بعد تسجيل الدخول)
+    const method = options.method || 'GET';
+    const tokenPart = this.token || localStorage.getItem('token') || 'noauth';
+    const cacheKey = method === 'GET' ? `${method}:${endpoint}:${tokenPart.slice(-8)}` : null;
+    if (cacheKey) {
+      const existing = this.pendingRequests.get(cacheKey);
+      if (existing) return existing as Promise<ApiResponse<T>>;
+    }
+
     try {
       const url = `${this.baseURL}${endpoint}`;
       const config: RequestInit = {
@@ -472,102 +482,77 @@ class ApiClient {
         };
       }
 
-      const response = await fetch(url, config);
+      let promise: Promise<ApiResponse<T>>;
+      const responsePromise = fetch(url, config);
 
-      if (!response.ok && response.status === 0) {
-        return {
-          success: false,
-          message: 'خطأ في الاتصال بالخادم، تأكد من أن الخادم يعمل'
-        };
-      }
-
-      let data;
-      try {
-        const text = await response.text();
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        return {
-          success: false,
-          message: 'خطأ في تحليل البيانات المستلمة من الخادم'
-        };
-      }
-
-      if (!response.ok) {
-        // إذا كان طلب تسجيل الدخول وفشل، أعد الرسالة الأصلية من السيرفر
-        if (endpoint === '/auth/login' && response.status === 401) {
-          return {
-            success: false,
-            message: data.message || 'بيانات الدخول غير صحيحة'
-          };
-        }
-
-        if (response.status === 401 && retryOn401) {
-          // Singleton refresh logic
-          const refreshToken = localStorage.getItem('refreshToken');
-          if (refreshToken && !this.refreshPromise) {
-            this.refreshPromise = (async () => {
-              try {
-                const refreshResponse = await this.refreshToken(refreshToken);
-                if (refreshResponse.success && refreshResponse.data?.token) {
-                  this.setToken(refreshResponse.data.token);
-                  localStorage.setItem('token', refreshResponse.data.token);
-                  if (refreshResponse.data.refreshToken) {
-                    localStorage.setItem('refreshToken', refreshResponse.data.refreshToken);
-                  }
-                  return true;
-                } else {
-                  this.clearToken();
-                  return false;
-                }
-              } catch (error) {
-                this.clearToken();
-                return false;
-              }
-            })();
+      promise = (async () => {
+        try {
+          const response = await responsePromise;
+          if (!response.ok && response.status === 0) {
+            return { success: false, message: 'خطأ في الاتصال بالخادم، تأكد من أن الخادم يعمل' };
           }
-
-          if (this.refreshPromise) {
-            const refreshResult = await this.refreshPromise;
-            this.refreshPromise = null;
-            if (refreshResult) {
-              // إعادة المحاولة مرة واحدة فقط
-              return this.request<T>(endpoint, options, false);
-            } else {
-              return {
-                success: false,
-                message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى'
-              };
+          let data;
+          try {
+            const text = await response.text();
+            data = text ? JSON.parse(text) : {};
+          } catch {
+            return { success: false, message: 'خطأ في تحليل البيانات المستلمة من الخادم' };
+          }
+          if (!response.ok) {
+            if (endpoint === '/auth/login' && response.status === 401) {
+              return { success: false, message: data.message || 'بيانات الدخول غير صحيحة' };
             }
-          } else {
-            this.clearToken();
-            return {
-              success: false,
-              message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى'
-            };
+            if (response.status === 401 && retryOn401) {
+              const refreshToken = localStorage.getItem('refreshToken');
+              if (refreshToken && !this.refreshPromise) {
+                this.refreshPromise = (async () => {
+                  try {
+                    const refreshResponse = await this.refreshToken(refreshToken);
+                    if (refreshResponse.success && refreshResponse.data?.token) {
+                      this.setToken(refreshResponse.data.token);
+                      localStorage.setItem('token', refreshResponse.data.token);
+                      if (refreshResponse.data.refreshToken) {
+                        localStorage.setItem('refreshToken', refreshResponse.data.refreshToken);
+                      }
+                      return true;
+                    } else {
+                      this.clearToken();
+                      return false;
+                    }
+                  } catch {
+                    this.clearToken();
+                    return false;
+                  }
+                })();
+              }
+              if (this.refreshPromise) {
+                const refreshResult = await this.refreshPromise;
+                this.refreshPromise = null;
+                if (refreshResult) {
+                  return this.request<T>(endpoint, options, false);
+                } else {
+                  return { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى' };
+                }
+              } else {
+                this.clearToken();
+                return { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى' };
+              }
+            }
+            if (process.env.NODE_ENV === 'development' && response.status >= 500) {
+              console.error('API Error Response:', { status: response.status, statusText: response.statusText, data });
+            }
+            const innerErr = (data as any)?.data ?? data;
+            return { success: false, message: data.error || data.message || `خطأ ${response.status}: ${response.statusText}`, errors: data.errors || innerErr?.errors, details: data.details || innerErr?.details, data: innerErr };
           }
+          const inner = (data as any)?.data !== undefined ? (data as any).data as T : data as T;
+          return { success: true, data: inner, message: data.message };
+        } finally {
+          if (cacheKey) this.pendingRequests.delete(cacheKey);
         }
-        // Only log errors in development mode to avoid cluttering console
-        if (process.env.NODE_ENV === 'development') {
-          // Log the full error response for debugging (only for server errors)
-          if (response.status >= 500) {
-            console.error('API Error Response:', {
-              status: response.status,
-              statusText: response.statusText,
-              data
-            });
-          }
-        }
-        
-        return {
-          success: false,
-          message: data.error || data.message || `خطأ ${response.status}: ${response.statusText}`,
-          errors: data.errors,
-          details: data.details,
-          data: data
-        };
-      }
+      })();
 
-      return data;
+      if (cacheKey) this.pendingRequests.set(cacheKey, promise);
+      return promise;
     } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
@@ -643,20 +628,18 @@ class ApiClient {
 
   setToken(token: string) {
     this.token = token;
-    localStorage.setItem('token', token);
+    localStorage.setItem('token', token); // للكاش عبر التبويبات/إعادة التحميل
   }
 
   clearToken() {
     this.token = null;
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
-    // إلغاء جميع الطلبات الجارية
     this.refreshPromise = null;
   }
 
   private getToken(): string | null {
-    // تحديث التوكن من localStorage دائمًا
-    this.token = localStorage.getItem('token');
+    if (!this.token) this.token = localStorage.getItem('token');
     return this.token;
   }
 
@@ -2745,6 +2728,72 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(permissions),
     });
+  }
+
+  // Print methods
+  async printBill(data: {
+    bill: any;
+    organization: any;
+    language?: string;
+    tableSectionName?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/print/bill', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async printOrder(data: {
+    order: any;
+    organization: any;
+    language?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/print/order', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async printConsumptionReport(data: {
+    reportData: any;
+    organization: any;
+    language?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/print/consumption-report', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Printer detection methods
+  async detectPrinters(printerType: string = 'usb'): Promise<ApiResponse<any>> {
+    return this.request(`/print/detect?printerType=${printerType}`);
+  }
+
+  async testPrinter(data: {
+    printerPath: string;
+    printerType?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/print/test', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async saveDevicePrinter(data: {
+    printerPath: string;
+    printerName: string;
+    deviceId?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/print/device', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getDevicePrinter(deviceId?: string): Promise<ApiResponse<any>> {
+    const query = deviceId ? `?deviceId=${deviceId}` : '';
+    return this.request(`/print/device${query}`);
   }
 
 

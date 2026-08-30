@@ -407,8 +407,6 @@ payrollSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-payrollSchema.index({ isDeleted: 1 });
-
 // Apply sync middleware
 applySyncMiddleware(payrollSchema, 'Payroll');
 

@@ -174,8 +174,6 @@ deviceSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-deviceSchema.index({ isDeleted: 1 });
-
 // Apply sync middleware with enhanced validation
 applySyncMiddleware(deviceSchema, 'Device');
 

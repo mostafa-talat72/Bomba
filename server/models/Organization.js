@@ -116,7 +116,29 @@ const OrganizationSchema = new mongoose.Schema({
     // إعدادات الطباعة
     printSettings: {
         printQRCode: { type: Boolean, default: true },
+        printerType: { 
+            type: String, 
+            enum: ['none', 'usb', 'network', 'bluetooth'],
+            default: 'none'
+        },
+        printerDevice: { type: String, default: '' }, // معرف الجهاز للطابعة
+        printerIP: { type: String, default: '' }, // عنوان IP للطابعة الشبكية
+        printerPort: { type: Number, default: 9100 }, // منفذ الطابعة الشبكية
+        openCashDrawer: { type: Boolean, default: true }, // فتح درج الكاشير للفواتير
+        charactersPerLine: { type: Number, default: 48 }, // عدد الأحرف في السطر
+        printHeader: { type: Boolean, default: true }, // طباعة الرأس
+        printFooter: { type: Boolean, default: true }, // طباعة التذييل
+        autoCut: { type: Boolean, default: false }, // قص تلقائي للورق
     },
+
+    // تخزين معرفات الطابعات لكل جهاز/مستخدم (منفصل عن printSettings)
+    devicePrinters: [{
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        deviceId: { type: String }, // معرف الجهاز الفريد
+        printerPath: { type: String }, // مسار الطابعة (e.g., COM1, /dev/usb/lp0)
+        printerName: { type: String }, // اسم الطابعة
+        lastUsed: { type: Date, default: Date.now }
+    }],
 
     // معلومات إضافية
     logo: { type: String, default: "" },
@@ -182,8 +204,6 @@ OrganizationSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-OrganizationSchema.index({ isDeleted: 1 });
-
 // Apply sync middleware
 applySyncMiddleware(OrganizationSchema, 'Organization');
 

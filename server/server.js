@@ -65,6 +65,7 @@ import publicRoutes from "./routes/publicRoutes.js";
 import payrollRoutes from "./routes/payroll.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
 import inviteRoutes from "./routes/inviteRoutes.js";
+import printRoutes from "./routes/printRoutes.js";
 
 // Environment variables already loaded at the top of the file
 
@@ -194,7 +195,7 @@ mongoose.connection.once("open", async () => {
         Logger.info("🔄 Initializing sync system...");
         
         // Apply sync middleware to all models (works for Atlas, LAN, or both)
-        applySyncToAllModels();
+        if (!global.__syncApplied) { applySyncToAllModels(); global.__syncApplied = true; }
 
         // Atlas-specific queue/worker (only if Atlas sync enabled)
         if (syncConfig.enabled) {
@@ -622,12 +623,15 @@ app.set("trust proxy", 1);
 
 // Health check endpoint (before middleware for fast response)
 app.get("/health", (req, res) => {
-    res.status(200).json({
-        status: "success",
-        message: "Server is running",
+    const ready = serverReady && mongoose.connection.readyState === 1;
+    res.status(ready ? 200 : 503).json({
+        status: ready ? "success" : "starting",
+        message: ready ? "Server is running" : "Server starting up",
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || "development",
+        ready,
+        dbConnected: mongoose.connection.readyState === 1,
     });
 });
 
@@ -718,6 +722,7 @@ app.use("/api/organization", organizationRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/warehouse", warehouseRoutes);
 app.use("/api/invites", inviteRoutes);
+app.use("/api/print", printRoutes);
 app.use("/public", publicRoutes);
 
 // Desktop app static serving (enabled only when DESKTOP_DIST_PATH is set)
@@ -767,6 +772,9 @@ app.use("/api/orders", (req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
+// Global readiness flag for /health endpoint
+let serverReady = false;
+
 server.listen(PORT, async () => {
     Logger.info(`Server started on port ${PORT}`, {
         environment: process.env.NODE_ENV,
@@ -783,12 +791,14 @@ server.listen(PORT, async () => {
         }`
     );
 
+    // Mark server as ready for health checks (lightweight)
+    serverReady = true;
+
     // Initialize scheduled tasks
     if (process.env.NODE_ENV === "production") {
         initializeScheduler();
         Logger.info("✅ Scheduler initialized in production mode");
     } else {
-        // Initialize scheduler in development mode as well
         initializeScheduler();
         Logger.info("✅ Scheduler initialized in development mode");
     }
@@ -797,7 +807,6 @@ server.listen(PORT, async () => {
     if (syncConfig.lanSync?.enabled) {
         try {
             Logger.info("🔄 Initializing LAN sync (B+C)...");
-            // Wait a bit for DB to be ready
             const waitForDB = async () => {
                 for (let i = 0; i < 10; i++) {
                     if (mongoose.connection.readyState === 1) return true;
@@ -817,6 +826,38 @@ server.listen(PORT, async () => {
     } else {
         Logger.info("ℹ️  LAN sync disabled (set LAN_SYNC_ENABLED=true to enable)");
     }
+
+    // 🔧 HEAVY TASKS IN BACKGROUND — لا تحجب أول استجابة /health
+    setImmediate(async () => {
+        try {
+            const { default: Bill } = await import('./models/Bill.js');
+            const result = await Bill.updateMany(
+                { status: 'paid', $expr: { $or: [{ $ne: ['$paid', '$total'] }, { $gt: ['$remaining', 0.01] }] } },
+                [{ $set: { paid: '$total', remaining: 0 } }]
+            );
+            if (result.modifiedCount > 0) Logger.info(`✅ Fixed ${result.modifiedCount} paid bills (background)`);
+        } catch (e) { Logger.error("Background bill fix failed:", e.message); }
+    });
+
+    // 🔄 SYNC INIT IN BACKGROUND — يبدأ بعد 30ث لضمان جاهزية Atlas
+    setTimeout(async () => {
+        if (!syncConfig.enabled && !syncConfig.lanSync?.enabled) return;
+        if (global.__syncApplied) return;
+        try {
+            Logger.info("🔄 Initializing sync system (background)...");
+            if (!global.__syncApplied) { applySyncToAllModels(); global.__syncApplied = true; }
+
+            if (syncConfig.enabled) {
+                try {
+                    const loadedCount = await syncQueueManager.loadFromDisk();
+                    if (loadedCount > 0) Logger.info(`📂 Loaded ${loadedCount} ops from queue`);
+                } catch (e) { Logger.error("Queue load failed:", e.message); }
+                syncWorker.start();
+                syncMonitor.logStatus();
+            }
+            Logger.info("✅ Sync system initialized (background)");
+        } catch (e) { Logger.error("Background sync init failed:", e.message); }
+    }, 30000); // 30 ثانية بعد الاستماع
 });
 
 // Graceful shutdown

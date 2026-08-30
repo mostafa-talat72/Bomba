@@ -277,8 +277,6 @@ orderSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-orderSchema.index({ isDeleted: 1 });
-
 // Apply sync middleware BEFORE creating the model
 applySyncMiddleware(orderSchema, 'Order');
 

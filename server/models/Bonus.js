@@ -56,8 +56,6 @@ bonusSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-bonusSchema.index({ isDeleted: 1 });
-
 const Bonus = mongoose.model('Bonus', bonusSchema);
 
 export default Bonus;

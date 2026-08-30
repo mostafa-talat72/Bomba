@@ -35,7 +35,7 @@ class DualDatabaseManager {
 
             const options = {
                 maxPoolSize: 50,
-                serverSelectionTimeoutMS: 5000,
+                serverSelectionTimeoutMS: 10000,
                 socketTimeoutMS: 45000,
                 family: 4,
                 retryWrites: true,
@@ -90,7 +90,7 @@ class DualDatabaseManager {
 
             const options = {
                 maxPoolSize: 20,
-                serverSelectionTimeoutMS: 5000,
+                serverSelectionTimeoutMS: 10000,
                 socketTimeoutMS: 15000,
                 family: 4,
                 retryWrites: true,

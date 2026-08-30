@@ -18,9 +18,13 @@ interface FormErrors {
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useApp();
+  const { login, isAuthenticated } = useApp();
   const { t } = useTranslation();
   const { isRTL } = useLanguage();
+
+  useEffect(() => {
+    if (isAuthenticated) navigate('/dashboard', { replace: true });
+  }, [isAuthenticated, navigate]);
 
   // State management
   const [formData, setFormData] = useState<FormData>({
@@ -89,10 +93,6 @@ const Login: React.FC = () => {
 
       if (result.success) {
         clearForm();
-        // Navigate to dashboard - AppContext will handle the authentication state
-        navigate('/dashboard', { replace: true });
-        
-        // Force re-apply direction after navigation to ensure it's correct
         setTimeout(() => {
           const savedLanguage = localStorage.getItem('language') || 'ar';
           const rtlLanguages = ['ar', 'he', 'fa', 'ur', 'ps', 'yi', 'sd', 'ug', 'dv', 'ku'];

@@ -63,6 +63,7 @@ interface DataContextType {
   fetchInventory: () => Promise<void>;
   fetchBills: () => Promise<void>;
   fetchCosts: () => Promise<void>;
+  fetchDashboardData: () => Promise<void>;
   setBills: React.Dispatch<React.SetStateAction<Bill[]>>;
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   setTables: React.Dispatch<React.SetStateAction<Table[]>>;
@@ -1540,6 +1541,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const fetchDashboardData = async (): Promise<void> => {
+    if (!user) return;
+    await Promise.all([
+      fetchBills(),
+      fetchOrders(),
+      fetchSessions(),
+      fetchTables(),
+    ]);
+  };
+
   const refreshData = async (retryCount = 0): Promise<void> => {
     if (!user) return;
 
@@ -1576,6 +1587,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setOrders([]);
     setBills([]);
     setSessions([]);
+
+    if (typeof window !== 'undefined') {
+      try { localStorage.removeItem('tables_cache_v2'); } catch {}
+    }
 
     await refreshData(0);
   };
@@ -2244,6 +2259,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     fetchUsers,
     fetchSettings,
     fetchWarehouseItems,
+    fetchDashboardData,
     setBills,
     setOrders,
     setTables,

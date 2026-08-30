@@ -445,7 +445,37 @@ const ConsumptionReport = () => {
     return items.reduce((sum, item) => sum + item.total, 0);
   };
 
-  const printReport = () => {
+  const printReport = async () => {
+    try {
+      // محاولة الطباعة المباشرة عبر API
+      const reportData = {
+        consumptionData,
+        dateRange,
+        totalSales: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0),
+        totalConsumption: Object.values(consumptionData).flat().reduce((sum, item) => sum + item.total, 0)
+      };
+
+      const response = await api.printConsumptionReport({
+        reportData,
+        organization: user?.organization,
+        language: i18n.language
+      });
+
+      if (response.success) {
+        const successMsg = i18n.language === 'ar' 
+          ? 'تمت طباعة التقرير بنجاح'
+          : i18n.language === 'fr'
+          ? 'Rapport imprimé avec succès'
+          : 'Report printed successfully';
+        
+        toast.success(successMsg);
+        return;
+      }
+    } catch (error) {
+      console.error('Direct print failed, falling back to window print:', error);
+    }
+
+    // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
     try {
       const isRTL = i18n.language === 'ar';
       const dir = isRTL ? 'rtl' : 'ltr';
@@ -570,35 +600,35 @@ const ConsumptionReport = () => {
               text-align: center; 
               margin-bottom: 8px;
               margin-top: 0;
-              font-weight: 700;
+              font-weight: 900;
               border-bottom: 2px dashed #000;
               padding-bottom: 6px;
             }
             .org-name { 
-              font-size: 1.4em; 
+              font-size: 1.5em; 
               font-weight: 900; 
               margin-bottom: 6px; 
               color: #000;
             }
             .title { 
-              font-size: 1.1em; 
-              font-weight: 800; 
+              font-size: 1.2em; 
+              font-weight: 900; 
               margin-bottom: 6px; 
               color: #000;
             }
             .category-name {
-              font-size: 1.2em;
-              font-weight: 800;
+              font-size: 1.3em;
+              font-weight: 900;
               margin-bottom: 8px;
               color: #000;
               background: #e0e0e0;
-              padding: 6px;
+              padding: 8px;
               border-radius: 4px;
             }
             .date-info { 
               margin-bottom: 4px; 
-              font-weight: 600;
-              font-size: 0.9em;
+              font-weight: 900;
+              font-size: 1.05em;
             }
             .divider { 
               border-top: 2px dashed #000; 
@@ -608,27 +638,27 @@ const ConsumptionReport = () => {
               width: 100%;
               border-collapse: collapse;
               margin-bottom: 10px;
-              font-size: 0.85em;
+              font-size: 0.95em;
               border: 2px solid #000;
               table-layout: fixed;
               direction: ${dir};
             }
             .items-table thead {
               background: #e0e0e0;
-              font-weight: 800;
+              font-weight: 900;
             }
             .items-table th {
-              padding: 4px 3px;
+              padding: 5px 4px;
               text-align: center;
               border: 1.5px solid #000;
-              font-size: 0.9em;
+              font-size: 1em;
               word-wrap: break-word;
             }
             .items-table td {
-              padding: 3px 3px;
+              padding: 4px 4px;
               text-align: center;
               border: 1px solid #000;
-              font-weight: 600;
+              font-weight: 800;
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
@@ -645,26 +675,30 @@ const ConsumptionReport = () => {
             }
             .items-table .item-name {
               text-align: center;
-              font-weight: 700;
+              font-weight: 900;
+              font-size: 1.05em;
               padding-${isRTL ? 'left' : 'right'}: 5px;
               width: 50% !important;
             }
             .items-table .item-quantity {
-              font-weight: 600;
+              font-weight: 900;
+              font-size: 1.15em;
             }
             .items-table .item-price {
-              font-weight: 600;
+              font-weight: 900;
+              font-size: 1.15em;
             }
             .items-table .item-total {
-              font-weight: 800;
+              font-weight: 900;
+              font-size: 1.15em;
               color: #000;
             }
             .category-total {
               text-align: center;
-              font-size: 1.2em;
-              font-weight: 800;
+              font-size: 1.35em;
+              font-weight: 900;
               color: #000;
-              padding: 10px;
+              padding: 12px;
               background: #f0f0f0;
               border-radius: 4px;
               margin-top: 10px;
@@ -672,22 +706,22 @@ const ConsumptionReport = () => {
             .footer { 
               margin-top: auto;
               text-align: center; 
-              font-size: 0.85em; 
+              font-size: 1em; 
               color: #333;
               border-top: 2px dashed #000;
-              padding-top: 8px;
-              padding-bottom: 8px;
-              font-weight: 700;
+              padding-top: 10px;
+              padding-bottom: 10px;
+              font-weight: 900;
             }
             .thank-you { 
               text-align: center; 
               margin-top: 12px; 
               margin-bottom: 10px;
-              font-size: 1.1em; 
-              font-weight: 700; 
+              font-size: 1.2em; 
+              font-weight: 800; 
             }
             strong { 
-              font-weight: 800; 
+              font-weight: 900; 
             }
             
             @media print {

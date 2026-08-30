@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, FC } from 'react';
-import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Bell, User, Lock, Eye, EyeOff, Building2, LucideIcon, Facebook, Instagram, Twitter, Linkedin, Youtube, MessageCircle, Send, Globe, Phone, Mail, MapPin, Users, Check, X, Clock, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
@@ -12,6 +12,7 @@ import { getCurrencyName } from '../../shared/currencyNames';
 import { CURRENCY_SYMBOLS } from '../../shared/currencySymbols';
 import { getTimezoneName } from '../../shared/timezoneNames';
 import { WORLD_LANGUAGES } from '../../shared/languages';
+import api from '../services/api';
 
 // Type for alert messages
 type AlertType = 'success' | 'error' | 'info' | 'warning';
@@ -128,6 +129,10 @@ const Settings: FC = () => {
   const [generalSaving, setGeneralSaving] = useState(false);
   const [organizationSaving, setOrganizationSaving] = useState(false);
   const [permissionsSaving, setPermissionsSaving] = useState(false);
+  
+  // Printer detection states
+  const [detectingPrinters, setDetectingPrinters] = useState(false);
+  const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
   
   // Alert state
   const [showAlert, setShowAlert] = useState(false);
@@ -722,6 +727,79 @@ const Settings: FC = () => {
         ? prev.filter(id => id !== managerId)
         : [...prev, managerId]
     );
+  };
+
+  // Printer detection functions
+  const detectPrinters = async () => {
+    setDetectingPrinters(true);
+    try {
+      const response: any = await api.detectPrinters('usb');
+      const printers = response.printers || response.data?.printers || [];
+      if (response.success) {
+        setAvailablePrinters(printers);
+        if (printers.length > 0) {
+          showAlertMessage(t('settings.organization.printSettings.printersDetected', { count: printers.length }), 'success');
+        } else {
+          showAlertMessage('لا توجد طابعات متصلة — تأكد من توصيل الطابعة وتشغيلها ثم حاول again', 'info');
+        }
+      } else {
+        showAlertMessage(response.message || t('settings.organization.printSettings.detectFailed'), 'error');
+      }
+    } catch (error) {
+      console.error('Error detecting printers:', error);
+      showAlertMessage(t('settings.organization.printSettings.detectFailed'), 'error');
+    } finally {
+      setDetectingPrinters(false);
+    }
+  };
+
+  const selectPrinter = (printer: any) => {
+    setOrganization({
+      ...organization,
+      printSettings: {
+        ...organization.printSettings,
+        printerDevice: printer.path,
+      },
+    });
+    
+    // حفظ إعدادات الطابعة للجهاز الحالي
+    saveDevicePrinter(printer.path, printer.name);
+  };
+
+  const testPrinter = async (printer: any) => {
+    try {
+      const response = await api.testPrinter({
+        printerPath: printer.path,
+        printerType: 'usb',
+      });
+      
+      if (response.success) {
+        showAlertMessage(
+          t('settings.organization.printSettings.testSuccess'),
+          'success'
+        );
+      } else {
+        showAlertMessage(
+          t('settings.organization.printSettings.testFailed', { error: response.message || 'Unknown error' }),
+          'error'
+        );
+      }
+    } catch (error) {
+      console.error('Error testing printer:', error);
+      showAlertMessage(t('settings.organization.printSettings.testFailed', { error: 'Connection error' }), 'error');
+    }
+  };
+
+  const saveDevicePrinter = async (printerPath: string, printerName: string) => {
+    try {
+      const deviceId = localStorage.getItem('deviceId') || 'default';
+      const userId = (JSON.parse(localStorage.getItem('user') || '{}')?._id) || 'anon';
+      localStorage.setItem(`printer_${deviceId}_${userId}`, JSON.stringify({ printerPath, printerName, lastUsed: Date.now() }));
+      const response = await api.saveDevicePrinter({ printerPath, printerName, deviceId });
+      if (response.success) console.log('Printer settings saved for device');
+    } catch (error) {
+      console.error('Error saving device printer:', error);
+    }
   };
 
   const tabs: TabType[] = [
@@ -1377,32 +1455,345 @@ const Settings: FC = () => {
 
                   {/* Print Settings Section */}
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-                    <div className="flex items-center justify-between">
+                    <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
+                      {t('settings.organization.printSettings.title')}
+                    </h4>
+                    
+                    <div className="space-y-4">
+                      {/* Printer Type */}
                       <div>
-                        <h4 className="text-md font-medium text-gray-900 dark:text-gray-100">
-                          {t('settings.organization.printSettings.title')}
-                        </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {t('settings.organization.printSettings.printQRCodeDesc')}
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={organization.printSettings?.printQRCode ?? true}
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          {t('settings.organization.printSettings.printerType')}
+                        </label>
+                        <select
+                          value={organization.printSettings?.printerType || 'none'}
                           onChange={(e) =>
                             setOrganization({
                               ...organization,
                               printSettings: {
                                 ...organization.printSettings,
-                                printQRCode: e.target.checked,
+                                printerType: e.target.value,
                               },
                             })
                           }
-                          className="sr-only peer"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:text-gray-100"
+                        >
+                          <option value="none">{t('settings.organization.printSettings.none')}</option>
+                          <option value="usb">{t('settings.organization.printSettings.usb')}</option>
+                          <option value="network">{t('settings.organization.printSettings.network')}</option>
+                          <option value="bluetooth">{t('settings.organization.printSettings.bluetooth')}</option>
+                        </select>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {t('settings.organization.printSettings.printerTypeDesc')}
+                        </p>
+                      </div>
+
+                      {/* Printer Device (for USB) */}
+                      {organization.printSettings?.printerType === 'usb' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {t('settings.organization.printSettings.printerDevice')}
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={organization.printSettings?.printerDevice || ''}
+                              onChange={(e) =>
+                                setOrganization({
+                                  ...organization,
+                                  printSettings: {
+                                    ...organization.printSettings,
+                                    printerDevice: e.target.value,
+                                  },
+                                })
+                              }
+                              placeholder="e.g., /dev/usb/lp0 or COM1"
+                              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:text-gray-100"
+                            />
+                            <button
+                              type="button"
+                              onClick={detectPrinters}
+                              disabled={detectingPrinters}
+                              className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                              {detectingPrinters ? (
+                                <>
+                                  <span className="animate-spin">⟳</span>
+                                  {t('settings.organization.printSettings.detecting')}
+                                </>
+                              ) : (
+                                <>
+                                  <Search className="w-4 h-4" />
+                                  {t('settings.organization.printSettings.detectPrinters')}
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.printerDeviceDesc')}
+                          </p>
+                          
+                          {/* قائمة الطابعات المتاحة */}
+                          {availablePrinters.length > 0 && (
+                            <div className="mt-3">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                {t('settings.organization.printSettings.availablePrinters')}
+                              </label>
+                              <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2">
+                                {availablePrinters.map((printer, index) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer"
+                                    onClick={() => selectPrinter(printer)}
+                                  >
+                                    <div>
+                                      <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                        {printer.name}
+                                      </div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                                        {printer.path} {printer.driver && `(${printer.driver})`}
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        testPrinter(printer);
+                                      }}
+                                      className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                    >
+                                      {t('settings.organization.printSettings.test')}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Printer IP and Port (for Network) */}
+                      {organization.printSettings?.printerType === 'network' && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              {t('settings.organization.printSettings.printerIP')}
+                            </label>
+                            <input
+                              type="text"
+                              value={organization.printSettings?.printerIP || ''}
+                              onChange={(e) =>
+                                setOrganization({
+                                  ...organization,
+                                  printSettings: {
+                                    ...organization.printSettings,
+                                    printerIP: e.target.value,
+                                  },
+                                })
+                              }
+                              placeholder="192.168.1.100"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:text-gray-100"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {t('settings.organization.printSettings.printerIPDesc')}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              {t('settings.organization.printSettings.printerPort')}
+                            </label>
+                            <input
+                              type="number"
+                              value={organization.printSettings?.printerPort || 9100}
+                              onChange={(e) =>
+                                setOrganization({
+                                  ...organization,
+                                  printSettings: {
+                                    ...organization.printSettings,
+                                    printerPort: parseInt(e.target.value) || 9100,
+                                  },
+                                })
+                              }
+                              placeholder="9100"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:text-gray-100"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {t('settings.organization.printSettings.printerPortDesc')}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Open Cash Drawer */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.organization.printSettings.openCashDrawer')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.openCashDrawerDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organization.printSettings?.openCashDrawer ?? true}
+                            onChange={(e) =>
+                              setOrganization({
+                                ...organization,
+                                printSettings: {
+                                  ...organization.printSettings,
+                                  openCashDrawer: e.target.checked,
+                                },
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {/* Characters Per Line */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          {t('settings.organization.printSettings.charactersPerLine')}
+                        </label>
+                        <input
+                          type="number"
+                          value={organization.printSettings?.charactersPerLine || 48}
+                          onChange={(e) =>
+                            setOrganization({
+                              ...organization,
+                              printSettings: {
+                                ...organization.printSettings,
+                                charactersPerLine: parseInt(e.target.value) || 48,
+                              },
+                            })
+                          }
+                          min="32"
+                          max="64"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:text-gray-100"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-                      </label>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {t('settings.organization.printSettings.charactersPerLineDesc')}
+                        </p>
+                      </div>
+
+                      {/* Print Header */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.organization.printSettings.printHeader')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.printHeaderDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organization.printSettings?.printHeader ?? true}
+                            onChange={(e) =>
+                              setOrganization({
+                                ...organization,
+                                printSettings: {
+                                  ...organization.printSettings,
+                                  printHeader: e.target.checked,
+                                },
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {/* Print Footer */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.organization.printSettings.printFooter')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.printFooterDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organization.printSettings?.printFooter ?? true}
+                            onChange={(e) =>
+                              setOrganization({
+                                ...organization,
+                                printSettings: {
+                                  ...organization.printSettings,
+                                  printFooter: e.target.checked,
+                                },
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {/* Auto Cut */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.organization.printSettings.autoCut')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.autoCutDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organization.printSettings?.autoCut ?? false}
+                            onChange={(e) =>
+                              setOrganization({
+                                ...organization,
+                                printSettings: {
+                                  ...organization.printSettings,
+                                  autoCut: e.target.checked,
+                                },
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
+
+                      {/* Print QR Code */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {t('settings.organization.printSettings.printQRCode')}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {t('settings.organization.printSettings.printQRCodeDesc')}
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={organization.printSettings?.printQRCode ?? true}
+                            onChange={(e) =>
+                              setOrganization({
+                                ...organization,
+                                printSettings: {
+                                  ...organization.printSettings,
+                                  printQRCode: e.target.checked,
+                                },
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -1993,10 +2384,31 @@ const Settings: FC = () => {
               </div>
             )}
 
-            {/* Organization Tab - Show message if no permissions */}
+            {/* Organization Tab - Per-device printer for normal users (visible even without org edit permission) */}
             {activeTab === 'organization' && !organizationPermissions.canEdit && !organizationLoading && (
               <div className="space-y-6">
-                <div className="text-center py-12">
+                <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
+                    {t('settings.organization.printSettings.title')} — {t('settings.organization.printSettings.myDevice')}
+                  </h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{t('settings.organization.printSettings.myDeviceDesc')}</p>
+                  <div className="flex gap-2 mb-3">
+                    <button onClick={detectPrinters} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm">
+                      {t('settings.organization.printSettings.detectPrinters')}
+                    </button>
+                  </div>
+                  {availablePrinters.length > 0 && (
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-2 bg-white dark:bg-gray-800">
+                      {availablePrinters.map((printer: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded">
+                          <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{printer.name || printer.path}</span>
+                          <button onClick={() => saveDevicePrinter(printer.path, printer.name)} className="ml-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">{t('common.select')}</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="text-center py-6">
                   <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900">
                     <Building2 className="h-6 w-6 text-red-600 dark:text-red-400" />
                   </div>

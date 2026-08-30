@@ -253,8 +253,6 @@ warehouseItemSchema.add({
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 });
-warehouseItemSchema.index({ isDeleted: 1 });
-
 applySyncMiddleware(warehouseItemSchema, "WarehouseItem");
 
 export default mongoose.model("WarehouseItem", warehouseItemSchema);
