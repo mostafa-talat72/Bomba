@@ -34,7 +34,6 @@ import {
   Minimize2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useData } from '../context/DataContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useTablesHeader } from '../context/TablesHeaderContext';
@@ -267,8 +266,20 @@ const Layout = () => {
     return tableIdsWithStatus.size > 0 || hasOpenBill || hasActiveSession;
   }, [user, tables, bills, sessions]);
 
+  const handleConfirmLogoutWithOccupied = async () => {
+    setIsConfirmingLogout(true);
+    setShowOccupiedWarning(false);
+
+    try {
+      await logout();
+    } finally {
+      setIsConfirmingLogout(false);
+    }
+  };
+
   const handleLogout = async () => {
-    if (hasOccupiedTables && !window.confirm('توجد طاولات مشغولة، هل تريد تسجيل الخروج؟')) {
+    if (hasOccupiedTables) {
+      setShowOccupiedWarning(true);
       return;
     }
 
