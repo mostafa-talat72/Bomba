@@ -3628,6 +3628,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                     quantity: qty,
                     itemTotal,
                     notes: raw.notes || null,
+                    variant: raw.variant || null,
                     preparationTime: mi.preparationTime || 5,
                     section: mi.category ? null : null,
                 });
@@ -3647,6 +3648,7 @@ export const updateBillAggregatedItems = async (req, res) => {
                     quantity: qty,
                     itemTotal,
                     notes: raw.notes || null,
+                    variant: raw.variant || null,
                     preparationTime: raw.preparationTime || 5,
                 });
             }
@@ -3949,6 +3951,9 @@ export const updateBillAggregatedItems = async (req, res) => {
             { path: "table", select: "number name section" },
             { path: "createdBy", select: "name" },
         ]);
+        
+        // Ensure variant field is included in response (convert to plain object)
+        const billResponse = bill.toObject();
 
         // Socket notify
         if (req.io) {
@@ -3965,7 +3970,7 @@ export const updateBillAggregatedItems = async (req, res) => {
             }
         } catch {}
 
-        res.json({ success: true, message: "تم تحديث أصناف الفاتورة بنجاح", data: bill });
+        res.json({ success: true, message: "تم تحديث أصناف الفاتورة بنجاح", data: billResponse });
     } catch (error) {
         Logger.error("خطأ في تحديث أصناف الفاتورة المجمعة", error);
         res.status(500).json({ success: false, message: "خطأ في تحديث أصناف الفاتورة", error: error.message });

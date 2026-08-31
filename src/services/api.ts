@@ -1612,6 +1612,7 @@ class ApiClient {
       price?: number;
       quantity: number;
       notes?: string | null;
+      variant?: string | null;
     }>;
   }): Promise<ApiResponse<Bill>> {
     const response = await this.request<Bill>(`/billing/${id}/items-aggregated`, {
