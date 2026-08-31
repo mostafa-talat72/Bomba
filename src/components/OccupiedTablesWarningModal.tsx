@@ -2,7 +2,6 @@ import React from 'react';
 import { AlertTriangle, LogOut, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ModalPortal from './ModalPortal';
-import { useLanguage } from '../context/LanguageContext';
 
 interface OccupiedTablesWarningModalProps {
   isOpen: boolean;
@@ -24,7 +23,6 @@ const OccupiedTablesWarningModal: React.FC<OccupiedTablesWarningModalProps> = ({
   actionType = 'logout'
 }) => {
   const { t } = useTranslation();
-  const { isRTL } = useLanguage();
 
   if (!isOpen || occupiedTablesCount === 0) return null;
 
