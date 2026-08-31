@@ -492,6 +492,7 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                       fmt={fmt}
                       canEditPrice={canEditPrice}
                       onEditPrice={() => { setPriceEditTarget({ index: idx, item }); setShowPriceEditModal(true); }}
+                      showVariantBadge={true}
                     />
                   </div>
                   );

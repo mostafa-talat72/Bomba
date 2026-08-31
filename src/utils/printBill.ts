@@ -257,7 +257,8 @@ export const buildBillPrintHTML = async (
     
     const itemsRows = aggregatedItems.map((item: AggregatedItem) => {
       const v = (item as any).variant;
-      const variantText = v && v !== 'عادي' ? ` (${v})` : '';
+      // تحسين عرض الحجم (size) - يظهر بشكل أوضح في الفاتورة المطبوعة
+      const variantText = v && v !== 'عادي' ? `\n📏 ${v}` : '';
       const addonsText = item.addons && item.addons.length > 0
         ? ` (${item.addons.map(a => a.name).join(', ')})`
         : '';
@@ -485,6 +486,8 @@ export const buildBillPrintHTML = async (
           font-size: 1.1em;
           padding-${dir === 'rtl' ? 'right' : 'left'}: 5px;
           width: 50% !important;
+          white-space: pre-wrap;
+          word-break: break-word;
         }
         .items-table .item-quantity {
           width: 16.67% !important;
