@@ -6,14 +6,14 @@
 /**
  * Creates a unique key for an item based on name, price, and addons
  */
-function createItemKey(itemName, itemPrice, addons = []) {
+function createItemKey(itemName, itemPrice, addons = [], variant = null) {
     // Sort addons by name and price to ensure consistent keys
     const addonsKey = addons
         .map(addon => `${addon.name}:${addon.price}`)
         .sort()
         .join('|');
     
-    return `${itemName}|${itemPrice}|${addonsKey}`;
+    return `${itemName}|${variant || ''}|${itemPrice}|${addonsKey}`;
 }
 
 /**
@@ -157,15 +157,15 @@ function getItemIdsForAggregatedItem(aggregatedItemId, orders) {
         return []; // Item not found
     }
 
-    // Find all items with same name+price+addons that actually exist
-    const targetKey = createItemKey(targetItem.name, targetItem.price, targetItem.addons);
+    // Find all items with same name+price+addons+variant that actually exist
+    const targetKey = createItemKey(targetItem.name, targetItem.price, targetItem.addons, targetItem.variant);
     const matchingItemIds = [];
 
     orders.forEach((order) => {
         if (!order.items || !Array.isArray(order.items)) return;
 
         order.items.forEach((item, itemIndex) => {
-            const itemKey = createItemKey(item.name, item.price, item.addons);
+            const itemKey = createItemKey(item.name, item.price, item.addons, item.variant);
             if (itemKey === targetKey) {
                 const itemId = `${order._id}-${itemIndex}`;
                 // Only include if it's a valid itemId
@@ -204,13 +204,14 @@ export function aggregateItemsWithPayments(
 
         order.items.forEach((item, itemIndex) => {
             const itemId = `${order._id}-${itemIndex}`;
-            const key = createItemKey(item.name, item.price, item.addons);
+            const key = createItemKey(item.name, item.price, item.addons, item.variant);
 
             if (!itemMap.has(key)) {
                 // Create new aggregated item
                 const newItem = {
                     id: itemId, // Use first itemId as representative
                     name: item.name,
+                    variant: item.variant || null,
                     price: item.price,
                     totalQuantity: item.quantity,
                     paidQuantity: 0, // Will be calculated later

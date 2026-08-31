@@ -753,7 +753,7 @@ export const createOrder = async (req, res) => {
         
         if (menuItemIds.length > 0) {
             const menuItems = await MenuItem.find({ _id: { $in: menuItemIds } })
-                .select('_id name arabicName price isAvailable preparationTime category')
+                .select('_id name arabicName price variants isAvailable preparationTime category')
                 .populate({ path: 'category', select: 'section', populate: { path: 'section', select: '_id' } })
                 .lean();
             
@@ -778,15 +778,42 @@ export const createOrder = async (req, res) => {
                     });
                 }
 
-                // Calculate item total
-                const itemTotal = (menuItem.price || 0) * (item.quantity || 1);
+                // Determine effective price/variant: support multi-size variants
+                let effectivePrice = menuItem.price || 0;
+                let effectiveVariant = item.variant ? String(item.variant).trim() : null;
+                if (menuItem.variants && menuItem.variants.length > 0) {
+                    if (effectiveVariant) {
+                        const matched = menuItem.variants.find(v => v.size === effectiveVariant);
+                        if (matched) {
+                            effectivePrice = matched.price;
+                        } else {
+                            return res.status(400).json({
+                                success: false,
+                                message: `الحجم غير موجود: ${effectiveVariant} للعنصر ${menuItem.name}`,
+                            });
+                        }
+                    } else {
+                        // No variant supplied, use first variant as default (backward compat with price)
+                        effectiveVariant = menuItem.variants[0].size;
+                        effectivePrice = menuItem.variants[0].price;
+                    }
+                } else {
+                    effectiveVariant = effectiveVariant || null;
+                }
+                // Allow custom price per order if user has permission
+                if (item.price !== undefined && item.price !== null && item.price !== '' && req.user.hasPermission('canEditItemPrice')) {
+                    const cp = Number(item.price);
+                    if (!isNaN(cp) && cp >= 0) effectivePrice = cp;
+                }
+                const itemTotal = effectivePrice * (item.quantity || 1);
                 subtotal += itemTotal;
                 const sectionId = menuItem.category?.section?._id || null;
                 processedItems.push({
                     menuItem: menuItem._id,
                     name: menuItem.name,
                     arabicName: menuItem.arabicName || menuItem.name,
-                    price: menuItem.price || 0,
+                    price: effectivePrice,
+                    variant: effectiveVariant,
                     quantity: item.quantity || 1,
                     itemTotal: itemTotal,
                     notes: item.notes,
@@ -802,6 +829,7 @@ export const createOrder = async (req, res) => {
                 processedItems.push({
                     name: item.name || 'عنصر غير محدد',
                     price: itemPrice,
+                    variant: item.variant ? String(item.variant).trim() : null,
                     quantity: itemQuantity,
                     itemTotal: itemTotal,
                     notes: item.notes,
@@ -1263,7 +1291,7 @@ export const updateOrder = async (req, res) => {
                     );
                 }
                 if (orderItem) {
-                    // تحديث الكمية والملاحظات
+                    // تحديث الكمية والملاحظات مع دعم variants
                     const newQuantity = Math.max(
                         updatedItem.quantity,
                         orderItem.preparedCount || 0
@@ -1273,13 +1301,51 @@ export const updateOrder = async (req, res) => {
                         updatedItem.notes !== undefined
                             ? updatedItem.notes
                             : orderItem.notes;
-                    orderItem.price = updatedItem.price;
-                    orderItem.name = updatedItem.name;
-                    orderItem.menuItem = updatedItem.menuItem;
+                    // Resolve variant/price via MenuItem if needed
+                    if (updatedItem.menuItem) {
+                        const menuItemDoc = await MenuItem.findById(updatedItem.menuItem).select('price variants name').lean();
+                        if (menuItemDoc) {
+                            let effPrice = updatedItem.price;
+                            let effVariant = updatedItem.variant ? String(updatedItem.variant).trim() : (orderItem.variant || null);
+                            if (menuItemDoc.variants && menuItemDoc.variants.length > 0) {
+                                if (effVariant) {
+                                    const matched = menuItemDoc.variants.find(v => v.size === effVariant);
+                                    if (matched) effPrice = matched.price;
+                                    else if (updatedItem.variant) {
+                                        return res.status(400).json({ success: false, message: `الحجم غير موجود: ${effVariant} للعنصر ${menuItemDoc.name}` });
+                                    }
+                                } else {
+                                    effVariant = menuItemDoc.variants[0].size;
+                                    effPrice = menuItemDoc.variants[0].price;
+                                }
+                            } else {
+                                effPrice = effPrice != null ? effPrice : menuItemDoc.price;
+                            }
+                            // Custom price override per order
+                            if (updatedItem.price !== undefined && updatedItem.price !== null && updatedItem.price !== '' && req.user.hasPermission('canEditItemPrice')) {
+                                const cp = Number(updatedItem.price);
+                                if (!isNaN(cp) && cp >= 0) effPrice = cp;
+                            }
+                            orderItem.price = effPrice;
+                            orderItem.variant = effVariant;
+                            orderItem.name = menuItemDoc.name;
+                            orderItem.menuItem = menuItemDoc._id;
+                        } else {
+                            orderItem.price = updatedItem.price;
+                            orderItem.variant = updatedItem.variant ? String(updatedItem.variant).trim() : orderItem.variant;
+                            orderItem.name = updatedItem.name;
+                            orderItem.menuItem = updatedItem.menuItem;
+                        }
+                    } else {
+                        orderItem.price = updatedItem.price;
+                        orderItem.variant = updatedItem.variant ? String(updatedItem.variant).trim() : orderItem.variant;
+                        orderItem.name = updatedItem.name;
+                        orderItem.menuItem = updatedItem.menuItem;
+                    }
                     // أعد حساب itemTotal
                     orderItem.itemTotal = orderItem.price * orderItem.quantity;
                 } else {
-                    // إضافة صنف جديد
+                    // إضافة صنف جديد - مع دعم variants
                     if (updatedItem.menuItem) {
                         const menuItem = await MenuItem.findById(
                             updatedItem.menuItem
@@ -1297,12 +1363,32 @@ export const updateOrder = async (req, res) => {
                             });
                         }
 
-                        const itemTotal = menuItem.price * updatedItem.quantity;
+                        let effPrice = menuItem.price;
+                        let effVariant = updatedItem.variant ? String(updatedItem.variant).trim() : null;
+                        if (menuItem.variants && menuItem.variants.length > 0) {
+                            if (effVariant) {
+                                const matched = menuItem.variants.find(v => v.size === effVariant);
+                                if (matched) effPrice = matched.price;
+                                else return res.status(400).json({ success: false, message: `الحجم غير موجود: ${effVariant} للعنصر ${menuItem.name}` });
+                            } else {
+                                effVariant = menuItem.variants[0].size;
+                                effPrice = menuItem.variants[0].price;
+                            }
+                        } else {
+                            effVariant = effVariant || null;
+                            effPrice = updatedItem.price != null ? updatedItem.price : menuItem.price;
+                        }
+                        if (updatedItem.price !== undefined && updatedItem.price !== null && updatedItem.price !== '' && req.user.hasPermission('canEditItemPrice')) {
+                            const cp = Number(updatedItem.price);
+                            if (!isNaN(cp) && cp >= 0) effPrice = cp;
+                        }
+                        const itemTotal = effPrice * updatedItem.quantity;
                         order.items.push({
                             menuItem: menuItem._id,
                             name: menuItem.name,
                             arabicName: menuItem.arabicName || menuItem.name,
-                            price: menuItem.price,
+                            price: effPrice,
+                            variant: effVariant,
                             quantity: updatedItem.quantity,
                             itemTotal,
                             notes: updatedItem.notes,
@@ -1314,6 +1400,7 @@ export const updateOrder = async (req, res) => {
                         order.items.push({
                             name: updatedItem.name,
                             price: updatedItem.price,
+                            variant: updatedItem.variant ? String(updatedItem.variant).trim() : null,
                             quantity: updatedItem.quantity,
                             itemTotal,
                             notes: updatedItem.notes,

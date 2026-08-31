@@ -110,6 +110,7 @@ const [formData, setFormData] = useState({
     { id: 'canAddOrder', name: t('users.permissions.canAddOrder'), description: t('users.permissions.canAddOrderDesc') },
     { id: 'canEditOrder', name: t('users.permissions.canEditOrder'), description: t('users.permissions.canEditOrderDesc') },
     { id: 'canDeleteOrder', name: t('users.permissions.canDeleteOrder'), description: t('users.permissions.canDeleteOrderDesc') },
+    { id: 'canEditItemPrice', name: t('users.permissions.canEditItemPrice'), description: t('users.permissions.canEditItemPriceDesc') },
     { id: 'canPartialPayment', name: t('users.permissions.canPartialPayment'), description: t('users.permissions.canPartialPaymentDesc') },
     { id: 'canEditSessionTime', name: t('users.permissions.canEditSessionTime'), description: t('users.permissions.canEditSessionTimeDesc') },
     { id: 'canPayFullBill', name: t('users.permissions.canPayFullBill'), description: t('users.permissions.canPayFullBillDesc') },

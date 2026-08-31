@@ -82,6 +82,13 @@ export const canEditPartialPayment = (user: UserPermissions | null): boolean => 
 };
 
 /**
+ * Check if user can edit item price in order
+ */
+export const canEditItemPrice = (user: UserPermissions | null): boolean => {
+  return hasPermission(user, 'canEditItemPrice');
+};
+
+/**
  * Check if user has any of the specified permissions
  */
 export const hasAnyPermission = (user: UserPermissions | null, permissions: string[]): boolean => {

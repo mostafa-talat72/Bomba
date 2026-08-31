@@ -571,6 +571,8 @@
       "canEditOrderDesc": "Allow editing existing orders",
       "canDeleteOrder": "Delete Order",
       "canDeleteOrderDesc": "Allow deleting orders",
+      "canEditItemPrice": "Edit Item Price",
+      "canEditItemPriceDesc": "Allow editing item price within an order",
       "canPartialPayment": "Partial Payment",
       "canPartialPaymentDesc": "Allow partial payment for orders and sessions",
       "canEditSessionTime": "Edit Session Time",

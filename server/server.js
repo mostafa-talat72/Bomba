@@ -17,6 +17,7 @@ import { performanceMonitor } from "./middleware/performanceMonitor.js";
 import { setupSocketIO } from "./socket/socketHandler.js";
 import { startAutoOrderCompleter } from "./services/autoOrderCompleter.js";
 import { initializeScheduler } from "./utils/scheduler.js";
+import { fixAllTableStatuses } from "./utils/tableUtils.js";
 import Logger from "./middleware/logger.js";
 import jwt from "jsonwebtoken";
 import Bill from "./models/Bill.js";
@@ -187,6 +188,15 @@ mongoose.connection.once("open", async () => {
         }
     } catch (error) {
         Logger.error("❌ Error in automatic bill fix:", error.message);
+    }
+
+    // Auto-fix table statuses on startup (one-time, efficient: Bill.exists + bulkWrite)
+    try {
+        Logger.info("🔧 Running automatic table status fix on startup...");
+        const tableFixResult = await fixAllTableStatuses({ logResults: true, silentIfNoFix: false });
+        Logger.info(`✅ Table status startup fix completed: fixed ${tableFixResult.fixed}/${tableFixResult.total} (occupied:${tableFixResult.occupied} empty:${tableFixResult.empty})`);
+    } catch (tableFixError) {
+        Logger.error("❌ Error in automatic table status fix:", tableFixError.message);
     }
     
     // Initialize sync system (Atlas and/or LAN)

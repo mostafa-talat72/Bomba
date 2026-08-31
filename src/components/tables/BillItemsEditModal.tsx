@@ -8,6 +8,9 @@ import { useLanguage } from '../../context/LanguageContext';
 import { getTableDisplay } from './tableHelpers';
 import { ItemCard, OrderItemRow } from './OrderItems';
 import ModalPortal from '../ModalPortal';
+import PriceEditModal from './PriceEditModal';
+import { useApp } from '../../context/AppContext';
+import { canEditItemPrice } from '../../utils/permissionHelper';
 import type { LocalOrderItem } from './tableHelpers';
 
 interface AggregatedEditItem extends LocalOrderItem {}
@@ -24,9 +27,9 @@ interface Props {
   getItemsForCategory?: (categoryId: string) => MenuItem[];
 }
 
-function createItemKey(name: string, price: number, menuItem?: string) {
-  if (menuItem) return `mid:${menuItem}`;
-  return `name:${name}|${price}`;
+function createItemKey(name: string, price: number, menuItem?: string, variant?: string | null) {
+  if (menuItem) return `mid:${menuItem}|${price}|${variant || ''}`;
+  return `name:${name}|${price}|${variant || ''}`;
 }
 
 const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems, menuSections, menuCategories, onSuccess, getCategoriesForSection: propGetCats, getItemsForCategory: propGetItems }) => {
@@ -46,6 +49,11 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
   const [flashId, setFlashId] = useState<string | null>(null);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLengthRef = useRef(items.length);
+
+  const { user } = useApp() as any;
+  const canEditPrice = canEditItemPrice(user);
+  const [showPriceEditModal, setShowPriceEditModal] = useState(false);
+  const [priceEditTarget, setPriceEditTarget] = useState<{ index: number; item: AggregatedEditItem } | null>(null);
 
   const curCurrency = useRef(localStorage.getItem('organizationCurrency') || 'EGP').current;
   const fmt = useCallback((n: number) => formatCurrencyUtil(n, i18n.language, curCurrency), [i18n.language, curCurrency]);
@@ -75,13 +83,14 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       for (const it of order.items) {
         const menuItemId = it.menuItem?._id || it.menuItem || (typeof it.menuItem === 'string' ? it.menuItem : undefined);
         const mid = menuItemId ? String(menuItemId) : undefined;
-        const key = createItemKey(it.name, it.price, mid);
+        const variant = (it as any).variant || null;
+        const key = createItemKey(it.name, it.price, mid, variant);
         const existing = map.get(key);
         if (existing) existing.quantity += it.quantity;
-        else map.set(key, { menuItem: mid || it.name, name: it.name, price: it.price, quantity: it.quantity, notes: it.notes || undefined } as any);
-        // store menuItem as id string for LocalOrderItem compatibility
+        else map.set(key, { menuItem: mid || it.name, name: it.name, price: it.price, quantity: it.quantity, notes: it.notes || undefined, variant } as any);
         const stored = map.get(key)!;
         if (mid) stored.menuItem = mid;
+        (stored as any).variant = variant;
       }
     }
     // Normalize to LocalOrderItem: menuItem must be string id
@@ -91,7 +100,8 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
       price: it.price,
       quantity: it.quantity,
       notes: (it as any).notes,
-    } as LocalOrderItem));
+      variant: (it as any).variant || null,
+    } as any as LocalOrderItem));
     setItems(normalized);
     setError(null);
     setInventoryErrors([]);
@@ -180,10 +190,11 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
 
   const handleAddWithFlash = useCallback((menuItem: MenuItem) => {
     const id = (menuItem as any)._id || (menuItem as any).id;
+    const effectivePrice = menuItem.variants && menuItem.variants.length > 0 ? menuItem.variants[0].price : menuItem.price;
     setItems(prev => {
-      const ex = prev.find(i => i.menuItem === id);
-      if (ex) return prev.map(i => i.menuItem === id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { menuItem: id, name: menuItem.name, price: menuItem.price, quantity: 1 }];
+      const ex = prev.find(i => i.menuItem === id && i.price === effectivePrice);
+      if (ex) return prev.map(i => i.menuItem === id && i.price === effectivePrice ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { menuItem: id, name: menuItem.name, price: effectivePrice, quantity: 1 }];
     });
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     setFlashId(id);
@@ -204,6 +215,28 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     setItems(prev => prev.map(it => it.menuItem === menuItemId ? { ...it, notes } : it));
   };
 
+  const handlePriceEditSaveBill = (qty: number, newPrice: number) => {
+    if (!priceEditTarget) return;
+    const { index, item } = priceEditTarget;
+    setItems(prev => {
+      const cp = [...prev];
+      let idx = index;
+      if (!cp[idx] || cp[idx].menuItem !== item.menuItem || cp[idx].price !== item.price) {
+        idx = cp.findIndex(i => i.menuItem === item.menuItem && i.price === item.price);
+        if (idx === -1) return prev;
+      }
+      const target = cp[idx];
+      if (qty >= target.quantity) {
+        cp[idx] = { ...target, price: newPrice };
+      } else {
+        cp[idx] = { ...target, quantity: target.quantity - qty };
+        const newItem = { menuItem: target.menuItem, name: target.name, price: newPrice, quantity: qty, notes: target.notes, variant: (target as any).variant || null } as AggregatedEditItem;
+        cp.splice(idx + 1, 0, newItem);
+      }
+      return cp;
+    });
+  };
+
   const handleSave = async () => {
     const targetBill = fullBill || bill;
     if (!targetBill) return;
@@ -212,13 +245,18 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
     setInventoryErrors([]);
     try {
       const billId = (targetBill as any)._id || (targetBill as any).id;
-      // Map items: if menuItem looks like ObjectId (24 hex), send as menuItem, otherwise as name/price
+      // Map items: include price/variant for custom price per order (requires canEditItemPrice)
       const payloadItems = items.map(it => {
         const isObjectId = /^[a-f\d]{24}$/i.test(it.menuItem);
         if (isObjectId) {
-          return { menuItem: it.menuItem, quantity: it.quantity, notes: it.notes || undefined };
+          const payload: any = { menuItem: it.menuItem, quantity: it.quantity, notes: it.notes || undefined };
+          if (it.price !== undefined) payload.price = it.price;
+          if ((it as any).variant) payload.variant = (it as any).variant;
+          return payload;
         }
-        return { name: it.name, price: it.price, quantity: it.quantity, notes: it.notes || undefined };
+        const payload: any = { name: it.name, price: it.price, quantity: it.quantity, notes: it.notes || undefined };
+        if ((it as any).variant) payload.variant = (it as any).variant;
+        return payload;
       });
       const res: any = await api.updateBillAggregatedItems(billId, { items: payloadItems });
       if (res.success) {
@@ -412,22 +450,27 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                     <p className="text-base text-gray-300 dark:text-gray-600">لا توجد أصناف</p>
                     <p className="text-xs text-gray-400 mt-1">أضف من القائمة</p>
                   </div>
-                ) : items.map(item => (
-                  <div key={item.menuItem} ref={el => { itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
+                ) : items.map((item, idx) => {
+                  const compositeKey = `${item.menuItem}::${item.price}`;
+                  return (
+                  <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; }}>
                     <OrderItemRow
                       item={item}
                       isFlash={flashId === item.menuItem}
-                      isExpanded={!!expandedNotes[item.menuItem]}
-                      onMinus={() => updateItemQuantity(item.menuItem, -1)}
-                      onPlus={() => updateItemQuantity(item.menuItem, 1)}
-                      onRemove={() => removeItemFromOrder(item.menuItem)}
-                      onToggleNote={() => setExpandedNotes(p => ({ ...p, [item.menuItem]: !p[item.menuItem] }))}
-                      onNoteChange={v => updateItemNotes(item.menuItem, v)}
+                      isExpanded={!!expandedNotes[compositeKey]}
+                      onMinus={() => setItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; const q=it.quantity-1; if(q<=0) cp.splice(idx,1); else cp[idx]={...it, quantity:q}; return cp; })}
+                      onPlus={() => setItems(prev => { const cp=[...prev]; cp[idx]={...cp[idx], quantity:cp[idx].quantity+1}; return cp; })}
+                      onRemove={() => setItems(prev => prev.filter((_, i) => i !== idx))}
+                      onToggleNote={() => setExpandedNotes(p => ({ ...p, [compositeKey]: !p[compositeKey] }))}
+                      onNoteChange={v => setItems(prev => { const cp=[...prev]; if(cp[idx]) cp[idx]={...cp[idx], notes:v}; return cp; })}
                       notePlaceholder={t('cafe.orderModal.itemNotesPlaceholder')}
                       fmt={fmt}
+                      canEditPrice={canEditPrice}
+                      onEditPrice={() => { setPriceEditTarget({ index: idx, item }); setShowPriceEditModal(true); }}
                     />
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="px-2 pb-3 flex-shrink-0 space-y-1.5">
@@ -448,11 +491,18 @@ const BillItemsEditModal: React.FC<Props> = ({ isOpen, onClose, bill, menuItems,
                   </button>
                 </div>
               </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </ModalPortal>
+        <PriceEditModal
+          isOpen={showPriceEditModal}
+          onClose={() => { setShowPriceEditModal(false); setPriceEditTarget(null); }}
+          item={priceEditTarget?.item || null}
+          onSave={handlePriceEditSaveBill}
+          formatCurrency={fmt}
+        />
+      </ModalPortal>
   );
 };
 

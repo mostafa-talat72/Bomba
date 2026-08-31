@@ -518,9 +518,9 @@ const BillView = () => {
 											const totalPrice = item.price * item.totalQuantity;
 											const isFullyPaid = item.remainingQuantity === 0;
 											return (
-												<tr key={`${item.name}-${item.price}-${idx}`} className={`border-b last:border-b-0 ${colorClass} ${isFullyPaid ? 'bg-green-50' : ''}`}>
+												<tr key={`${item.name}-${item.variant || ''}-${item.price}-${idx}`} className={`border-b last:border-b-0 ${colorClass} ${isFullyPaid ? 'bg-green-50' : ''}`}>
 													<td className="py-2 px-2 font-medium text-gray-900">
-														{item.name}
+														{item.name}{(item as any).variant ? ` (${(item as any).variant})` : ''}
 														{isFullyPaid && <span className="mr-2 text-xs text-green-600 font-bold">✓ {t('billView.fullyPaid')}</span>}
 													</td>
 													<td className="py-2 px-2">{formatDecimalWithLocale(item.totalQuantity)}</td>
@@ -939,8 +939,8 @@ const BillView = () => {
 										<span className="font-semibold text-sm">{t('billView.items')}:</span>
 										<ul className="list-disc pr-4 mt-1">
 											{order.items?.map((item, idx) => (
-												<li key={`${item.name}-${item.price}-${idx}`} className="text-xs text-gray-700">
-													{item.name} × {formatDecimalWithLocale(item.quantity)} - {formatCurrency(item.price)}
+												<li key={`${item.name}-${(item as any).variant || ''}-${item.price}-${idx}`} className="text-xs text-gray-700">
+													{item.name}{(item as any).variant ? ` (${(item as any).variant})` : ''} × {formatDecimalWithLocale(item.quantity)} - {formatCurrency(item.price)}
 												</li>
 											))}
 										</ul>

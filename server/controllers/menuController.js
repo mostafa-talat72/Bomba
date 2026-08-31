@@ -3,6 +3,86 @@ import MenuCategory from "../models/MenuCategory.js";
 import { writeToAtlas } from "../utils/atlasWrite.js";
 import Logger from "../middleware/logger.js";
 import dualDatabaseManager from "../config/dualDatabaseManager.js";
+import { validateRequestData } from "../middleware/validation.js";
+
+// Helper to normalize variants/price for create (requires at least one)
+function normalizeMenuItemForCreate(body) {
+    let variants = body.variants;
+    let price = body.price;
+    const hasVariants = variants != null && Array.isArray(variants) && variants.length > 0;
+    const hasPrice = price != null && price !== "" && !isNaN(Number(price));
+    if (hasVariants) {
+        if (variants.length === 0) {
+            throw new Error("يجب إضافة حجم واحد على الأقل");
+        }
+        variants = variants.map((v, idx) => {
+            if (!v.size || String(v.size).trim() === "") throw new Error(`حجم ${idx + 1}: اسم الحجم مطلوب`);
+            if (v.price == null || v.price === "" || isNaN(Number(v.price)) || Number(v.price) < 0) throw new Error(`حجم ${v.size || idx + 1}: السعر يجب أن يكون رقم موجب`);
+            return {
+                size: String(v.size).trim(),
+                price: Number(v.price),
+                sku: v.sku != null && String(v.sku).trim() !== "" ? String(v.sku).trim() : null,
+                barcode: v.barcode != null && String(v.barcode).trim() !== "" ? String(v.barcode).trim() : null,
+            };
+        });
+        price = variants[0].price;
+    } else if (hasPrice) {
+        price = Number(price);
+        if (isNaN(price) || price < 0) throw new Error("السعر يجب أن يكون رقم موجب");
+        variants = [{ size: "عادي", price }];
+    } else {
+        throw new Error("السعر مطلوب أو يجب إضافة حجم واحد على الأقل");
+    }
+    body.variants = variants;
+    body.price = price;
+    return body;
+}
+
+function normalizeMenuItemForUpdate(body) {
+    const hasVariantsField = Object.prototype.hasOwnProperty.call(body, 'variants');
+    const hasPriceField = Object.prototype.hasOwnProperty.call(body, 'price');
+    // If neither provided, leave as is (no change to price/variants)
+    if (!hasVariantsField && !hasPriceField) return body;
+    let variants = body.variants;
+    let price = body.price;
+    const hasVariants = variants != null && Array.isArray(variants);
+    const hasPrice = price != null && price !== "" && !isNaN(Number(price));
+    if (hasVariants) {
+        if (variants.length === 0) {
+            if (hasPrice) {
+                price = Number(price);
+                variants = [{ size: "عادي", price }];
+            } else {
+                throw new Error("يجب إضافة حجم واحد على الأقل");
+            }
+        } else {
+            variants = variants.map((v, idx) => {
+                if (!v.size || String(v.size).trim() === "") throw new Error(`حجم ${idx + 1}: اسم الحجم مطلوب`);
+                if (v.price == null || v.price === "" || isNaN(Number(v.price)) || Number(v.price) < 0) throw new Error(`حجم ${v.size || idx + 1}: السعر يجب أن يكون رقم موجب`);
+                return {
+                    size: String(v.size).trim(),
+                    price: Number(v.price),
+                    sku: v.sku != null && String(v.sku).trim() !== "" ? String(v.sku).trim() : null,
+                    barcode: v.barcode != null && String(v.barcode).trim() !== "" ? String(v.barcode).trim() : null,
+                };
+            });
+            price = variants[0].price;
+        }
+        body.variants = variants;
+        body.price = price;
+    } else if (hasPrice) {
+        price = Number(price);
+        if (isNaN(price) || price < 0) throw new Error("السعر يجب أن يكون رقم موجب");
+        // If variants not provided but price provided, check if we should keep existing variants or replace with single
+        // For update, if variants field not present but price present, create single variant only if caller explicitly wants to replace?
+        // We treat price-only update as wanting single variant 'عادي'
+        // But to keep backward compat, we will create single variant if no variants field
+        // However if client sends price without variants, we create single variant
+        body.variants = [{ size: "عادي", price }];
+        body.price = price;
+    }
+    return body;
+}
 
 // Get all menu items with optional filtering
 export const getAllMenuItems = async (req, res) => {
@@ -194,6 +274,45 @@ export const createMenuItem = async (req, res) => {
             });
         }
 
+        // Normalize variants/price before creation
+        try {
+            normalizeMenuItemForCreate(req.body);
+        } catch (normErr) {
+            return res.status(400).json({
+                success: false,
+                message: normErr.message,
+                errors: [{ field: "variants", message: normErr.message }],
+            });
+        }
+
+        // Additional manual validation for variants if provided
+        if (req.body.variants) {
+            if (!Array.isArray(req.body.variants) || req.body.variants.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب إضافة حجم واحد على الأقل",
+                    errors: [{ field: "variants", message: "يجب إضافة حجم واحد على الأقل" }],
+                });
+            }
+            for (let i = 0; i < req.body.variants.length; i++) {
+                const v = req.body.variants[i];
+                if (!v.size || String(v.size).trim() === "") {
+                    return res.status(400).json({
+                        success: false,
+                        message: `حجم ${i + 1}: اسم الحجم مطلوب`,
+                        errors: [{ field: `variants[${i}].size`, message: "اسم الحجم مطلوب" }],
+                    });
+                }
+                if (v.price == null || isNaN(Number(v.price)) || Number(v.price) < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `حجم ${v.size}: السعر يجب أن يكون رقم موجب`,
+                        errors: [{ field: `variants[${i}].price`, message: "السعر يجب أن يكون رقم موجب" }],
+                    });
+                }
+            }
+        }
+
         const menuItemData = {
             ...req.body,
             createdBy: req.user.id,
@@ -214,6 +333,7 @@ export const createMenuItem = async (req, res) => {
             _id: menuItem._id,
             name: menuItem.name,
             price: menuItem.price,
+            variants: menuItem.variants,
             category: menuItem.category,
             isAvailable: menuItem.isAvailable,
             createdAt: menuItem.createdAt,
@@ -266,12 +386,50 @@ export const updateMenuItem = async (req, res) => {
             });
         }
 
+        // Normalize variants/price if provided
+        try {
+            normalizeMenuItemForUpdate(req.body);
+        } catch (normErr) {
+            return res.status(400).json({
+                success: false,
+                message: normErr.message,
+                errors: [{ field: "variants", message: normErr.message }],
+            });
+        }
+
+        if (req.body.variants) {
+            if (!Array.isArray(req.body.variants) || req.body.variants.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "يجب إضافة حجم واحد على الأقل",
+                    errors: [{ field: "variants", message: "يجب إضافة حجم واحد على الأقل" }],
+                });
+            }
+            for (let i = 0; i < req.body.variants.length; i++) {
+                const v = req.body.variants[i];
+                if (!v.size || String(v.size).trim() === "") {
+                    return res.status(400).json({
+                        success: false,
+                        message: `حجم ${i + 1}: اسم الحجم مطلوب`,
+                        errors: [{ field: `variants[${i}].size`, message: "اسم الحجم مطلوب" }],
+                    });
+                }
+                if (v.price == null || isNaN(Number(v.price)) || Number(v.price) < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `حجم ${v.size}: السعر يجب أن يكون رقم موجب`,
+                        errors: [{ field: `variants[${i}].price`, message: "السعر يجب أن يكون رقم موجب" }],
+                    });
+                }
+            }
+        }
+
         const updateData = {
             ...req.body,
             updatedBy: req.user.id,
         };
 
-        const menuItem = await MenuItem.findByIdAndUpdate(
+        const menuItem = await MenuItem.findOneAndUpdate(
             { _id: id, organization: req.user.organization },
             updateData,
             {
@@ -300,6 +458,7 @@ export const updateMenuItem = async (req, res) => {
             _id: menuItem._id,
             name: menuItem.name,
             price: menuItem.price,
+            variants: menuItem.variants,
             category: menuItem.category,
             isAvailable: menuItem.isAvailable,
             updatedAt: menuItem.updatedAt,
@@ -665,3 +824,5 @@ export const updateMenuItemsOrder = async (req, res) => {
         });
     }
 };
+
+

@@ -5,6 +5,7 @@ export interface LocalOrderItem {
   menuItem: string;
   name: string;
   price: number;
+  variant?: string | null;
   quantity: number;
   notes?: string;
 }

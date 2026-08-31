@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight } from 'lucide-react';
+import { Table as TableIcon, ShoppingCart, DollarSign, Plus, Clock, Printer, ArrowLeftRight, Edit } from 'lucide-react';
 import { Table, Bill } from '../../services/api';
 import { formatCurrency as formatCurrencyUtil } from '../../utils/formatters';
 import { getTableDisplay, getAgeLabel, getTableAgeColor } from './tableHelpers';
@@ -22,12 +22,13 @@ export interface TableButtonProps {
   onEndAllSessions?: (table: Table, e: React.MouseEvent) => void;
   onQuickPrint?: (table: Table, e: React.MouseEvent) => void;
   onQuickChangeTable?: (table: Table, e: React.MouseEvent) => void;
+  onQuickEditBill?: (table: Table, e: React.MouseEvent) => void;
   onHoverChange?: (table: Table | null) => void;
   /** تكلفة إضافية حية للجلسات النشطة (delta كل 10 ثوانٍ) */
   liveExtra?: number;
 }
 
-const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onHoverChange, liveExtra = 0 }) => {
+const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupied, tableBills, tableOrdersCount, activeSessionType, activeSessionCount = 0, sessionUrgency = 'none', onClick, onQuickOrder, onQuickBilling, onEndAllSessions, onQuickPrint, onQuickChangeTable, onQuickEditBill, onHoverChange, liveExtra = 0 }) => {
   const { t, i18n } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -145,50 +146,67 @@ const TableButton = React.memo<TableButtonProps>(({ table, isSelected, isOccupie
         {/* hover glow */}
         <div className={`absolute inset-0 rounded-xl sm:rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${styles.hover}`} />
 
-        {/* ── Quick action buttons ── */}
+        {/* ── Quick action buttons - موزعة بوضوح 2 صفوف عند الحاجة ── */}
         {isOccupied && !isSelected && (
-          <div className="absolute bottom-1.5 left-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-10">
-            <button
-              onClick={(e) => onQuickOrder(table, e)}
-              className="flex-1 py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-red-600 dark:text-red-400 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-red-200 dark:border-red-800 transition-all"
-              title={t('cafe.tableOrdersModal.newOrder')}>
-              <ShoppingCart className="h-3 w-3" />
-              <span className="hidden sm:inline">طلب</span>
-            </button>
-            <button
-              onClick={(e) => onQuickBilling(table, e)}
-              className="flex-1 py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-blue-600 dark:text-blue-400 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-blue-200 dark:border-blue-800 transition-all"
-              title={t('billing.paymentManagement')}>
-              <DollarSign className="h-3 w-3" />
-              <span className="hidden sm:inline">دفع</span>
-            </button>
-            {onQuickChangeTable && (
+          <div className="absolute bottom-1 left-1 right-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 z-10 flex flex-col gap-1">
+            {/* صف رئيسي: تعديل + طلب + دفع - واضحة ومتساوية */}
+            <div className="grid grid-cols-3 gap-1">
+              {onQuickEditBill && tableBills.some(b => ['draft','partial','overdue'].includes(b.status)) && (
+                <button
+                  onClick={(e) => onQuickEditBill(table, e)}
+                  className="py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow border border-blue-700 transition-all"
+                  title="تعديل الأصناف">
+                  <Edit className="h-3 w-3" />
+                  <span>تعديل</span>
+                </button>
+              )}
               <button
-                onClick={(e) => onQuickChangeTable(table, e)}
-                className="py-1 px-2 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-purple-600 dark:text-purple-400 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-purple-200 dark:border-purple-800 transition-all"
-                title={t('billing.changeTableTitle', 'تغيير الطاولة')}>
-                <ArrowLeftRight className="h-3 w-3" />
+                onClick={(e) => onQuickOrder(table, e)}
+                className="py-1.5 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 backdrop-blur-sm text-red-600 dark:text-red-400 text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow border border-red-200 dark:border-red-800 transition-all"
+                title={t('cafe.tableOrdersModal.newOrder')}>
+                <ShoppingCart className="h-3 w-3" />
+                <span>طلب</span>
               </button>
-            )}
-            {onQuickPrint && totalRemaining > 0 && (
               <button
-                onClick={(e) => onQuickPrint(table, e)}
-                className="py-1 px-2 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border border-gray-200 dark:border-gray-600 transition-all"
-                title="طباعة الفاتورة">
-                <Printer className="h-3 w-3" />
+                onClick={(e) => onQuickBilling(table, e)}
+                className="py-1.5 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 backdrop-blur-sm text-blue-600 dark:text-blue-400 text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow border border-blue-200 dark:border-blue-800 transition-all"
+                title={t('billing.paymentManagement')}>
+                <DollarSign className="h-3 w-3" />
+                <span>دفع</span>
               </button>
-            )}
-            {activeSessionCount > 0 && onEndAllSessions && (
-              <button
-                onClick={(e) => onEndAllSessions(table, e)}
-                className={`py-1 px-2 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-xs font-bold rounded-lg flex items-center justify-center gap-0.5 shadow border transition-all ${
-                  sessionUrgency === 'danger'
-                    ? 'border-red-400 text-red-600 dark:text-red-400 animate-pulse'
-                    : 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
-                }`}
-                title={`إنهاء كل الجلسات (${activeSessionCount})`}>
-                ⏹<span className="font-extrabold">{activeSessionCount}</span>
-              </button>
+            </div>
+            {/* صف ثانوي: نقل + طباعة + إنهاء - أصغر وأيقونات فقط */}
+            {(onQuickChangeTable || onQuickPrint || activeSessionCount > 0) && (
+              <div className="grid grid-cols-3 gap-1">
+                {onQuickChangeTable ? (
+                  <button
+                    onClick={(e) => onQuickChangeTable(table, e)}
+                    className="py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-purple-600 dark:text-purple-400 text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow border border-purple-200 dark:border-purple-800 transition-all"
+                    title={t('billing.changeTableTitle', 'تغيير الطاولة')}>
+                    <ArrowLeftRight className="h-3 w-3" />
+                    <span className="hidden sm:inline text-[10px]">نقل</span>
+                  </button>
+                ) : <div />}
+                {onQuickPrint && totalRemaining > 0 ? (
+                  <button
+                    onClick={(e) => onQuickPrint(table, e)}
+                    className="py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow border border-gray-200 dark:border-gray-600 transition-all"
+                    title="طباعة الفاتورة">
+                    <Printer className="h-3 w-3" />
+                    <span className="hidden sm:inline text-[10px]">طباعة</span>
+                  </button>
+                ) : <div />}
+                {activeSessionCount > 0 && onEndAllSessions ? (
+                  <button
+                    onClick={(e) => onEndAllSessions(table, e)}
+                    className={`py-1 bg-white/90 hover:bg-white dark:bg-gray-900/90 dark:hover:bg-gray-900 backdrop-blur-sm text-xs font-bold rounded-lg flex items-center justify-center gap-1 shadow border transition-all ${
+                      sessionUrgency === 'danger' ? 'border-red-400 text-red-600 dark:text-red-400 animate-pulse' : 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+                    }`}
+                    title={`إنهاء كل الجلسات (${activeSessionCount})`}>
+                    ⏹<span className="font-extrabold">{activeSessionCount}</span>
+                  </button>
+                ) : <div />}
+              </div>
             )}
           </div>
         )}

@@ -323,14 +323,33 @@ const processOrderItems = async (items, operation = "create") => {
                     };
                 }
 
-                // حساب تكلفة العنصر
-                const itemTotal = menuItem.price * item.quantity;
+                // Support variants: resolve effective price/variant
+                let effectivePrice = menuItem.price || 0;
+                let effectiveVariant = item.variant ? String(item.variant).trim() : null;
+                if (menuItem.variants && menuItem.variants.length > 0) {
+                    if (effectiveVariant) {
+                        const matched = menuItem.variants.find(v => v.size === effectiveVariant);
+                        if (matched) effectivePrice = matched.price;
+                        else {
+                            return {
+                                success: false,
+                                status: 400,
+                                data: { success: false, message: `الحجم غير موجود: ${effectiveVariant} للعنصر ${menuItem.name}` },
+                            };
+                        }
+                    } else {
+                        effectiveVariant = menuItem.variants[0].size;
+                        effectivePrice = menuItem.variants[0].price;
+                    }
+                }
+                const itemTotal = effectivePrice * item.quantity;
                 subtotal += itemTotal;
                 processedItems.push({
                     menuItem: menuItem._id,
                     name: menuItem.name,
                     arabicName: menuItem.arabicName || menuItem.name,
-                    price: menuItem.price,
+                    price: effectivePrice,
+                    variant: effectiveVariant,
                     quantity: item.quantity,
                     itemTotal,
                     notes: item.notes,
@@ -343,6 +362,7 @@ const processOrderItems = async (items, operation = "create") => {
                 processedItems.push({
                     name: item.name,
                     price: item.price,
+                    variant: item.variant ? String(item.variant).trim() : null,
                     quantity: item.quantity,
                     itemTotal,
                     notes: item.notes,

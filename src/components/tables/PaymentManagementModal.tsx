@@ -449,7 +449,7 @@ const PaymentManagementModal: React.FC<PaymentManagementModalProps> = ({
                     ) : aggregatedItems.map((item, i) => (
                       <div key={i} className="bg-white dark:bg-gray-800 rounded-lg px-2.5 py-2 border border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
                         <div className="flex items-start justify-between gap-1 mb-1">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{item.name}</p>
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 leading-tight flex-1 min-w-0 truncate">{item.name}{(item as any).variant ? ` (${(item as any).variant})` : ''}</p>
                           <span className="text-[11px] text-gray-500 flex-shrink-0">{formatCurrency(item.price)}</span>
                         </div>
                         <div className="grid grid-cols-3 gap-1 text-center">

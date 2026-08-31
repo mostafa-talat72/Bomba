@@ -63,6 +63,7 @@ const Menu: React.FC = () => {
 	const [formData, setFormData] = useState({
 		name: '',
 		price: '',
+		variants: [] as { size: string; price: string; sku?: string; barcode?: string }[],
 		category: '',
 		description: '',
 		isAvailable: true,
@@ -174,6 +175,7 @@ const Menu: React.FC = () => {
 		setFormData({
 			name: '',
 			price: '',
+			variants: [{ size: 'عادي', price: '' }],
 			category: categoryId || '',
 			description: '',
 			isAvailable: true,
@@ -187,9 +189,13 @@ const Menu: React.FC = () => {
 	const handleEditItem = (item: MenuItem) => {
 		setEditingItem(item);
 		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
+		const variantsData = item.variants && item.variants.length > 0
+			? item.variants.map(v => ({ size: v.size, price: String(v.price), sku: v.sku || '', barcode: v.barcode || '' }))
+			: [{ size: 'عادي', price: item.price != null ? item.price.toString() : '' }];
 		setFormData({
 			name: item.name,
-			price: item.price.toString(),
+			price: item.price != null ? item.price.toString() : (variantsData[0]?.price || ''),
+			variants: variantsData,
 			category: categoryId,
 			description: item.description || '',
 			isAvailable: item.isAvailable,
@@ -203,9 +209,13 @@ const Menu: React.FC = () => {
 	const handleDuplicateItem = (item: MenuItem) => {
 		setEditingItem(null);
 		const categoryId = typeof item.category === 'string' ? item.category : item.category?.id || item.category?._id || '';
+		const variantsData = item.variants && item.variants.length > 0
+			? item.variants.map(v => ({ size: v.size, price: String(v.price), sku: v.sku || '', barcode: v.barcode || '' }))
+			: [{ size: 'عادي', price: item.price != null ? item.price.toString() : '' }];
 		setFormData({
 			name: `${item.name} (${t('menu.duplicate')})`,
-			price: item.price.toString(),
+			price: variantsData[0]?.price || '',
+			variants: variantsData,
 			category: categoryId,
 			description: item.description || '',
 			isAvailable: item.isAvailable,
@@ -221,17 +231,28 @@ const Menu: React.FC = () => {
 		setShowQuickView(true);
 	};
 
-	const handleSaveItem = async (data: { name: string; price: string; category: string; description: string; isAvailable: boolean; preparationTime: string; isPopular: boolean; ingredients: { item: string; quantity: number; unit: string }[] }) => {
-		if (!data.name || !data.price || !data.category) {
+	const handleSaveItem = async (data: { name: string; price: string; variants?: { size: string; price: string; sku?: string; barcode?: string }[]; category: string; description: string; isAvailable: boolean; preparationTime: string; isPopular: boolean; ingredients: { item: string; quantity: number; unit: string }[] }) => {
+		if (!data.name || !data.category) {
 			showNotification(t('menu.notifications.enterItemName'), 'error');
 			return;
 		}
-
-		const price = parseFloat(data.price);
-		if (isNaN(price) || price <= 0) {
+		// Variants validation
+		const rawVariants = data.variants && data.variants.length > 0 ? data.variants : [{ size: 'عادي', price: data.price }];
+		const cleanedVariants = rawVariants.map(v => ({
+			size: String(v.size || '').trim(),
+			price: parseFloat(String(v.price)),
+			sku: v.sku ? String(v.sku).trim() : undefined,
+			barcode: v.barcode ? String(v.barcode).trim() : undefined,
+		})).filter(v => v.size && !isNaN(v.price) && v.price >= 0);
+		if (cleanedVariants.length === 0) {
 			showNotification(t('menu.notifications.enterPrice'), 'error');
 			return;
 		}
+		for (const v of cleanedVariants) {
+			if (!v.size) { showNotification('اسم الحجم مطلوب', 'error'); return; }
+			if (isNaN(v.price) || v.price <= 0) { showNotification(t('menu.notifications.enterPrice'), 'error'); return; }
+		}
+		const price = cleanedVariants[0].price;
 
 		const validIngredients = data.ingredients.filter((ing: { item: string; quantity: number; unit: string }) =>
 			ing.item && ing.item.trim() !== '' && !isNaN(ing.quantity) && ing.quantity > 0
@@ -242,9 +263,10 @@ const Menu: React.FC = () => {
 			return;
 		}
 
-		const itemData = {
+		const itemData: any = {
 			name: data.name.trim(),
 			price: price,
+			variants: cleanedVariants,
 			category: data.category,
 			description: data.description.trim(),
 			isAvailable: data.isAvailable,
@@ -890,10 +912,21 @@ const Menu: React.FC = () => {
 																</div>
 
 																<div className="flex items-center justify-between mt-3">
-																	<div className="flex items-center gap-3">
-																		<span className="text-base font-bold text-gray-900 dark:text-gray-100">
-																			{formatDecimal(item.price, i18n.language)}
-																		</span>
+																	<div className="flex flex-col gap-1">
+																		{item.variants && item.variants.length > 0 ? (
+																			<div className="flex flex-wrap gap-1">
+																				{item.variants.slice(0,3).map(v => (
+																					<span key={v.size} className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded-full">
+																						{v.size}: {formatDecimal(v.price, i18n.language)}
+																					</span>
+																				))}
+																				{item.variants.length > 3 && <span className="text-xs text-gray-400">+{item.variants.length - 3}</span>}
+																			</div>
+																		) : (
+																			<span className="text-base font-bold text-gray-900 dark:text-gray-100">
+																				{formatDecimal(item.price, i18n.language)}
+																			</span>
+																		)}
 																		<span className="text-xs text-gray-400 dark:text-gray-500">
 																			{formatDecimal(item.preparationTime, i18n.language)} {t('menu.minutes')}
 																		</span>

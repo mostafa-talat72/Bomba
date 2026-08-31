@@ -2,12 +2,17 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execPromise = promisify(exec);
-// SerialPort اختياري — قد لا يكون مثبتاً في بيئة السيرفر
 let SerialPort = null;
-try {
-  const mod = await import('serialport');
-  SerialPort = mod.SerialPort || mod.default?.SerialPort || null;
-} catch { SerialPort = null; }
+let serialPortLoaded = false;
+async function getSerialPort() {
+  if (serialPortLoaded) return SerialPort;
+  serialPortLoaded = true;
+  try {
+    const mod = await import('serialport');
+    SerialPort = mod.SerialPort || mod.default?.SerialPort || null;
+  } catch { SerialPort = null; }
+  return SerialPort;
+}
 
 class PrinterDetectionService {
   /**
@@ -38,24 +43,22 @@ class PrinterDetectionService {
    */
   async detectWindowsPrinters() {
     try {
-      // استخدام PowerShell للحصول على الطابعات
-      const command = `powershell "Get-Printer | Where-Object { $_.Type -eq 'Local' } | Select-Object Name, DriverName, PortName | ConvertTo-Json"`;
+      const fakeNames = ['Microsoft Print to PDF','Microsoft XPS','OneNote','Fax','PDF24','Adobe PDF','Google Cloud'];
+      const command = `powershell "Get-Printer | Where-Object { $_.Type -eq 'Local' -and $_.PrinterStatus -eq 'Normal' -and -not $_.WorkOffline } | Select-Object Name, DriverName, PortName, PrinterStatus | ConvertTo-Json"`;
       const { stdout } = await execPromise(command);
-      
-      if (!stdout || stdout.trim() === '') {
-        return [];
-      }
-
+      if (!stdout || stdout.trim() === '') return [];
       const printersData = JSON.parse(stdout);
       const printers = Array.isArray(printersData) ? printersData : [printersData];
-
-      return printers.map(printer => ({
-        name: printer.Name,
-        driver: printer.DriverName,
-        port: printer.PortName,
-        path: printer.PortName,
-        type: 'usb'
-      }));
+      return printers
+        .filter(p => !fakeNames.some(fake => (p.Name||'').includes(fake)))
+        .map(printer => ({
+          name: printer.Name,
+          driver: printer.DriverName,
+          port: printer.PortName,
+          path: printer.PortName,
+          type: 'usb',
+          status: printer.PrinterStatus
+        }));
     } catch (error) {
       console.error('Error detecting Windows printers:', error);
       return [];
@@ -67,26 +70,17 @@ class PrinterDetectionService {
    */
   async detectMacPrinters() {
     try {
-      // استخدام lpstat للحصول على الطابعات
       const { stdout } = await execPromise('lpstat -p -d');
-      
       const printers = [];
       const lines = stdout.split('\n');
-      
       for (const line of lines) {
         if (line.startsWith('printer')) {
           const match = line.match(/printer\s+(\S+)\s+is\s+(.+)/);
-          if (match) {
-            printers.push({
-              name: match[1],
-              status: match[2],
-              path: match[1],
-              type: 'usb'
-            });
+          if (match && /idle/i.test(match[2])) {
+            printers.push({ name: match[1], status: match[2], path: match[1], type: 'usb' });
           }
         }
       }
-
       return printers;
     } catch (error) {
       console.error('Error detecting Mac printers:', error);
@@ -99,29 +93,22 @@ class PrinterDetectionService {
    */
   async detectLinuxPrinters() {
     try {
-      // استخدام lpstat للحصول على الطابعات
       const { stdout } = await execPromise('lpstat -p -d');
-      
       const printers = [];
       const lines = stdout.split('\n');
-      
       for (const line of lines) {
         if (line.startsWith('printer')) {
           const match = line.match(/printer\s+(\S+)\s+is\s+(.+)/);
-          if (match) {
-            printers.push({
-              name: match[1],
-              status: match[2],
-              path: match[1],
-              type: 'usb'
-            });
+          if (match && /idle/i.test(match[2])) {
+            printers.push({ name: match[1], status: match[2], path: match[1], type: 'usb' });
           }
         }
       }
 
-      if (SerialPort) {
+      const SP = await getSerialPort();
+      if (SP) {
         try {
-          const ports = await SerialPort.list();
+          const ports = await SP.list();
           for (const port of ports) {
             if (port.manufacturer && (
               port.manufacturer.includes('Printer') ||
@@ -171,10 +158,11 @@ class PrinterDetectionService {
   async testPrinterConnection(printerPath, printerType = 'usb') {
     try {
       if (printerType === 'usb') {
-        // للطابعات USB، نحاول الاتصال عبر المنفذ التسلسلي إذا كان مساراً
         if (printerPath.startsWith('/dev/') || printerPath.startsWith('COM')) {
           try {
-            const port = new SerialPort({ 
+            const SP = await getSerialPort();
+            if (!SP) return { success: false, message: 'SerialPort not available' };
+            const port = new SP({ 
               path: printerPath, 
               baudRate: 9600,
               autoOpen: false

@@ -1097,9 +1097,37 @@ const initializeOrganizationMonthlyReportSchedules = async () => {
     }
 };
 
+/**
+ * Auto-fix table statuses every 5 minutes (drift correction)
+ * Efficient: uses Bill.exists + bulkWrite, logs only if fixes needed
+ */
+const setupTableStatusAutoFixScheduler = () => {
+    cron.schedule(
+        "*/5 * * * *",
+        async () => {
+            try {
+                const { fixAllTableStatuses } = await import("./tableUtils.js");
+                const result = await fixAllTableStatuses({ logResults: true, silentIfNoFix: true });
+                // fixAllTableStatuses already logs only if fixed > 0 when silentIfNoFix
+                // no extra log needed for zero fixes (keeps logs quiet)
+            } catch (error) {
+                Logger.error("❌ Table status periodic auto-fix failed:", error.message);
+            }
+        },
+        {
+            scheduled: true,
+            timezone: "UTC",
+        }
+    );
+    Logger.info("✅ Table status auto-fix scheduled: every 5 minutes");
+};
+
 // Initialize all scheduled tasks
 export const initializeScheduler = () => {
     Logger.info("Initializing scheduled tasks...");
+
+    // Auto-fix table statuses every 5 minutes (drift correction)
+    setupTableStatusAutoFixScheduler();
 
     // Check low stock every 6 hours at minute 0
     cron.schedule("0 */6 * * *", checkLowStock);

@@ -122,9 +122,11 @@ export interface Order {
 
 export interface OrderItem {
   _id?: string;
+  menuItem?: string;
   name: string;
   arabicName?: string;
   price: number;
+  variant?: string | null;
   quantity: number;
   preparedCount?: number;
   deliveredCount?: number;
@@ -357,11 +359,19 @@ export interface MenuCategory {
   updatedAt?: Date;
 }
 
+export interface MenuVariant {
+  size: string;
+  price: number;
+  sku?: string | null;
+  barcode?: string | null;
+}
+
 export interface MenuItem {
   _id: string;
   id: string;
   name: string;
-  price: number;
+  price: number; // legacy / computed: variants[0].price for backward compatibility
+  variants?: MenuVariant[];
   category: string | MenuCategory;
   description?: string;
   isAvailable: boolean;
@@ -2233,7 +2243,8 @@ class ApiClient {
 
   async createMenuItem(itemData: {
     name: string;
-    price: number;
+    price?: number;
+    variants?: MenuVariant[];
     category: string;
     description?: string;
     isAvailable?: boolean;

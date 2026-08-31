@@ -21,6 +21,11 @@ const orderItemSchema = new mongoose.Schema({
         required: [true, "سعر المنتج مطلوب"],
         min: 0,
     },
+    variant: {
+        type: String,
+        default: null,
+        trim: true,
+    },
     quantity: {
         type: Number,
         required: [true, "الكمية مطلوبة"],

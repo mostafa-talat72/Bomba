@@ -178,7 +178,7 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate">{item.name}</span>
+                            <span className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 truncate">{item.name}{(item as any).variant ? ` (${(item as any).variant})` : ''}</span>
                             {item.hasAddons && (
                               <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full whitespace-nowrap">
                                 🍯 {t('billing.partialPaymentModal.withAddons')}
@@ -316,10 +316,10 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
                     const item = availableItems.find(i => i.id === itemId);
                     if (!item) return null;
                     
-                    return (
+                      return (
                       <div key={itemId} className="flex justify-between text-sm sm:text-base bg-orange-100 dark:bg-orange-800 p-2 rounded border border-orange-200 dark:border-orange-600">
                         <span className="text-orange-800 dark:text-orange-200 truncate flex-1 pr-2">
-                          {item.name} × {formatDecimal(quantity, i18n.language)}
+                          {item.name}{(item as any).variant ? ` (${(item as any).variant})` : ''} × {formatDecimal(quantity, i18n.language)}
                         </span>
                         <span className="font-bold text-orange-900 dark:text-orange-100 flex-shrink-0">
                           {formatCurrency(item.price * quantity, i18n.language)}

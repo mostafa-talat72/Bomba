@@ -40,6 +40,8 @@ import ModalPortal from '../components/ModalPortal';
 import UndoBar, { UndoRequest } from '../components/UndoBar';
 import { playWarnBeep, playDangerBeep, isSoundEnabled, setSoundEnabled } from '../utils/sound';
 import BillItemsEditModal from '../components/tables/BillItemsEditModal';
+import PriceEditModal from '../components/tables/PriceEditModal';
+import { canEditItemPrice } from '../utils/permissionHelper';
 
 // ─── Memoized sub-components مستخرجة إلى src/components/tables/ ─────────────
 
@@ -252,6 +254,14 @@ const Tables: React.FC = () => {
   const [showBillItemsEditModal, setShowBillItemsEditModal] = useState(false);
   const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
 
+  // Pay choice modal
+  const [showPayChoiceModal, setShowPayChoiceModal] = useState(false);
+  const [payChoiceBill, setPayChoiceBill] = useState<Bill | null>(null);
+
+  // Price edit modal (for item price override)
+  const [showPriceEditModal, setShowPriceEditModal] = useState(false);
+  const [priceEditItem, setPriceEditItem] = useState<{ index: number; item: LocalOrderItem } | null>(null);
+
   // ── useBillAggregation ───────────────────────────────────────────────────
   const { aggregatedItems: backendAggregatedItems, loading: aggregationLoading, refetch: refetchAggregatedItems } = useBillAggregation(selectedBill?.id || selectedBill?._id || null);
 
@@ -265,10 +275,10 @@ const Tables: React.FC = () => {
     showOrderModal || showEditOrderModal || showManagementModal ||
     showSectionModal || showTableModal || showConfirmModal || showUnifiedTableModal ||
     showPaymentModal || showPartialPaymentModal || showSessionPaymentModal ||
-    showQuickAddModal || showDailyReportModal || showBillItemsEditModal,
+    showQuickAddModal || showDailyReportModal || showBillItemsEditModal || showPayChoiceModal || showPriceEditModal,
   [showOrderModal, showEditOrderModal, showManagementModal, showSectionModal, showTableModal,
     showConfirmModal, showUnifiedTableModal, showPaymentModal, showPartialPaymentModal,
-    showSessionPaymentModal, showQuickAddModal, showDailyReportModal, showBillItemsEditModal]);
+    showSessionPaymentModal, showQuickAddModal, showDailyReportModal, showBillItemsEditModal, showPayChoiceModal, showPriceEditModal]);
   useBodyScrollLock(anyModalOpen);
 
   // ── Permission check — useMemo لتجنب إعادة حساب في كل render ───────────
@@ -1197,26 +1207,33 @@ const loadInitialData = async () => {
     setTimeout(() => setShowOrderModal(true), 50);
   };
 
-  // #1 Quick billing from table card — يفتح نافذة الدفع مباشرة
-  const handleQuickBilling = (table: Table, e: React.MouseEvent) => {
+  // #1 Quick billing from table card — يفتح نفس نافذة اختيار الدفع اللي في فواتير الطاولة بالظبط
+  const handleQuickBilling = useCallback((table: Table, e: React.MouseEvent) => {
     e.stopPropagation();
-    const tableId = (table._id || (table as any).id).toString();
-    // البحث عن أول فاتورة غير مدفوعة على الطاولة
-    const unpaidBill = bills.find((b: Bill) => {
-      const btid = (b.table as any)?._id || b.table;
-      return btid?.toString() === tableId && ['draft', 'partial', 'overdue'].includes(b.status);
-    });
+    const tableId = String((table as any)._id || (table as any).id || table);
+    const cardBills = tableCardData.get(tableId)?.tBills || (tableBillsMap as any)[tableId]?.bills || [];
+    let unpaidBill = cardBills.find((b: any) => ['draft', 'partial', 'overdue'].includes(b.status));
+    if (!unpaidBill) {
+      unpaidBill = bills.find((b: Bill) => {
+        const btid = (b.table as any)?._id || (b.table as any)?.id || b.table;
+        return String(btid) === tableId && ['draft', 'partial', 'overdue'].includes(b.status);
+      });
+    }
     if (unpaidBill) {
-      handlePaymentClick(unpaidBill);
+      setPayChoiceBill(unpaidBill);
+      setShowPayChoiceModal(true);
+    } else if (cardBills.length > 0) {
+      // fallback: لو فيه فاتورة بس حالتها paid/cancelled اعرض أول واحدة في إدارة الدفع بدل فواتير الطاولة
+      setPayChoiceBill(cardBills[0]);
+      setShowPayChoiceModal(true);
     } else {
-      // fallback — لا توجد فاتورة، افتح تاب الفواتير
       setSelectedTable(table);
       setActiveTab('billing');
       setActiveTab3('billing');
       setShowUnifiedTableModal(true);
       setTableBillsFilter('unpaid');
     }
-  };
+  }, [tableCardData, tableBillsMap, bills]);
 
   const handleQuickAddSave = async () => {
     if (!quickAddTable || quickAddItems.length === 0) return;
@@ -1383,7 +1400,7 @@ const loadInitialData = async () => {
     setSelectedOrder(order);
     setCurrentOrderItems(order.items.map(item => ({
       menuItem: (item as any).menuItem?._id || (item as any).menuItem || '',
-      name: item.name, price: item.price, quantity: item.quantity, notes: (item as any).notes || '',
+      name: item.name, price: item.price, variant: (item as any).variant || null, quantity: item.quantity, notes: (item as any).notes || '',
     })));
     setOrderNotes(order.notes || '');
     setExpandedSections({}); setExpandedCategories({});
@@ -1405,29 +1422,110 @@ const loadInitialData = async () => {
       return c === categoryId && item.isAvailable;
     }), [menuItems]);
 
-  const addItemToOrder = (menuItem: MenuItem) => {
-    const existing = currentOrderItems.find(i => i.menuItem === menuItem.id);
-    if (existing) {
-      setCurrentOrderItems(p => p.map(i => i.menuItem === menuItem.id ? { ...i, quantity: i.quantity + 1 } : i));
+  const addItemToOrder = (menuItem: MenuItem, variant?: string | null) => {
+    // Resolve effective price/variant from MenuItem variants
+    let effectiveVariant: string | null = variant ? String(variant).trim() : null;
+    let effectivePrice = menuItem.price;
+    if (menuItem.variants && menuItem.variants.length > 0) {
+      if (effectiveVariant) {
+        const matched = menuItem.variants.find(v => v.size === effectiveVariant);
+        if (matched) effectivePrice = matched.price;
+        else {
+          // variant not found - fallback to first
+          effectiveVariant = menuItem.variants[0].size;
+          effectivePrice = menuItem.variants[0].price;
+        }
+      } else {
+        effectiveVariant = menuItem.variants[0].size;
+        effectivePrice = menuItem.variants[0].price;
+      }
     } else {
-      setCurrentOrderItems(p => [...p, { menuItem: menuItem.id, name: menuItem.name, price: menuItem.price, quantity: 1, notes: '' }]);
+      effectiveVariant = effectiveVariant || null;
+    }
+    const keyVariant = effectiveVariant || '';
+    const existing = currentOrderItems.find(i => i.menuItem === menuItem.id && (i.variant || '') === keyVariant && i.price === effectivePrice);
+    if (existing) {
+      setCurrentOrderItems(p => p.map(i => (i.menuItem === menuItem.id && (i.variant || '') === keyVariant && i.price === effectivePrice) ? { ...i, quantity: i.quantity + 1 } : i));
+    } else {
+      setCurrentOrderItems(p => [...p, { menuItem: menuItem.id, name: menuItem.name, price: effectivePrice, variant: effectiveVariant, quantity: 1, notes: '' }]);
     }
   };
 
-  const updateItemQuantity = useCallback((id: string, delta: number) => {
-    setCurrentOrderItems(p => p.map(i => {
-      if (i.menuItem !== id) return i;
-      const q = i.quantity + delta;
-      if (q <= 0) return null as any;
-      return { ...i, quantity: q };
-    }).filter(Boolean) as LocalOrderItem[]);
+  const updateItemQuantity = useCallback((id: string, delta: number, variant?: string | null) => {
+    setCurrentOrderItems(p => {
+      // If variant explicitly provided, match both
+      if (variant !== undefined) {
+        const keyVariant = variant || '';
+        return p.map(i => {
+          if (i.menuItem !== id || (i.variant || '') !== keyVariant) return i;
+          const q = i.quantity + delta;
+          if (q <= 0) return null as any;
+          return { ...i, quantity: q };
+        }).filter(Boolean) as LocalOrderItem[];
+      }
+      // Legacy fallback: if multiple variants exist, update first matching id (or all? we update first)
+      // For backward compat, if only one entry with this menuItem, update it
+      const matching = p.filter(i => i.menuItem === id);
+      if (matching.length === 1) {
+        return p.map(i => {
+          if (i.menuItem !== id) return i;
+          const q = i.quantity + delta;
+          if (q <= 0) return null as any;
+          return { ...i, quantity: q };
+        }).filter(Boolean) as LocalOrderItem[];
+      }
+      // If multiple, we shouldn't guess - do nothing unless variant supplied
+      return p;
+    });
   }, []);
 
-  const updateItemNotes = useCallback((id: string, notes: string) =>
-    setCurrentOrderItems(p => p.map(i => i.menuItem === id ? { ...i, notes } : i)), []);
+  const handlePriceEditSave = (qtyToEdit: number, newPrice: number) => {
+    if (!priceEditItem) return;
+    const { index, item } = priceEditItem;
+    setCurrentOrderItems(prev => {
+      const newItems = [...prev];
+      // Find by index first, fallback to matching item if index out of sync
+      let idx = index;
+      if (!newItems[idx] || newItems[idx].menuItem !== item.menuItem || newItems[idx].price !== item.price) {
+        idx = newItems.findIndex(i => i.menuItem === item.menuItem && i.price === item.price && (i.variant || '') === (item.variant || ''));
+        if (idx === -1) return prev;
+      }
+      const target = newItems[idx];
+      if (qtyToEdit >= target.quantity) {
+        newItems[idx] = { ...target, price: newPrice };
+      } else {
+        newItems[idx] = { ...target, quantity: target.quantity - qtyToEdit };
+        const newItem: LocalOrderItem = {
+          menuItem: target.menuItem,
+          name: target.name,
+          price: newPrice,
+          variant: (target as any).variant || null,
+          quantity: qtyToEdit,
+          notes: target.notes,
+        };
+        newItems.splice(idx + 1, 0, newItem);
+      }
+      return newItems;
+    });
+  };
 
-  const removeItemFromOrder = useCallback((id: string) =>
-    setCurrentOrderItems(p => p.filter(i => i.menuItem !== id)), []);
+  const updateItemNotes = useCallback((id: string, notes: string, variant?: string | null) =>
+    setCurrentOrderItems(p => p.map(i => {
+      if (variant !== undefined) {
+        if (i.menuItem === id && (i.variant || '') === (variant || '')) return { ...i, notes };
+        return i;
+      }
+      return i.menuItem === id ? { ...i, notes } : i;
+    }), []));
+
+  const removeItemFromOrder = useCallback((id: string, variant?: string | null) =>
+    setCurrentOrderItems(p => {
+      if (variant !== undefined) {
+        const keyVariant = variant || '';
+        return p.filter(i => !(i.menuItem === id && (i.variant || '') === keyVariant));
+      }
+      return p.filter(i => i.menuItem !== id);
+    }), []);
 
   const calculateOrderTotal = () => currentOrderItems.reduce((s, i) => s + i.price * i.quantity, 0);
 
@@ -1441,7 +1539,7 @@ const loadInitialData = async () => {
       const order = await createOrder({
         table: selectedTable._id,
         customerName: selectedTable.number.toString(),
-        items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, quantity: i.quantity, notes: i.notes || null })),
+        items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, variant: i.variant || null, quantity: i.quantity, notes: i.notes || null })),
         notes: orderNotes || null, status,
       });
         if (order) {
@@ -1473,7 +1571,7 @@ const loadInitialData = async () => {
       setSavingOrder(true);
       showNotification(t('cafe.notifications.updatingOrder'), 'info');
       const orderData: Record<string, any> = {
-        items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, quantity: i.quantity, notes: i.notes || null })),
+        items: currentOrderItems.map(i => ({ menuItem: i.menuItem, name: i.name, price: i.price, variant: i.variant || null, quantity: i.quantity, notes: i.notes || null })),
         notes: orderNotes || null,
       };
       if (status) orderData.status = status;
@@ -1728,6 +1826,53 @@ const loadInitialData = async () => {
     } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
   };
 
+  const handleDirectPayFull = async (bill: Bill) => {
+    if (!canPayFullBill(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    if (bill && hasActiveSession(bill)) { showNotification(t('billing.notifications.cannotPayActiveSession'), 'error'); return; }
+    if (bill.status === 'paid') { showNotification(t('billing.notifications.billAlreadyPaid'), 'info'); return; }
+    if ((bill.remaining || 0) <= 0) { showNotification(t('billing.notifications.noRemainingAmount'), 'info'); return; }
+    try {
+      setIsProcessingPayment(true);
+      if (selectedBill && (selectedBill.id === bill.id || (selectedBill as any)._id === (bill as any)._id)) {
+        await processPayment();
+        setIsProcessingPayment(false);
+        setShowPaymentSuccessAnim(true);
+        setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
+        return;
+      }
+      const remaining = bill.remaining || 0;
+      const optimisticFull: any = { ...bill, paid: (bill.paid || 0) + remaining, remaining: 0, status: 'paid' };
+      const optimisticBills = bills.map(b => String(b._id || (b as any).id) === String((bill as any)._id || (bill as any).id) ? optimisticFull : b);
+      setBills(optimisticBills);
+      // لو الطاولة مبقاش عليها فواتير غير مدفوعة -> اقفل نافذتها وخليها فارغة فورا
+      const tableId = String((bill.table as any)?._id || bill.table || '');
+      const hasUnpaidForTable = optimisticBills.some((b: any) => String(b.table?._id || b.table) === tableId && ['draft','partial','overdue'].includes(b.status));
+      if (!hasUnpaidForTable && selectedTable && String((selectedTable as any)._id || (selectedTable as any).id) === tableId) {
+        setShowUnifiedTableModal(false);
+        setSelectedTable(null);
+      }
+      // مسح كاش كروت الطاولات عشان اللون يتحدث فورا
+      tableCardDataCache.current.clear();
+      const result = await api.updatePayment((bill as any).id || (bill as any)._id, {
+        paid: (bill.paid || 0) + remaining, remaining: 0, status: 'paid',
+        paymentAmount: remaining, method: 'cash', reference: '',
+      } as any);
+      if (result?.data) {
+        setBills(prev => prev.map(b => String(b._id || (b as any).id) === String((bill as any)._id || (bill as any).id) ? result.data : b));
+        tableCardDataCache.current.clear();
+        setIsProcessingPayment(false);
+        setShowPaymentSuccessAnim(true);
+        setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
+        invalidateTablesCache();
+        // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
+        fetchBills().catch(()=>{});
+        showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
+      } else {
+        setIsProcessingPayment(false);
+      }
+    } catch { showNotification(t('billing.notifications.payFullBillError'), 'error'); setIsProcessingPayment(false); }
+  };
+
   const handlePartialPayment = async (bill: Bill) => {
     if (!canPartialPayment(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
     setSelectedBill(bill); setShowPartialPaymentModal(true);
@@ -1954,7 +2099,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
   // ── Callbacks مستقرة لـ TableButton — تمنع إعادة رسم الكروت غير الضرورية ──
   const stableTableClick = useCallback((tb: Table) => { lastFocusedTableRef.current = tb; handleTableClick(tb); }, []);
   const stableQuickOrder = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickOrder(tb, e); }, []);
-  const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, []);
+  const stableQuickBilling = useCallback((tb: Table, e: React.MouseEvent) => { lastFocusedTableRef.current = tb; handleQuickBilling(tb, e); }, [handleQuickBilling]);
   const stableHoverChange = useCallback((tb: Table | null) => { lastFocusedTableRef.current = tb; }, []);
 
   const handleQuickPrint = useCallback(async (tb: Table, e: React.MouseEvent) => {
@@ -2025,6 +2170,19 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
   }, [tableCardData, handleOpenChangeTableModal]);
 
   const stableQuickChangeTable = useCallback((tb: Table, e: React.MouseEvent) => { handleQuickChangeTable(tb, e); }, [handleQuickChangeTable]);
+
+  const handleQuickEditBill = useCallback((tb: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    lastFocusedTableRef.current = tb;
+    const bills = tableCardData.get((tb._id || (tb as any).id).toString())?.tBills || [];
+    const firstUnpaid = bills.find((b: any) => ['draft','partial','overdue'].includes(b.status));
+    if (!firstUnpaid) { showNotification('لا توجد فاتورة غير مدفوعة', 'error'); return; }
+    if (!canEditOrder(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
+    setBillToEdit(firstUnpaid);
+    setShowBillItemsEditModal(true);
+  }, [tableCardData, user, t]);
+
+  const stableQuickEditBill = useCallback((tb: Table, e: React.MouseEvent) => { handleQuickEditBill(tb, e); }, [handleQuickEditBill]);
 
   const handleEditSessionTime = (session: Session) => {
     if (!canEditSessionTime(user)) { showNotification(t('common.permissionDenied'), 'error'); return; }
@@ -2312,6 +2470,7 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                               onQuickBilling={stableQuickBilling}
                               onQuickPrint={stableQuickPrint}
                               onQuickChangeTable={stableQuickChangeTable}
+                              onQuickEditBill={stableQuickEditBill}
                               onEndAllSessions={handleEndAllSessions}
                               onHoverChange={stableHoverChange}
                             />
@@ -2736,6 +2895,18 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                           <X className="h-3.5 w-3.5" />
                         </button>
                       )}
+                      {/* زر سريع تعديل الفاتورة - يفتح مباشرة */}
+                      {(() => {
+                        const src2 = (tableBillsMap as any)[tableId]?.bills || [];
+                        const firstUnpaid = src2.find((b: Bill) => ['draft','partial','overdue'].includes(b.status));
+                        if (!firstUnpaid || !canEditOrder(user)) return null;
+                        return (
+                          <button onClick={() => { setBillToEdit(firstUnpaid); setShowBillItemsEditModal(true); }}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-1.5 flex-shrink-0 shadow-sm">
+                            <Edit className="h-3.5 w-3.5" />تعديل
+                          </button>
+                        );
+                      })()}
                     </div>
 
                     {/* إجماليات شرطية: تظهر فقط إذا الفلتر مش "unpaid" أو عند البحث */}
@@ -2822,16 +2993,16 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                                         {liveRemaining > 0 && <span className="text-red-600 dark:text-red-400 font-bold">متبقي: {formatCurrency(liveRemaining)}</span>}
                                       </div>
                                     </div>
-                                    <div className="flex gap-1 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
-                                      {/* تعديل أصناف الفاتورة مجمعة */}
+                                    <div className="flex gap-1 flex-shrink-0 opacity-90 group-hover:opacity-100 transition-opacity">
+                                      {/* تعديل أصناف الفاتورة مجمعة - زر واضح */}
                                       {canEditOrder(user) && ['draft','partial','overdue'].includes(bill.status) && (
                                         <button onClick={e => { e.stopPropagation(); setBillToEdit(bill); setShowBillItemsEditModal(true); }}
-                                          className="w-7 h-7 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-300 rounded-lg flex items-center justify-center transition-all" title="تعديل الأصناف">
-                                          <Edit className="h-3 w-3" />
+                                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-1 shadow-sm" title="تعديل الأصناف">
+                                          <Edit className="h-3.5 w-3.5" />تعديل
                                         </button>
                                       )}
                                       {isUnpaid && (
-                                        <button onClick={e => { e.stopPropagation(); handlePayFullBill(bill); }}
+                                        <button onClick={e => { e.stopPropagation(); setPayChoiceBill(bill); setShowPayChoiceModal(true); }}
                                           className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold rounded-lg flex items-center gap-1 transition-all whitespace-nowrap">
                                           <DollarSign className="h-3 w-3" />دفع
                                         </button>
@@ -3594,7 +3765,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           updateItemNotes={updateItemNotes} removeItemFromOrder={removeItemFromOrder} calculateTotal={calculateOrderTotal}
           onSave={() => handleSaveOrder('pending', false)} onSaveAndSend={() => handleSaveOrder('pending', false)}
           onSaveAndPrint={() => handleSaveOrder('pending', true)}
-          onClose={() => { setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes(''); }} loading={savingOrder} isEdit={false} />
+          onClose={() => { setShowOrderModal(false); setCurrentOrderItems([]); setOrderNotes(''); }} loading={savingOrder} isEdit={false}
+          canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }} />
       )}
       {showEditOrderModal && selectedOrder && selectedTable && (
         <OrderModal table={selectedTable} orderItems={currentOrderItems} setOrderItems={setCurrentOrderItems}
@@ -3605,7 +3777,8 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
           updateItemNotes={updateItemNotes} removeItemFromOrder={removeItemFromOrder} calculateTotal={calculateOrderTotal}
           onSave={() => handleUpdateOrder(false, 'pending')} onSaveAndSend={() => handleUpdateOrder(false, 'pending')}
           onSaveAndPrint={() => handleUpdateOrder(true, 'pending')}
-          onClose={() => { setShowEditOrderModal(false); setSelectedOrder(null); setCurrentOrderItems([]); setOrderNotes(''); }} loading={savingOrder} isEdit={true} />
+          onClose={() => { setShowEditOrderModal(false); setSelectedOrder(null); setCurrentOrderItems([]); setOrderNotes(''); }} loading={savingOrder} isEdit={true}
+          canEditPrice={canEditItemPrice(user)} onEditPrice={(idx, item) => { setPriceEditItem({ index: idx, item }); setShowPriceEditModal(true); }} />
       )}
 
       {/* ── Table Management Modal ── */}
@@ -3711,6 +3884,45 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
         }}
       />
 
+      {/* ── Pay Choice Modal ── */}
+      {showPayChoiceModal && payChoiceBill && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowPayChoiceModal(false)}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="bg-gradient-to-r from-emerald-500 to-blue-600 px-5 py-4 text-white">
+                <h3 className="text-xl font-bold flex items-center gap-2"><DollarSign className="h-5 w-5" />تأكيد الدفع</h3>
+                <p className="text-sm opacity-90 mt-1">فاتورة #{payChoiceBill.billNumber || (payChoiceBill as any)._id?.toString().slice(-6)} - المتبقي {formatCurrency(Number(payChoiceBill.remaining) || 0)}</p>
+              </div>
+              <div className="p-5 space-y-3 bg-gray-50 dark:bg-gray-900">
+                <p className="text-base text-gray-700 dark:text-gray-300 text-center">اختر طريقة الدفع</p>
+                <button
+                  onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handleDirectPayFull(b); }}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
+                  <CheckCircle className="h-5 w-5" />دفع الفاتورة بالكامل
+                </button>
+                <button
+                  onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handlePaymentClick(b); }}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
+                  <Receipt className="h-5 w-5" />الذهاب لإدارة الدفع
+                </button>
+                <p className="text-xs text-gray-500 text-center">إدارة الدفع تتيح الدفع الجزئي والتقسيم والخصم</p>
+              </div>
+              <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-center">
+                <button onClick={() => { setShowPayChoiceModal(false); setPayChoiceBill(null); }} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm">إلغاء</button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      <PriceEditModal
+        isOpen={showPriceEditModal}
+        onClose={() => { setShowPriceEditModal(false); setPriceEditItem(null); }}
+        item={priceEditItem?.item || null}
+        onSave={handlePriceEditSave}
+        formatCurrency={formatCurrency}
+      />
+
     </div>
   );
 };
@@ -3740,17 +3952,30 @@ const QuickAddModal: React.FC<{
 
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
 
-  const addItem = (mi: MenuItem) => {
+  const addItem = (mi: MenuItem, variant?: string | null) => {
+    let effPrice = mi.price;
+    let effVariant: string | null = variant ? String(variant).trim() : null;
+    if (mi.variants && mi.variants.length > 0) {
+      if (effVariant) {
+        const m = mi.variants.find(v => v.size === effVariant);
+        if (m) effPrice = m.price;
+      } else {
+        effVariant = mi.variants[0].size;
+        effPrice = mi.variants[0].price;
+      }
+    } else effVariant = effVariant || null;
+    const keyVariant = effVariant || '';
     setItems(prev => {
-      const ex = prev.find(i => i.menuItem === mi.id);
-      if (ex) return prev.map(i => i.menuItem === mi.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { menuItem: mi.id, name: mi.name, price: mi.price, quantity: 1 }];
+      const ex = prev.find(i => i.menuItem === mi.id && (i.variant || '') === keyVariant);
+      if (ex) return prev.map(i => (i.menuItem === mi.id && (i.variant || '') === keyVariant) ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { menuItem: mi.id, name: mi.name, price: effPrice, variant: effVariant, quantity: 1 }];
     });
   };
 
-  const changeQty = (id: string, delta: number) => {
+  const changeQty = (id: string, delta: number, variant?: string | null) => {
     setItems(prev => prev.map(i => {
-      if (i.menuItem !== id) return i;
+      const match = variant !== undefined ? (i.menuItem === id && (i.variant || '') === (variant || '')) : i.menuItem === id;
+      if (!match) return i;
       const q = i.quantity + delta;
       return q <= 0 ? null as any : { ...i, quantity: q };
     }).filter(Boolean));
@@ -3786,17 +4011,53 @@ const QuickAddModal: React.FC<{
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content with variant support */}
         <div className="flex-1 overflow-y-auto p-3 min-h-0 grid grid-cols-1 gap-2">
           {filtered.length === 0 ? (
             <p className="text-center text-gray-400 py-8">لا توجد أصناف</p>
           ) : filtered.map(mi => {
+            const hasVariants = mi.variants && mi.variants.length > 1;
+            if (hasVariants) {
+              return (
+                <div key={mi.id} className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <p className="font-medium text-lg text-gray-900 dark:text-gray-100 truncate mb-2">{mi.name}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {mi.variants!.map(v => {
+                      const inOrderV = items.find(i => i.menuItem === mi.id && i.variant === v.size);
+                      return (
+                        <div key={v.size} className={`flex items-center justify-between p-2 rounded-lg border ${inOrderV ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/20' : 'border-gray-200 dark:border-gray-600'}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{v.size}</p>
+                            <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold">{formatCurrencyUtil(v.price, i18n.language, cur)}</p>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {inOrderV ? (
+                              <>
+                                <button onClick={() => changeQty(mi.id, -1, v.size)} className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center justify-center font-bold text-sm">−</button>
+                                <span className="w-5 text-center font-bold text-sm text-gray-900 dark:text-gray-100">{inOrderV.quantity}</span>
+                                <button onClick={() => changeQty(mi.id, 1, v.size)} className="w-6 h-6 bg-green-500 hover:bg-green-600 text-white rounded-lg flex items-center justify-center font-bold text-sm">+</button>
+                              </>
+                            ) : (
+                              <button onClick={() => addItem(mi, v.size)} className="w-6 h-6 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center">
+                                <Plus className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            const displayPrice = mi.variants && mi.variants.length === 1 ? mi.variants[0].price : mi.price;
+            const displaySize = mi.variants && mi.variants.length === 1 ? mi.variants[0].size : null;
             const inOrder = items.find(i => i.menuItem === mi.id);
             return (
               <div key={mi.id} className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${inOrder ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-lg text-gray-900 dark:text-gray-100 truncate">{mi.name}</p>
-                  <p className="text-base text-orange-600 dark:text-orange-400 font-semibold">{formatCurrencyUtil(mi.price, i18n.language, cur)}</p>
+                  <p className="font-medium text-lg text-gray-900 dark:text-gray-100 truncate flex items-center gap-1">{mi.name} {displaySize && displaySize !== 'عادي' && <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full">{displaySize}</span>}</p>
+                  <p className="text-base text-orange-600 dark:text-orange-400 font-semibold">{formatCurrencyUtil(displayPrice, i18n.language, cur)}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {inOrder ? (
@@ -3970,13 +4231,15 @@ interface OrderModalProps {
   toggleSection: (id: string) => void; toggleCategory: (id: string) => void;
   getCategoriesForSection: (id: string) => MenuCategory[];
   getItemsForCategory: (id: string) => MenuItem[];
-  addItemToOrder: (item: MenuItem) => void;
-  updateItemQuantity: (id: string, delta: number) => void;
-  updateItemNotes: (id: string, notes: string) => void;
-  removeItemFromOrder: (id: string) => void;
+  addItemToOrder: (item: MenuItem, variant?: string | null) => void;
+  updateItemQuantity: (id: string, delta: number, variant?: string | null) => void;
+  updateItemNotes: (id: string, notes: string, variant?: string | null) => void;
+  removeItemFromOrder: (id: string, variant?: string | null) => void;
   calculateTotal: () => number;
   onSave: () => void; onSaveAndPrint: () => void; onSaveAndSend: () => void; onClose: () => void;
   loading: boolean; isEdit: boolean;
+  canEditPrice?: boolean;
+  onEditPrice?: (index: number, item: LocalOrderItem) => void;
 }
 
 
@@ -3985,6 +4248,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   expandedSections, expandedCategories, toggleSection, toggleCategory, getCategoriesForSection,
   getItemsForCategory, addItemToOrder, updateItemQuantity, updateItemNotes, removeItemFromOrder,
   calculateTotal, onSave, onSaveAndPrint, onSaveAndSend, onClose, loading, isEdit,
+  canEditPrice, onEditPrice,
 }) => {
   const { t, i18n } = useTranslation();
   const { isRTL } = useLanguage();
@@ -3995,10 +4259,20 @@ const OrderModal: React.FC<OrderModalProps> = ({
   const cur = useRef(localStorage.getItem('organizationCurrency') || 'EGP').current;
   const fmt = useCallback((n: number) => formatCurrencyUtil(n, i18n.language, cur), [i18n.language, cur]);
 
-  // ── map الكمية: O(1) بدل O(n) في كل صنف ────────────────────────────
+  // ── map الكمية: O(1) بدل O(n) في كل صنف — with variant support ───────
   const qtyMap = useMemo(() => {
     const map: Record<string, number> = {};
-    orderItems.forEach(i => { map[i.menuItem] = i.quantity; });
+    orderItems.forEach(i => { map[i.menuItem] = (map[i.menuItem] || 0) + i.quantity; });
+    return map;
+  }, [orderItems]);
+  const qtyByVariantMap = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    orderItems.forEach(i => {
+      const v = i.variant || '';
+      if (!map[i.menuItem]) map[i.menuItem] = {};
+      map[i.menuItem][v] = (map[i.menuItem][v] || 0) + i.quantity;
+      if (i.variant) map[i.menuItem][i.variant] = (map[i.menuItem][i.variant] || 0) + i.quantity;
+    });
     return map;
   }, [orderItems]);
 
@@ -4061,12 +4335,16 @@ const OrderModal: React.FC<OrderModalProps> = ({
     prevLengthRef.current = orderItems.length;
   }, [orderItems.length]);
 
-  const handleAddWithFlash = useCallback((menuItem: MenuItem) => {
-    addItemToOrder(menuItem);
+  const handleAddWithFlash = useCallback((menuItem: MenuItem, variant?: string | null) => {
+    addItemToOrder(menuItem, variant);
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    setFlashId(menuItem.id);
+    const flashKey = variant ? `${menuItem.id}::${variant}` : menuItem.id;
+    setFlashId(flashKey);
     flashTimerRef.current = setTimeout(() => setFlashId(null), 700);
-    setTimeout(() => { itemRefsMap.current[menuItem.id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
+    setTimeout(() => {
+      const el = itemRefsMap.current[flashKey] || itemRefsMap.current[menuItem.id];
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 30);
   }, [addItemToOrder]);
 
   useEffect(() => {
@@ -4206,6 +4484,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                       key={item.id}
                       item={item}
                       qty={qtyMap[item.id] || 0}
+                      qtyByVariant={qtyByVariantMap[item.id]}
                       onAdd={handleAddWithFlash}
                       fmt={fmt}
                     />
@@ -4234,22 +4513,27 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   <ShoppingCart className="h-8 w-8 text-gray-200 dark:text-gray-700 mb-1" />
                   <p className="text-base text-gray-300 dark:text-gray-600">{t('cafe.orderModal.noItems')}</p>
                 </div>
-              ) : orderItems.map(item => (
-                <div key={item.menuItem} ref={el => { itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
+              ) : orderItems.map((item, idx) => {
+                const compositeKey = item.variant ? `${item.menuItem}::${item.variant}::${item.price}` : `${item.menuItem}::${item.price}`;
+                return (
+                <div key={compositeKey + idx} ref={el => { itemRefsMap.current[compositeKey] = el as HTMLDivElement | null; if (!item.variant) itemRefsMap.current[item.menuItem] = el as HTMLDivElement | null; }}>
                   <OrderItemRow
                     item={item}
-                    isFlash={flashId === item.menuItem}
-                    isExpanded={!!expandedNotes[item.menuItem]}
-                    onMinus={() => updateItemQuantity(item.menuItem, -1)}
-                    onPlus={() => updateItemQuantity(item.menuItem, 1)}
-                    onRemove={() => removeItemFromOrder(item.menuItem)}
-                    onToggleNote={() => setExpandedNotes(p => ({ ...p, [item.menuItem]: !p[item.menuItem] }))}
-                    onNoteChange={v => updateItemNotes(item.menuItem, v)}
+                    isFlash={flashId === compositeKey || flashId === item.menuItem}
+                    isExpanded={!!expandedNotes[compositeKey]}
+                    onMinus={() => setOrderItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; const q=it.quantity-1; if(q<=0) cp.splice(idx,1); else cp[idx]={...it, quantity:q}; return cp; })}
+                    onPlus={() => setOrderItems(prev => { const cp=[...prev]; const it=cp[idx]; if(!it) return prev; cp[idx]={...it, quantity:it.quantity+1}; return cp; })}
+                    onRemove={() => setOrderItems(prev => prev.filter((_, i) => i !== idx))}
+                    onToggleNote={() => setExpandedNotes(p => ({ ...p, [compositeKey]: !p[compositeKey] }))}
+                    onNoteChange={v => setOrderItems(prev => { const cp=[...prev]; if(cp[idx]) cp[idx]={...cp[idx], notes:v}; return cp; })}
                     notePlaceholder={t('cafe.orderModal.itemNotesPlaceholder')}
                     fmt={fmt}
+                    canEditPrice={canEditPrice}
+                    onEditPrice={onEditPrice ? () => onEditPrice(idx, item) : undefined}
                   />
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="px-2 pt-2 pb-1 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">

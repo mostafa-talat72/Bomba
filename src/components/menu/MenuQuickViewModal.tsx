@@ -58,7 +58,7 @@ const MenuQuickViewModal: React.FC<MenuQuickViewModalProps> = ({
 
 				{/* Content */}
 				<div className="p-6 space-y-5">
-					{/* Status + Price */}
+					{/* Status + Price with variants */}
 					<div className="flex items-center justify-between">
 						<span className={`px-3 py-1.5 text-sm font-bold rounded-full ${
 							item.isAvailable
@@ -67,9 +67,19 @@ const MenuQuickViewModal: React.FC<MenuQuickViewModalProps> = ({
 						}`}>
 							{item.isAvailable ? t('menu.available') : t('menu.unavailable')}
 						</span>
-						<span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
-							{formatCurrency(item.price, i18n.language)}
-						</span>
+						{item.variants && item.variants.length > 0 ? (
+							<div className="flex flex-col items-end gap-1">
+								{item.variants.map(v => (
+									<span key={v.size} className="text-sm font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
+										{v.size}: {formatCurrency(v.price, i18n.language)}
+									</span>
+								))}
+							</div>
+						) : (
+							<span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
+								{formatCurrency(item.price, i18n.language)}
+							</span>
+						)}
 					</div>
 
 					{/* Description */}

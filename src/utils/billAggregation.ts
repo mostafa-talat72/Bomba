@@ -5,6 +5,7 @@
 interface OrderItem {
   name: string;
   price: number;
+  variant?: string | null;
   quantity: number;
   addons?: {
     _id?: string;
@@ -42,6 +43,7 @@ interface ItemPayment {
 export interface AggregatedItem {
   id: string; // Unique identifier for the item
   name: string;
+  variant?: string | null;
   price: number;
   totalQuantity: number;
   paidQuantity: number;
@@ -58,14 +60,14 @@ export interface AggregatedItem {
  * Items with the same name and price but different addons are treated as separate items
  * Items with the same addons (regardless of order) are combined
  */
-function createItemKey(itemName: string, itemPrice: number, addons?: { name: string; price: number }[]): string {
+function createItemKey(itemName: string, itemPrice: number, addons?: { name: string; price: number }[], variant?: string | null): string {
   // Sort addons by name and price to ensure consistent keys regardless of order
   const addonsKey = (addons || [])
     .map(addon => `${addon.name}:${addon.price}`)
     .sort()
     .join('|');
   
-  return `${itemName}|${itemPrice}|${addonsKey}`;
+  return `${itemName}|${variant || ''}|${itemPrice}|${addonsKey}`;
 }
 
 /**
@@ -195,13 +197,14 @@ export function aggregateItemsWithPayments(
 
     order.items.forEach((item: OrderItem, itemIndex) => {
       const itemId = `${order._id}-${itemIndex}`; // Backend expected format
-      const key = createItemKey(item.name, item.price, item.addons);
+      const key = createItemKey(item.name, item.price, item.addons, (item as any).variant);
 
       if (!itemMap.has(key)) {
         // Create new aggregated item
         const newItem = {
           id: itemId, // Use first itemId as representative
           name: item.name,
+          variant: (item as any).variant || null,
           price: item.price,
           totalQuantity: item.quantity,
           paidQuantity: 0, // Will be calculated later
@@ -299,14 +302,14 @@ export function getItemIdsForAggregatedItem(
   }
 
   // Find all items with same name+price+addons that actually exist in current orders
-  const targetKey = createItemKey(targetItem.name, targetItem.price, targetItem.addons);
+  const targetKey = createItemKey(targetItem.name, targetItem.price, targetItem.addons, (targetItem as any).variant);
   const matchingItemIds: string[] = [];
 
   orders.forEach((order) => {
     if (!order.items || !Array.isArray(order.items)) return;
 
     order.items.forEach((item: OrderItem, itemIndex) => {
-      const itemKey = createItemKey(item.name, item.price, item.addons);
+      const itemKey = createItemKey(item.name, item.price, item.addons, (item as any).variant);
       if (itemKey === targetKey) {
         const itemId = `${order._id}-${itemIndex}`;
         // Only include if it's a valid itemId (exists in current orders)

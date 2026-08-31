@@ -79,11 +79,27 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
 				</div>
 			)}
 
-			{/* Price + Stats */}
+			{/* Price + Stats with variants */}
 			<div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100 dark:border-gray-700">
-				<span className="price-tag text-xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
-					{formatCurrency(item.price, i18n.language)}
-				</span>
+				<div className="flex flex-col gap-1">
+					{item.variants && item.variants.length > 0 ? (
+						<div className="flex flex-wrap gap-1">
+							{item.variants.slice(0, 3).map(v => (
+								<span key={v.size} className="price-tag text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded-full font-bold">
+									{v.size}: {formatCurrency(v.price, i18n.language)}
+								</span>
+							))}
+							{item.variants.length > 3 && <span className="text-xs text-gray-400">+{item.variants.length - 3}</span>}
+						</div>
+					) : (
+						<span className="price-tag text-xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
+							{formatCurrency(item.price, i18n.language)}
+						</span>
+					)}
+					{item.variants && item.variants.length > 1 && (
+						<span className="text-xs text-gray-400">{item.variants.length} أحجام</span>
+					)}
+				</div>
 				<div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
 					<div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
 						<TrendingUp className="h-3.5 w-3.5" />

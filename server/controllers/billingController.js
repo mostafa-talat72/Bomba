@@ -717,6 +717,11 @@ export const createBill = async (req, res) => {
             );
         }
 
+        // Update table status SYNCHRONOUSLY before response (fix stale status)
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+        }
+
         // Fire-and-forget Atlas write
         writeToAtlas('bills', 'upsert', bill.toObject ? bill.toObject() : bill, { _id: bill._id });
 
@@ -742,50 +747,22 @@ export const createBill = async (req, res) => {
             createdAt: bill.createdAt,
         };
 
-        // Return response IMMEDIATELY after local save
+        // Return response IMMEDIATELY after local save (table status already updated)
         res.status(201).json({
             success: true,
             message: "تم إنشاء الفاتورة بنجاح",
             data: responseData,
         });
 
-        // All background work in setImmediate - non-blocking
+        // Background work - only notifications and socket (table status already done)
         setImmediate(async () => {
             try {
-                // 1. Calculate subtotal from orders and sessions
-                if (
-                    (orders && orders.length > 0) ||
-                    (sessions && sessions.length > 0)
-                ) {
-                    await bill.calculateSubtotal();
-                }
-
-                // 2. Update orders and sessions to reference this bill
-                if (orders && orders.length > 0) {
-                    await Order.updateMany(
-                        { _id: { $in: orders } },
-                        { bill: bill._id }
-                    );
-                }
-
-                if (sessions && sessions.length > 0) {
-                    await Session.updateMany(
-                        { _id: { $in: sessions } },
-                        { bill: bill._id }
-                    );
-                }
-
-                // 3. Update table status if bill has a table
-                if (bill.table) {
-                    await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
-                }
-
-                // 4. Notify via Socket.IO
+                // Notify via Socket.IO
                 if (req.io) {
                     req.io.notifyBillUpdate("created", bill, req.user.organization);
                 }
 
-                // 5. Create notification for new bill
+                // Create notification for new bill
                 try {
                     const userLanguage = req.user.preferences?.language || 'ar';
                     const organization = await Organization.findById(req.user.organization).select('currency');
@@ -1152,6 +1129,12 @@ export const updateBill = async (req, res) => {
         const prevStatus = bill.status;
         const updatedBill = await bill.save();
 
+        // Update table status SYNCHRONOUSLY before response (fix stale status)
+        // Handle both old and new table cases: updatedBill.table is the new/current table
+        if (updatedBill.table) {
+            await updateTableStatusIfNeeded(updatedBill.table, req.user.organization, req.io);
+        }
+
         // Fire-and-forget Atlas write
         writeToAtlas('bills', 'upsert', updatedBill.toObject ? updatedBill.toObject() : updatedBill, { _id: updatedBill._id });
 
@@ -1178,21 +1161,16 @@ export const updateBill = async (req, res) => {
             updatedAt: updatedBill.updatedAt,
         };
 
-        // Return response IMMEDIATELY
+        // Return response IMMEDIATELY (table status already updated)
         res.json({
             success: true,
             message: "تم تحديث الفاتورة بنجاح",
             data: responseData,
         });
 
-        // Background work
+        // Background work - only notifications and socket (table status already done)
         setImmediate(async () => {
             try {
-                // Update table status if bill status changed
-                if (bill.table && prevStatus !== updatedBill.status) {
-                    await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
-                }
-
                 // Notify via Socket.IO
                 if (req.io) {
                     req.io.notifyBillUpdate("updated", updatedBill, req.user.organization);
@@ -1461,17 +1439,21 @@ export const addPayment = async (req, res) => {
             }
         }
 
+        // Update table status SYNCHRONOUSLY before response (fix stale status)
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+        }
+
         // Populate only essential fields for response (QR يُنشأ في الخلفية بلا حجب)
         await bill.populate([
             { path: "table", select: "number name" }
         ]);
 
-        // Update table status in background (non-blocking)
-        if (bill.table) {
-            updateTableStatusIfNeeded(bill.table, req.user.organization, req.io).catch(err => {
-                Logger.error("Error updating table status:", err);
-            });
-        }
+        res.json({
+            success: true,
+            message: "تم تسجيل الدفع بنجاح",
+            data: bill,
+        });
 
         // Notify via Socket.IO (non-blocking)
         if (req.io) {
@@ -1508,12 +1490,6 @@ export const addPayment = async (req, res) => {
             } catch (err) {
                 Logger.error("Failed to get user/org data for notification:", err);
             }
-        });
-
-        res.json({
-            success: true,
-            message: "تم تسجيل الدفع بنجاح",
-            data: bill,
         });
 
         // QR في الخلفية — لا يحجب الاستجابة (كان 80-150ms)
@@ -1834,6 +1810,11 @@ export const cancelBill = async (req, res) => {
         await Order.updateMany({ bill: bill._id }, { $unset: { bill: 1 } });
 
         await Session.updateMany({ bill: bill._id }, { $unset: { bill: 1 } });
+
+        // Update table status SYNCHRONOUSLY before response (fix stale status)
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+        }
 
         const message =
             bill.paid > 0
@@ -2267,6 +2248,11 @@ export const addPartialPayment = async (req, res) => {
             total: bill.total
         });
 
+        // Update table status SYNCHRONOUSLY before response (fix stale status)
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+        }
+
         // Populate للاستجابة
         await bill.populate([
             "orders",
@@ -2275,17 +2261,6 @@ export const addPartialPayment = async (req, res) => {
             "itemPayments.paidBy",
             "payments.user"
         ]);
-
-        // إرسال تحديث Socket.IO
-        if (req.io) {
-            req.io.emit('partial-payment-received', {
-                type: 'partial-payment',
-                bill: bill,
-                amount: totalPaymentAmount,
-                items: processedItems,
-                message: 'تم إضافة الدفع الجزئي بنجاح'
-            });
-        }
 
         res.json({
             success: true,
@@ -2297,6 +2272,19 @@ export const addPartialPayment = async (req, res) => {
                 method: paymentMethod || "cash"
             }
         });
+
+        // إرسال تحديث Socket.IO in background (non-blocking)
+        if (req.io) {
+            setImmediate(() => {
+                req.io.emit('partial-payment-received', {
+                    type: 'partial-payment',
+                    bill: bill,
+                    amount: totalPaymentAmount,
+                    items: processedItems,
+                    message: 'تم إضافة الدفع الجزئي بنجاح'
+                });
+            });
+        }
 
     } catch (error) {
         Logger.error("خطأ في إضافة الدفع الجزئي", error);
@@ -3516,6 +3504,11 @@ export const addPartialPaymentAggregated = async (req, res) => {
             total: bill.total
         });
 
+        // Update table status SYNCHRONOUSLY before response (fix stale status)
+        if (bill.table) {
+            await updateTableStatusIfNeeded(bill.table, req.user.organization, req.io);
+        }
+
         // Populate للاستجابة
         await bill.populate([
             "orders",
@@ -3524,17 +3517,6 @@ export const addPartialPaymentAggregated = async (req, res) => {
             "itemPayments.paidBy",
             "payments.user"
         ]);
-
-        // إرسال تحديث Socket.IO
-        if (req.io) {
-            req.io.emit('partial-payment-received', {
-                type: 'partial-payment',
-                bill: bill,
-                amount: totalPaymentAmount,
-                items: processedItems,
-                message: 'تم إضافة الدفع الجزئي بنجاح'
-            });
-        }
 
         res.json({
             success: true,
@@ -3546,6 +3528,19 @@ export const addPartialPaymentAggregated = async (req, res) => {
                 method: paymentMethod || "cash"
             }
         });
+
+        // إرسال تحديث Socket.IO in background (non-blocking)
+        if (req.io) {
+            setImmediate(() => {
+                req.io.emit('partial-payment-received', {
+                    type: 'partial-payment',
+                    bill: bill,
+                    amount: totalPaymentAmount,
+                    items: processedItems,
+                    message: 'تم إضافة الدفع الجزئي بنجاح'
+                });
+            });
+        }
 
     } catch (error) {
         Logger.error("خطأ في إضافة الدفع الجزئي المجمع", error);
@@ -3618,7 +3613,11 @@ export const updateBillAggregatedItems = async (req, res) => {
                 if (!mi.isAvailable) {
                     return res.status(400).json({ success: false, message: `الصنف غير متاح: ${mi.name}` });
                 }
-                const price = mi.price || 0;
+                let price = mi.price || 0;
+                if (raw.price !== undefined && raw.price !== null && raw.price !== '' && req.user.hasPermission('canEditItemPrice')) {
+                    const cp = Number(raw.price);
+                    if (!isNaN(cp) && cp >= 0) price = cp;
+                }
                 const itemTotal = price * qty;
                 subtotal += itemTotal;
                 processedItems.push({

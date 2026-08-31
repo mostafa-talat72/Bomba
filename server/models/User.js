@@ -73,6 +73,7 @@ const userSchema = new mongoose.Schema(
                     "canPayFullBill",
                     "canDeleteBill",
                     "canEditPartialPayment",
+                    "canEditItemPrice",
                     // Inventory permissions (detailed)
                     "canViewInventory",
                     "canAddInventoryItem",

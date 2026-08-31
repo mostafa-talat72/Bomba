@@ -404,17 +404,23 @@ class PrintController {
   async testPrinter(req, res) {
     try {
       const { printerPath, printerType = 'usb' } = req.body;
-
-      if (!printerPath) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Printer path is required' 
-        });
+      if (!printerPath) return res.status(400).json({ success: false, message: 'Printer path is required' });
+      const organizationId = req.user.organization?._id || req.user.organization;
+      let printSettings = { printerType, printerDevice: printerPath };
+      if (organizationId) {
+        try {
+          const org = await Organization.findById(organizationId).select('printSettings');
+          if (org?.printSettings) printSettings = { ...org.printSettings, printerDevice: printerPath, printerType };
+        } catch {}
       }
-
-      const result = await printerDetectionService.testPrinterConnection(printerPath, printerType);
-
-      return res.json(result);
+      const connected = await printerService.initializePrinter(printSettings);
+      if (!connected) return res.json(await printerDetectionService.testPrinterConnection(printerPath, printerType));
+      const testContent = '\n' + 'الطباعة نجحت'.padStart(24) + '\n' + new Date().toLocaleString('ar-EG') + '\n\n\n';
+      const result = await printerService.printDocument(testContent, false, true);
+      await printerService.disconnect();
+      if (result.success) return res.json({ success: true, message: 'تمت طباعة ورقة الاختبار بنجاح' });
+      const fallback = await printerDetectionService.testPrinterConnection(printerPath, printerType);
+      return res.json(fallback);
     } catch (error) {
       console.error('Error testing printer:', error);
       return res.status(500).json({ 

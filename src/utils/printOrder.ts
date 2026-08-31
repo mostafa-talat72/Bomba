@@ -7,6 +7,7 @@ interface OrderItem {
   name: string;
   arabicName?: string;
   price: number;
+  variant?: string | null;
   quantity: number;
   notes?: string;
   preparedCount?: number;
@@ -281,9 +282,12 @@ const printAllSectionsInOnePage = (
             </tr>
           </thead>
           <tbody>
-            ${items.map(item => `
+            ${items.map(item => {
+              const v = (item as any).variant;
+              const variantText = v && v !== 'عادي' ? ` (${v})` : '';
+              return `
               <tr>
-                <td class="item-name">${item.name}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
+                <td class="item-name">${item.name}${variantText}${item.notes ? `<br><small>(${item.notes})</small>` : ''}</td>
                 <td class="item-qty"><strong>${formatDecimal(item.quantity, language)}</strong></td>
                 <td class="item-price"><strong>${formatDecimal(item.price * item.quantity, language)}</strong></td>
               </tr>
@@ -296,7 +300,8 @@ const printAllSectionsInOnePage = (
                   </tr>
                 `).join('') : ''
               }
-            `).join('')}
+            `;
+            }).join('')}
           </tbody>
         </table>
 
@@ -525,28 +530,16 @@ export const printOrder = async (
   tableSectionName?: string
 ) => {
   try {
-    // محاولة الطباعة المباشرة عبر API
-    const response = await api.printOrder({
-      order,
-      organization: order.organization,
-      language
-    });
-
-    if (response.success) {
-      const successMsg = language === 'ar' 
-        ? 'تمت طباعة الطلب بنجاح'
-        : language === 'fr'
-        ? 'Commande imprimée avec succès'
-        : 'Order printed successfully';
-      
-      // إظهار إشعار نجاح
-      if (typeof window !== 'undefined' && (window as any).showNotification) {
-        (window as any).showNotification(successMsg, 'success');
-      }
+    const directPrint = api.printOrder({ order, organization: order.organization, language });
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const response: any = await Promise.race([directPrint, timeout]);
+    if (response?.success) {
+      const successMsg = language === 'ar' ? 'تمت طباعة الطلب بنجاح' : language === 'fr' ? 'Commande imprimée avec succès' : 'Order printed successfully';
+      if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(successMsg, 'success');
       return;
     }
-  } catch (error) {
-    console.error('Direct print failed, falling back to window print:', error);
+  } catch (error: any) {
+    if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
   }
 
   // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة

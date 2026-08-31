@@ -32,13 +32,39 @@ import { body } from "express-validator";
 
 const router = express.Router();
 
-// Validation rules
+// Validation rules - price optional if variants provided
 const menuItemValidation = [
     body("name")
         .trim()
         .isLength({ min: 2, max: 100 })
         .withMessage("اسم العنصر يجب أن يكون بين 2 و 100 حرف"),
-    body("price").isFloat({ min: 0 }).withMessage("السعر يجب أن يكون رقم موجب"),
+    body("price")
+        .optional({ values: "null" })
+        .isFloat({ min: 0 })
+        .withMessage("السعر يجب أن يكون رقم موجب"),
+    body("variants")
+        .optional()
+        .isArray()
+        .withMessage("الأحجام يجب أن تكون مصفوفة"),
+    body("variants.*.size")
+        .optional()
+        .trim()
+        .isLength({ min: 1, max: 50 })
+        .withMessage("اسم الحجم مطلوب"),
+    body("variants.*.price")
+        .optional()
+        .isFloat({ min: 0 })
+        .withMessage("سعر الحجم يجب أن يكون رقم موجب"),
+    body("variants.*.sku")
+        .optional({ values: "null" })
+        .trim()
+        .isLength({ max: 50 })
+        .withMessage("SKU يجب أن يكون أقل من 50 حرف"),
+    body("variants.*.barcode")
+        .optional({ values: "null" })
+        .trim()
+        .isLength({ max: 50 })
+        .withMessage("الباركود يجب أن يكون أقل من 50 حرف"),
     body("category")
         .notEmpty()
         .withMessage("الفئة مطلوبة")

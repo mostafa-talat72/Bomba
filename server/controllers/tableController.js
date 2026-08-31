@@ -445,5 +445,88 @@ export const deleteTable = async (req, res) => {
     }
 };
 
+// Fix table statuses - one-time correction for stuck tables (admin only)
+// Also reused by auto-fix jobs; efficient: uses Bill.exists + bulkWrite
+export const fixTableStatuses = async (req, res) => {
+    try {
+        const tables = await Table.find({ organization: req.user.organization }).select("_id number status organization").lean();
+
+        let occupied = 0;
+        let empty = 0;
+        const details = [];
+        const bulkOps = [];
+        const emitQueue = [];
+
+        for (const table of tables) {
+            // Efficient: use exists instead of fetching all bills
+            const hasUnpaid = await Bill.exists({
+                table: table._id,
+                status: { $in: ["draft", "partial", "overdue"] },
+                organization: table.organization,
+            });
+
+            const newStatus = hasUnpaid ? "occupied" : "empty";
+
+            if (newStatus === "occupied") occupied++;
+            else empty++;
+
+            if (table.status !== newStatus) {
+                bulkOps.push({
+                    updateOne: {
+                        filter: { _id: table._id },
+                        update: { $set: { status: newStatus } },
+                    },
+                });
+                details.push({
+                    tableId: table._id,
+                    number: table.number,
+                    oldStatus: table.status,
+                    newStatus,
+                    hasUnpaid: !!hasUnpaid,
+                });
+                emitQueue.push({ tableId: table._id, status: newStatus });
+                Logger.info(`✓ Table ${table.number} status fixed: ${table.status} -> ${newStatus} (${hasUnpaid ? 'has unpaid' : 'no unpaid'})`);
+            }
+        }
+
+        let fixed = 0;
+        if (bulkOps.length > 0) {
+            const result = await Table.bulkWrite(bulkOps);
+            fixed = result.modifiedCount ?? bulkOps.length;
+
+            // Emit updates for fixed tables
+            if (req.io) {
+                for (const e of emitQueue) {
+                    try {
+                        req.io.emit("table-status-update", {
+                            tableId: e.tableId,
+                            status: e.status,
+                        });
+                    } catch (_) {}
+                }
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `تم إصلاح ${fixed} من أصل ${tables.length} طاولة`,
+            data: {
+                total: tables.length,
+                fixed,
+                occupied,
+                empty,
+                details,
+            },
+        });
+    } catch (error) {
+        Logger.error("خطأ في إصلاح حالات الطاولات", error);
+        res.status(500).json({
+            success: false,
+            message: "خطأ في إصلاح حالات الطاولات",
+            error: error.message,
+        });
+    }
+};
+
 
 

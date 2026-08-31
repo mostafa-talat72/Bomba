@@ -13,9 +13,10 @@ import {
     createTable,
     updateTable,
     deleteTable,
+    fixTableStatuses,
 } from "../controllers/tableController.js";
 import { authenticateToken, authorize } from "../middleware/auth.js";
-import { protect } from "../middleware/auth.js";
+import { protect, adminOnly } from "../middleware/auth.js";
 import { validateRequest } from "../middleware/validation.js";
 import { body } from "express-validator";
 
@@ -71,6 +72,9 @@ router.put(
     updateTableSection
 );
 router.delete("/sections/:id", authorize("cafe", "tables", "orders", "staff", "all"), deleteTableSection);
+
+// Fix table statuses - admin only (one-time correction for stuck tables)
+router.post("/fix-statuses", adminOnly, fixTableStatuses);
 
 // Tables routes (cafe, orders, staff permission required)
 router.get("/tables", authorize("cafe", "tables", "orders", "staff", "all"), getAllTables);

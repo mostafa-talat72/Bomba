@@ -256,6 +256,8 @@ export const buildBillPrintHTML = async (
     }
     
     const itemsRows = aggregatedItems.map((item: AggregatedItem) => {
+      const v = (item as any).variant;
+      const variantText = v && v !== 'عادي' ? ` (${v})` : '';
       const addonsText = item.addons && item.addons.length > 0
         ? ` (${item.addons.map(a => a.name).join(', ')})`
         : '';
@@ -265,7 +267,7 @@ export const buildBillPrintHTML = async (
       
       return `
         <tr>
-          <td class="item-name">${statusIcon} ${item.name}${addonsText}</td>
+          <td class="item-name">${statusIcon} ${item.name}${variantText}${addonsText}</td>
           <td class="item-quantity">${formatQuantity(item.totalQuantity)}</td>
           <td class="item-paid-qty">${formatQuantity(item.paidQuantity)}</td>
           <td class="item-total">${formatNumber(item.price * item.totalQuantity)}</td>
@@ -740,29 +742,20 @@ export const printBill = async (
   tableSectionName?: string
 ) => {
   try {
-    // محاولة الطباعة المباشرة عبر API
-    const response = await api.printBill({
-      bill,
-      organization: bill.organization,
-      language,
-      tableSectionName
-    });
-
-    if (response.success) {
+    const directPrint = api.printBill({ bill, organization: bill.organization, language, tableSectionName });
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('print-timeout')), 900));
+    const response: any = await Promise.race([directPrint, timeout]);
+    if (response?.success) {
       const successMsg = language === 'ar' 
         ? 'تمت طباعة الفاتورة بنجاح' + (response.cashDrawerOpened ? ' وتم فتح درج الكاشير' : '')
         : language === 'fr'
         ? 'Facture imprimée avec succès' + (response.cashDrawerOpened ? ' et tiroir-caisse ouvert' : '')
         : 'Bill printed successfully' + (response.cashDrawerOpened ? ' and cash drawer opened' : '');
-      
-      // إظهار إشعار نجاح
-      if (typeof window !== 'undefined' && (window as any).showNotification) {
-        (window as any).showNotification(successMsg, 'success');
-      }
+      if (typeof window !== 'undefined' && (window as any).showNotification) (window as any).showNotification(successMsg, 'success');
       return;
     }
-  } catch (error) {
-    console.error('Direct print failed, falling back to window print:', error);
+  } catch (error: any) {
+    if (error?.message !== 'print-timeout') console.error('Direct print failed, falling back to window print:', error);
   }
 
   // Fallback: استخدام الطريقة القديمة إذا فشلت الطباعة المباشرة
