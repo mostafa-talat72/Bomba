@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, DollarSign } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
-import { Cost } from '../types/cost';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 

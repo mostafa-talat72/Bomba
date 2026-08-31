@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Bell, X, Check, Trash2, AlertCircle, Info, CheckCircle, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import NotificationSound from './NotificationSound';
-import { formatDecimal } from '../utils/formatters';
 import { getLocaleFromLanguage } from '../utils/localeMapper';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../context/OrganizationContext';
-import i18n from '../i18n/config';
 
 interface Notification {
   _id: string;
@@ -179,18 +177,18 @@ const NotificationCenter: React.FC = () => {
       if (filter === 'unread') {
         options.unreadOnly = true;
       }
-      const data = await getNotifications(options);
+      const data: Notification[] = await getNotifications(options);
 
       // التحقق من الإشعارات الجديدة
       const previousCount = unreadCount;
-      const newCount = data.filter(notification => isUnread(notification)).length;
+      const newCount = data.filter((notification: Notification) => isUnread(notification)).length;
 
       // إذا كان هناك إشعارات جديدة، شغل الصوت (فقط إذا لم يكن هذا التحميل الأولي)
       if (newCount > previousCount && !isOpen && previousCount > 0) {
         // تحديد نوع الصوت حسب أولوية الإشعارات الجديدة
-        const newNotifications = data.filter(notification => isUnread(notification));
-        const urgentNotification = newNotifications.find(n => n.priority === 'urgent');
-        const highPriorityNotification = newNotifications.find(n => n.priority === 'high');
+        const newNotifications = data.filter((notification: Notification) => isUnread(notification));
+        const urgentNotification = newNotifications.find((n: Notification) => n.priority === 'urgent');
+        const highPriorityNotification = newNotifications.find((n: Notification) => n.priority === 'high');
 
         if (urgentNotification) {
           setSoundType('urgent');

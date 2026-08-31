@@ -2,7 +2,7 @@ import React from 'react';
 import { TimePicker } from 'antd';
 import type { TimePickerProps } from 'antd';
 import { useTranslation } from 'react-i18next';
-import dayjs, { Dayjs } from 'dayjs';
+import type { Dayjs } from 'dayjs';
 
 /**
  * TimePicker مخصص يدعم ترجمة AM/PM إلى ص/م في اللغة العربية

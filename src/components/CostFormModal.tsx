@@ -164,11 +164,11 @@ const CostFormModal: React.FC<CostFormModalProps> = ({
 
       if (editingCost) {
         // Update existing cost
-        const response = await api.put(`/costs/${editingCost._id}`, payload);
+        await api.put(`/costs/${editingCost._id}`, payload);
         showNotification(t('costs.modals.costForm.notifications.updated'), 'success');
       } else {
         // Create new cost
-        const response = await api.post('/costs', payload);
+        await api.post('/costs', payload);
         showNotification(t('costs.modals.costForm.notifications.created'), 'success');
       }
 

@@ -1,12 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { X, Receipt, CheckCircle, Plus, Minus } from 'lucide-react';
-import { Bill, Order, OrderItem } from '../services/api';
+import { Bill } from '../services/api';
 import { formatCurrency, formatDecimal } from '../utils/formatters';
 import { aggregateItemsWithPayments } from '../utils/billAggregation';
 import ModalPortal from './ModalPortal';
 import ConfirmModal from './ConfirmModal';
 import { useTranslation } from 'react-i18next';
-import { useLanguage } from '../context/LanguageContext';
 
 interface PartialPaymentModalProps {
   isOpen: boolean;
@@ -24,7 +23,6 @@ const PartialPaymentModal: React.FC<PartialPaymentModalProps> = ({
   isProcessing
 }) => {
   const { t, i18n } = useTranslation();
-  const { isRTL } = useLanguage();
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: number }>({});
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
