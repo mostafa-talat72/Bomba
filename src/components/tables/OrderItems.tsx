@@ -13,6 +13,11 @@ export const ItemCard = React.memo(({ item, qty, qtyByVariant, onAdd, fmt }: {
 }) => {
   const hasVariants = item.variants && item.variants.length > 1;
   const inOrder = qty > 0;
+  const variantSummary = hasVariants
+    ? item.variants!.filter(v => (qtyByVariant?.[v.size] || 0) > 0)
+        .map(v => `${v.size}: ${qtyByVariant![v.size]}`)
+        .join(' · ')
+    : '';
 
   if (hasVariants) {
     return (
@@ -34,7 +39,7 @@ export const ItemCard = React.memo(({ item, qty, qtyByVariant, onAdd, fmt }: {
           </div>
         </div>
         <div className={`w-full flex items-center justify-center gap-0.5 py-1 border-t text-base font-medium ${inOrder ? 'border-orange-200 dark:border-orange-700 bg-orange-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20'}`}>
-          <span className="text-xs font-semibold">{inOrder ? `${qty} في الطلب` : 'اختر الحجم'}</span>
+          <span className="text-xs font-semibold">{inOrder ? variantSummary : 'اختر الحجم'}</span>
         </div>
       </div>
     );

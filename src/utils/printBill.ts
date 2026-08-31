@@ -257,8 +257,8 @@ export const buildBillPrintHTML = async (
     
     const itemsRows = aggregatedItems.map((item: AggregatedItem) => {
       const v = (item as any).variant;
-      // تحسين عرض الحجم (size) - يظهر بشكل أوضح في الفاتورة المطبوعة
-      const variantText = v && v !== 'عادي' ? `\n📏 ${v}` : '';
+      // Match order printing: show the selected size in parentheses.
+      const variantText = v && v !== 'عادي' ? ` (${v})` : '';
       const addonsText = item.addons && item.addons.length > 0
         ? ` (${item.addons.map(a => a.name).join(', ')})`
         : '';

@@ -4,7 +4,7 @@ import {
   Settings, AlertTriangle, Search, CheckCircle, DollarSign,
   Calendar, User, Receipt, QrCode, Table as TableIcon, Eye, EyeOff,
   Gamepad2, ChevronDown, ChevronUp, ChefHat,
-  Clock, History, FileText, Zap, Layers, Unlock
+  Clock, History, FileText, Zap, Layers
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -1713,6 +1713,7 @@ const loadInitialData = async () => {
     // تأكيد بالبيانات الراجعة من السيرفر
     setBills(prev => prev.map(b => String(b._id || b.id) === String(bill._id || bill.id) ? result.data : b));
     if (selectedBill && String(selectedBill._id || selectedBill.id) === String(bill._id || bill.id)) setSelectedBill(result.data as Bill);
+    await fetchTables();
     if (newStatus === 'paid') {
       setShowPaymentSuccessAnim(true);
       setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
@@ -1833,7 +1834,8 @@ const loadInitialData = async () => {
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         tableCardDataCache.current.clear();
         invalidateTablesCache();
-        fetchBills().catch(() => {});
+        await fetchTables();
+        fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
 
         if (user?.organization?.printSettings?.openCashDrawerOnPayment !== false) {
@@ -1893,6 +1895,7 @@ const loadInitialData = async () => {
         setShowPaymentSuccessAnim(true);
         setTimeout(() => setShowPaymentSuccessAnim(false), 2500);
         invalidateTablesCache();
+        await fetchTables();
         // fetch فوري بدون throttle عشان حالة الطاولة تتأكد
         fetchBills().catch(()=>{});
         showNotification(t('billing.notifications.payFullBillSuccess'), 'success');
@@ -3978,11 +3981,6 @@ const billId = (targetBill as any)?.id || (targetBill as any)?._id || selectedBi
                   onClick={() => { const b = payChoiceBill; setShowPayChoiceModal(false); setPayChoiceBill(null); if (b) handlePaymentClick(b); }}
                   className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
                   <Receipt className="h-5 w-5" />الذهاب لإدارة الدفع
-                </button>
-                <button
-                  onClick={() => handleOpenCashDrawer()}
-                  className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow">
-                  <Unlock className="h-5 w-5" />فتح درج الكاشير
                 </button>
                 <p className="text-xs text-gray-500 text-center">إدارة الدفع تتيح الدفع الجزئي والتقسيم والخصم</p>
               </div>

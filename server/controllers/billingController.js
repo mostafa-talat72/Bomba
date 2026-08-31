@@ -57,9 +57,21 @@ async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
     const actualTableId = tableId._id || tableId;
 
     try {
-        // Find all unpaid bills for this table (draft, partial, or overdue status)
+        const table = await Table.findOne({
+            _id: actualTableId,
+            organization: organizationId,
+        }).select("number");
+
+        if (!table) {
+            return null;
+        }
+
+        // Support both the current table reference and legacy tableNumber bills.
         const unpaidBills = await Bill.find({
-            table: actualTableId,
+            $or: [
+                { table: actualTableId },
+                { tableNumber: table.number },
+            ],
             status: { $in: ["draft", "partial", "overdue"] },
             organization: organizationId,
         });
@@ -68,7 +80,10 @@ async function updateTableStatusIfNeeded(tableId, organizationId, io = null) {
         const newStatus = unpaidBills.length > 0 ? "occupied" : "empty";
 
         // Update table status
-        await Table.findByIdAndUpdate(actualTableId, { status: newStatus });
+        await Table.findOneAndUpdate(
+            { _id: actualTableId, organization: organizationId },
+            { status: newStatus }
+        );
 
         Logger.info(
             `✓ Table status updated to '${newStatus}' for table: ${actualTableId} (${unpaidBills.length} unpaid bills)`
