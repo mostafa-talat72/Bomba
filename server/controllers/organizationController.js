@@ -834,7 +834,7 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
     const totalCosts = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
     const netProfit = totalRevenue - totalCosts;
 
-    // نفس منطق المنتجات والأقسام من sendReportNow
+    // نفس منطق المنتجات والأقسام من sendReportNow - variant-aware (size separate)
     const productSales = {};
     orders.forEach((order) => {
         if (!order.items || !Array.isArray(order.items)) return;
@@ -842,21 +842,24 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
         order.items.forEach((item) => {
             if (!item.name) return;
             
-            if (!productSales[item.name]) {
-                productSales[item.name] = { quantity: 0, revenue: 0 };
+            const variant = item.variant || '';
+            const key = `${item.name}|${variant}`;
+            const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+            const displayName = `${item.name}${variantText}`;
+            if (!productSales[key]) {
+                productSales[key] = { name: displayName, variant, quantity: 0, revenue: 0 };
             }
             
             const itemQuantity = Number(item.quantity) || 0;
             const itemPrice = Number(item.price) || 0;
-            const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+            const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
             
-            productSales[item.name].quantity += itemQuantity;
-            productSales[item.name].revenue += itemTotal;
+            productSales[key].quantity += itemQuantity;
+            productSales[key].revenue += itemTotal;
         });
     });
 
-    const topProducts = Object.entries(productSales)
-        .map(([name, data]) => ({ name, ...data }))
+    const topProducts = Object.values(productSales)
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 10);
 
@@ -878,6 +881,11 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
 
         order.items.forEach(item => {
             if (!item.name) return;
+
+            const variant = item.variant || '';
+            const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+            const displayName = `${item.name}${variantText}`;
+            const productKey = `${item.name}|${variant}`;
 
             const menuItem = menuItemMap[item.name];
             let sectionId = 'other';
@@ -901,18 +909,19 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
 
             const itemPrice = Number(item.price) || 0;
             const itemQuantity = Number(item.quantity) || 0;
-            const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+            const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
 
-            if (!sectionData[sectionId].products[item.name]) {
-                sectionData[sectionId].products[item.name] = {
-                    name: item.name,
+            if (!sectionData[sectionId].products[productKey]) {
+                sectionData[sectionId].products[productKey] = {
+                    name: displayName,
+                    variant,
                     quantity: 0,
                     revenue: 0
                 };
             }
 
-            sectionData[sectionId].products[item.name].quantity += itemQuantity;
-            sectionData[sectionId].products[item.name].revenue += itemTotal;
+            sectionData[sectionId].products[productKey].quantity += itemQuantity;
+            sectionData[sectionId].products[productKey].revenue += itemTotal;
             sectionData[sectionId].totalRevenue += itemTotal;
             sectionData[sectionId].totalQuantity += itemQuantity;
         });
@@ -949,12 +958,14 @@ export const generateAndSendDailyReport = async (organizationId, userLocale = 'a
             sectionName: section.sectionName,
             items: Object.values(section.products).map(product => ({
                 name: product.name,
+                variant: product.variant,
                 quantity: product.quantity,
                 totalRevenue: product.revenue
             }))
         })),
-        allSoldItems: Object.entries(productSales).map(([name, data]) => ({
-            name: name,
+        allSoldItems: Object.values(productSales).map((data) => ({
+            name: data.name,
+            variant: data.variant,
             quantity: data.quantity,
             totalRevenue: data.revenue
         })).sort((a, b) => b.totalRevenue - a.totalRevenue),
@@ -1247,7 +1258,7 @@ export const sendReportNow = async (req, res) => {
         const totalCosts = costs.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
         const netProfit = totalRevenue - totalCosts;
 
-        // Get top products
+        // Get top products - variant-aware (size separate)
         const productSales = {};
         orders.forEach((order) => {
             if (!order.items || !Array.isArray(order.items)) return;
@@ -1255,21 +1266,24 @@ export const sendReportNow = async (req, res) => {
             order.items.forEach((item) => {
                 if (!item.name) return;
                 
-                if (!productSales[item.name]) {
-                    productSales[item.name] = { quantity: 0, revenue: 0 };
+                const variant = item.variant || '';
+                const key = `${item.name}|${variant}`;
+                const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                const displayName = `${item.name}${variantText}`;
+                if (!productSales[key]) {
+                    productSales[key] = { name: displayName, variant, quantity: 0, revenue: 0 };
                 }
                 
                 const itemQuantity = Number(item.quantity) || 0;
                 const itemPrice = Number(item.price) || 0;
-                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
                 
-                productSales[item.name].quantity += itemQuantity;
-                productSales[item.name].revenue += itemTotal;
+                productSales[key].quantity += itemQuantity;
+                productSales[key].revenue += itemTotal;
             });
         });
 
-        const topProducts = Object.entries(productSales)
-            .map(([name, data]) => ({ name, ...data }))
+        const topProducts = Object.values(productSales)
             .sort((a, b) => b.revenue - a.revenue)
             .slice(0, 10);
 
@@ -1293,6 +1307,11 @@ export const sendReportNow = async (req, res) => {
             order.items.forEach(item => {
                 if (!item.name) return;
 
+                const variant = item.variant || '';
+                const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                const displayName = `${item.name}${variantText}`;
+                const productKey = `${item.name}|${variant}`;
+
                 const menuItem = menuItemMap[item.name];
                 let sectionId = 'other';
                 let sectionName = 'أخرى';
@@ -1315,18 +1334,19 @@ export const sendReportNow = async (req, res) => {
 
                 const itemPrice = Number(item.price) || 0;
                 const itemQuantity = Number(item.quantity) || 0;
-                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
 
-                if (!sectionData[sectionId].products[item.name]) {
-                    sectionData[sectionId].products[item.name] = {
-                        name: item.name,
+                if (!sectionData[sectionId].products[productKey]) {
+                    sectionData[sectionId].products[productKey] = {
+                        name: displayName,
+                        variant,
                         quantity: 0,
                         revenue: 0
                     };
                 }
 
-                sectionData[sectionId].products[item.name].quantity += itemQuantity;
-                sectionData[sectionId].products[item.name].revenue += itemTotal;
+                sectionData[sectionId].products[productKey].quantity += itemQuantity;
+                sectionData[sectionId].products[productKey].revenue += itemTotal;
                 sectionData[sectionId].totalRevenue += itemTotal;
                 sectionData[sectionId].totalQuantity += itemQuantity;
             });
@@ -1359,17 +1379,19 @@ export const sendReportNow = async (req, res) => {
                 computer: computerRevenue || 0,
                 cafe: cafeRevenue || 0
             },
-            // إضافة البيانات الجديدة للأقسام وجميع الأصناف
+            // إضافة البيانات الجديدة للأقسام وجميع الأصناف - variant-aware
             soldItemsBySection: Object.values(sectionData).map(section => ({
                 sectionName: section.sectionName,
                 items: Object.values(section.products).map(product => ({
                     name: product.name,
+                    variant: product.variant,
                     quantity: product.quantity,
                     totalRevenue: product.revenue
                 }))
             })),
-            allSoldItems: Object.entries(productSales).map(([name, data]) => ({
-                name: name,
+            allSoldItems: Object.values(productSales).map((data) => ({
+                name: data.name,
+                variant: data.variant,
                 quantity: data.quantity,
                 totalRevenue: data.revenue
             })).sort((a, b) => b.totalRevenue - a.totalRevenue),
@@ -1579,25 +1601,28 @@ export const sendReportNow = async (req, res) => {
                 const monthlyTotalCosts = monthlyCosts.reduce((sum, cost) => sum + (Number(cost.paidAmount) || Number(cost.amount) || 0), 0);
                 const monthlyNetProfit = monthlyTotalRevenue - monthlyTotalCosts;
                 
-                // Get monthly top products
+                // Get monthly top products - variant-aware (size separate)
                 const monthlyProductSales = {};
                 monthlyOrders.forEach((order) => {
                     if (!order.items || !Array.isArray(order.items)) return;
                     order.items.forEach((item) => {
                         if (!item.name) return;
-                        if (!monthlyProductSales[item.name]) {
-                            monthlyProductSales[item.name] = { quantity: 0, revenue: 0 };
+                        const variant = item.variant || '';
+                        const key = `${item.name}|${variant}`;
+                        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                        const displayName = `${item.name}${variantText}`;
+                        if (!monthlyProductSales[key]) {
+                            monthlyProductSales[key] = { name: displayName, variant, quantity: 0, revenue: 0 };
                         }
                         const itemQuantity = Number(item.quantity) || 0;
                         const itemPrice = Number(item.price) || 0;
-                        const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
-                        monthlyProductSales[item.name].quantity += itemQuantity;
-                        monthlyProductSales[item.name].revenue += itemTotal;
+                        const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
+                        monthlyProductSales[key].quantity += itemQuantity;
+                        monthlyProductSales[key].revenue += itemTotal;
                     });
                 });
                 
-                const monthlyTopProducts = Object.entries(monthlyProductSales)
-                    .map(([name, data]) => ({ name, ...data }))
+                const monthlyTopProducts = Object.values(monthlyProductSales)
                     .sort((a, b) => b.revenue - a.revenue)
                     .slice(0, 10);
                 
@@ -1622,12 +1647,16 @@ export const sendReportNow = async (req, res) => {
                         }
                         const itemPrice = Number(item.price) || 0;
                         const itemQuantity = Number(item.quantity) || 0;
-                        const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
-                        if (!monthlySectionData[sectionId].products[item.name]) {
-                            monthlySectionData[sectionId].products[item.name] = { name: item.name, quantity: 0, revenue: 0 };
+                        const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
+                        const variant = item.variant || '';
+                        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                        const displayName = `${item.name}${variantText}`;
+                        const productKey = `${item.name}|${variant}`;
+                        if (!monthlySectionData[sectionId].products[productKey]) {
+                            monthlySectionData[sectionId].products[productKey] = { name: displayName, variant, quantity: 0, revenue: 0 };
                         }
-                        monthlySectionData[sectionId].products[item.name].quantity += itemQuantity;
-                        monthlySectionData[sectionId].products[item.name].revenue += itemTotal;
+                        monthlySectionData[sectionId].products[productKey].quantity += itemQuantity;
+                        monthlySectionData[sectionId].products[productKey].revenue += itemTotal;
                         monthlySectionData[sectionId].totalRevenue += itemTotal;
                         monthlySectionData[sectionId].totalQuantity += itemQuantity;
                     });

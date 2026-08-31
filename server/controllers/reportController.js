@@ -225,7 +225,7 @@ export const getSalesReport = async (req, res) => {
             },
             {
                 $group: {
-                    _id: "$items.name",
+                    _id: { name: "$items.name", variant: "$items.variant" },
                     totalQuantity: { $sum: "$items.quantity" },
                     totalRevenue: {
                         $sum: {
@@ -234,6 +234,33 @@ export const getSalesReport = async (req, res) => {
                     },
                     orderCount: { $sum: 1 },
                 },
+            },
+            {
+                $project: {
+                    _id: 0,
+                    name: {
+                        $concat: [
+                            "$_id.name",
+                            {
+                                $cond: [
+                                    {
+                                        $and: [
+                                            { $ne: ["$_id.variant", null] },
+                                            { $ne: ["$_id.variant", ""] },
+                                            { $ne: ["$_id.variant", "عادي"] }
+                                        ]
+                                    },
+                                    { $concat: [" (", "$_id.variant", ")"] },
+                                    ""
+                                ]
+                            }
+                        ]
+                    },
+                    variant: "$_id.variant",
+                    totalQuantity: 1,
+                    totalRevenue: 1,
+                    orderCount: 1
+                }
             },
             {
                 $sort: { totalQuantity: -1 },
@@ -1205,7 +1232,7 @@ const getSalesReportData = async (organization, startDate, endDate) => {
         cafe: cafeRevenue,
     };
 
-    // Top products from orders - group by name
+    // Top products from orders - group by name+variant (variant-aware)
     const productSales = {};
     orders.forEach((order) => {
         if (!order.items || !Array.isArray(order.items)) return;
@@ -1213,9 +1240,13 @@ const getSalesReportData = async (organization, startDate, endDate) => {
         order.items.forEach((item) => {
             if (!item.name) return;
             
-            if (!productSales[item.name]) {
-                productSales[item.name] = { 
-                    name: item.name,
+            const variant = item.variant || '';
+            const key = `${item.name}|${variant}`;
+            const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+            const displayName = `${item.name}${variantText}`;
+            if (!productSales[key]) {
+                productSales[key] = { 
+                    name: displayName,
                     quantity: 0, 
                     revenue: 0 
                 };
@@ -1225,8 +1256,8 @@ const getSalesReportData = async (organization, startDate, endDate) => {
             const itemPrice = Number(item.price) || 0;
             const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
             
-            productSales[item.name].quantity += itemQuantity;
-            productSales[item.name].revenue += itemTotal;
+            productSales[key].quantity += itemQuantity;
+            productSales[key].revenue += itemTotal;
         });
     });
 
@@ -1536,23 +1567,27 @@ const getTopProductsBySection = async (organization, startDate, endDate) => {
                     };
                 }
 
-                // Calculate item total
+                // Calculate item total (variant-aware)
+                const variant = item.variant || '';
+                const key = `${item.name}|${variant}`;
+                const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                const displayName = `${item.name}${variantText}`;
                 const itemPrice = Number(item.price) || 0;
                 const itemQuantity = Number(item.quantity) || 0;
                 const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
 
-                // Initialize product if not exists
-                if (!sectionData[sectionId].products[item.name]) {
-                    sectionData[sectionId].products[item.name] = {
-                        name: item.name,
+                // Initialize product if not exists (variant-aware key)
+                if (!sectionData[sectionId].products[key]) {
+                    sectionData[sectionId].products[key] = {
+                        name: displayName,
                         quantity: 0,
                         revenue: 0
                     };
                 }
 
                 // Accumulate product data
-                sectionData[sectionId].products[item.name].quantity += itemQuantity;
-                sectionData[sectionId].products[item.name].revenue += itemTotal;
+                sectionData[sectionId].products[key].quantity += itemQuantity;
+                sectionData[sectionId].products[key].revenue += itemTotal;
                 sectionData[sectionId].totalRevenue += itemTotal;
                 sectionData[sectionId].totalQuantity += itemQuantity;
             });

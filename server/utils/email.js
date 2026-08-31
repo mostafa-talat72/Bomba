@@ -417,12 +417,17 @@ export const emailTemplates = {
                             <h2 class="section-title">${t.topProductsTitle}</h2>
                             <div class="products-list">
                                 ${data.topProducts && data.topProducts.length > 0
-                                    ? data.topProducts.map((product, index) => `
+                                    ? data.topProducts.map((product, index) => {
+                                        const variant = product.variant || '';
+                                        const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                                        const displayName = variantText && product.name && product.name.includes(variant) ? product.name : `${product.name || ''}${variantText}`;
+                                        return `
                                         <div class="product-item">
-                                            <div class="product-name">${index + 1}. ${product.name}</div>
+                                            <div class="product-name">${index + 1}. ${displayName}</div>
                                             <div class="product-quantity">${product.quantity} ${t.unit}</div>
                                         </div>
-                                    `).join('')
+                                        `;
+                                      }).join('')
                                     : `<div style="text-align: center; color: #6c757d; padding: 20px;">${t.noDataAvailable}</div>`
                                 }
                             </div>
@@ -533,12 +538,17 @@ export const emailTemplates = {
                             
                             <div class="section-title">${t.topProductsTitle}</div>
                             ${data.topProducts.length > 0
-                                ? data.topProducts.map((product, index) => `
+                                ? data.topProducts.map((product, index) => {
+                                    const variant = product.variant || '';
+                                    const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                                    const displayName = variantText && product.name && product.name.includes(variant) ? product.name : `${product.name || ''}${variantText}`;
+                                    return `
                                     <div class="product-item">
-                                        <div class="product-name">${index + 1}. ${product.name}</div>
+                                        <div class="product-name">${index + 1}. ${displayName}</div>
                                         <div>${product.quantity} ${t.piece} - ${product.revenue.toLocaleString(locale)} ${currencySymbol}</div>
                                     </div>
-                                `).join('')
+                                    `;
+                                  }).join('')
                                 : `<div style="text-align: center; color: #6c757d; padding: 20px;">${t.noSalesThisMonth}</div>`
                             }
                         </div>

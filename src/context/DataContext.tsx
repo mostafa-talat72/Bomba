@@ -2189,12 +2189,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const canManageReports = async (): Promise<any> => {
     try {
-      const response = await api.canManageReports();
-      if (response.success) {
-        return response;
-      } else {
-        return { canManage: false, isOwner: false };
-      }
+      const response: any = await api.canManageReports();
+      if (response.success) return response.data ?? response;
+      else return { canManage: false, isOwner: false };
     } catch (error) {
       return { canManage: false, isOwner: false };
     }
@@ -2218,12 +2215,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const canManagePayroll = async (): Promise<any> => {
     try {
-      const response = await api.canManagePayroll();
-      if (response.success) {
-        return response;
-      } else {
-        return { canManage: false, isOwner: false };
-      }
+      const response: any = await api.canManagePayroll();
+      if (response.success) return response.data ?? response;
+      else return { canManage: false, isOwner: false };
     } catch (error) {
       return { canManage: false, isOwner: false };
     }

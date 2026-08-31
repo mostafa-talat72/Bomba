@@ -436,7 +436,7 @@ const generateMonthlyReportForOrganization = async (organization) => {
             netProfit
         });
 
-        // Get top products
+        // Get top products - variant-aware (size separate: مكرونة (صغير) vs مكرونة (كبير))
         const productSales = {};
         orders.forEach((order) => {
             if (!order.items || !Array.isArray(order.items)) return;
@@ -444,21 +444,24 @@ const generateMonthlyReportForOrganization = async (organization) => {
             order.items.forEach((item) => {
                 if (!item.name) return;
                 
-                if (!productSales[item.name]) {
-                    productSales[item.name] = { quantity: 0, revenue: 0 };
+                const variant = item.variant || '';
+                const key = `${item.name}|${variant}`;
+                const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                const displayName = `${item.name}${variantText}`;
+                if (!productSales[key]) {
+                    productSales[key] = { name: displayName, variant, quantity: 0, revenue: 0 };
                 }
                 
                 const itemQuantity = Number(item.quantity) || 0;
                 const itemPrice = Number(item.price) || 0;
-                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
                 
-                productSales[item.name].quantity += itemQuantity;
-                productSales[item.name].revenue += itemTotal;
+                productSales[key].quantity += itemQuantity;
+                productSales[key].revenue += itemTotal;
             });
         });
 
-        const topProducts = Object.entries(productSales)
-            .map(([name, data]) => ({ name, ...data }))
+        const topProducts = Object.values(productSales)
             .sort((a, b) => b.revenue - a.revenue)
             .slice(0, 10);
 
@@ -482,6 +485,11 @@ const generateMonthlyReportForOrganization = async (organization) => {
             order.items.forEach(item => {
                 if (!item.name) return;
 
+                const variant = item.variant || '';
+                const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                const displayName = `${item.name}${variantText}`;
+                const productKey = `${item.name}|${variant}`;
+
                 const menuItem = menuItemMap[item.name];
                 let sectionId = 'other';
                 let sectionName = 'أخرى';
@@ -504,18 +512,19 @@ const generateMonthlyReportForOrganization = async (organization) => {
 
                 const itemPrice = Number(item.price) || 0;
                 const itemQuantity = Number(item.quantity) || 0;
-                const itemTotal = item.itemTotal || (itemPrice * itemQuantity);
+                const itemTotal = Number(item.itemTotal) || (itemPrice * itemQuantity);
 
-                if (!sectionData[sectionId].products[item.name]) {
-                    sectionData[sectionId].products[item.name] = {
-                        name: item.name,
+                if (!sectionData[sectionId].products[productKey]) {
+                    sectionData[sectionId].products[productKey] = {
+                        name: displayName,
+                        variant,
                         quantity: 0,
                         revenue: 0
                     };
                 }
 
-                sectionData[sectionId].products[item.name].quantity += itemQuantity;
-                sectionData[sectionId].products[item.name].revenue += itemTotal;
+                sectionData[sectionId].products[productKey].quantity += itemQuantity;
+                sectionData[sectionId].products[productKey].revenue += itemTotal;
                 sectionData[sectionId].totalRevenue += itemTotal;
                 sectionData[sectionId].totalQuantity += itemQuantity;
             });

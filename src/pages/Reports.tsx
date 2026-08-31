@@ -87,6 +87,7 @@ interface ProductSalesBySection {
   sectionId: string;
   products: Array<{
     name: string;
+    variant?: string;
     quantity: number;
     revenue: number;
   }>;
@@ -248,9 +249,14 @@ const TopProductsBySection = ({ data, t, i18n, formatCurrency }: { data: Product
             <div className="p-5 bg-white dark:bg-gray-800 border-t-2 border-gray-200 dark:border-gray-700">
               {section.products && section.products.length > 0 ? (
                 <div className="space-y-3">
-                  {section.products.map((product, index) => (
+                  {section.products.map((product, index) => {
+                    const variant = (product as any).variant || '';
+                    const variantText = variant && variant !== 'عادي' ? ` (${variant})` : '';
+                    const displayName = product.name.includes('(') ? product.name : `${product.name}${variantText}`;
+                    const key = `${product.name}|${variant}-${index}`;
+                    return (
                     <div 
-                      key={`${product.name}-${index}`} 
+                      key={key} 
                       className="flex justify-between items-center py-4 px-5 bg-gradient-to-r from-gray-50 to-white dark:from-gray-700/30 dark:to-gray-800 rounded-xl hover:from-orange-50 hover:to-orange-50/50 dark:hover:from-orange-900/20 dark:hover:to-orange-900/10 transition-all duration-200 border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-700"
                     >
                       <div className="flex items-center gap-4">
@@ -258,7 +264,7 @@ const TopProductsBySection = ({ data, t, i18n, formatCurrency }: { data: Product
                           {formatDecimal(index + 1, i18n.language)}
                         </span>
                         <span className="text-base font-semibold text-gray-800 dark:text-gray-200">
-                          {product.name}
+                          {displayName}
                         </span>
                       </div>
                       <div className="flex items-center gap-8">
@@ -276,7 +282,8 @@ const TopProductsBySection = ({ data, t, i18n, formatCurrency }: { data: Product
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               ) : (
                 <p className="text-gray-500 dark:text-gray-400 text-center py-4">
